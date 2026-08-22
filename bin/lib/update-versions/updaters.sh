@@ -638,6 +638,11 @@ update_version() {
                     # The maintainer's follow-up is the regeneration command in
                     # the Gemfile's own header.
                     sed_inplace "s/^gem \"gitlab-triage\", \"[^\"]*\"/gem \"gitlab-triage\", \"$latest\"/" "$gemfile_path"
+                    # The CI include's cache key is derived from the Gemfile pin
+                    # at job runtime, so there is no second copy of the version
+                    # to keep in step here — deliberately, since an updater that
+                    # bumped one of two sources would fail the sync assertion in
+                    # tests/unit/gitlab-templates.sh on every auto-patch run.
                     echo -e "${YELLOW}    NOTE: .gitlab/triage/Gemfile.lock must be regenerated — see the Gemfile header${NC}" >&2
                     ;;
                 *)

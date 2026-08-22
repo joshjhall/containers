@@ -789,27 +789,21 @@ test_gemfile_and_lock_exist() {
     fi
 }
 
-test_triage_version_matches_gemfile() {
-    # GITLAB_TRIAGE_VERSION still exists in the CI include because the cache key
-    # is built from it, but the gem version now actually comes from the Gemfile.
-    # Two sources of truth that must not drift.
-    local gemfile="$GITLAB_DIR/triage/Gemfile"
-    [ -f "$gemfile" ] && [ -f "$CI_INCLUDE" ] || {
-        assert_true false "Gemfile or CI include missing — cannot compare pins"
+test_gem_version_has_one_source_of_truth() {
+    # The gem version must live ONLY in the Gemfile. A duplicate in the CI
+    # include would have to be kept in step by the weekly auto-patch updater,
+    # which bumps only the Gemfile — so the copy would go stale on the very next
+    # bump and fail the lock-sync assertion below (#764).
+    [ -f "$CI_INCLUDE" ] || {
+        assert_true false "CI include missing — cannot check for a duplicate pin"
         return
     }
 
-    local ci_version gem_version
-    ci_version=$(/usr/bin/grep -E '^\s*GITLAB_TRIAGE_VERSION:' "$CI_INCLUDE" |
-        /usr/bin/sed -E 's/.*"([^"]+)".*/\1/')
-    gem_version=$(/usr/bin/grep -E '^gem "gitlab-triage"' "$gemfile" |
-        /usr/bin/sed -E 's/.*,\s*"([^"]+)".*/\1/')
-
-    if [ -n "$ci_version" ] && [ "$ci_version" = "$gem_version" ]; then
-        assert_true true "GITLAB_TRIAGE_VERSION ($ci_version) matches the Gemfile pin"
-    else
+    if /usr/bin/grep -qE '^\s*GITLAB_TRIAGE_VERSION:' "$CI_INCLUDE"; then
         assert_true false \
-            "pin drift: CI include has '${ci_version:-<none>}', Gemfile has '${gem_version:-<none>}'"
+            "CI include redeclares GITLAB_TRIAGE_VERSION — the Gemfile is the single source of truth"
+    else
+        assert_true true "gem version has a single source of truth (the Gemfile)"
     fi
 }
 
@@ -880,33 +874,45 @@ test_triage_job_uses_bundler() {
     fi
 }
 
-test_cache_key_includes_ruby_image() {
-    # A gem tree built against one Ruby ABI must not be reused after an image
-    # bump — the graph contains native extensions (#764 item 3).
+test_cache_key_scoped_to_lock_and_image() {
+    # Two independent invalidation triggers (#764 item 3):
+    #   - the Gemfile.lock's checksum, so ANY change to the resolved graph
+    #     (not just the top-level pin) busts the cache automatically;
+    #   - the Ruby image tag, because the graph contains native extensions
+    #     (bigdecimal) whose build is ABI-specific.
     [ -f "$CI_INCLUDE" ] || {
         assert_true false "CI include missing — cannot check cache key"
         return
     }
 
-    local key image_tag
-    key=$(/usr/bin/grep -E '^\s*key:\s*"gitlab-triage' "$CI_INCLUDE" |
+    local prefix image_tag failures=0
+    prefix=$(/usr/bin/grep -E '^\s*prefix:\s*"gitlab-triage' "$CI_INCLUDE" |
         /usr/bin/sed -E 's/.*"([^"]+)".*/\1/')
-    # e.g. "ruby:3.3.12-slim" -> "3.3.12"
     image_tag=$(/usr/bin/grep -E '^\s*image:\s*ruby:' "$CI_INCLUDE" |
         /usr/bin/sed -E 's/.*ruby:([0-9.]+).*/\1/')
 
-    if [ -z "$key" ] || [ -z "$image_tag" ]; then
-        assert_true false "could not read cache key or image tag from the CI include"
-        return
+    # The key must hash the lock file itself.
+    if ! /usr/bin/grep -q 'Gemfile.lock' "$CI_INCLUDE"; then
+        /usr/bin/echo "  cache key does not hash .gitlab/triage/Gemfile.lock"
+        failures=$((failures + 1))
     fi
 
-    # Compare on the digits so the key's formatting is free to differ.
-    local key_digits="${key//[^0-9]/}"
-    local tag_digits="${image_tag//[^0-9]/}"
-    if [ "${key_digits#*"$tag_digits"}" != "$key_digits" ]; then
-        assert_true true "cache key is scoped to the Ruby image tag ($image_tag)"
+    if [ -z "$prefix" ] || [ -z "$image_tag" ]; then
+        /usr/bin/echo "  could not read the cache prefix or image tag"
+        failures=$((failures + 1))
     else
-        assert_true false "cache key '$key' does not include the Ruby image tag '$image_tag'"
+        local prefix_digits="${prefix//[^0-9]/}"
+        local tag_digits="${image_tag//[^0-9]/}"
+        if [ "${prefix_digits#*"$tag_digits"}" = "$prefix_digits" ]; then
+            /usr/bin/echo "  cache prefix '$prefix' omits the Ruby image tag '$image_tag'"
+            failures=$((failures + 1))
+        fi
+    fi
+
+    if [ "$failures" -eq 0 ]; then
+        assert_true true "cache key is scoped to the lock checksum and the Ruby image tag"
+    else
+        assert_true false "$failures cache-key scoping problem(s)"
     fi
 }
 
@@ -929,9 +935,9 @@ run_test test_needs_triage_clear_rule_truth_table "needs-triage clear rule fires
 run_test test_needs_triage_rules_are_exact_negations "needs-triage add/clear rules are exact negations"
 run_test test_needs_triage_logic_has_teeth "an && -> || slip flips the needs-triage result"
 run_test test_gemfile_and_lock_exist "triage Gemfile and multi-platform lock are committed"
-run_test test_triage_version_matches_gemfile "GITLAB_TRIAGE_VERSION matches the Gemfile pin"
+run_test test_gem_version_has_one_source_of_truth "gem version lives only in the Gemfile"
 run_test test_gemfile_and_lock_agree "Gemfile pin matches the resolved Gemfile.lock"
 run_test test_triage_job_uses_bundler "triage job installs via bundler in deployment mode"
-run_test test_cache_key_includes_ruby_image "cache key is scoped to the Ruby image tag"
+run_test test_cache_key_scoped_to_lock_and_image "cache key is scoped to the lock and Ruby image"
 
 generate_report

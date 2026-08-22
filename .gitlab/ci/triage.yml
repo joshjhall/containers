@@ -59,11 +59,13 @@
 # branches by default. Deployment mode re-verifies every gem against the
 # committed lock on every run, cache state notwithstanding.
 
-variables:
-  # Kept as a variable because the cache key below is keyed on it. It must stay
-  # in sync with the pin in .gitlab/triage/Gemfile — tests/unit/gitlab-templates.sh
-  # asserts they match, so a bump to one without the other fails the suite.
-  GITLAB_TRIAGE_VERSION: "1.51.0"
+# NOTE: there is deliberately no GITLAB_TRIAGE_VERSION variable here any more.
+# The gem version has exactly ONE source of truth — the pin in
+# .gitlab/triage/Gemfile — and the cache key below derives from the Gemfile's
+# own checksum instead of restating it. A second copy would have to be kept in
+# step by the weekly auto-patch updater, which bumps only the Gemfile; the
+# result would be a stale variable failing the sync assertion in
+# tests/unit/gitlab-templates.sh on every auto-patch run (#764).
 
 issue-triage:
   stage: .post
@@ -88,7 +90,16 @@ issue-triage:
   # longer trusted implicitly: deployment mode re-verifies every gem against the
   # committed Gemfile.lock on each run.
   cache:
-    key: "gitlab-triage-$GITLAB_TRIAGE_VERSION-ruby3.3.12"
+    # Keyed on the Gemfile.lock's own checksum plus the Ruby image tag. `files:`
+    # makes GitLab hash the file, so a gem bump invalidates the cache
+    # automatically with no version string to keep in sync — and because the LOCK
+    # is what changes on a real bump, this tracks the entire resolved graph, not
+    # just the top-level pin. The image tag is part of the prefix because the
+    # graph contains native extensions (bigdecimal) that are ABI-specific.
+    key:
+      files:
+        - .gitlab/triage/Gemfile.lock
+      prefix: "gitlab-triage-ruby3.3.12"
     paths:
       - .gem/
     policy: pull-push

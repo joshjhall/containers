@@ -47,9 +47,12 @@ jobs:
             exit 1
           fi
           echo "Installing yq $YQ_VERSION"
-          curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
+          # sudo because /usr/local/bin is root-owned on ubuntu-latest — the
+          # same reason every sibling install below (shfmt, conform, lefthook,
+          # rumdl, just, actionlint) uses it.
+          sudo curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
             -o /usr/local/bin/yq
-          chmod +x /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
           yq --version
 
       - name: Run unit tests
