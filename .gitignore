@@ -130,6 +130,11 @@ target/
 .config
 .yardoc
 Gemfile.lock
+# ...except the triage job's, which MUST be committed: `bundle install` runs in
+# deployment (frozen) mode against it, so an absent lock fails the job outright,
+# and the lock is what makes the install verify every transitive gem rather than
+# trusting a warm cache (#764).
+!.gitlab/triage/Gemfile.lock
 _yardoc/
 doc/
 .ruby-version

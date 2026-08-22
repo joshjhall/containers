@@ -617,6 +617,40 @@ update_version() {
                     ;;
             esac
             ;;
+        Gemfile)
+            # .gitlab/triage/Gemfile — the scheduled gitlab-triage job's pin.
+            local gemfile_path="$PROJECT_ROOT/.gitlab/triage/Gemfile"
+            case "$tool" in
+                gitlab-triage)
+                    # Rewrite the Gemfile pin. The companion Gemfile.lock CANNOT
+                    # be regenerated here — that needs a real Ruby resolver, and
+                    # a hand-edited lock would checksum-verify against invented
+                    # data, which is worse than a stale one.
+                    #
+                    # That is deliberately safe rather than silently broken:
+                    # `bundle install` runs in deployment (frozen) mode, which
+                    # REFUSES to run when the Gemfile and lock disagree. So a
+                    # bot bump that touches only the Gemfile fails the triage
+                    # job loudly instead of installing an unverified graph. The
+                    # unit suite also asserts the two stay in sync, so the drift
+                    # is caught at commit time, before it reaches a schedule.
+                    #
+                    # The maintainer's follow-up is the regeneration command in
+                    # the Gemfile's own header.
+                    sed_inplace "s/^gem \"gitlab-triage\", \"[^\"]*\"/gem \"gitlab-triage\", \"$latest\"/" "$gemfile_path"
+                    # The CI include's cache key is derived from the Gemfile pin
+                    # at job runtime, so there is no second copy of the version
+                    # to keep in step here — deliberately, since an updater that
+                    # bumped one of two sources would fail the sync assertion in
+                    # tests/unit/gitlab-templates.sh on every auto-patch run.
+                    echo -e "${YELLOW}    NOTE: .gitlab/triage/Gemfile.lock must be regenerated — see the Gemfile header${NC}" >&2
+                    ;;
+                *)
+                    echo -e "${RED}    ERROR: Unknown Gemfile tool: $tool — add a case in updaters.sh${NC}" >&2
+                    return "$RC_NO_UPDATER_CASE"
+                    ;;
+            esac
+            ;;
         *)
             echo -e "${RED}    ERROR: Unknown file type: $file (tool: $tool) — add a case in updaters.sh${NC}" >&2
             return "$RC_NO_UPDATER_CASE"

@@ -667,6 +667,42 @@ test_check_crates_io_mock() {
     assert_equals "0.25.15" "${LATEST_VERSIONS[0]}" "crates.io version extracted correctly"
 }
 
+test_check_rubygems_mock() {
+    setup_check_env
+
+    add_tool "gitlab-triage" "1.51.0" "Gemfile"
+
+    fetch_url() {
+        echo '{"version":"1.52.0"}'
+    }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_rubygems "gitlab-triage"
+
+    assert_equals "1.52.0" "${LATEST_VERSIONS[0]}" "RubyGems version extracted correctly"
+}
+
+test_check_rubygems_missing_gem() {
+    # A 404 / unparsable body must surface as an ERROR, never as "no update
+    # available" — a silent pass there would stall the pin at its current
+    # version forever, which is the whole failure mode this tracking prevents.
+    # check_rubygems emits the "null" sentinel, which set_latest() normalizes to
+    # "error" and marks the tool's status accordingly.
+    setup_check_env
+
+    add_tool "gitlab-triage" "1.51.0" "Gemfile"
+
+    fetch_url() {
+        echo ''
+    }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_rubygems "gitlab-triage"
+
+    assert_equals "error" "${LATEST_VERSIONS[0]}" "an unparsable response is recorded as an error"
+    assert_equals "error" "${VERSION_STATUS[0]}" "the tool's status is error, not current"
+}
+
 test_check_maven_central_mock() {
     setup_check_env
 
@@ -719,6 +755,8 @@ run_test test_check_github_release_prerelease_mock "check_github_release_prerele
 run_test test_check_github_release_prerelease_skips_drafts "check_github_release_prerelease skips draft releases"
 run_test test_check_gitlab_release_mock "check_gitlab_release with mock API response"
 run_test test_check_crates_io_mock "check_crates_io with mock API response"
+run_test test_check_rubygems_mock "check_rubygems with mock API response"
+run_test test_check_rubygems_missing_gem "check_rubygems falls back to null on an empty response"
 run_test test_check_maven_central_mock "check_maven_central with mock API response"
 # ============================================================================
 # Test: extract_action_version normalizes SHA-pinned / tag / branch refs

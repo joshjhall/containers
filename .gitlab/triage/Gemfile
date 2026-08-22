@@ -1,0 +1,46 @@
+# frozen_string_literal: true
+#
+# Dependency manifest for the scheduled `gitlab-triage` job (.gitlab/ci/triage.yml).
+#
+# Why a Gemfile rather than `gem install gitlab-triage --version X` (issue #764):
+# pinning the top-level gem version does not lock its transitive dependency
+# graph, and once the job's gem cache is warm `gem install` is a no-op —
+# RubyGems finds the local spec and never re-checksums against the registry, so
+# whatever bytes sit in `.gem/` are what runs with an `api`-scoped token. A
+# committed Gemfile.lock plus `bundle install` in deployment mode verifies every
+# gem, transitive ones included, on every run regardless of cache state.
+#
+# The two extra gems are NOT incidental — both were found by actually running
+# this bundle in the job's own image:
+#
+#   racc  gitlab-triage requires it at runtime. It ships as a Ruby *default
+#         gem*, which is why the old `gem install` path resolved it implicitly.
+#         Once a bundle governs the load path, a default gem that is not IN the
+#         bundle is no longer requirable, and gitlab-triage dies with
+#         `cannot load such file -- racc/parser.rb`.
+#
+#   csv   Also currently a default gem, but Ruby 3.4 drops it from the default
+#         set (3.3 already warns). Declaring it now means the eventual image
+#         bump is a version change, not a debugging session.
+#
+# Bump deliberately. Regenerate the lock with a real resolver — never hand-edit
+# it — in the image the job uses:
+#
+#   docker run --rm -it -v "$PWD":/w -w /w ruby:<image-tag> bash -c \
+#     'apt-get update && apt-get install -y build-essential && \
+#      bundle lock && \
+#      bundle lock --add-platform x86_64-linux && \
+#      bundle lock --add-platform aarch64-linux'
+#
+# build-essential is required because the resolved dependency graph includes
+# native extensions (bigdecimal). See the job's `before_script` for why the CI
+# job installs it too.
+
+source "https://rubygems.org"
+
+gem "gitlab-triage", "1.51.0"
+
+# Runtime dependencies of gitlab-triage that are currently Ruby default gems.
+# See the header — both must be explicit once a bundle owns the load path.
+gem "racc"
+gem "csv"

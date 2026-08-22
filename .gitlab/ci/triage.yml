@@ -44,46 +44,80 @@
 # Run `gitlab-triage --dry-run` locally (see the job's script) to preview
 # actions without mutating issues.
 #
-# GITLAB_TRIAGE_VERSION pins the gem so a breaking upstream release cannot
-# silently change labeling behaviour. Bump deliberately; the CI cache below is
-# keyed on this value, so a bump forces a clean reinstall.
+# Reproducibility and cache integrity (issue #764). The gem version is pinned in
+# `.gitlab/triage/Gemfile`, and the FULL dependency graph — transitive gems
+# included — is locked in the committed `Gemfile.lock`. Bump deliberately by
+# editing the Gemfile and regenerating the lock with a real resolver; the
+# Gemfile's header carries the exact command.
 #
-# Reproducibility (transitive deps — deferred). Pinning the gem version does not
-# lock its transitive dependency graph; a fully reproducible install would use a
-# vendored `Gemfile` + `Gemfile.lock` with `bundle install --deployment`. That
-# is intentionally deferred: the top-level version pin plus the cross-run gem
-# cache below are the interim reproducibility measure. Track the bundler route as
-# a follow-up if the dependency tree ever drifts in a way that matters.
+# Why bundler rather than `gem install gitlab-triage --version X`: that pinned
+# the top-level gem only, and — worse — once the cross-run cache below was warm
+# it became a no-op. RubyGems finds the local spec and never re-fetches or
+# re-checksums against the registry, so the version pin stopped forcing any
+# integrity check on cached runs: whatever bytes sat in `.gem/` were what ran,
+# with an `api`-scoped token in hand, and GitLab cache keys are shared across
+# branches by default. Deployment mode re-verifies every gem against the
+# committed lock on every run, cache state notwithstanding.
 
-variables:
-  GITLAB_TRIAGE_VERSION: "1.51.0"
+# NOTE: there is deliberately no GITLAB_TRIAGE_VERSION variable here any more.
+# The gem version has exactly ONE source of truth — the pin in
+# .gitlab/triage/Gemfile — and the cache key below derives from the Gemfile's
+# own checksum instead of restating it. A second copy would have to be kept in
+# step by the weekly auto-patch updater, which bumps only the Gemfile; the
+# result would be a stale variable failing the sync assertion in
+# tests/unit/gitlab-templates.sh on every auto-patch run (#764).
 
 issue-triage:
   stage: .post
   # Patch-pinned (not the floating `ruby:3.3-slim`) to match this repo's
   # pin-explicit-versions posture. Bump the patch deliberately.
   image: ruby:3.3.12-slim
-  # Job-scoped, NOT a top-level variable: this file is a reusable include, and a
-  # top-level GEM_HOME would redirect RubyGems' install/lookup path for EVERY job
-  # in the consuming pipeline. Keeping it here confines it to this job so it can
-  # cache the gem (see `cache:` below) without leaking into unrelated Ruby jobs.
-  variables:
-    GEM_HOME: "$CI_PROJECT_DIR/.gem"
+  # No GEM_HOME here any more. It existed to point RubyGems at the cached
+  # `.gem/` for the old `gem install` flow; bundler now owns that location via
+  # `bundle config set --local path`, and `bundle exec` resolves executables
+  # through the bundle rather than $PATH. Keeping the variable (and the matching
+  # PATH export) would be dead config that reads like it is load-bearing.
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
-  # Cache the installed gem across scheduled runs, keyed on the pinned version so
-  # a `GITLAB_TRIAGE_VERSION` bump invalidates the cache and reinstalls cleanly.
+  # Cache the vendored bundle across scheduled runs. The key includes the Ruby
+  # image tag as well as the gem version: a cache built against one Ruby ABI
+  # must not be reused after an image bump, because the resolved graph contains
+  # native extensions (bigdecimal). Version bump or image bump — either
+  # invalidates the cache and reinstalls cleanly.
+  #
+  # Unlike the previous `gem install` setup, a stale or tampered cache is no
+  # longer trusted implicitly: deployment mode re-verifies every gem against the
+  # committed Gemfile.lock on each run.
   cache:
-    key: "gitlab-triage-$GITLAB_TRIAGE_VERSION"
+    # Keyed on the Gemfile.lock's own checksum plus the Ruby image tag. `files:`
+    # makes GitLab hash the file, so a gem bump invalidates the cache
+    # automatically with no version string to keep in sync — and because the LOCK
+    # is what changes on a real bump, this tracks the entire resolved graph, not
+    # just the top-level pin. The image tag is part of the prefix because the
+    # graph contains native extensions (bigdecimal) that are ABI-specific.
+    key:
+      files:
+        - .gitlab/triage/Gemfile.lock
+      prefix: "gitlab-triage-ruby3.3.12"
     paths:
       - .gem/
     policy: pull-push
   before_script:
-    - export PATH="$GEM_HOME/bin:$PATH"
-    - gem install gitlab-triage --no-document --version "$GITLAB_TRIAGE_VERSION"
+    # The locked graph includes native extensions (bigdecimal), and the -slim
+    # image ships no compiler. Verified in that image: without build-essential
+    # the install fails at `bundle install`; the old `gem install` path only
+    # avoided it by resolving bigdecimal to the Ruby default gem. Adds ~8s.
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends build-essential
+    # deployment mode = frozen: refuses to run if Gemfile and Gemfile.lock
+    # disagree, and never silently rewrites the lock. Set via `bundle config`
+    # rather than the deprecated `--deployment` flag.
+    - bundle config set --local deployment true
+    - bundle config set --local path "$CI_PROJECT_DIR/.gem"
+    - bundle config set --local gemfile .gitlab/triage/Gemfile
+    - bundle install
   script:
     - |
-      gitlab-triage \
+      bundle exec gitlab-triage \
         --token "$GITLAB_API_TOKEN" \
         --host-url "$CI_SERVER_URL" \
         --source-id "$CI_PROJECT_PATH" \

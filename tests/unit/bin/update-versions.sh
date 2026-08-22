@@ -1398,6 +1398,113 @@ EOF
     assert_true "$ok" "hyperfine, jsonc-parser, and sd rewrite their own pins and nothing else"
 }
 
+test_gemfile_case_rewrites_triage_pin() {
+    # The Gemfile file type is unlike every other updater target: the pin lives
+    # in .gitlab/triage/Gemfile, and the companion Gemfile.lock CANNOT be
+    # regenerated here (that needs a real Ruby resolver). Assert the rewrite
+    # itself is correct and that the lock is deliberately left alone.
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    mkdir -p "$test_dir/.gitlab/triage"
+    command cat >"$test_dir/.gitlab/triage/Gemfile" <<'EOF'
+# frozen_string_literal: true
+source "https://rubygems.org"
+
+gem "gitlab-triage", "1.50.0"
+gem "racc"
+gem "csv"
+EOF
+    command cat >"$test_dir/.gitlab/triage/Gemfile.lock" <<'EOF'
+GEM
+  specs:
+    gitlab-triage (1.50.0)
+EOF
+
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "gitlab-triage", "current": "1.50.0", "latest": "1.51.0", "file": "Gemfile", "status": "outdated"}
+  ]
+}
+EOF
+
+    (
+        cd "$test_dir" || exit 1
+        PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" \
+            --no-commit --no-bump --input test.json >/dev/null 2>&1
+    ) || true
+
+    local ok=true
+    local gemfile="$test_dir/.gitlab/triage/Gemfile"
+
+    command grep -q 'gem "gitlab-triage", "1.51.0"' "$gemfile" || {
+        echo "    gitlab-triage: Gemfile pin was not rewritten to 1.51.0"
+        ok=false
+    }
+    # The unversioned sibling gems must survive untouched.
+    command grep -q '^gem "racc"$' "$gemfile" || {
+        echo "    gitlab-triage: the racc dependency was disturbed"
+        ok=false
+    }
+    command grep -q '^gem "csv"$' "$gemfile" || {
+        echo "    gitlab-triage: the csv dependency was disturbed"
+        ok=false
+    }
+    # The lock is intentionally NOT rewritten — a hand-edited lock would
+    # checksum-verify against invented data. Frozen mode then fails loudly, and
+    # tests/unit/gitlab-templates.sh catches the drift at commit time.
+    command grep -q 'gitlab-triage (1.50.0)' "$test_dir/.gitlab/triage/Gemfile.lock" || {
+        echo "    gitlab-triage: Gemfile.lock should have been left alone for manual regeneration"
+        ok=false
+    }
+
+    command rm -rf "$test_dir"
+    assert_true "$ok" "gitlab-triage rewrites the Gemfile pin and leaves the lock for a real resolver"
+}
+
+test_unknown_gemfile_tool_returns_no_updater_case() {
+    # The Gemfile branch's *) arm must report a missing case rather than
+    # silently succeeding, same as every other file type.
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    mkdir -p "$test_dir/.gitlab/triage"
+    command cat >"$test_dir/.gitlab/triage/Gemfile" <<'EOF'
+source "https://rubygems.org"
+gem "gitlab-triage", "1.50.0"
+EOF
+
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "some-unknown-gem", "current": "1.0.0", "latest": "2.0.0", "file": "Gemfile", "status": "outdated"}
+  ]
+}
+EOF
+
+    local output rc=0
+    output=$(
+        cd "$test_dir" || exit 1
+        PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" \
+            --no-commit --no-bump --input test.json 2>&1
+    ) || rc=$?
+
+    command rm -rf "$test_dir"
+
+    local ok=true
+    if [ "$rc" -eq 0 ]; then
+        echo "    unknown Gemfile tool exited 0 — a missing case must be reported"
+        ok=false
+    fi
+    if ! /usr/bin/printf '%s' "$output" | command grep -qi 'unknown gemfile tool'; then
+        echo "    expected an 'Unknown Gemfile tool' error, got: $output"
+        ok=false
+    fi
+
+    assert_true "$ok" "an unknown Gemfile tool reports a missing updater case"
+}
+
 # ============================================================================
 # Test: a failed rewrite exits 3, not 2
 # ============================================================================
@@ -1498,6 +1605,8 @@ run_test test_exit_code_contract "Exit-code contract: 2 on skipped updates (real
 run_test test_dry_run_reports_missing_case_without_writing "Dry run reports a missing updater case without writing"
 run_test test_dry_run_short_circuits_network_and_binary "Dry run skips pin_action's network call and the luggage binary probe"
 run_test test_new_cases_rewrite_their_pins "hyperfine, jsonc-parser, and sd rewrite their own pins"
+run_test test_gemfile_case_rewrites_triage_pin "gitlab-triage rewrites the Gemfile pin, not the lock"
+run_test test_unknown_gemfile_tool_returns_no_updater_case "unknown Gemfile tool reports a missing updater case"
 run_test test_failed_rewrite_exits_three "Failed rewrite exits 3 (fatal), not 2 (tolerated)"
 run_test test_luggage_catalog_failure_exits_three "Failed luggage catalog update returns RC_UPDATE_FAILED and exits 3"
 run_test test_failure_summary_separates_causes "Failure summary separates causes and names the tools"
