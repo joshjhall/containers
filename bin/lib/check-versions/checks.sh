@@ -306,6 +306,19 @@ check_crates_io() {
     progress_done
 }
 
+check_rubygems() {
+    local tool="$1"
+    local gem="${2:-$tool}"
+    progress_msg "  $tool..."
+    # RubyGems exposes the newest published release for a gem at
+    # /api/v1/versions/<gem>/latest.json as {"version":"X.Y.Z"}.
+    local latest
+    latest=$(fetch_url "https://rubygems.org/api/v1/versions/$gem/latest.json" |
+        jq -r '.version // "null"' 2>/dev/null)
+    set_latest "$tool" "$latest"
+    progress_done
+}
+
 check_npm() {
     local tool="$1"
     local package="${2:-$tool}"

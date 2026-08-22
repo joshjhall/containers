@@ -44,18 +44,25 @@
 # Run `gitlab-triage --dry-run` locally (see the job's script) to preview
 # actions without mutating issues.
 #
-# GITLAB_TRIAGE_VERSION pins the gem so a breaking upstream release cannot
-# silently change labeling behaviour. Bump deliberately; the CI cache below is
-# keyed on this value, so a bump forces a clean reinstall.
+# Reproducibility and cache integrity (issue #764). The gem version is pinned in
+# `.gitlab/triage/Gemfile`, and the FULL dependency graph — transitive gems
+# included — is locked in the committed `Gemfile.lock`. Bump deliberately by
+# editing the Gemfile and regenerating the lock with a real resolver; the
+# Gemfile's header carries the exact command.
 #
-# Reproducibility (transitive deps — deferred). Pinning the gem version does not
-# lock its transitive dependency graph; a fully reproducible install would use a
-# vendored `Gemfile` + `Gemfile.lock` with `bundle install --deployment`. That
-# is intentionally deferred: the top-level version pin plus the cross-run gem
-# cache below are the interim reproducibility measure. Track the bundler route as
-# a follow-up if the dependency tree ever drifts in a way that matters.
+# Why bundler rather than `gem install gitlab-triage --version X`: that pinned
+# the top-level gem only, and — worse — once the cross-run cache below was warm
+# it became a no-op. RubyGems finds the local spec and never re-fetches or
+# re-checksums against the registry, so the version pin stopped forcing any
+# integrity check on cached runs: whatever bytes sat in `.gem/` were what ran,
+# with an `api`-scoped token in hand, and GitLab cache keys are shared across
+# branches by default. Deployment mode re-verifies every gem against the
+# committed lock on every run, cache state notwithstanding.
 
 variables:
+  # Kept as a variable because the cache key below is keyed on it. It must stay
+  # in sync with the pin in .gitlab/triage/Gemfile — tests/unit/gitlab-templates.sh
+  # asserts they match, so a bump to one without the other fails the suite.
   GITLAB_TRIAGE_VERSION: "1.51.0"
 
 issue-triage:
@@ -71,19 +78,37 @@ issue-triage:
     GEM_HOME: "$CI_PROJECT_DIR/.gem"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
-  # Cache the installed gem across scheduled runs, keyed on the pinned version so
-  # a `GITLAB_TRIAGE_VERSION` bump invalidates the cache and reinstalls cleanly.
+  # Cache the vendored bundle across scheduled runs. The key includes the Ruby
+  # image tag as well as the gem version: a cache built against one Ruby ABI
+  # must not be reused after an image bump, because the resolved graph contains
+  # native extensions (bigdecimal). Version bump or image bump — either
+  # invalidates the cache and reinstalls cleanly.
+  #
+  # Unlike the previous `gem install` setup, a stale or tampered cache is no
+  # longer trusted implicitly: deployment mode re-verifies every gem against the
+  # committed Gemfile.lock on each run.
   cache:
-    key: "gitlab-triage-$GITLAB_TRIAGE_VERSION"
+    key: "gitlab-triage-$GITLAB_TRIAGE_VERSION-ruby3.3.12"
     paths:
       - .gem/
     policy: pull-push
   before_script:
     - export PATH="$GEM_HOME/bin:$PATH"
-    - gem install gitlab-triage --no-document --version "$GITLAB_TRIAGE_VERSION"
+    # The locked graph includes native extensions (bigdecimal), and the -slim
+    # image ships no compiler. Verified in that image: without build-essential
+    # the install fails at `bundle install`; the old `gem install` path only
+    # avoided it by resolving bigdecimal to the Ruby default gem. Adds ~8s.
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends build-essential
+    # deployment mode = frozen: refuses to run if Gemfile and Gemfile.lock
+    # disagree, and never silently rewrites the lock. Set via `bundle config`
+    # rather than the deprecated `--deployment` flag.
+    - bundle config set --local deployment true
+    - bundle config set --local path "$CI_PROJECT_DIR/.gem"
+    - bundle config set --local gemfile .gitlab/triage/Gemfile
+    - bundle install
   script:
     - |
-      gitlab-triage \
+      bundle exec gitlab-triage \
         --token "$GITLAB_API_TOKEN" \
         --host-url "$CI_SERVER_URL" \
         --source-id "$CI_PROJECT_PATH" \

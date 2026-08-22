@@ -28,6 +28,30 @@ jobs:
         with:
           fetch-depth: 0 # Fetch full history for Gitleaks to scan commit ranges
 
+      # tests/unit/gitlab-templates.sh executes the triage policy's committed
+      # Ruby conditions to prove the labeling logic works. It needs ruby (already
+      # on ubuntu-latest) AND yq — without yq those tests SKIPPED here, and a
+      # skip renders identically to a pass, so they sat un-executed on every run
+      # (#768). The suite now fails rather than skips when CI=true, so this step
+      # is what keeps that check green.
+      #
+      # Version is read from lib/features/dev-tools.sh so there is ONE yq pin in
+      # the repo — the one bin/check-versions.sh already tracks — rather than a
+      # second copy here that would drift silently.
+      - name: Install yq (for GitLab triage policy tests)
+        run: |
+          set -euo pipefail
+          YQ_VERSION=$(grep -oP 'YQ_VERSION="\$\{YQ_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          if [ -z "$YQ_VERSION" ]; then
+            echo "::error::could not read YQ_VERSION from lib/features/dev-tools.sh"
+            exit 1
+          fi
+          echo "Installing yq $YQ_VERSION"
+          curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
+            -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+          yq --version
+
       - name: Run unit tests
         run: |
           echo "Running unit tests without Docker..."

@@ -156,6 +156,17 @@ any crate without a prebuilt binary. All are `--locked` and pinned to a
 - cargo-nextest, cargo-llvm-cov, cargo-machete (rust-dev.sh)
 - mold linker (rust-dev.sh; checked against `rui314/mold` GitHub releases)
 
+✅ **CI template pins:**
+
+- gitlab-triage (`.gitlab/triage/Gemfile`; checked against the RubyGems API).
+  Powers the scheduled GitLab issue-triage job. The full dependency graph is
+  locked in the committed `Gemfile.lock`, which `bundle install` verifies in
+  deployment mode on every run. The weekly sweep can rewrite the **Gemfile**
+  pin but cannot regenerate the **lock** — that needs a real Ruby resolver — so
+  a bump is finished by hand using the command in the Gemfile's header. The two
+  are asserted to stay in sync by `tests/unit/gitlab-templates.sh`, and frozen
+  mode refuses to run if they ever disagree (#764).
+
 ## Version Tracking Status
 
 ✅ **All critical tools are now properly versioned and tracked:**

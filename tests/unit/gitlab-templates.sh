@@ -202,8 +202,16 @@ test_policy_and_include_exist() {
 }
 
 test_yaml_is_valid() {
+    # Same CI rule as the Ruby-backed tests: a malformed triage.yml that only
+    # ever gets skipped in CI is exactly the failure mode worth preventing here,
+    # since nothing in this repo's pipeline executes the file itself.
     if ! command -v yq >/dev/null 2>&1; then
-        skip_test "yq not available — skipping YAML validity check"
+        if [ "${CI:-false}" = "true" ]; then
+            assert_true false \
+                "yq is required in CI — YAML validity check cannot silently skip (see .github/workflows/ci.yml)"
+        else
+            skip_test "yq not available — skipping YAML validity check"
+        fi
         return
     fi
     local invalid=0 file
@@ -343,15 +351,73 @@ _policy_ruby_eval() {
 }
 
 # Guard: both tests need a Ruby interpreter and yq to read the policy.
+#
+# In CI these are NOT optional. A skip renders identically to a pass in the
+# summary, which is exactly how these tests sat un-executed on every CI run
+# (ubuntu-latest ships ruby but not yq, and no workflow step installed it) —
+# the gap #768 was filed against. So under CI a missing interpreter is a
+# FAILURE, not a skip; locally it stays a graceful skip, since not every
+# contributor has Ruby installed.
 _policy_regex_prereqs_ok() {
     command -v ruby >/dev/null 2>&1 && command -v yq >/dev/null 2>&1
 }
 
-test_policy_regex_matches_template_triage_blocks() {
-    if ! _policy_regex_prereqs_ok; then
-        skip_test "ruby or yq not available — skipping functional regex test"
-        return
+# Handle absent prerequisites per the rule above. Returns 0 when the caller
+# should proceed, 1 when it has already reported (skip locally / fail in CI).
+_policy_prereq_gate() {
+    local what="$1"
+    if _policy_regex_prereqs_ok; then
+        return 0
     fi
+    if [ "${CI:-false}" = "true" ]; then
+        assert_true false \
+            "ruby and yq are required in CI — $what cannot silently skip (see .github/workflows/ci.yml)"
+    else
+        skip_test "ruby or yq not available — skipping $what"
+    fi
+    return 1
+}
+
+# Evaluate a needs-triage lifecycle rule's committed `ruby:` condition against a
+# label set, exactly as gitlab-triage would. These two rules are the only ones
+# expressed as pure logic rather than a regex, and they bind resource[:labels]
+# rather than resource[:description] — hence a sibling of _policy_ruby_eval.
+#
+# $1 selects the rule by the action it performs, since one ADDS the label and
+# the other REMOVES it: "add" reads .actions.labels[0], "clear" reads
+# .actions.remove_labels[0].
+#
+# Same trust boundary as _policy_ruby_eval: the committed expression IS executed
+# (evaluating a transcription would not test the real thing). Labels are passed
+# through the environment as a newline-delimited list, never interpolated into
+# the Ruby source.
+_policy_labels_eval() {
+    local which="$1" labels="$2" expr selector
+
+    case "$which" in
+        add) selector='.actions.labels[0] == "needs-triage"' ;;
+        clear) selector='.actions.remove_labels[0] == "needs-triage"' ;;
+        *) return 1 ;;
+    esac
+
+    expr=$(yq -r \
+        ".resource_rules.issues.rules[] | select($selector) | .conditions.ruby" \
+        "$POLICY_FILE" 2>/dev/null)
+    [ -n "$expr" ] && [ "$expr" != "null" ] || return 1
+
+    # NOTE: unlike the severity/effort regex conditions, these expressions are
+    # TWO statements (`labels = Array(...); !(...)`). Wrapping them in
+    # `print(...)` the way _policy_ruby_eval does is a syntax error, so evaluate
+    # the whole thing as a block and print its value instead.
+    _POLICY_LABELS="$labels" ruby -e \
+        "resource = { labels: ENV['_POLICY_LABELS'].split(\"\n\").reject(&:empty?) }
+         print(begin
+           ${expr}
+         end)" 2>/dev/null
+}
+
+test_policy_regex_matches_template_triage_blocks() {
+    _policy_prereq_gate "functional regex test" || return
     [ -f "$POLICY_FILE" ] || {
         assert_true false "policy file missing — cannot run functional regex test"
         return
@@ -404,10 +470,7 @@ test_policy_regex_matches_template_triage_blocks() {
 }
 
 test_policy_regex_matches_every_value() {
-    if ! _policy_regex_prereqs_ok; then
-        skip_test "ruby or yq not available — skipping per-value regex test"
-        return
-    fi
+    _policy_prereq_gate "per-value regex test" || return
     [ -f "$POLICY_FILE" ] || {
         assert_true false "policy file missing — cannot run per-value regex test"
         return
@@ -445,10 +508,7 @@ test_policy_regex_matches_every_value() {
 }
 
 test_policy_regex_rejects_broken_anchor() {
-    if ! _policy_regex_prereqs_ok; then
-        skip_test "ruby or yq not available — skipping broken-anchor regex test"
-        return
-    fi
+    _policy_prereq_gate "broken-anchor regex test" || return
     [ -f "$POLICY_FILE" ] || {
         assert_true false "policy file missing — cannot run broken-anchor regex test"
         return
@@ -493,6 +553,363 @@ test_policy_regex_rejects_broken_anchor() {
     fi
 }
 
+# ============================================================================
+# needs-triage lifecycle — functional (issue #768)
+# ============================================================================
+# test_policy_has_both_triage_rules above only greps that the two rules EXIST.
+# Their conditions are pure Ruby against resource[:labels], so a logic slip
+# (&& for ||, a dropped negation, a typo'd prefix) passes that grep untouched
+# while silently flagging every issue or none. These tests execute the
+# committed expressions across the full truth table.
+
+test_needs_triage_add_rule_truth_table() {
+    _policy_prereq_gate "needs-triage add-rule test" || return
+    [ -f "$POLICY_FILE" ] || {
+        assert_true false "policy file missing — cannot run needs-triage add-rule test"
+        return
+    }
+
+    # The add rule fires when the issue lacks a severity/* OR an effort/* label.
+    # Half-labeled counts as untriaged — that is what the && inside the negation
+    # buys, and the case a || regression would silently break.
+    # Parallel arrays rather than delimited strings: a label SET is itself
+    # newline-delimited, so packing it into a "a|b|c" record and splitting with
+    # cut mangles every multi-label case.
+    local failures=0 got i
+    local -a set_labels=(
+        ""
+        "severity/high"
+        "effort/small"
+        "severity/high"$'\n'"effort/small"
+        "type/bug"$'\n'"component/ci"
+        "severity/high"$'\n'"effort/small"$'\n'"type/bug"
+    )
+    local -a set_want=(true true true false true false)
+    local -a set_desc=(
+        "no labels at all"
+        "severity only (effort missing)"
+        "effort only (severity missing)"
+        "both namespaces present"
+        "unrelated labels only"
+        "both present plus extras"
+    )
+
+    for i in "${!set_labels[@]}"; do
+        got=$(_policy_labels_eval add "${set_labels[$i]}")
+        if [ "$got" != "${set_want[$i]}" ]; then
+            /usr/bin/echo "  add rule: ${set_desc[$i]} — expected ${set_want[$i]}, got '${got:-<none>}'"
+            failures=$((failures + 1))
+        fi
+    done
+
+    if [ "$failures" -eq 0 ]; then
+        assert_true true "needs-triage add rule fires exactly when a namespace is missing"
+    else
+        assert_true false "$failures needs-triage add-rule case(s) failed"
+    fi
+}
+
+test_needs_triage_clear_rule_truth_table() {
+    _policy_prereq_gate "needs-triage clear-rule test" || return
+    [ -f "$POLICY_FILE" ] || {
+        assert_true false "policy file missing — cannot run needs-triage clear-rule test"
+        return
+    }
+
+    # The clear rule is the exact negation of the add rule.
+    # Parallel arrays — see the add-rule test for why.
+    local failures=0 got i
+    local -a set_labels=(
+        ""
+        "severity/high"
+        "effort/small"
+        "severity/high"$'\n'"effort/small"
+        "severity/low"$'\n'"effort/large"$'\n'"type/bug"
+    )
+    local -a set_want=(false false false true true)
+    local -a set_desc=(
+        "no labels at all"
+        "severity only (effort missing)"
+        "effort only (severity missing)"
+        "both namespaces present"
+        "both present plus extras"
+    )
+
+    for i in "${!set_labels[@]}"; do
+        got=$(_policy_labels_eval clear "${set_labels[$i]}")
+        if [ "$got" != "${set_want[$i]}" ]; then
+            /usr/bin/echo "  clear rule: ${set_desc[$i]} — expected ${set_want[$i]}, got '${got:-<none>}'"
+            failures=$((failures + 1))
+        fi
+    done
+
+    if [ "$failures" -eq 0 ]; then
+        assert_true true "needs-triage clear rule fires exactly when both namespaces are present"
+    else
+        assert_true false "$failures needs-triage clear-rule case(s) failed"
+    fi
+}
+
+test_needs_triage_rules_are_exact_negations() {
+    # The two rules must partition every label set between them: exactly one
+    # fires for any input. If they ever drift apart, an issue could be flagged
+    # and cleared on the same run (flapping) or fall through both and sit
+    # unlabeled forever — neither of which the per-rule tables above would
+    # catch, since each passes in isolation.
+    _policy_prereq_gate "needs-triage negation test" || return
+    [ -f "$POLICY_FILE" ] || {
+        assert_true false "policy file missing — cannot run needs-triage negation test"
+        return
+    }
+
+    local failures=0 add clear labels
+    local -a label_sets=(
+        ""
+        "severity/high"
+        "effort/small"
+        "severity/high"$'\n'"effort/small"
+        "type/bug"
+        "severity/critical"$'\n'"effort/trivial"$'\n'"component/runtime"
+    )
+
+    for labels in "${label_sets[@]}"; do
+        add=$(_policy_labels_eval add "$labels")
+        clear=$(_policy_labels_eval clear "$labels")
+        if [ -z "$add" ] || [ -z "$clear" ]; then
+            /usr/bin/echo "  could not evaluate one of the rules for label set: ${labels//$'\n'/,}"
+            failures=$((failures + 1))
+            continue
+        fi
+        if [ "$add" = "$clear" ]; then
+            /usr/bin/echo "  rules agreed (both '$add') for label set: ${labels//$'\n'/,} — they must be negations"
+            failures=$((failures + 1))
+        fi
+    done
+
+    if [ "$failures" -eq 0 ]; then
+        assert_true true "add and clear rules are exact negations across every label set"
+    else
+        assert_true false "$failures label set(s) broke the negation invariant"
+    fi
+}
+
+test_needs_triage_logic_has_teeth() {
+    # Mirrors test_policy_regex_rejects_broken_anchor: mutate the committed
+    # expression and assert the result flips. Without this, the truth tables
+    # above could pass against an expression that ignores its input entirely.
+    _policy_prereq_gate "needs-triage teeth test" || return
+    [ -f "$POLICY_FILE" ] || {
+        assert_true false "policy file missing — cannot run needs-triage teeth test"
+        return
+    }
+
+    local real broken correct wrong
+    real=$(yq -r \
+        '.resource_rules.issues.rules[] | select(.actions.labels[0] == "needs-triage") | .conditions.ruby' \
+        "$POLICY_FILE" 2>/dev/null)
+
+    # The regression this guards: && -> ||, which makes a half-labeled issue
+    # (severity but no effort) stop being flagged.
+    broken=$(/usr/bin/printf '%s' "$real" | /usr/bin/sed 's/&&/||/')
+
+    # Same two-statement caveat as _policy_labels_eval — evaluate as a block.
+    local labels="severity/high"
+    correct=$(_POLICY_LABELS="$labels" ruby -e \
+        "resource = { labels: ENV['_POLICY_LABELS'].split(\"\n\").reject(&:empty?) }
+         print(begin
+           ${real}
+         end)" 2>/dev/null)
+    wrong=$(_POLICY_LABELS="$labels" ruby -e \
+        "resource = { labels: ENV['_POLICY_LABELS'].split(\"\n\").reject(&:empty?) }
+         print(begin
+           ${broken}
+         end)" 2>/dev/null)
+
+    local failures=0
+    if [ "$broken" = "$real" ]; then
+        /usr/bin/echo "  sed did not mutate the expression — cannot exercise the broken variant"
+        failures=$((failures + 1))
+    fi
+    if [ "$correct" != "true" ]; then
+        /usr/bin/echo "  real add rule failed to flag a half-labeled issue (got '$correct')"
+        failures=$((failures + 1))
+    fi
+    if [ "$wrong" != "false" ]; then
+        /usr/bin/echo "  && -> || variant still flagged (got '$wrong') — the truth table would not catch this"
+        failures=$((failures + 1))
+    fi
+
+    if [ "$failures" -eq 0 ]; then
+        assert_true true "an && -> || slip flips the result — the needs-triage tests have teeth"
+    else
+        assert_true false "$failures needs-triage teeth assertion(s) failed"
+    fi
+}
+
+# ============================================================================
+# Gemfile / CI include consistency (issue #764)
+# ============================================================================
+
+test_gemfile_and_lock_exist() {
+    local gemfile="$GITLAB_DIR/triage/Gemfile"
+    local lock="$GITLAB_DIR/triage/Gemfile.lock"
+    local failures=0
+
+    [ -f "$gemfile" ] || {
+        /usr/bin/echo "  missing $gemfile"
+        failures=$((failures + 1))
+    }
+    [ -f "$lock" ] || {
+        /usr/bin/echo "  missing $lock"
+        failures=$((failures + 1))
+    }
+
+    # A lock without the transitive graph defeats the point of committing it.
+    if [ -f "$lock" ] && ! /usr/bin/grep -q '^GEM' "$lock"; then
+        /usr/bin/echo "  Gemfile.lock has no GEM section — not a resolved lock"
+        failures=$((failures + 1))
+    fi
+
+    # The job runs on Linux runners of either architecture; a lock missing a
+    # platform fails there in deployment mode.
+    if [ -f "$lock" ]; then
+        local plat
+        for plat in x86_64-linux aarch64-linux; do
+            if ! /usr/bin/grep -q "$plat" "$lock"; then
+                /usr/bin/echo "  Gemfile.lock does not register the $plat platform"
+                failures=$((failures + 1))
+            fi
+        done
+    fi
+
+    if [ "$failures" -eq 0 ]; then
+        assert_true true "triage Gemfile and resolved multi-platform Gemfile.lock are committed"
+    else
+        assert_true false "$failures Gemfile/Gemfile.lock problem(s)"
+    fi
+}
+
+test_triage_version_matches_gemfile() {
+    # GITLAB_TRIAGE_VERSION still exists in the CI include because the cache key
+    # is built from it, but the gem version now actually comes from the Gemfile.
+    # Two sources of truth that must not drift.
+    local gemfile="$GITLAB_DIR/triage/Gemfile"
+    [ -f "$gemfile" ] && [ -f "$CI_INCLUDE" ] || {
+        assert_true false "Gemfile or CI include missing — cannot compare pins"
+        return
+    }
+
+    local ci_version gem_version
+    ci_version=$(/usr/bin/grep -E '^\s*GITLAB_TRIAGE_VERSION:' "$CI_INCLUDE" |
+        /usr/bin/sed -E 's/.*"([^"]+)".*/\1/')
+    gem_version=$(/usr/bin/grep -E '^gem "gitlab-triage"' "$gemfile" |
+        /usr/bin/sed -E 's/.*,\s*"([^"]+)".*/\1/')
+
+    if [ -n "$ci_version" ] && [ "$ci_version" = "$gem_version" ]; then
+        assert_true true "GITLAB_TRIAGE_VERSION ($ci_version) matches the Gemfile pin"
+    else
+        assert_true false \
+            "pin drift: CI include has '${ci_version:-<none>}', Gemfile has '${gem_version:-<none>}'"
+    fi
+}
+
+test_gemfile_and_lock_agree() {
+    # `bundle install` runs in deployment (frozen) mode, which REFUSES to
+    # resolve when the Gemfile and Gemfile.lock disagree — so a bump that
+    # touches only one of them breaks the scheduled job. The weekly auto-patch
+    # updater can rewrite the Gemfile pin but cannot regenerate the lock (that
+    # needs a real Ruby resolver), so this assertion is what catches the drift
+    # at commit time instead of at the next schedule.
+    local gemfile="$GITLAB_DIR/triage/Gemfile"
+    local lock="$GITLAB_DIR/triage/Gemfile.lock"
+    [ -f "$gemfile" ] && [ -f "$lock" ] || {
+        assert_true false "Gemfile or Gemfile.lock missing — cannot compare pins"
+        return
+    }
+
+    local gem_version lock_version
+    gem_version=$(/usr/bin/grep -E '^gem "gitlab-triage"' "$gemfile" |
+        /usr/bin/sed -E 's/.*,[[:space:]]*"([^"]+)".*/\1/')
+    # The lock records the resolved version as `    gitlab-triage (X.Y.Z)`.
+    lock_version=$(/usr/bin/grep -E '^[[:space:]]+gitlab-triage \(' "$lock" |
+        /usr/bin/head -1 |
+        /usr/bin/sed -E 's/.*\(([^)]+)\).*/\1/')
+
+    if [ -n "$gem_version" ] && [ "$gem_version" = "$lock_version" ]; then
+        assert_true true "Gemfile pin ($gem_version) matches the resolved Gemfile.lock"
+    else
+        assert_true false \
+            "Gemfile/lock drift: Gemfile has '${gem_version:-<none>}', lock has '${lock_version:-<none>}' — regenerate the lock (see the Gemfile header)"
+    fi
+}
+
+test_triage_job_uses_bundler() {
+    [ -f "$CI_INCLUDE" ] || {
+        assert_true false "CI include missing — cannot check bundler wiring"
+        return
+    }
+
+    local failures=0
+
+    # deployment mode is the whole point: it re-verifies every gem against the
+    # committed lock regardless of cache state (#764).
+    if ! /usr/bin/grep -q 'bundle config set --local deployment true' "$CI_INCLUDE"; then
+        /usr/bin/echo "  job does not enable bundler deployment mode"
+        failures=$((failures + 1))
+    fi
+    if ! /usr/bin/grep -q 'bundle exec gitlab-triage' "$CI_INCLUDE"; then
+        /usr/bin/echo "  job does not invoke gitlab-triage through the bundle"
+        failures=$((failures + 1))
+    fi
+    # The old path is what left a warm cache unverified — it must not come back.
+    if /usr/bin/grep -qE '^\s*-\s*gem install gitlab-triage' "$CI_INCLUDE"; then
+        /usr/bin/echo "  job still uses 'gem install' — bypasses lock verification"
+        failures=$((failures + 1))
+    fi
+    # The locked graph contains native extensions and the -slim image has no
+    # compiler; verified empirically that the install fails without this.
+    if ! /usr/bin/grep -q 'build-essential' "$CI_INCLUDE"; then
+        /usr/bin/echo "  job does not install build-essential (native gems will fail to build)"
+        failures=$((failures + 1))
+    fi
+
+    if [ "$failures" -eq 0 ]; then
+        assert_true true "triage job installs via bundler in deployment mode"
+    else
+        assert_true false "$failures bundler-wiring problem(s) in the CI include"
+    fi
+}
+
+test_cache_key_includes_ruby_image() {
+    # A gem tree built against one Ruby ABI must not be reused after an image
+    # bump — the graph contains native extensions (#764 item 3).
+    [ -f "$CI_INCLUDE" ] || {
+        assert_true false "CI include missing — cannot check cache key"
+        return
+    }
+
+    local key image_tag
+    key=$(/usr/bin/grep -E '^\s*key:\s*"gitlab-triage' "$CI_INCLUDE" |
+        /usr/bin/sed -E 's/.*"([^"]+)".*/\1/')
+    # e.g. "ruby:3.3.12-slim" -> "3.3.12"
+    image_tag=$(/usr/bin/grep -E '^\s*image:\s*ruby:' "$CI_INCLUDE" |
+        /usr/bin/sed -E 's/.*ruby:([0-9.]+).*/\1/')
+
+    if [ -z "$key" ] || [ -z "$image_tag" ]; then
+        assert_true false "could not read cache key or image tag from the CI include"
+        return
+    fi
+
+    # Compare on the digits so the key's formatting is free to differ.
+    local key_digits="${key//[^0-9]/}"
+    local tag_digits="${image_tag//[^0-9]/}"
+    if [ "${key_digits#*"$tag_digits"}" != "$key_digits" ]; then
+        assert_true true "cache key is scoped to the Ruby image tag ($image_tag)"
+    else
+        assert_true false "cache key '$key' does not include the Ruby image tag '$image_tag'"
+    fi
+}
+
 run_test test_templates_exist_and_nonempty "all three issue templates exist"
 run_test test_templates_have_type_quick_action "templates apply type/* via /label"
 run_test test_templates_have_required_anchors "templates contain required H2 anchors"
@@ -507,5 +924,14 @@ run_test test_ci_include_is_schedule_gated "triage job is schedule-gated"
 run_test test_policy_regex_matches_template_triage_blocks "policy regexes match template Triage blocks"
 run_test test_policy_regex_matches_every_value "every severity/effort regex matches its own value"
 run_test test_policy_regex_rejects_broken_anchor "broken anchor flips the regex result"
+run_test test_needs_triage_add_rule_truth_table "needs-triage add rule fires on a missing namespace"
+run_test test_needs_triage_clear_rule_truth_table "needs-triage clear rule fires only when fully labeled"
+run_test test_needs_triage_rules_are_exact_negations "needs-triage add/clear rules are exact negations"
+run_test test_needs_triage_logic_has_teeth "an && -> || slip flips the needs-triage result"
+run_test test_gemfile_and_lock_exist "triage Gemfile and multi-platform lock are committed"
+run_test test_triage_version_matches_gemfile "GITLAB_TRIAGE_VERSION matches the Gemfile pin"
+run_test test_gemfile_and_lock_agree "Gemfile pin matches the resolved Gemfile.lock"
+run_test test_triage_job_uses_bundler "triage job installs via bundler in deployment mode"
+run_test test_cache_key_includes_ruby_image "cache key is scoped to the Ruby image tag"
 
 generate_report

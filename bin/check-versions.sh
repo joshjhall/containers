@@ -293,6 +293,17 @@ extract_all_versions() {
     _add_feature_version AGNIX_VERSION "agnix" "dev-tools.sh"
     _add_feature_version JSONC_PARSER_VERSION "jsonc-parser" "dev-tools.sh"
 
+    # gitlab-triage: the pin lives in .gitlab/triage/Gemfile (not a feature
+    # script), so it needs its own extraction rather than _add_feature_version.
+    # Deliberately pinned — the scheduled triage job's labeling behaviour must
+    # not change under us — but tracked here so the weekly sweep surfaces drift
+    # instead of leaving it to manual maintenance (#764).
+    if [ -f "$PROJECT_ROOT/.gitlab/triage/Gemfile" ]; then
+        ver=$(command grep -E '^gem "gitlab-triage"' "$PROJECT_ROOT/.gitlab/triage/Gemfile" 2>/dev/null |
+            command sed -E 's/.*,[[:space:]]*"([^"]+)".*/\1/') || true
+        [ -n "$ver" ] && add_tool "gitlab-triage" "$ver" "Gemfile" || true
+    fi
+
     # Cargo tools from rust.sh (pinned cargo install targets)
     _add_feature_version CARGO_WATCH_VERSION "cargo-watch" "rust.sh"
     _add_feature_version MDBOOK_VERSION "mdbook" "rust.sh"
@@ -502,6 +513,7 @@ main() {
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;
             librarian) check_github_release "librarian" "joshjhall/librarian" ;;
             agnix) check_npm "agnix" ;;
+            gitlab-triage) check_rubygems "gitlab-triage" ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
     done
