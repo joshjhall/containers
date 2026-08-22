@@ -597,11 +597,14 @@ test_jq_absent_fallback_valid_json() {
 run_test test_jq_absent_fallback_valid_json "jq-absent fallback emits valid JSON for an injection-laden GOLEM_ID"
 
 # ===========================================================================
-# A worktree whose root is already named `golem-N` (not `issue-N`) is taken
-# verbatim — exercises the `golem-*` arm of the basename case (vs `golem-golem-N`).
+# Build a main checkout with a linked worktree whose root is already named
+# `golem-<N>` (not `issue-<N>`), so resolution takes the `golem-*` arm of the
+# basename case rather than the `issue-*` one. Echoes the worktree path; the
+# main checkout to clean up is two levels above it, as with setup_worktree.
 # ===========================================================================
-test_golem_named_worktree_verbatim() {
-    local main wt got
+setup_golem_worktree() {
+    local n="$1"
+    local main
     main=$(/usr/bin/mktemp -d)
     (
         cd "$main"
@@ -609,14 +612,54 @@ test_golem_named_worktree_verbatim() {
         /usr/bin/git config user.email t@t.t
         /usr/bin/git config user.name t
         /usr/bin/git commit -q --allow-empty -m init
-        /usr/bin/git worktree add -q ".worktrees/golem-42" -b "feature/golem-42" >/dev/null 2>&1
+        /usr/bin/git worktree add -q ".worktrees/golem-${n}" -b "feature/golem-${n}" >/dev/null 2>&1
     )
-    wt="$main/.worktrees/golem-42"
+    /usr/bin/echo "$main/.worktrees/golem-${n}"
+}
+
+# ===========================================================================
+# A worktree whose root is already named `golem-N` (not `issue-N`) is taken
+# verbatim — exercises the `golem-*` arm of the basename case (vs `golem-golem-N`).
+# ===========================================================================
+test_golem_named_worktree_verbatim() {
+    local wt got
+    wt=$(setup_golem_worktree 42)
     got=$(run_hook_golem "$HOOK_REPO" "$wt" "")
     assert_equals "golem-42" "$got" "golem-named worktree is used verbatim, not golem-golem-42"
-    /usr/bin/rm -rf "$main"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
 }
 run_test test_golem_named_worktree_verbatim "golem-named worktree root resolves verbatim"
+
+# Rung 2 > rung 3, via the OTHER basename arm. test_worktree_root_outranks_agent_id
+# covers the same precedence through `issue-*` only; `golem-*` is a distinct
+# pattern branch of the outer case and must outrank $AGENT_ID just as `issue-*`
+# does. Without this, a container golem working in a golem-named worktree could
+# regress to keying the feed on agentNN and nothing would catch it (#797).
+test_golem_named_worktree_outranks_agent_id() {
+    local wt got
+    wt=$(setup_golem_worktree 42)
+    got=$(run_hook_env "$HOOK_REPO" "$wt" "aaaaaaaa11112222" AGENT_ID=agent07)
+    assert_equals "golem-42" "$got" "golem-named worktree root outranks AGENT_ID"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_golem_named_worktree_outranks_agent_id "golem-named worktree root outranks AGENT_ID (#797)"
+
+# The `?*` guard on $AGENT_ID matches any NON-EMPTY string — whitespace
+# included — so a whitespace-only value takes the AGENT_ID arm and is keyed
+# verbatim rather than falling through to primary. That is standard glob
+# semantics, and it is the behavior both hooks agree on: claude-host-event.sh
+# keys the same value as `<project>-   `. Pinned here so the guard's boundary is
+# explicit — the empty case (test_empty_agent_id_falls_through) is the only side
+# that falls through — and so the jq path is shown to escape the value correctly
+# (#797).
+test_whitespace_agent_id_is_kept() {
+    local main got
+    main=$(setup_plain_repo)
+    got=$(run_hook_env "$HOOK_REPO" "$main" "aaaaaaaa11112222" AGENT_ID='   ')
+    assert_equals "   " "$got" "a whitespace-only AGENT_ID matches ?* and is keyed verbatim, not fallen through"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_whitespace_agent_id_is_kept "whitespace-only AGENT_ID matches the ?* guard (#797)"
 
 # ===========================================================================
 # Event classification (#600): map the Notification message to an event kind so
