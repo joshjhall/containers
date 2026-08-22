@@ -75,13 +75,24 @@ esac
 #      worktree root is cwd-independent: `git rev-parse --show-toplevel`
 #      returns `.../issue-N` even when the Notification fires from a
 #      subdirectory or a review-harness subagent with its own cwd.
-#   3. $CLAUDE_SESSION_ROLE=orchestrator (#750) — a non-golem session driving a
+#   3. $AGENT_ID (container golems, e.g. agentNN from agent-entrypoint.sh).
+#      Keyed BARE, with no `-<short>` suffix: like $GOLEM_ID it is already a
+#      stable unique id, so it needs no per-tab differentiation — and keeping it
+#      bare is what makes the feed id line up with claude-host-event.sh's
+#      `<project>-<golem>` POST key. The `?*` guard (not `*`) means an
+#      empty-string $AGENT_ID falls through rather than keying the feed on "".
+#      Narrow in practice — agent-entrypoint.sh stamps $GOLEM_ID on the pipeline
+#      path (#758), so rung 1 wins there — but still reachable from that script's
+#      non-pipeline interactive branch, which returns before the stamp. Unlike
+#      $GOLEM_ID this value is NOT regex-gated, so it reaches the jq-absent
+#      sanitizer below as an untrusted string (#766).
+#   4. $CLAUDE_SESSION_ROLE=orchestrator (#750) — a non-golem session driving a
 #      fleet of golems via /orchestrate. Like `primary` it has no stable unique
 #      id, so it is a LABELED VARIANT of it: differentiated per-tab by the
 #      Claude-native session_id (`orchestrator-<short>`) with the same scheme.
 #      This is the CONSUME side of a librarian-emitted marker (the /orchestrate
 #      skill exports it); until the emit side ships this arm is never taken.
-#   4. `primary` — a non-golem interactive session with no orchestrator marker
+#   5. `primary` — a non-golem interactive session with no orchestrator marker
 #      (a human in the main checkout). It is NOT a golem, so it must not carry
 #      the `golem-?` placeholder (which reads as a broken golem in the
 #      `just golems` feed). This keeps the feed in agreement with the host-event
@@ -104,11 +115,20 @@ if [ -z "$golem" ]; then
         issue-*) golem="golem-${base#issue-}" ;;
         golem-*) golem="$base" ;;
         *)
-            # Orchestrator marker classifies before the bare `primary` fallback;
-            # both keep the per-tab session_id suffix. Unset/unknown -> primary.
-            case "${CLAUDE_SESSION_ROLE:-}" in
-                orchestrator) golem="orchestrator${cc_session:+-$cc_session}" ;;
-                *) golem="primary${cc_session:+-$cc_session}" ;;
+            # $AGENT_ID (container golems) classifies before the role marker —
+            # a container golem IS a golem, so it must not be reclassified as
+            # orchestrator/primary just because it carries the marker (#766).
+            case "${AGENT_ID:-}" in
+                ?*) golem="$AGENT_ID" ;;
+                *)
+                    # Orchestrator marker classifies before the bare `primary`
+                    # fallback; both keep the per-tab session_id suffix.
+                    # Unset/unknown -> primary.
+                    case "${CLAUDE_SESSION_ROLE:-}" in
+                        orchestrator) golem="orchestrator${cc_session:+-$cc_session}" ;;
+                        *) golem="primary${cc_session:+-$cc_session}" ;;
+                    esac
+                    ;;
             esac
             ;;
     esac
@@ -124,8 +144,10 @@ if command -v jq >/dev/null 2>&1; then
         '{ts: $ts, golem: $golem, event: $event, message: $message}' \
         >>"$feed" 2>/dev/null || true
 else
-    # No jq: hand-roll the JSON. The message (and, defensively, the golem id)
-    # originate from the Notification payload / environment, so sanitize before
+    # No jq: hand-roll the JSON. The message and the golem id both originate
+    # from the Notification payload / environment — and the golem id genuinely
+    # can be untrusted, since the $AGENT_ID arm above is not regex-gated the way
+    # $GOLEM_ID is (#766) — so sanitize before
     # interpolating: drop control chars and backslashes — which can't be
     # escaped correctly without a real JSON encoder and would otherwise let a
     # crafted payload break out of the string literal — then escape any
