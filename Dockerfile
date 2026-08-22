@@ -684,6 +684,14 @@ RUN if [ -f /opt/container-runtime/workspace-fs-health-cron.sh ]; then \
 # Minute 17 rather than 0 to stay off the top-of-hour pile-up with other jobs.
 # The wrapper is a silent no-op whenever the boot run left no env snapshot
 # (SKIP_CASE_CHECK=true, or no repo mounted), so this costs nothing when idle.
+#
+# The user column is deliberately `root`, NOT ${USERNAME} — do not "fix" it
+# back. This file is written at build time, but the runtime user is not knowable
+# then: editors remap it (Zed adopts the host UID, VS Code keeps 1000). A baked
+# ${USERNAME} that no longer matches fails SILENTLY — the build-time user still
+# exists, so cron runs the job as it, HOME points at the wrong home, the env
+# snapshot is not found, and the job exits 0 doing nothing. The wrapper instead
+# resolves the container user hourly and drops to it itself (issue #800).
 RUN if command -v cron > /dev/null 2>&1; then \
     mkdir -p /etc/cron.d && \
     printf '%s\n' \
@@ -692,13 +700,26 @@ RUN if command -v cron > /dev/null 2>&1; then \
     '# it fixes is a function of uptime. Silent and idempotent when healthy.' \
     '# Disable with SKIP_CASE_CHECK=true (the boot run then removes the env' \
     '# snapshot this job requires, so it becomes a no-op).' \
+    '#' \
+    '# Runs as root and drops to the container user resolved at RUN time; a' \
+    '# build-time username here would silently never run (issue #800).' \
+    '# Output is appended to /var/log/workspace-fs-health.log, group-owned by' \
+    '# the container user so a plain `tail` works without sudo. NOT piped to' \
+    '# logger: these images ship no syslog daemon, so there is no /dev/log to' \
+    '# receive it and logger would discard the message and still exit 0 - the' \
+    '# same silent-failure class this entry exists to fix. A plain redirect' \
+    '# also keeps cron seeing the job own exit status rather than a pipeline.' \
     '' \
     'SHELL=/bin/bash' \
     'PATH=/usr/local/bin:/usr/bin:/bin' \
+    'MAILTO=""' \
     '' \
-    "17 * * * * ${USERNAME} /usr/local/bin/workspace-fs-health-cron" \
+    '17 * * * * root /usr/local/bin/workspace-fs-health-cron >> /var/log/workspace-fs-health.log 2>&1' \
     > /etc/cron.d/workspace-fs-health && \
-    chmod 644 /etc/cron.d/workspace-fs-health; \
+    chmod 644 /etc/cron.d/workspace-fs-health && \
+    touch /var/log/workspace-fs-health.log && \
+    chgrp "${USERNAME}" /var/log/workspace-fs-health.log && \
+    chmod 640 /var/log/workspace-fs-health.log; \
     fi
 
 # Install init-env cleanup startup script

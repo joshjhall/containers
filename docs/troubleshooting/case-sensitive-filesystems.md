@@ -138,6 +138,32 @@ leg requires the **cron feature** (`INCLUDE_CRON=true`, also pulled in by
 and the on-demand command below still work. `SKIP_CASE_CHECK=true` disables the
 hourly pass along with everything else.
 
+The cron entry runs as **root** and the wrapper drops to the container user it
+resolves at run time, using the same ladder the entrypoint does. Cron's user
+column is written when the image is built, but the runtime user is not knowable
+then (Zed adopts the host UID, VS Code keeps 1000), and a stale name there would
+fail *silently*: the job would run as a user that exists, look for its state
+under the wrong `HOME`, find nothing, and exit successfully having repaired
+nothing.
+
+One caveat on that parity. The ladder's first arm honors `CONTAINER_UID`, but
+cron inherits nothing from `docker run -e`, and nothing writes that value into
+the root-owned `/etc/container/cron-env` the wrapper reads. So **`CONTAINER_UID`
+is not honored by the hourly leg today** — it resolves by **user shape**, which
+is correct for every image with a single regular login user (all of ours). The
+two legs could only disagree on an image with a second such account *and* a
+`CONTAINER_UID` naming the other one. Exporting `CONTAINER_UID` from
+`/etc/container/cron-env` is the supported way to make that arm live, since the
+wrapper sources that file before resolving.
+
+Its output is appended to a **log file**, not mailed — these images ship no MTA,
+and no syslog daemon either, so `logger` would discard the message and still
+exit 0:
+
+```bash
+tail /var/log/workspace-fs-health.log
+```
+
 #### Running it on demand
 
 To repair right now — typically when symlinks are showing as modified just

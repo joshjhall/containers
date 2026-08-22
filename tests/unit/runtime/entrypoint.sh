@@ -137,84 +137,134 @@ test_script_permissions() {
     fi
 }
 
-# Resolve a non-root username the same way the entrypoint does: honor
-# CONTAINER_UID if set, otherwise fall back to the single regular login user
-# (matched by shape — /home dir + real login shell, NOT by UID range, since
-# Zed remaps the user below 1000). `getent_fn` is injected so tests can mock
-# /etc/passwd without needing real users. Mirrors entrypoint.sh:103-130.
+# Resolve a non-root username the way the entrypoint does — by calling the REAL
+# shared implementation, lib/runtime/lib/resolve-container-user.sh, which the
+# entrypoint now sources instead of inlining the ladder (issue #800).
+#
+# Deliberately NOT a local copy of that logic. A hand-duplicated resolver here
+# would pass forever while the shipped ladder drifted underneath it — the exact
+# two-copies drift the extraction was meant to end.
+#
+# `getent` is shimmed on PATH rather than injected as a function argument,
+# because the real function calls `getent` directly. BASH_ENV must be cleared:
+# /etc/bash_env rebuilds PATH on non-interactive bash and would put the real
+# getent ahead of the shim.
+#
+# Args: $1 = passwd fixture contents.
 resolve_container_username() {
-    local getent_fn="${1:-getent}"
-    local username=""
-    if [ -n "${CONTAINER_UID:-}" ]; then
-        username=$("$getent_fn" passwd "${CONTAINER_UID}" | command cut -d: -f1) || true
-    fi
-    if [ -z "$username" ]; then
-        username=$("$getent_fn" passwd | command awk -F: \
-            '$1 != "root" && $6 ~ /^\/home\// && $7 !~ /(nologin|false)$/ { print $1; exit }') || true
-    fi
-    printf '%s' "$username"
+    local passwd_data="$1"
+    local stub_dir
+    stub_dir=$(command mktemp -d)
+    command printf '%s\n' "$passwd_data" >"$stub_dir/passwd"
+
+    command cat >"$stub_dir/getent" <<GETENT_EOF
+#!/bin/bash
+[ "\${1:-}" = "passwd" ] || exit 2
+if [ -n "\${2:-}" ]; then
+    /usr/bin/awk -F: -v want="\$2" '\$3 == want { print; found=1 } END { exit !found }' "$stub_dir/passwd"
+else
+    command cat "$stub_dir/passwd"
+fi
+GETENT_EOF
+    command chmod +x "$stub_dir/getent"
+
+    (
+        export BASH_ENV=""
+        export PATH="$stub_dir:$PATH"
+        # shellcheck source=/dev/null
+        source "$PROJECT_ROOT/lib/runtime/lib/resolve-container-user.sh"
+        resolve_container_user || true
+    ) 2>/dev/null | command tr -d '\n'
+
+    command rm -rf "$stub_dir"
 }
+
+# The passwd fixture used by the resolution tests below: root, a system
+# account, and one regular user remapped to a sub-1000 (Zed/host) UID.
+ENTRYPOINT_PASSWD_FIXTURE='root:x:0:0:root:/root:/bin/bash
+nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin
+vscode:x:501:20::/home/vscode:/bin/bash'
 
 # Test: User detection is UID-agnostic (Zed remaps to host UID, e.g. 501;
 # VS Code keeps the image-native 1000). The single-regular-user fallback must
 # find the user regardless of the number.
 test_user_detection_uid_agnostic() {
-    # Mock getent: a remapped non-1000 user plus only system accounts.
-    _mock_getent() {
-        if [ "$1" = "passwd" ] && [ -n "${2:-}" ]; then
-            # Lookup by UID — only 501 resolves in this mock.
-            [ "$2" = "501" ] && echo "vscode:x:501:20::/home/vscode:/bin/bash"
-            return 0
-        fi
-        # Full table dump.
-        printf '%s\n' \
-            "root:x:0:0:root:/root:/bin/bash" \
-            "nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin" \
-            "vscode:x:501:20::/home/vscode:/bin/bash"
-        return 0
-    }
-
     # No CONTAINER_UID set: must discover vscode (501) via the regular-user scan.
     unset CONTAINER_UID 2>/dev/null || true
     local resolved
-    resolved=$(resolve_container_username _mock_getent)
+    resolved=$(resolve_container_username "$ENTRYPOINT_PASSWD_FIXTURE")
     assert_equals "vscode" "$resolved" "Detects remapped non-1000 user (Zed/host UID)"
 
     # CONTAINER_UID explicitly set: resolve by that UID.
     export CONTAINER_UID=501
-    resolved=$(resolve_container_username _mock_getent)
+    resolved=$(resolve_container_username "$ENTRYPOINT_PASSWD_FIXTURE")
     assert_equals "vscode" "$resolved" "Honors explicit CONTAINER_UID"
     unset CONTAINER_UID
-
-    unset -f _mock_getent
 }
 
 # Test: A missing user must NOT crash the entrypoint under `set -e`.
 # Regression guard for the silent exit-2 bug: a getent miss inside the
 # command substitution previously aborted the script before the guard ran.
 test_user_detection_set_e_safe() {
-    _mock_getent_empty() {
-        # No regular users at all; lookups always miss (exit non-zero).
-        if [ "$1" = "passwd" ] && [ -n "${2:-}" ]; then
-            return 2
-        fi
-        printf '%s\n' \
-            "root:x:0:0:root:/root:/bin/bash" \
-            "nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin"
-        return 0
-    }
+    # No regular users at all — only root and a nologin system account, so both
+    # arms miss.
+    local empty_fixture='root:x:0:0:root:/root:/bin/bash
+nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin'
 
     # Run under `set -e` in a subshell — must reach the empty result, not abort.
     local resolved rc=0
     resolved=$(
         set -e
         unset CONTAINER_UID 2>/dev/null || true
-        resolve_container_username _mock_getent_empty
+        resolve_container_username "$empty_fixture"
     ) || rc=$?
     assert_equals "0" "$rc" "Resolution survives a getent miss under set -e"
     assert_equals "" "$resolved" "Returns empty (caught by guard) when no regular user exists"
+}
 
-    unset -f _mock_getent_empty
+# Test: the entrypoint sources the shared resolver rather than inlining a copy.
+# This is the structural half of the drift guard — the tests above exercise the
+# real ladder, and this asserts the entrypoint is actually wired to it.
+test_entrypoint_sources_shared_resolver() {
+    local entrypoint="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    assert_file_contains "$entrypoint" 'resolve-container-user.sh' \
+        "Entrypoint sources the shared resolver sub-module"
+    assert_file_contains "$entrypoint" 'resolve_container_user' \
+        "Entrypoint calls resolve_container_user"
+
+    # The ladder's body must live in the sub-module, not here — a re-inlined
+    # copy is the drift this extraction exists to prevent.
+    # `grep -c` prints 0 and exits 1 on no match, so the `|| true` keeps the
+    # count single-valued instead of appending a second 0 from a fallback echo.
+    local inlined
+    inlined=$(/usr/bin/grep -c 'getent passwd | command awk' "$entrypoint" 2>/dev/null || true)
+    assert_equals "0" "$inlined" \
+        "Entrypoint must not re-inline the shape-match ladder"
+}
+
+# Test: a missing resolver sub-module degrades to the entrypoint's own error
+# guard rather than an unbound-function crash. The `declare -f` check is what
+# makes that true, so it needs a test.
+test_entrypoint_handles_missing_resolver() {
+    local rc=0 output
+    output=$(
+        set -u
+        # Simulate the sub-module being absent: the function is never defined.
+        USERNAME=""
+        if declare -f resolve_container_user >/dev/null 2>&1; then
+            USERNAME=$(resolve_container_user) || true
+        fi
+        if [ -z "$USERNAME" ]; then
+            command echo "Error: could not determine a non-root container user (set CONTAINER_UID to override)"
+            exit 1
+        fi
+    ) || rc=$?
+
+    assert_equals "1" "$rc" \
+        "A missing resolver must reach the entrypoint's explicit error exit"
+    assert_contains "$output" "could not determine a non-root container user" \
+        "A missing resolver must fail loudly, not with an unbound-function crash"
 }
 
 # Test: User context switching
@@ -1168,6 +1218,8 @@ run_test_with_setup test_every_boot_scripts "Every-boot scripts execute properly
 run_test_with_setup test_script_permissions "Script permission handling"
 run_test_with_setup test_user_detection_uid_agnostic "User detection is UID-agnostic"
 run_test_with_setup test_user_detection_set_e_safe "User detection is set -e safe"
+run_test_with_setup test_entrypoint_sources_shared_resolver "Entrypoint sources the shared resolver (no inlined copy)"
+run_test_with_setup test_entrypoint_handles_missing_resolver "Missing resolver fails loudly, not silently"
 run_test_with_setup test_user_context "User context switching logic"
 run_test_with_setup test_first_run_marker_creation "First-run marker creation"
 run_test_with_setup test_empty_directory_handling "Empty directory handling"

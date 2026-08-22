@@ -11,6 +11,11 @@
 # This wrapper is the cron leg of that repair. It re-runs the same script,
 # unmodified, against the same project the boot run resolved.
 #
+# Cron invokes it as ROOT and it drops to the container user itself, rather than
+# letting cron's user column name that user: the column is written at build time
+# and the runtime user is not knowable then (issue #800). See the re-exec stage
+# below.
+#
 # Cron jobs inherit none of the container environment, so the two values that
 # cannot be re-derived here — which project to inspect, and whether the user
 # opted out of writes — are read from the snapshot the boot run recorded.
@@ -27,6 +32,92 @@ set -uo pipefail
 
 FS_HEALTH_SCRIPT="${FS_HEALTH_SCRIPT:-/etc/container/startup/42-workspace-fs-health.sh}"
 CRON_ENV_FILE="${CRON_ENV_FILE:-/etc/container/cron-env}"
+FS_HEALTH_RESOLVE_USER_LIB="${FS_HEALTH_RESOLVE_USER_LIB:-/opt/container-runtime/lib/resolve-container-user.sh}"
+FS_HEALTH_SU="${FS_HEALTH_SU:-su}"
+
+# ============================================================================
+# Drop from root to the resolved container user
+# ============================================================================
+# The /etc/cron.d entry runs this as ROOT on purpose. Cron's user column is
+# written at image build time, but the runtime user is not knowable then —
+# editors remap it (Zed adopts the host UID, VS Code keeps 1000), so a baked
+# ${USERNAME} can name the wrong user. That failure is silent rather than loud:
+# the build-time user always exists, so cron happily runs the job as it, HOME
+# resolves to that user's home, the snapshot below is not found, and the job
+# exits 0 by the "no snapshot means do not run" contract — the hourly repair
+# never fires and nothing reports it (issue #800).
+#
+# So resolve the user HERE, hourly, at run time, and re-exec as them. `su -l`
+# rather than plain `su` is load-bearing: the login shell is what sets the
+# right HOME, and HOME is exactly what the snapshot lookup depends on.
+#
+# The guard is an ARGUMENT, not an environment variable, because `su -l` wipes
+# the environment — an env-var guard would not survive the re-exec and the
+# second pass would loop.
+#
+# CONTAINER_UID parity, precisely. The ladder's first arm honors CONTAINER_UID,
+# but cron inherits none of `docker run -e`, so under cron that arm is reachable
+# ONLY via $CRON_ENV_FILE (sourced just below, ahead of the resolution).
+#
+# Nothing in the repo writes CONTAINER_UID into that file today — lib/features/
+# cron.sh generates it at build time, and CONTAINER_UID is a runtime value — so
+# in practice this leg resolves by SHAPE MATCH. That is correct for every image
+# we ship, each of which has exactly one regular login user. The divergence
+# needs a second such account AND a CONTAINER_UID naming the other one.
+#
+# The sourcing order is still deliberate, not decorative: it is what lets an
+# operator (or a later change) make the arm live by exporting CONTAINER_UID into
+# that file, and $CRON_ENV_FILE is the only source safe to grant that power —
+# it is root-owned. This value decides which account a ROOT process drops into,
+# so a user-writable source would be a privilege-escalation vector. That is why
+# the boot run's env snapshot is deliberately NOT consulted for it: it is
+# written by the unprivileged user, and it lives under the very HOME resolution
+# has not determined yet. See docs/troubleshooting/case-sensitive-filesystems.md.
+AS_USER=false
+case "${1:-}" in
+    --as-user)
+        AS_USER=true
+        shift
+        ;;
+    "") ;;
+    *)
+        command echo "workspace-fs-health-cron: unknown argument '$1'" >&2
+        exit 2
+        ;;
+esac
+
+if [ "$AS_USER" != "true" ] && [ "$(id -u)" -eq 0 ]; then
+    if [ ! -f "$FS_HEALTH_RESOLVE_USER_LIB" ]; then
+        exit 0
+    fi
+
+    # Source the root-owned container env BEFORE resolving, so a CONTAINER_UID
+    # exported there reaches the ladder's first arm. Sourcing it only after the
+    # re-exec (as the second pass does, for HOME/PATH) would leave that arm
+    # permanently dead under cron and silently demote every run to the shape
+    # match.
+    if [ -f "$CRON_ENV_FILE" ]; then
+        # shellcheck source=/dev/null
+        source "$CRON_ENV_FILE"
+    fi
+
+    # shellcheck source=/dev/null
+    source "$FS_HEALTH_RESOLVE_USER_LIB"
+
+    _fs_health_user=""
+    if declare -f resolve_container_user >/dev/null 2>&1; then
+        _fs_health_user=$(resolve_container_user) || true
+    fi
+
+    # No resolvable user is the same class of situation as no snapshot: this
+    # leg does not guess, it stays silent. A wrong guess would run the repair's
+    # git-config and ln -sfn writes as the wrong owner inside the project.
+    if [ -z "$_fs_health_user" ]; then
+        exit 0
+    fi
+
+    exec "$FS_HEALTH_SU" -l "$_fs_health_user" -c "$(command printf '%q %q' "$0" --as-user)"
+fi
 
 # Container environment (PATH, HOME, ...). Sourced first so the snapshot path
 # below resolves against the same HOME the boot run used.
