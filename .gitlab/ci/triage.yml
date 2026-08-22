@@ -72,12 +72,11 @@ issue-triage:
   # Patch-pinned (not the floating `ruby:3.3-slim`) to match this repo's
   # pin-explicit-versions posture. Bump the patch deliberately.
   image: ruby:3.3.12-slim
-  # Job-scoped, NOT a top-level variable: this file is a reusable include, and a
-  # top-level GEM_HOME would redirect RubyGems' install/lookup path for EVERY job
-  # in the consuming pipeline. Keeping it here confines it to this job so it can
-  # cache the gem (see `cache:` below) without leaking into unrelated Ruby jobs.
-  variables:
-    GEM_HOME: "$CI_PROJECT_DIR/.gem"
+  # No GEM_HOME here any more. It existed to point RubyGems at the cached
+  # `.gem/` for the old `gem install` flow; bundler now owns that location via
+  # `bundle config set --local path`, and `bundle exec` resolves executables
+  # through the bundle rather than $PATH. Keeping the variable (and the matching
+  # PATH export) would be dead config that reads like it is load-bearing.
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
   # Cache the vendored bundle across scheduled runs. The key includes the Ruby
@@ -104,7 +103,6 @@ issue-triage:
       - .gem/
     policy: pull-push
   before_script:
-    - export PATH="$GEM_HOME/bin:$PATH"
     # The locked graph includes native extensions (bigdecimal), and the -slim
     # image ships no compiler. Verified in that image: without build-essential
     # the install fails at `bundle install`; the old `gem install` path only

@@ -46,13 +46,32 @@ jobs:
             echo "::error::could not read YQ_VERSION from lib/features/dev-tools.sh"
             exit 1
           fi
+          # Verify the download against the SHA256 the repo already pins for
+          # this exact version and URL in lib/checksums.json. The sibling tool
+          # installs in this job download unverified, but yq is one of the few
+          # with a checksum already on hand — so there is no reason to execute
+          # it unverified. A missing entry is a hard error, not a silent skip:
+          # a bumped YQ_VERSION whose checksum was never recorded must stop CI
+          # rather than quietly fall back to trusting the download.
+          EXPECTED_SHA=$(jq -r \
+            --arg v "$YQ_VERSION" \
+            '.tools.yq.versions[$v].checksums.amd64.sha256 // empty' \
+            lib/checksums.json)
+          if [ -z "$EXPECTED_SHA" ]; then
+            echo "::error::no amd64 SHA256 pinned for yq $YQ_VERSION in lib/checksums.json"
+            exit 1
+          fi
+
           echo "Installing yq $YQ_VERSION"
+          curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
+            -o /tmp/yq
+          echo "${EXPECTED_SHA}  /tmp/yq" | sha256sum -c -
+
           # sudo because /usr/local/bin is root-owned on ubuntu-latest — the
           # same reason every sibling install below (shfmt, conform, lefthook,
-          # rumdl, just, actionlint) uses it.
-          sudo curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
-            -o /usr/local/bin/yq
-          sudo chmod +x /usr/local/bin/yq
+          # rumdl, just, actionlint) uses it. Only ever moved into place AFTER
+          # the checksum passes.
+          sudo install -m 0755 /tmp/yq /usr/local/bin/yq
           yq --version
 
       - name: Run unit tests
