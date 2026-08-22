@@ -527,9 +527,10 @@ install_github_binary_tools() {
             agnix_audit_json=$(cd "$agnix_verify_dir" &&
                 npm audit signatures --json 2>&1 || true)
 
-            # Count entries in `invalid`. jq is not guaranteed at this point in
-            # the build, so match the array's shape textually: `"invalid": []`
-            # (any whitespace) means it ran and found nothing wrong.
+            # jq is not guaranteed at this point in the build, so the array's
+            # shape is matched textually. Whitespace is stripped first, so this
+            # is a 0/1 "did invalid[] open with an object" flag, not a count:
+            # `"invalid":[{` means at least one entry, `"invalid":[]` none.
             agnix_invalid=$(command printf '%s' "$agnix_audit_json" |
                 command tr -d ' \n' | command grep -c '"invalid":\[{' || true)
 
