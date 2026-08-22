@@ -420,6 +420,124 @@ test_ondemand_does_not_write_snapshot() {
         "On-demand run should not create or overwrite the boot snapshot"
 }
 
+test_snapshot_survives_quote_in_path() {
+    # The snapshot is written as KEY='value' and read back by a parser. A path
+    # containing a single quote must round-trip as DATA — if the quoting or the
+    # unescaping is wrong, the value is truncated or (when sourced) the tail
+    # becomes shell syntax.
+    local quoted_root="$TEST_TEMP_DIR/my's-project"
+    command mkdir -p "$quoted_root"
+    git -C "$quoted_root" init -q .
+    git -C "$quoted_root" config user.email "test@example.com"
+    git -C "$quoted_root" config user.name "Test User"
+    git -C "$quoted_root" config --unset core.ignorecase 2>/dev/null || true
+
+    (
+        export PROJECT_ROOT="$quoted_root"
+        export FS_CASE_STATE=sensitive
+        export FS_HEALTH_ENV_FILE
+        bash "$FS_HEALTH_SCRIPT"
+    ) 2>/dev/null
+
+    # The cron leg must resolve the very same path back out of the snapshot.
+    run_cron_wrapper insensitive >/dev/null
+
+    local result
+    result=$(git -C "$quoted_root" config --get core.ignorecase 2>/dev/null || echo "unset")
+    assert_equals "true" "$result" \
+        "A PROJECT_ROOT containing a single quote should round-trip through the snapshot"
+}
+
+test_snapshot_injection_not_executed() {
+    # The reader must PARSE the snapshot, never source it. A crafted value is
+    # the difference between a wrong string and arbitrary code on an hourly
+    # timer, so assert the payload never runs.
+    local canary="$TEST_TEMP_DIR/canary-executed"
+    command printf "%s\n" \
+        "PROJECT_ROOT='/nonexistent'; touch '$canary'" \
+        "SKIP_CASE_FIX='false'" \
+        >"$FS_HEALTH_ENV_FILE"
+
+    run_cron_wrapper insensitive >/dev/null 2>&1
+
+    assert_file_not_exists "$canary" \
+        "Snapshot contents must never be executed as shell code"
+}
+
+test_snapshot_spaces_round_trip() {
+    local spaced_root="$TEST_TEMP_DIR/my project dir"
+    command mkdir -p "$spaced_root"
+    git -C "$spaced_root" init -q .
+    git -C "$spaced_root" config user.email "test@example.com"
+    git -C "$spaced_root" config user.name "Test User"
+    git -C "$spaced_root" config --unset core.ignorecase 2>/dev/null || true
+
+    (
+        export PROJECT_ROOT="$spaced_root"
+        export FS_CASE_STATE=sensitive
+        export FS_HEALTH_ENV_FILE
+        bash "$FS_HEALTH_SCRIPT"
+    ) 2>/dev/null
+
+    run_cron_wrapper insensitive >/dev/null
+
+    local result
+    result=$(git -C "$spaced_root" config --get core.ignorecase 2>/dev/null || echo "unset")
+    assert_equals "true" "$result" \
+        "A PROJECT_ROOT containing spaces should round-trip through the snapshot"
+}
+
+test_cron_wrapper_noop_on_malformed_snapshot() {
+    # Present but malformed (no usable PROJECT_ROOT) must be treated like no
+    # snapshot, never as a license to fall back to cron's $PWD.
+    command printf "%s\n" "SKIP_CASE_FIX='false'" >"$FS_HEALTH_ENV_FILE"
+
+    local output
+    output=$(run_cron_wrapper insensitive)
+    assert_empty "$output" \
+        "Cron wrapper should no-op on a snapshot with no PROJECT_ROOT"
+    assert_equals "unset" "$(get_ignorecase)" \
+        "Cron wrapper should repair nothing from a malformed snapshot"
+}
+
+test_cron_wrapper_noop_when_script_missing() {
+    run_fs_health sensitive
+    local output status=0
+    output=$(
+        unset PROJECT_ROOT SKIP_CASE_CHECK SKIP_CASE_FIX 2>/dev/null || true
+        export FS_HEALTH_SCRIPT="$TEST_TEMP_DIR/no-such-script.sh"
+        export FS_HEALTH_ENV_FILE
+        export CRON_ENV_FILE="$TEST_TEMP_DIR/no-such-cron-env"
+        { bash "$CRON_WRAPPER" >/dev/null; } 2>&1
+    ) || status=$?
+    assert_equals "0" "$status" \
+        "Cron wrapper should exit 0 when the repair script is absent"
+    assert_empty "$output" \
+        "Cron wrapper should stay silent when the repair script is absent"
+}
+
+test_ondemand_fails_when_script_missing() {
+    local status=0
+    (
+        export FS_HEALTH_SCRIPT="$TEST_TEMP_DIR/no-such-script.sh"
+        export FS_HEALTH_ENV_FILE
+        bash "$ONDEMAND_WRAPPER"
+    ) >/dev/null 2>&1 || status=$?
+    assert_equals "1" "$status" \
+        "On-demand command should fail loudly when the repair script is absent"
+}
+
+test_ondemand_help_exits_clean() {
+    local output status=0
+    output=$(
+        export FS_HEALTH_SCRIPT="$FS_HEALTH_SCRIPT"
+        export FS_HEALTH_ENV_FILE
+        bash "$ONDEMAND_WRAPPER" --help
+    ) 2>&1 || status=$?
+    assert_equals "0" "$status" "--help should exit 0"
+    assert_contains "$output" "Usage:" "--help should print usage text"
+}
+
 test_ondemand_rejects_bad_path() {
     local status=0
     (
@@ -471,6 +589,13 @@ run_test_with_setup test_cron_wrapper_honors_snapshot_skip_fix "Cron wrapper hon
 run_test_with_setup test_cron_wrapper_does_not_rewrite_snapshot "Cron wrapper leaves the snapshot alone"
 run_test_with_setup test_ondemand_repairs_given_path "On-demand command repairs a given path"
 run_test_with_setup test_ondemand_does_not_write_snapshot "On-demand run does not write the snapshot"
+run_test_with_setup test_snapshot_survives_quote_in_path "Snapshot round-trips a path with a single quote"
+run_test_with_setup test_snapshot_injection_not_executed "Snapshot contents are never executed"
+run_test_with_setup test_snapshot_spaces_round_trip "Snapshot round-trips a path with spaces"
+run_test_with_setup test_cron_wrapper_noop_on_malformed_snapshot "Cron wrapper no-ops on a malformed snapshot"
+run_test_with_setup test_cron_wrapper_noop_when_script_missing "Cron wrapper no-ops when the script is absent"
+run_test_with_setup test_ondemand_fails_when_script_missing "On-demand command fails when the script is absent"
+run_test_with_setup test_ondemand_help_exits_clean "On-demand --help exits cleanly"
 run_test_with_setup test_ondemand_rejects_bad_path "On-demand command rejects a bad path"
 
 # Generate test report

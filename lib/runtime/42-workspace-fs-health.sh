@@ -60,12 +60,32 @@ write_env_snapshot() {
     dir=$(command dirname "$FS_HEALTH_ENV_FILE")
     /usr/bin/mkdir -p "$dir" 2>/dev/null || return 0
 
-    # Quote the values: PROJECT_ROOT is a path that may contain spaces, and the
-    # snapshot is sourced by the wrapper.
+    # Single-quote the values so a path containing spaces round-trips, and
+    # escape any embedded single quote via the standard '\'' idiom. Without the
+    # escape, a project path like /workspace/my's-project would terminate the
+    # quoting early and turn the rest of the line into shell syntax rather than
+    # data — the reader parses these values, so unescaped input there is a code
+    # path, not just a wrong string.
+    local escaped_root="${PROJECT_ROOT//\'/\'\\\'\'}"
+    local escaped_skip="${SKIP_CASE_FIX:-false}"
+    escaped_skip="${escaped_skip//\'/\'\\\'\'}"
+
+    # Write to a temp file and rename into place. The hourly cron leg may read
+    # this while a fast container restart is rewriting it; rename is atomic on
+    # the same filesystem, so the reader sees either the old or the new file,
+    # never a half-written one.
+    local tmp="${FS_HEALTH_ENV_FILE}.tmp.$$"
     {
-        echo "PROJECT_ROOT='${PROJECT_ROOT}'"
-        echo "SKIP_CASE_FIX='${SKIP_CASE_FIX:-false}'"
-    } >"$FS_HEALTH_ENV_FILE" 2>/dev/null || return 0
+        command echo "PROJECT_ROOT='${escaped_root}'"
+        command echo "SKIP_CASE_FIX='${escaped_skip}'"
+    } >"$tmp" 2>/dev/null || {
+        /usr/bin/rm -f "$tmp" 2>/dev/null || true
+        return 0
+    }
+    /usr/bin/mv -f "$tmp" "$FS_HEALTH_ENV_FILE" 2>/dev/null || {
+        /usr/bin/rm -f "$tmp" 2>/dev/null || true
+        return 0
+    }
 }
 
 # ============================================================================

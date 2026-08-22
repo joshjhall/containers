@@ -17,6 +17,11 @@
 # No snapshot means "do not run": either SKIP_CASE_CHECK=true was set, no repo
 # was mounted, or the boot script never ran. All three should be silent no-ops
 # rather than a guess at PROJECT_ROOT (under cron, $PWD is the user's home).
+#
+# The snapshot is PARSED, never sourced. Sourcing it would make every byte in
+# the file executable shell, so a project path containing a quote plus shell
+# syntax would run as code on the hourly timer. Parsing keeps those values as
+# the strings they are meant to be.
 
 set -uo pipefail
 
@@ -40,8 +45,22 @@ if [ ! -x "$FS_HEALTH_SCRIPT" ] && [ ! -f "$FS_HEALTH_SCRIPT" ]; then
     exit 0
 fi
 
-# shellcheck source=/dev/null
-source "$FS_HEALTH_ENV_FILE"
+# Read the snapshot with a restricted parser rather than `source`ing it.
+# Sourcing would execute whatever the file contains, which makes every value in
+# it a code path; this only ever yields strings. Accepts exactly the two
+# single-quoted KEY='value' lines the writer emits, and unescapes the '\''
+# idiom it uses for embedded quotes.
+snapshot_value() {
+    local key="$1" line
+    line=$(/usr/bin/grep -m1 -E "^${key}='.*'$" "$FS_HEALTH_ENV_FILE" 2>/dev/null) || return 0
+    line="${line#"${key}='"}"
+    line="${line%\'}"
+    # Reverse the writer's '\'' escaping.
+    command printf '%s' "${line//\'\\\'\'/\'}"
+}
+
+PROJECT_ROOT=$(snapshot_value PROJECT_ROOT)
+SKIP_CASE_FIX=$(snapshot_value SKIP_CASE_FIX)
 
 # A snapshot without a project root is malformed — treat it like no snapshot
 # rather than falling back to cron's $PWD.
