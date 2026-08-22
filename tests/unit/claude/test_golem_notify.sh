@@ -65,7 +65,7 @@ run_hook_golem() {
         if [ -n "$golem_id" ]; then
             GOLEM_ID="$golem_id" "$hook" <<<'{"message":"needs permission"}' >/dev/null 2>&1
         else
-            env -u GOLEM_ID "$hook" <<<'{"message":"needs permission"}' >/dev/null 2>&1
+            env -u GOLEM_ID -u AGENT_ID "$hook" <<<'{"message":"needs permission"}' >/dev/null 2>&1
         fi
     )
     # Feed lives under the main checkout. Resolve the git-common-dir the same
@@ -186,7 +186,7 @@ run_hook_primary_session() {
     local feed
     (
         cd "$cwd"
-        env -u GOLEM_ID "$hook" <<<"{\"message\":\"needs permission\",\"session_id\":\"$session_id\"}" >/dev/null 2>&1
+        env -u GOLEM_ID -u AGENT_ID "$hook" <<<"{\"message\":\"needs permission\",\"session_id\":\"$session_id\"}" >/dev/null 2>&1
     )
     feed="$(
         cd "$cwd"
@@ -229,7 +229,7 @@ run_hook_orch_session() {
     local feed
     (
         cd "$cwd"
-        env -u GOLEM_ID CLAUDE_SESSION_ROLE=orchestrator "$hook" \
+        env -u GOLEM_ID -u AGENT_ID CLAUDE_SESSION_ROLE=orchestrator "$hook" \
             <<<"{\"message\":\"needs permission\",\"session_id\":\"$session_id\"}" >/dev/null 2>&1
     )
     feed="$(
@@ -349,7 +349,7 @@ test_unknown_role_is_primary() {
     # A non-orchestrator role value must NOT classify as orchestrator.
     got=$(
         cd "$main"
-        env -u GOLEM_ID CLAUDE_SESSION_ROLE=something-else "$HOOK_REPO" \
+        env -u GOLEM_ID -u AGENT_ID CLAUDE_SESSION_ROLE=something-else "$HOOK_REPO" \
             <<<'{"message":"needs permission","session_id":"aaaaaaaa11112222"}' >/dev/null 2>&1
         common_dir="$(/usr/bin/git rev-parse --git-common-dir)"
         case "$common_dir" in /*) ;; *) common_dir="$(/usr/bin/pwd)/$common_dir" ;; esac
@@ -359,6 +359,162 @@ test_unknown_role_is_primary() {
     /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
 }
 run_test test_unknown_role_is_primary "unknown CLAUDE_SESSION_ROLE falls through to primary (#756)"
+
+# ===========================================================================
+# $AGENT_ID resolution arm (#766). A CONTAINER golem is identified only by
+# $AGENT_ID (agentNN, from agent-entrypoint.sh) when it carries no $GOLEM_ID and
+# its cwd is not an issue-*/golem-* worktree root — the non-pipeline interactive
+# branch of that script, which returns before the #758 GOLEM_ID stamp.
+#
+# This hook used to have NO such arm, so that session fell through to
+# `primary-<short>` here while claude-host-event.sh keyed it `<project>-agentNN`
+# — a real cross-hook divergence, despite host-event's comment asserting the two
+# ladders match. The arm closes it; these tests lock in both the arm itself and
+# its position in the precedence ladder (below GOLEM_ID and the worktree root,
+# above the orchestrator marker and primary).
+#
+# Runs the hook with a caller-chosen set of `KEY=VAL` env pairs (GOLEM_ID always
+# scrubbed unless the caller passes one), echoing the golem id of the LAST feed
+# line. Generalizes run_hook_orch_session, which is the same shape with the
+# marker hardcoded. Args: <hook> <cwd> <session_id> [KEY=VAL ...]
+# ===========================================================================
+run_hook_env() {
+    local hook="$1" cwd="$2" session_id="$3"
+    shift 3
+    local feed
+    (
+        cd "$cwd"
+        env -u GOLEM_ID -u AGENT_ID -u CLAUDE_SESSION_ROLE "$@" "$hook" \
+            <<<"{\"message\":\"needs permission\",\"session_id\":\"$session_id\"}" >/dev/null 2>&1
+    )
+    feed="$(
+        cd "$cwd"
+        common_dir="$(/usr/bin/git rev-parse --git-common-dir)"
+        case "$common_dir" in /*) ;; *) common_dir="$(/usr/bin/pwd)/$common_dir" ;; esac
+        /usr/bin/echo "$(/usr/bin/dirname "$common_dir")/.worktrees/.status/feed.jsonl"
+    )"
+    /usr/bin/jq -r '.golem' "$feed" 2>/dev/null | /usr/bin/tail -1
+}
+
+# Make a plain (non-worktree) repo whose root is neither issue-* nor golem-*, so
+# resolution reaches the fallback arms. Echoes the repo path.
+setup_plain_repo() {
+    local main
+    main=$(/usr/bin/mktemp -d)/plainrepo
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    /usr/bin/echo "$main"
+}
+
+# $AGENT_ID resolves BEFORE the primary fallback, and is keyed BARE — no
+# `-<short>` session_id suffix, unlike primary/orchestrator. The suffix exists
+# only to separate roles that have no stable unique id; $AGENT_ID already is one
+# (like $GOLEM_ID), and keeping it bare is what makes the feed id line up with
+# host-event's `<project>-<golem>` POST key. Mirrors host-event's
+# test_agent_id_before_primary (#746/#766).
+test_agent_id_before_primary() {
+    local main got
+    main=$(setup_plain_repo)
+    got=$(run_hook_env "$HOOK_REPO" "$main" "aaaaaaaa11112222" AGENT_ID=agent07)
+    assert_equals "agent07" "$got" "AGENT_ID resolves before primary, keyed bare (no session_id suffix)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_agent_id_before_primary "AGENT_ID (container golem) resolves before primary (#766)"
+
+# $AGENT_ID outranks the orchestrator marker — a container golem IS a golem and
+# must not be reclassified as the fleet coordinator just because the marker is
+# also set. Mirrors host-event's test_agent_id_outranks_orchestrator_marker.
+test_agent_id_outranks_orchestrator_marker() {
+    local main got
+    main=$(setup_plain_repo)
+    got=$(run_hook_env "$HOOK_REPO" "$main" "aaaaaaaa11112222" \
+        AGENT_ID=agent07 CLAUDE_SESSION_ROLE=orchestrator)
+    assert_equals "agent07" "$got" "AGENT_ID outranks the orchestrator marker (marker only acts on the primary fallback)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_agent_id_outranks_orchestrator_marker "AGENT_ID outranks orchestrator marker (#766)"
+
+# Rung 1 > rung 3: a stamped $GOLEM_ID wins over $AGENT_ID. Both are set on a
+# container golem taking the #758 pipeline path, where the issue-attributable
+# golem-N is the id that belongs in the feed.
+test_golem_id_outranks_agent_id() {
+    local main got
+    main=$(setup_plain_repo)
+    got=$(run_hook_env "$HOOK_REPO" "$main" "aaaaaaaa11112222" \
+        GOLEM_ID=golem-999 AGENT_ID=agent07)
+    assert_equals "golem-999" "$got" "GOLEM_ID outranks AGENT_ID (#758 stamps both on the pipeline path)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_golem_id_outranks_agent_id "GOLEM_ID outranks AGENT_ID (#766)"
+
+# Rung 2 > rung 3: the worktree-root basename wins over $AGENT_ID, so a golem
+# working inside .worktrees/issue-N is golem-N even when the container also
+# exports an agentNN id.
+test_worktree_root_outranks_agent_id() {
+    local wt got
+    wt=$(setup_worktree 766)
+    got=$(run_hook_env "$HOOK_REPO" "$wt" "aaaaaaaa11112222" AGENT_ID=agent07)
+    assert_equals "golem-766" "$got" "worktree-root golem-N outranks AGENT_ID"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_worktree_root_outranks_agent_id "worktree root outranks AGENT_ID (#766)"
+
+# An EMPTY $AGENT_ID must fall through, not key the feed on "". This is what the
+# `?*` guard buys over a bare `*`; an empty golem field would group every such
+# session onto one nameless feed row.
+test_empty_agent_id_falls_through() {
+    local main got
+    main=$(setup_plain_repo)
+    got=$(run_hook_env "$HOOK_REPO" "$main" "aaaaaaaa11112222" AGENT_ID=)
+    assert_equals "primary-aaaaaaaa" "$got" "an empty AGENT_ID falls through to primary, never keys the feed on \"\""
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_empty_agent_id_falls_through "empty AGENT_ID falls through to primary (#766)"
+
+# $AGENT_ID is UNVALIDATED — only $GOLEM_ID is regex-gated — so on the jq-absent
+# path it reaches the hand-rolled JSON as an untrusted string. A quote-laden
+# AGENT_ID must be sanitized, not break out of the string literal and inject a
+# key. Mirrors host-event's test_python_absent_fallback_sanitizes_injection.
+test_jq_absent_sanitizes_agent_id() {
+    local main stubdir feed line injected
+    main=$(setup_plain_repo)
+
+    # A PATH with only bash+git: no jq, so the hand-rolled fallback runs. env -i
+    # also drops BASH_ENV, which would otherwise rebuild PATH on non-interactive
+    # bash and re-shadow the stub with the real jq (#618).
+    stubdir=$(/usr/bin/mktemp -d)
+    /usr/bin/ln -s "$(command -v bash)" "$stubdir/bash"
+    /usr/bin/ln -s "$(command -v git)" "$stubdir/git"
+
+    (
+        cd "$main"
+        /usr/bin/env -i PATH="$stubdir" \
+            AGENT_ID='agent07" ,"x":1 \evil' \
+            "$HOOK_REPO" <<<'{}' >/dev/null 2>&1
+    )
+
+    feed="$(
+        cd "$main"
+        common_dir="$(/usr/bin/git rev-parse --git-common-dir)"
+        case "$common_dir" in /*) ;; *) common_dir="$(/usr/bin/pwd)/$common_dir" ;; esac
+        /usr/bin/echo "$(/usr/bin/dirname "$common_dir")/.worktrees/.status/feed.jsonl"
+    )"
+    line="$(/usr/bin/tail -1 "$feed")"
+
+    # `has("x")` doubles as the validity check: jq errors (empty output) on a
+    # malformed line, so the equality fails if the sanitizer let the JSON break.
+    injected="$(/usr/bin/printf '%s' "$line" | /usr/bin/jq 'has("x")' 2>/dev/null)"
+    assert_equals "false" "$injected" "jq-absent fallback sanitizes AGENT_ID: valid JSON, no injected key"
+
+    /usr/bin/rm -rf "$stubdir" "$(/usr/bin/dirname "$main")"
+}
+run_test test_jq_absent_sanitizes_agent_id "jq-absent fallback sanitizes an injection-laden AGENT_ID (#766)"
 
 # ===========================================================================
 # A primary session whose Notification payload has NO session_id falls back to
@@ -521,42 +677,41 @@ test_unknown_message_defaults_to_gate() {
 run_test test_unknown_message_defaults_to_gate "unrecognized message defaults to event=gate (#600)"
 
 # ===========================================================================
-# Cross-hook label agreement (gap 4 / #756). #750's "both hooks agree" AC was
-# only satisfied by matching hardcoded literals across the two test files —
-# nothing drove BOTH hooks with identical input and diffed the resulting label.
-# This test does exactly that: one plain repo, identical env (the orchestrator
-# marker) and identical payload session_id fed to both hooks, then asserts the
-# host-event POST key is the golem-notify feed id with the `<project>-` prefix.
+# Cross-hook label agreement (gap 4 / #756, extended for #766). #750's "both
+# hooks agree" AC was only satisfied by matching hardcoded literals across the
+# two test files — nothing drove BOTH hooks with identical input and diffed the
+# resulting label. This does exactly that: one plain repo, one identical env and
+# payload session_id fed to both hooks, then asserts the host-event POST key is
+# the golem-notify feed id with the `<project>-` prefix.
 #
 # golem-notify emits `.golem` = `<role>-<short>` (no project prefix — the feed is
 # already per-repo); claude-host-event POSTs `.session_id` = `<project>-<role>-<short>`
 # (the host bridge keys globally, so it needs the project). Agreement therefore
 # means: host_event_session_id == "<project>-" + golem_notify_golem.
+#
+# PARAMETERIZED over the identity rung under test, because the orchestrator-only
+# original is precisely why the AGENT_ID divergence (#766) went uncaught: the
+# marker rung is shared code, so driving it proved nothing about the rungs above
+# it. A future identity rung is covered by adding one `run_agreement_case` call,
+# not a third near-duplicate function.
 # ===========================================================================
 HOOK_HOST_EVENT="$CONTAINERS_DIR/lib/features/templates/claude/hooks/claude-host-event.sh"
 
-test_cross_hook_label_agreement() {
-    local main proj stubdir capture role_env
-    main=$(/usr/bin/mktemp -d)/plainrepo
-    /usr/bin/mkdir -p "$main"
-    (
-        cd "$main"
-        /usr/bin/git init -q .
-        /usr/bin/git config user.email t@t.t
-        /usr/bin/git config user.name t
-        /usr/bin/git commit -q --allow-empty -m init
-    )
+# Drive both hooks with identical input and assert they agree.
+# Args: <expected_feed_id> <session_id> [KEY=VAL ...]
+run_agreement_case() {
+    local expect_golem="$1" session_id="$2"
+    shift 2
+    local main proj stubdir capture golem_id host_sid
+
+    main=$(setup_plain_repo)
     proj=$(/usr/bin/basename "$main")
 
-    # Identical input for both hooks: the orchestrator marker + one session_id.
-    role_env="orchestrator"
-    local session_id="aaaaaaaa11112222"
-
-    # 1. golem-notify -> read `.golem` from its feed.
-    local golem_id
+    # 1. golem-notify -> read `.golem` from its feed. Every identity var is
+    #    scrubbed first so ONLY the caller's pairs classify the session.
     golem_id=$(
         cd "$main"
-        env -u GOLEM_ID CLAUDE_SESSION_ROLE="$role_env" "$HOOK_REPO" \
+        env -u GOLEM_ID -u AGENT_ID -u CLAUDE_SESSION_ROLE "$@" "$HOOK_REPO" \
             <<<"{\"message\":\"needs permission\",\"session_id\":\"$session_id\"}" >/dev/null 2>&1
         common_dir="$(/usr/bin/git rev-parse --git-common-dir)"
         case "$common_dir" in /*) ;; *) common_dir="$(/usr/bin/pwd)/$common_dir" ;; esac
@@ -578,30 +733,54 @@ done
 exit 0
 STUB
     /usr/bin/chmod +x "$stubdir/curl"
-    local host_sid
     host_sid=$(
         cd "$main"
         # Clear BASH_ENV so /etc/bash_env can't rebuild PATH and re-shadow the
-        # stub curl with the real one (see #618). Scrub GOLEM_ID/AGENT_ID so only
-        # the orchestrator marker classifies this session.
-        env -u GOLEM_ID -u AGENT_ID -u BASH_ENV \
+        # stub curl with the real one (see #618). PROJECT_NAME is scrubbed too so
+        # `project` comes from the repo basename, matching `$proj` below.
+        env -u GOLEM_ID -u AGENT_ID -u CLAUDE_SESSION_ROLE -u PROJECT_NAME -u BASH_ENV \
+            "$@" \
             CAPTURE="$capture" PATH="$stubdir:$PATH" \
             NOTCHBAR_AGENTS_HOST=127.0.0.1 NOTCHBAR_AGENTS_PORT=59990 \
-            CLAUDE_SESSION_ROLE="$role_env" \
             "$HOOK_HOST_EVENT" Ended \
             <<<"{\"hook_event_name\":\"SessionEnd\",\"session_id\":\"$session_id\"}" >/dev/null 2>&1
         /usr/bin/jq -r '.session_id' "$capture" 2>/dev/null
     )
 
-    # Sanity: both hooks resolved a non-empty label for identical input.
-    assert_equals "orchestrator-aaaaaaaa" "$golem_id" "golem-notify feed id for the shared input"
-    assert_equals "${proj}-orchestrator-aaaaaaaa" "$host_sid" "host-event POST key for the shared input"
+    # Sanity: both hooks resolved the EXPECTED non-empty label for this input.
+    # Without these, a shared regression to `primary` on both sides would still
+    # satisfy the agreement assertion below.
+    assert_equals "$expect_golem" "$golem_id" "golem-notify feed id for the shared input"
+    assert_equals "${proj}-${expect_golem}" "$host_sid" "host-event POST key for the shared input"
     # The core agreement assertion: host-event key == "<project>-" + feed id.
     assert_equals "${proj}-${golem_id}" "$host_sid" "both hooks classify identical input to the same label"
 
     /usr/bin/rm -rf "$stubdir" "$(/usr/bin/dirname "$main")"
 }
-run_test test_cross_hook_label_agreement "both hooks agree on the label for identical input (#756)"
+
+# Rung 4 — the orchestrator marker. The original #756 case: a shared code path
+# in both hooks, which is why it could not have caught #766.
+test_cross_hook_agreement_orchestrator() {
+    run_agreement_case "orchestrator-aaaaaaaa" "aaaaaaaa11112222" \
+        CLAUDE_SESSION_ROLE=orchestrator
+}
+run_test test_cross_hook_agreement_orchestrator "both hooks agree for orchestrator-marked input (#756)"
+
+# Rung 3 — $AGENT_ID. THE regression test for #766: before the AGENT_ID arm
+# landed, golem-notify keyed this session `primary-aaaaaaaa` while host-event
+# keyed it `<project>-agent07`, so this case fails loudly on the divergence.
+# Note the bare `agent07` on both sides — no `-<short>` suffix, since AGENT_ID is
+# already a stable unique id (see the rung-3 comment in the hook).
+test_cross_hook_agreement_agent_id() {
+    run_agreement_case "agent07" "aaaaaaaa11112222" AGENT_ID=agent07
+}
+run_test test_cross_hook_agreement_agent_id "both hooks agree for AGENT_ID-only input (#766)"
+
+# Rung 1 — $GOLEM_ID. The deterministic launch-stamped id, likewise bare.
+test_cross_hook_agreement_golem_id() {
+    run_agreement_case "golem-999" "aaaaaaaa11112222" GOLEM_ID=golem-999
+}
+run_test test_cross_hook_agreement_golem_id "both hooks agree for GOLEM_ID input (#766)"
 
 # ===========================================================================
 # Generate report
