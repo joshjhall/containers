@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "tool": "rust",
-  "version": "1.95.0",
-  "released": "2026-04-16",
+  "version": "1.96.0",
+  "released": "2026-05-28",
   "channel": "stable",
   "support_matrix": [
     {
@@ -13,20 +13,8 @@
     },
     {
       "os": "debian",
-      "os_version": "11",
-      "arch": "arm64",
-      "status": "supported"
-    },
-    {
-      "os": "debian",
       "os_version": "12",
       "arch": "amd64",
-      "status": "supported"
-    },
-    {
-      "os": "debian",
-      "os_version": "12",
-      "arch": "arm64",
       "status": "supported"
     },
     {
@@ -34,64 +22,9 @@
       "os_version": "13",
       "arch": "amd64",
       "status": "supported"
-    },
-    {
-      "os": "debian",
-      "os_version": "13",
-      "arch": "arm64",
-      "status": "supported"
-    },
-    {
-      "os": "ubuntu",
-      "os_version": "24.04",
-      "arch": "amd64",
-      "status": "supported"
-    },
-    {
-      "os": "ubuntu",
-      "os_version": "24.04",
-      "arch": "arm64",
-      "status": "supported"
-    },
-    {
-      "os": "alpine",
-      "os_version": "3.21",
-      "arch": "amd64",
-      "status": "supported"
-    },
-    {
-      "os": "alpine",
-      "os_version": "3.21",
-      "arch": "arm64",
-      "status": "supported"
-    },
-    {
-      "os": "rhel",
-      "os_version": "9",
-      "arch": "amd64",
-      "status": "supported"
-    },
-    {
-      "os": "rhel",
-      "os_version": "9",
-      "arch": "arm64",
-      "status": "supported"
     }
   ],
-  "tested": [
-    {
-      "os": "debian",
-      "os_version": "12",
-      "arch": "amd64",
-      "tested_at": "2026-06-29T03:32:54.377720019Z",
-      "ci_run": "https://github.com/joshjhall/containers/actions/runs/28346786906",
-      "result": "pass",
-      "image_ref": "ghcr.io/joshjhall/containers/base-debian-12-amd64",
-      "image_digest": "sha256:cca0bf7fe783abc570b21dd9b0054ad002bda450b16c8ab0ee4714399b4f5cbf",
-      "duration_seconds": 19.868913287,
-      "version_output": "rustc 1.95.0 (59807616e 2026-04-14)"
-    }
-  ],
+  "tested": [],
   "install_methods": [
     {
       "name": "rustup-init",
@@ -116,7 +49,7 @@
         "args": [
           "-y",
           "--default-toolchain",
-          "1.95.0",
+          "1.96.0",
           "--profile",
           "default"
         ],
@@ -174,7 +107,7 @@
         "args": [
           "-y",
           "--default-toolchain",
-          "1.95.0",
+          "1.96.0",
           "--profile",
           "default"
         ],
@@ -215,8 +148,8 @@
     }
   ],
   "metadata": {
-    "added_at": "2026-04-27T22:00:00Z",
-    "updated_at": "2026-04-27T22:00:00Z",
+    "added_at": "2026-05-31T00:00:00Z",
+    "updated_at": "2026-05-31T00:00:00Z",
     "schema_version": 1
   }
 }

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "tool": "rust",
+  "version": "1.96.0",
+  "released": "2026-05-28",
+  "install_methods": [
+    {
+      "name": "rustup-init",
+      "kind": "script-installer",
+      "totally_unknown_field": "version.schema.json sets additionalProperties:false",
+      "platform": {
+        "os": ["debian"],
+        "arch": ["amd64"]
+      },
+      "invoke": {
+        "args": ["-y"]
+      }
+    }
+  ],
+  "metadata": {
+    "schema_version": 1,
+    "added_at": "2026-05-28T00:00:00Z",
+    "updated_at": "2026-05-28T00:00:00Z"
+  }
+}

@@ -1,22 +1,21 @@
 {
   "schemaVersion": 1,
   "tool": "rust",
-  "version": "1.96.0",
-  "released": "2026-05-28",
+  "version": "1.95.0",
+  "released": "2026-04-16",
   "channel": "stable",
   "support_matrix": [
-    { "os": "debian", "os_version": "11", "arch": "amd64", "status": "supported" },
-    { "os": "debian", "os_version": "11", "arch": "arm64", "status": "supported" },
-    { "os": "debian", "os_version": "12", "arch": "amd64", "status": "supported" },
-    { "os": "debian", "os_version": "12", "arch": "arm64", "status": "supported" },
     { "os": "debian", "os_version": "13", "arch": "amd64", "status": "supported" },
     { "os": "debian", "os_version": "13", "arch": "arm64", "status": "supported" },
     { "os": "ubuntu", "os_version": "24.04", "arch": "amd64", "status": "supported" },
-    { "os": "ubuntu", "os_version": "24.04", "arch": "arm64", "status": "supported" },
     { "os": "alpine", "os_version": "3.21", "arch": "amd64", "status": "supported" },
-    { "os": "alpine", "os_version": "3.21", "arch": "arm64", "status": "supported" },
-    { "os": "rhel", "os_version": "9", "arch": "amd64", "status": "supported" },
-    { "os": "rhel", "os_version": "9", "arch": "arm64", "status": "supported" }
+    {
+      "os": "windows",
+      "arch": "amd64",
+      "status": "unsupported",
+      "reason": "no upstream rustup target for this glibc-only build path",
+      "tracking_url": "https://example.test/rust-windows"
+    }
   ],
   "tested": [],
   "install_methods": [
@@ -33,11 +32,7 @@
       },
       "source_url_template": "https://static.rust-lang.org/rustup/dist/{rustup_target}/rustup-init",
       "invoke": {
-        "args": ["-y", "--default-toolchain", "1.96.0", "--profile", "default"],
-        "env": {
-          "CARGO_HOME": "/cache/cargo",
-          "RUSTUP_HOME": "/cache/rustup"
-        }
+        "args": ["-y", "--default-toolchain", "1.95.0", "--profile", "default"]
       },
       "post_install": [
         { "kind": "component_add", "component": "rust-src" },
@@ -52,7 +47,7 @@
       ]
     },
     {
-      "name": "rustup-init",
+      "name": "rustup-init-musl",
       "platform": {
         "os": "alpine",
         "arch": ["amd64", "arm64"]
@@ -64,18 +59,8 @@
       },
       "source_url_template": "https://static.rust-lang.org/rustup/dist/{rustup_target}/rustup-init",
       "invoke": {
-        "args": ["-y", "--default-toolchain", "1.96.0", "--profile", "default"],
-        "env": {
-          "CARGO_HOME": "/cache/cargo",
-          "RUSTUP_HOME": "/cache/rustup"
-        }
+        "args": ["-y", "--default-toolchain", "1.95.0", "--profile", "default"]
       },
-      "post_install": [
-        { "kind": "component_add", "component": "rust-src" },
-        { "kind": "component_add", "component": "rust-analyzer" },
-        { "kind": "component_add", "component": "clippy" },
-        { "kind": "component_add", "component": "rustfmt" }
-      ],
       "dependencies": [
         { "tool": "ca_certificates" },
         { "tool": "gcc" },
@@ -84,8 +69,7 @@
     }
   ],
   "metadata": {
-    "added_at": "2026-05-31T00:00:00Z",
-    "updated_at": "2026-05-31T00:00:00Z",
+    "added_at": "2026-04-29T00:00:00Z",
     "schema_version": 1
   }
 }

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "bash",
-  "display_name": "GNU Bash",
+  "display_name": "Bash",
   "kind": "system_package",
   "homepage": "https://www.gnu.org/software/bash/",
   "source_repo": "https://git.savannah.gnu.org/git/bash.git",
