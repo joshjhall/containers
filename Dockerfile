@@ -666,6 +666,41 @@ RUN if [ -f /opt/container-runtime/42-workspace-fs-health.sh ]; then \
     chmod 755 /etc/container/startup/42-workspace-fs-health.sh; \
     fi
 
+# The stale-symlink decay the script above repairs is time-driven, not
+# boot-driven — a long-lived container drifts back into the broken state with
+# nothing left to re-trigger the repair (issue #794). So the same script also
+# gets an hourly cron leg and an on-demand command.
+RUN if [ -f /opt/container-runtime/workspace-fs-health-cron.sh ]; then \
+    cp /opt/container-runtime/workspace-fs-health-cron.sh /usr/local/bin/workspace-fs-health-cron && \
+    chmod 755 /usr/local/bin/workspace-fs-health-cron; \
+    fi; \
+    if [ -f /opt/container-runtime/workspace-fs-health-run.sh ]; then \
+    cp /opt/container-runtime/workspace-fs-health-run.sh /usr/local/bin/workspace-fs-health && \
+    chmod 755 /usr/local/bin/workspace-fs-health; \
+    fi
+
+# Hourly cron entry for that repair. Only written when the cron feature is
+# installed; without it the boot run and the on-demand command still work.
+# Minute 17 rather than 0 to stay off the top-of-hour pile-up with other jobs.
+# The wrapper is a silent no-op whenever the boot run left no env snapshot
+# (SKIP_CASE_CHECK=true, or no repo mounted), so this costs nothing when idle.
+RUN if command -v cron > /dev/null 2>&1; then \
+    mkdir -p /etc/cron.d && \
+    printf '%s\n' \
+    '# Workspace filesystem health - repair stale symlink attributes (issue #794)' \
+    '# Re-runs the boot-time repair hourly, because the virtiofs attribute decay' \
+    '# it fixes is a function of uptime. Silent and idempotent when healthy.' \
+    '# Disable with SKIP_CASE_CHECK=true (the boot run then removes the env' \
+    '# snapshot this job requires, so it becomes a no-op).' \
+    '' \
+    'SHELL=/bin/bash' \
+    'PATH=/usr/local/bin:/usr/bin:/bin' \
+    '' \
+    "17 * * * * ${USERNAME} /usr/local/bin/workspace-fs-health-cron" \
+    > /etc/cron.d/workspace-fs-health && \
+    chmod 644 /etc/cron.d/workspace-fs-health; \
+    fi
+
 # Install init-env cleanup startup script
 RUN if [ -f /opt/container-runtime/05-cleanup-init-env.sh ]; then \
     cp /opt/container-runtime/05-cleanup-init-env.sh /etc/container/startup/05-cleanup-init-env.sh && \

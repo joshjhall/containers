@@ -40,14 +40,19 @@ setup() {
     # under test. Start from a known-unset state.
     git -C "$PROJECT_ROOT" config --unset core.ignorecase 2>/dev/null || true
 
-    unset SKIP_CASE_CHECK SKIP_CASE_FIX 2>/dev/null || true
+    # Redirect the cron env snapshot into the fixture. Without this the script
+    # would write into the real $HOME/.cache/container/ on every test run.
+    export FS_HEALTH_ENV_FILE="$TEST_TEMP_DIR/fs-health.env"
+
+    unset SKIP_CASE_CHECK SKIP_CASE_FIX FS_HEALTH_UPDATE_ENV 2>/dev/null || true
 }
 
 teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    unset PROJECT_ROOT TEST_TEMP_DIR SKIP_CASE_CHECK SKIP_CASE_FIX 2>/dev/null || true
+    unset PROJECT_ROOT TEST_TEMP_DIR SKIP_CASE_CHECK SKIP_CASE_FIX \
+        FS_HEALTH_ENV_FILE FS_HEALTH_UPDATE_ENV 2>/dev/null || true
 }
 
 # Run the script with the filesystem verdict forced via FS_CASE_STATE, so the
@@ -59,6 +64,7 @@ run_fs_health() {
         export FS_CASE_STATE="$1"
         export SKIP_CASE_CHECK="${SKIP_CASE_CHECK:-false}"
         export SKIP_CASE_FIX="${SKIP_CASE_FIX:-false}"
+        export FS_HEALTH_ENV_FILE
         bash "$FS_HEALTH_SCRIPT"
     ) 2>/dev/null
 }
@@ -70,6 +76,7 @@ run_fs_health_stderr() {
         export FS_CASE_STATE="$1"
         export SKIP_CASE_CHECK="${SKIP_CASE_CHECK:-false}"
         export SKIP_CASE_FIX="${SKIP_CASE_FIX:-false}"
+        export FS_HEALTH_ENV_FILE
         { bash "$FS_HEALTH_SCRIPT" >/dev/null; } 2>&1
     )
 }
@@ -259,6 +266,290 @@ test_regular_files_untouched() {
 }
 
 # ============================================================================
+# Periodic Re-Run Tests (issue #794)
+# ============================================================================
+# The repair is time-driven, so it also runs hourly from cron. Cron inherits
+# none of the container environment, so the boot run records PROJECT_ROOT and
+# SKIP_CASE_FIX into an env snapshot; the snapshot's ABSENCE is what disables
+# the cron leg. These tests cover that contract in both directions.
+
+CRON_WRAPPER="$(dirname "${BASH_SOURCE[0]}")/../../../lib/runtime/workspace-fs-health-cron.sh"
+CRON_WRAPPER="$(cd "$(dirname "$CRON_WRAPPER")" && pwd)/$(basename "$CRON_WRAPPER")"
+
+ONDEMAND_WRAPPER="$(dirname "${BASH_SOURCE[0]}")/../../../lib/runtime/workspace-fs-health-run.sh"
+ONDEMAND_WRAPPER="$(cd "$(dirname "$ONDEMAND_WRAPPER")" && pwd)/$(basename "$ONDEMAND_WRAPPER")"
+
+# Run the cron wrapper with a clean environment — no PROJECT_ROOT, no
+# SKIP_CASE_*, and a nonexistent cron-env — so it can only work from the
+# snapshot, exactly as the real cron leg does. Returns stderr.
+run_cron_wrapper() {
+    (
+        unset PROJECT_ROOT SKIP_CASE_CHECK SKIP_CASE_FIX 2>/dev/null || true
+        export FS_HEALTH_SCRIPT="$FS_HEALTH_SCRIPT"
+        export FS_HEALTH_ENV_FILE
+        export CRON_ENV_FILE="$TEST_TEMP_DIR/no-such-cron-env"
+        export FS_CASE_STATE="${1:-sensitive}"
+        { bash "$CRON_WRAPPER" >/dev/null; } 2>&1
+    )
+}
+
+get_snapshot_value() {
+    /usr/bin/grep -E "^$1=" "$FS_HEALTH_ENV_FILE" 2>/dev/null | command sed "s/^$1=//; s/^'//; s/'$//"
+}
+
+test_writes_env_snapshot() {
+    run_fs_health sensitive
+    assert_file_exists "$FS_HEALTH_ENV_FILE" \
+        "A normal run should record the env snapshot the cron leg needs"
+    assert_equals "$PROJECT_ROOT" "$(get_snapshot_value PROJECT_ROOT)" \
+        "Snapshot should carry the resolved PROJECT_ROOT"
+    assert_equals "false" "$(get_snapshot_value SKIP_CASE_FIX)" \
+        "Snapshot should record SKIP_CASE_FIX=false by default"
+}
+
+test_snapshot_records_skip_case_fix() {
+    export SKIP_CASE_FIX=true
+    run_fs_health sensitive
+    assert_equals "true" "$(get_snapshot_value SKIP_CASE_FIX)" \
+        "Snapshot should carry SKIP_CASE_FIX=true so cron inherits the opt-out"
+}
+
+test_skip_case_check_removes_snapshot() {
+    # A snapshot from a boot BEFORE the opt-out was set would otherwise keep
+    # the hourly leg repairing for a user who explicitly opted out.
+    run_fs_health sensitive
+    assert_file_exists "$FS_HEALTH_ENV_FILE" "Precondition: snapshot exists"
+
+    export SKIP_CASE_CHECK=true
+    run_fs_health sensitive
+    assert_file_not_exists "$FS_HEALTH_ENV_FILE" \
+        "SKIP_CASE_CHECK=true should remove a stale env snapshot"
+}
+
+test_non_repo_removes_snapshot() {
+    run_fs_health sensitive
+    assert_file_exists "$FS_HEALTH_ENV_FILE" "Precondition: snapshot exists"
+
+    # Project unmounted / no longer a repo: the cron leg has nothing to repair
+    # and must not be left pointing at it.
+    command rm -rf "$PROJECT_ROOT/.git"
+    run_fs_health sensitive
+    assert_file_not_exists "$FS_HEALTH_ENV_FILE" \
+        "A non-repo project root should clear the env snapshot"
+}
+
+test_cron_wrapper_noop_without_snapshot() {
+    # No snapshot means "do not run" — never guess at PROJECT_ROOT, which under
+    # cron would be the user's home directory.
+    command rm -f "$FS_HEALTH_ENV_FILE"
+    local output
+    output=$(run_cron_wrapper insensitive)
+    assert_empty "$output" \
+        "Cron wrapper should be a silent no-op when no snapshot exists"
+    assert_equals "unset" "$(get_ignorecase)" \
+        "Cron wrapper should not repair anything without a snapshot"
+}
+
+test_cron_wrapper_repairs_from_snapshot() {
+    # The whole point of #794: a repair that reaches the project on a later,
+    # environment-less invocation rather than only at boot.
+    run_fs_health sensitive
+    assert_equals "unset" "$(get_ignorecase)" "Precondition: nothing repaired yet"
+
+    run_cron_wrapper insensitive >/dev/null
+    assert_equals "true" "$(get_ignorecase)" \
+        "Cron wrapper should repair the project named by the snapshot"
+}
+
+test_cron_wrapper_honors_snapshot_skip_fix() {
+    export SKIP_CASE_FIX=true
+    run_fs_health sensitive
+    unset SKIP_CASE_FIX
+
+    local output
+    output=$(run_cron_wrapper insensitive)
+    assert_equals "unset" "$(get_ignorecase)" \
+        "Cron wrapper should not write when the snapshot recorded SKIP_CASE_FIX=true"
+    assert_contains "$output" "case-insensitive" \
+        "Cron wrapper should still report the problem in report-only mode"
+}
+
+test_cron_wrapper_does_not_rewrite_snapshot() {
+    # The snapshot belongs to the boot run. If the cron leg rewrote it from its
+    # own environment, one bad cron invocation would permanently redirect every
+    # later one.
+    run_fs_health sensitive
+    local before
+    before=$(command cat "$FS_HEALTH_ENV_FILE")
+
+    run_cron_wrapper insensitive >/dev/null
+    assert_equals "$before" "$(command cat "$FS_HEALTH_ENV_FILE")" \
+        "Cron wrapper should leave the boot run's snapshot unchanged"
+}
+
+test_ondemand_repairs_given_path() {
+    # Resolve the target before the subshell clears PROJECT_ROOT — the point of
+    # clearing it is to prove the path argument alone drives the repair.
+    local target="$PROJECT_ROOT"
+    local output
+    output=$(
+        cd "$TEST_TEMP_DIR" || exit 1
+        export FS_HEALTH_SCRIPT="$FS_HEALTH_SCRIPT"
+        export FS_HEALTH_ENV_FILE
+        export FS_CASE_STATE=insensitive
+        unset PROJECT_ROOT 2>/dev/null || true
+        { bash "$ONDEMAND_WRAPPER" "$target" >/dev/null; } 2>&1
+    )
+    assert_equals "true" "$(get_ignorecase)" \
+        "On-demand command should repair the project path it is given"
+    assert_contains "$output" "core.ignorecase" \
+        "On-demand command should report what it repaired"
+}
+
+test_ondemand_does_not_write_snapshot() {
+    # An ad-hoc run from an arbitrary directory must not redirect the hourly
+    # cron leg at whatever the user happened to cd into.
+    command rm -f "$FS_HEALTH_ENV_FILE"
+    (
+        export FS_HEALTH_SCRIPT="$FS_HEALTH_SCRIPT"
+        export FS_HEALTH_ENV_FILE
+        export FS_CASE_STATE=insensitive
+        bash "$ONDEMAND_WRAPPER" "$PROJECT_ROOT"
+    ) >/dev/null 2>&1
+    assert_file_not_exists "$FS_HEALTH_ENV_FILE" \
+        "On-demand run should not create or overwrite the boot snapshot"
+}
+
+test_snapshot_survives_quote_in_path() {
+    # The snapshot is written as KEY='value' and read back by a parser. A path
+    # containing a single quote must round-trip as DATA — if the quoting or the
+    # unescaping is wrong, the value is truncated or (when sourced) the tail
+    # becomes shell syntax.
+    local quoted_root="$TEST_TEMP_DIR/my's-project"
+    command mkdir -p "$quoted_root"
+    git -C "$quoted_root" init -q .
+    git -C "$quoted_root" config user.email "test@example.com"
+    git -C "$quoted_root" config user.name "Test User"
+    git -C "$quoted_root" config --unset core.ignorecase 2>/dev/null || true
+
+    (
+        export PROJECT_ROOT="$quoted_root"
+        export FS_CASE_STATE=sensitive
+        export FS_HEALTH_ENV_FILE
+        bash "$FS_HEALTH_SCRIPT"
+    ) 2>/dev/null
+
+    # The cron leg must resolve the very same path back out of the snapshot.
+    run_cron_wrapper insensitive >/dev/null
+
+    local result
+    result=$(git -C "$quoted_root" config --get core.ignorecase 2>/dev/null || echo "unset")
+    assert_equals "true" "$result" \
+        "A PROJECT_ROOT containing a single quote should round-trip through the snapshot"
+}
+
+test_snapshot_injection_not_executed() {
+    # The reader must PARSE the snapshot, never source it. A crafted value is
+    # the difference between a wrong string and arbitrary code on an hourly
+    # timer, so assert the payload never runs.
+    local canary="$TEST_TEMP_DIR/canary-executed"
+    command printf "%s\n" \
+        "PROJECT_ROOT='/nonexistent'; touch '$canary'" \
+        "SKIP_CASE_FIX='false'" \
+        >"$FS_HEALTH_ENV_FILE"
+
+    run_cron_wrapper insensitive >/dev/null 2>&1
+
+    assert_file_not_exists "$canary" \
+        "Snapshot contents must never be executed as shell code"
+}
+
+test_snapshot_spaces_round_trip() {
+    local spaced_root="$TEST_TEMP_DIR/my project dir"
+    command mkdir -p "$spaced_root"
+    git -C "$spaced_root" init -q .
+    git -C "$spaced_root" config user.email "test@example.com"
+    git -C "$spaced_root" config user.name "Test User"
+    git -C "$spaced_root" config --unset core.ignorecase 2>/dev/null || true
+
+    (
+        export PROJECT_ROOT="$spaced_root"
+        export FS_CASE_STATE=sensitive
+        export FS_HEALTH_ENV_FILE
+        bash "$FS_HEALTH_SCRIPT"
+    ) 2>/dev/null
+
+    run_cron_wrapper insensitive >/dev/null
+
+    local result
+    result=$(git -C "$spaced_root" config --get core.ignorecase 2>/dev/null || echo "unset")
+    assert_equals "true" "$result" \
+        "A PROJECT_ROOT containing spaces should round-trip through the snapshot"
+}
+
+test_cron_wrapper_noop_on_malformed_snapshot() {
+    # Present but malformed (no usable PROJECT_ROOT) must be treated like no
+    # snapshot, never as a license to fall back to cron's $PWD.
+    command printf "%s\n" "SKIP_CASE_FIX='false'" >"$FS_HEALTH_ENV_FILE"
+
+    local output
+    output=$(run_cron_wrapper insensitive)
+    assert_empty "$output" \
+        "Cron wrapper should no-op on a snapshot with no PROJECT_ROOT"
+    assert_equals "unset" "$(get_ignorecase)" \
+        "Cron wrapper should repair nothing from a malformed snapshot"
+}
+
+test_cron_wrapper_noop_when_script_missing() {
+    run_fs_health sensitive
+    local output status=0
+    output=$(
+        unset PROJECT_ROOT SKIP_CASE_CHECK SKIP_CASE_FIX 2>/dev/null || true
+        export FS_HEALTH_SCRIPT="$TEST_TEMP_DIR/no-such-script.sh"
+        export FS_HEALTH_ENV_FILE
+        export CRON_ENV_FILE="$TEST_TEMP_DIR/no-such-cron-env"
+        { bash "$CRON_WRAPPER" >/dev/null; } 2>&1
+    ) || status=$?
+    assert_equals "0" "$status" \
+        "Cron wrapper should exit 0 when the repair script is absent"
+    assert_empty "$output" \
+        "Cron wrapper should stay silent when the repair script is absent"
+}
+
+test_ondemand_fails_when_script_missing() {
+    local status=0
+    (
+        export FS_HEALTH_SCRIPT="$TEST_TEMP_DIR/no-such-script.sh"
+        export FS_HEALTH_ENV_FILE
+        bash "$ONDEMAND_WRAPPER"
+    ) >/dev/null 2>&1 || status=$?
+    assert_equals "1" "$status" \
+        "On-demand command should fail loudly when the repair script is absent"
+}
+
+test_ondemand_help_exits_clean() {
+    local output status=0
+    output=$(
+        export FS_HEALTH_SCRIPT="$FS_HEALTH_SCRIPT"
+        export FS_HEALTH_ENV_FILE
+        bash "$ONDEMAND_WRAPPER" --help
+    ) 2>&1 || status=$?
+    assert_equals "0" "$status" "--help should exit 0"
+    assert_contains "$output" "Usage:" "--help should print usage text"
+}
+
+test_ondemand_rejects_bad_path() {
+    local status=0
+    (
+        export FS_HEALTH_SCRIPT="$FS_HEALTH_SCRIPT"
+        export FS_HEALTH_ENV_FILE
+        bash "$ONDEMAND_WRAPPER" "$TEST_TEMP_DIR/does-not-exist"
+    ) >/dev/null 2>&1 || status=$?
+    assert_equals "1" "$status" \
+        "On-demand command should fail loudly on a nonexistent path"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 
@@ -288,6 +579,24 @@ run_test_with_setup test_directory_symlink_not_polluted "Directory symlink not p
 run_test_with_setup test_symlinks_leave_repo_clean "Repo stays clean after symlink pass"
 run_test_with_setup test_silent_with_healthy_symlinks_present "Silent when all symlinks are healthy"
 run_test_with_setup test_regular_files_untouched "Regular files untouched"
+run_test_with_setup test_writes_env_snapshot "Writes the cron env snapshot"
+run_test_with_setup test_snapshot_records_skip_case_fix "Snapshot records SKIP_CASE_FIX"
+run_test_with_setup test_skip_case_check_removes_snapshot "SKIP_CASE_CHECK removes a stale snapshot"
+run_test_with_setup test_non_repo_removes_snapshot "Non-repo project root clears the snapshot"
+run_test_with_setup test_cron_wrapper_noop_without_snapshot "Cron wrapper no-ops without a snapshot"
+run_test_with_setup test_cron_wrapper_repairs_from_snapshot "Cron wrapper repairs from the snapshot"
+run_test_with_setup test_cron_wrapper_honors_snapshot_skip_fix "Cron wrapper honors snapshot SKIP_CASE_FIX"
+run_test_with_setup test_cron_wrapper_does_not_rewrite_snapshot "Cron wrapper leaves the snapshot alone"
+run_test_with_setup test_ondemand_repairs_given_path "On-demand command repairs a given path"
+run_test_with_setup test_ondemand_does_not_write_snapshot "On-demand run does not write the snapshot"
+run_test_with_setup test_snapshot_survives_quote_in_path "Snapshot round-trips a path with a single quote"
+run_test_with_setup test_snapshot_injection_not_executed "Snapshot contents are never executed"
+run_test_with_setup test_snapshot_spaces_round_trip "Snapshot round-trips a path with spaces"
+run_test_with_setup test_cron_wrapper_noop_on_malformed_snapshot "Cron wrapper no-ops on a malformed snapshot"
+run_test_with_setup test_cron_wrapper_noop_when_script_missing "Cron wrapper no-ops when the script is absent"
+run_test_with_setup test_ondemand_fails_when_script_missing "On-demand command fails when the script is absent"
+run_test_with_setup test_ondemand_help_exits_clean "On-demand --help exits cleanly"
+run_test_with_setup test_ondemand_rejects_bad_path "On-demand command rejects a bad path"
 
 # Generate test report
 generate_report

@@ -20,12 +20,82 @@
 #
 # Skip everything with:   SKIP_CASE_CHECK=true
 # Detect and report, but never write:  SKIP_CASE_FIX=true
+#
+# Repair 2 fixes a *time-driven* decay, so a boot-only run is not enough: a
+# container left up long enough re-accumulates the bad attributes with nothing
+# to re-trigger the repair (issue #794). The same script therefore also runs
+# hourly from cron via /usr/local/bin/workspace-fs-health-cron, and on demand
+# as /usr/local/bin/workspace-fs-health.
+#
+# Cron sees none of the container environment, so the BOOT run records the two
+# values the cron leg cannot re-derive — PROJECT_ROOT and SKIP_CASE_FIX — into
+# an env snapshot. Its ABSENCE is what disables the cron leg, which is why the
+# skip gate removes it rather than leaving a stale copy behind.
+#
+# Only the boot run maintains that snapshot. The cron and on-demand legs pass
+# FS_HEALTH_UPDATE_ENV=false, because both run with an environment that would
+# poison it: an on-demand run's PROJECT_ROOT is whatever directory the user
+# happened to be in, and a run in a non-repo directory exits before it could
+# record anything useful.
+
+# ============================================================================
+# Environment snapshot for the cron leg
+# ============================================================================
+# Under $HOME rather than /run: fix_run_permissions sits inside the
+# ENTRYPOINT_STARTUP_ONLY guard, so /run is not reliably user-writable on an
+# editor's later boots (see .claude/memory/zed-every-boot-startup-replay.md).
+
+FS_HEALTH_ENV_FILE="${FS_HEALTH_ENV_FILE:-${HOME:-/tmp}/.cache/container/fs-health.env}"
+FS_HEALTH_UPDATE_ENV="${FS_HEALTH_UPDATE_ENV:-true}"
+
+remove_env_snapshot() {
+    [ "$FS_HEALTH_UPDATE_ENV" = "true" ] || return 0
+    /usr/bin/rm -f "$FS_HEALTH_ENV_FILE" 2>/dev/null || true
+}
+
+write_env_snapshot() {
+    [ "$FS_HEALTH_UPDATE_ENV" = "true" ] || return 0
+
+    local dir
+    dir=$(command dirname "$FS_HEALTH_ENV_FILE")
+    /usr/bin/mkdir -p "$dir" 2>/dev/null || return 0
+
+    # Single-quote the values so a path containing spaces round-trips, and
+    # escape any embedded single quote via the standard '\'' idiom. Without the
+    # escape, a project path like /workspace/my's-project would terminate the
+    # quoting early and turn the rest of the line into shell syntax rather than
+    # data — the reader parses these values, so unescaped input there is a code
+    # path, not just a wrong string.
+    local escaped_root="${PROJECT_ROOT//\'/\'\\\'\'}"
+    local escaped_skip="${SKIP_CASE_FIX:-false}"
+    escaped_skip="${escaped_skip//\'/\'\\\'\'}"
+
+    # Write to a temp file and rename into place. The hourly cron leg may read
+    # this while a fast container restart is rewriting it; rename is atomic on
+    # the same filesystem, so the reader sees either the old or the new file,
+    # never a half-written one.
+    local tmp="${FS_HEALTH_ENV_FILE}.tmp.$$"
+    {
+        command echo "PROJECT_ROOT='${escaped_root}'"
+        command echo "SKIP_CASE_FIX='${escaped_skip}'"
+    } >"$tmp" 2>/dev/null || {
+        /usr/bin/rm -f "$tmp" 2>/dev/null || true
+        return 0
+    }
+    /usr/bin/mv -f "$tmp" "$FS_HEALTH_ENV_FILE" 2>/dev/null || {
+        /usr/bin/rm -f "$tmp" 2>/dev/null || true
+        return 0
+    }
+}
 
 # ============================================================================
 # Skip gate
 # ============================================================================
 
 if [ "${SKIP_CASE_CHECK:-false}" = "true" ]; then
+    # Drop any snapshot from a boot before the opt-out was set — otherwise the
+    # cron leg would keep repairing for a user who explicitly opted out.
+    remove_env_snapshot
     exit 0
 fi
 
@@ -49,11 +119,17 @@ fi
 
 # A worktree's .git is a *file* pointing at the real git dir, not a directory,
 # so accept either shape.
+#
+# Both bail-outs clear the snapshot: there is nothing here for the cron leg to
+# repair, and a snapshot left from an earlier boot would point it at a project
+# that is no longer mounted.
 if [ ! -e "${PROJECT_ROOT}/.git" ]; then
+    remove_env_snapshot
     exit 0
 fi
 
 if ! command -v git >/dev/null 2>&1; then
+    remove_env_snapshot
     exit 0
 fi
 
@@ -170,3 +246,8 @@ check_symlinks() {
 
 check_ignorecase
 check_symlinks
+
+# Record the resolved environment so the hourly cron leg can re-run this same
+# script against the same project with the same opt-out. Written last, so the
+# snapshot only ever describes a run that actually reached a healthy repo.
+write_env_snapshot
