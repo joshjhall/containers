@@ -1,16 +1,18 @@
 {
   "activity": {
     "scan_cadence_days": 1,
-    "scanned_at": "2026-04-29T00:00:00Z",
-    "score": "very-active"
+    "scanned_at": "2026-04-27T22:00:00Z",
+    "score": "very-active",
+    "signals": {
+      "active_maintainers": 152,
+      "commits_last_90d": 7904,
+      "last_commit_at": "2026-04-27T21:47:07Z",
+      "last_release_at": "2026-04-16T18:19:31Z",
+      "open_advisories": 0,
+      "releases_last_90d": 4
+    }
   },
   "available": [
-    {
-      "version": "1.84.0"
-    },
-    {
-      "version": "1.84.1"
-    },
     {
       "version": "1.95.0"
     },
@@ -27,21 +29,23 @@
   "channels": {
     "stable": {
       "default": true,
-      "description": "Production-grade releases."
+      "description": "Production-grade releases. New stable cuts roughly every six weeks; patch releases as needed."
     }
   },
-  "default_version": "1.95.0",
+  "default_version": "1.97.1",
   "display_name": "Rust",
   "homepage": "https://www.rust-lang.org",
   "id": "rust",
   "kind": "language",
   "license": "MIT OR Apache-2.0",
-  "minimum_recommended": "1.84.0",
+  "minimum_recommended": "1.95.0",
+  "ordering": {},
   "schemaVersion": 1,
+  "source_repo": "https://github.com/rust-lang/rust",
   "validation_tiers": {
     "tier3": {
-      "available": true
+      "available": true,
+      "notes": "rustup-init verified against publisher SHA256 at static.rust-lang.org/rustup/dist/<triple>/rustup-init.sha256; the rust toolchain itself is then verified by rustup's built-in signed-channel mechanism."
     }
-  },
-  "version_style": "semver"
+  }
 }

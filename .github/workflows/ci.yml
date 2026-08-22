@@ -38,6 +38,34 @@ jobs:
       # Version is read from lib/features/dev-tools.sh so there is ONE yq pin in
       # the repo — the one bin/check-versions.sh already tracks — rather than a
       # second copy here that would drift silently.
+      # tests/unit/vendored-catalog.sh compares the vendored luggage catalog
+      # (crates/luggage/testdata/catalog — the copy the Dockerfile ships) against
+      # the upstream containers-db entries. Without this checkout those tests
+      # SKIP, and per #768 a skip renders identically to a pass — which would
+      # leave the drift check un-executed on every run, the exact gap #815
+      # exists to close. The test also hard-fails rather than skips under CI=true.
+      #
+      # Public repo, so no token needed. Shallow: only the current tools/ and
+      # schema/ trees are read, never history.
+      - name: Checkout containers-db (for vendored catalog validation)
+        uses: actions/checkout@v4
+        with:
+          repository: joshjhall/containers-db
+          path: _containers-db
+          fetch-depth: 1
+          # Nothing here needs credentials (public repo, read-only use), and
+          # the default would write the job's GITHUB_TOKEN into
+          # _containers-db/.git/config where later steps read this checkout as
+          # untrusted data.
+          persist-credentials: false
+        # NOTE: intentionally unpinned — it tracks containers-db's default
+        # branch, so this check compares against the CURRENT upstream catalog.
+        # That is the point (a mirror that matched a stale pin would not be a
+        # mirror), but it does mean an upstream merge can flip this check
+        # red with no change in this repo. The migration playbook's end-state
+        # is a pinned containers-db snapshot for the vendored catalog itself;
+        # pin this `ref:` at the same time.
+
       - name: Install yq (for GitLab triage policy tests)
         run: |
           set -euo pipefail
@@ -75,6 +103,12 @@ jobs:
           yq --version
 
       - name: Run unit tests
+        env:
+          # Points tests/unit/vendored-catalog.sh at the checkout above. Named
+          # CONTAINERS_DB_SRC, not CONTAINERS_DB: the latter is what the built
+          # image sets to its own COPY of the vendored snapshot, so reusing it
+          # would compare the catalog against itself and pass vacuously.
+          CONTAINERS_DB_SRC: ${{ github.workspace }}/_containers-db
         run: |
           echo "Running unit tests without Docker..."
           export SKIP_DOCKER_CHECK=true

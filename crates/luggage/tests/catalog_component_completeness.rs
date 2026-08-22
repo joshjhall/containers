@@ -33,23 +33,40 @@ fn every_rust_version_carries_full_component_set() {
     let mut failures = Vec::new();
 
     for (version, doc) in &rust.versions {
-        // Gather every component added by any install method's post-install
-        // steps for this version.
-        let components: Vec<&str> = doc
-            .install_methods
-            .iter()
-            .flat_map(|m| m.post_install.iter().flatten())
-            .filter_map(|step| match step {
-                PostInstall::ComponentAdd { component } => Some(component.as_str()),
-                _ => None,
-            })
-            .collect();
+        // Checked PER INSTALL METHOD, not pooled across the version.
+        //
+        // Pooling hid a real defect: the vendored 1.97.x entries listed the
+        // full component set on the debian/ubuntu/rhel method but had NO
+        // post_install at all on the alpine (musl) one. A union across methods
+        // still saw all four components, so the version looked complete while
+        // every Alpine build installed rustc/cargo without clippy, rustfmt, or
+        // rust-analyzer — precisely the #740 footgun, on one platform. Which
+        // method runs is decided by the resolver at install time, so each one
+        // must independently carry the full set. (Found while adding the
+        // vendored-catalog drift check, #815.)
+        for method in &doc.install_methods {
+            let components: Vec<&str> = method
+                .post_install
+                .iter()
+                .flatten()
+                .filter_map(|step| match step {
+                    PostInstall::ComponentAdd { component } => Some(component.as_str()),
+                    _ => None,
+                })
+                .collect();
 
-        let missing: Vec<&str> =
-            REQUIRED_COMPONENTS.iter().copied().filter(|req| !components.contains(req)).collect();
+            let missing: Vec<&str> = REQUIRED_COMPONENTS
+                .iter()
+                .copied()
+                .filter(|req| !components.contains(req))
+                .collect();
 
-        if !missing.is_empty() {
-            failures.push(format!("rust@{version} missing components: {missing:?}"));
+            if !missing.is_empty() {
+                failures.push(format!(
+                    "rust@{version} method `{}` missing components: {missing:?}",
+                    method.name
+                ));
+            }
         }
     }
 

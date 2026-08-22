@@ -1,8 +1,19 @@
 //! End-to-end CLI tests for `luggage`.
 //!
 //! Each test spawns the freshly-built binary against the self-contained
-//! catalog under `testdata/catalog/`. We deliberately avoid depending on a
-//! `/workspace/containers-db` checkout so the suite stays hermetic.
+//! catalog under `testdata/fixtures-catalog/`. We deliberately avoid depending
+//! on a `/workspace/containers-db` checkout so the suite stays hermetic.
+//!
+//! Note the catalog these tests read is NOT `testdata/catalog/`, which is the
+//! *production* snapshot the image ships (`Dockerfile`'s
+//! `COPY crates/luggage/testdata/catalog /opt/containers-db`) and which
+//! `just db-validate-vendored` holds in sync with the upstream
+//! containers-db entries (issue #815). This suite needs edge cases upstream
+//! has no reason to carry — an `unsupported` platform cell to exercise the
+//! exit-2 path, a distinctly-named musl install method to prove per-platform
+//! method selection, and `1.84.x` versions for partial-version resolution.
+//! Keeping those in a separate fixture catalog lets the production copy be a
+//! strict mirror without making these assertions weaker.
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -14,7 +25,7 @@ const fn binary() -> &'static str {
 }
 
 fn catalog_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("testdata/catalog")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("testdata/fixtures-catalog")
 }
 
 fn run(args: &[&str]) -> Output {
