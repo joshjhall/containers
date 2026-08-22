@@ -483,46 +483,79 @@ install_github_binary_tools() {
     # agnix, not of this pattern: if agnix ever gains a dependency, re-check
     # with `npm install -g --offline` from the verified tree, which fails the
     # moment any byte still has to be fetched.
+    #
+    # CLASSIFYING THE FAILURE. `npm audit signatures` exits non-zero for BOTH
+    # "the signature does not match" and "the audit could not run" (registry
+    # 5xx, ECONNREFUSED, DNS failure, nothing auditable). Treating every
+    # non-zero exit as tampering would report a network blip as a supply-chain
+    # attack — and an operator who sees that message during an outage learns to
+    # re-run past it, which is exactly how a real mismatch gets waved through.
+    #
+    # So the classifier keys on the POSITIVE signal instead of enumerating
+    # benign ones: `--json` returns {"invalid":[...],"missing":[...]} when the
+    # audit ran, and {"error":{...}} when it could not. A non-empty `invalid`
+    # array is the only thing treated as a mismatch. Everything else is
+    # "unverifiable", which warns and skips — the same line
+    # verify_download_or_fail() (lib/base/checksum-verification.sh) draws when
+    # it hard-fails only on rc 1 (verification ran and failed) and falls
+    # through when verification was unavailable.
+    #
+    # LIMIT, stated so it is not over-read: this verifies the REGISTRY-attested
+    # tarball, i.e. that npm served the bytes the publisher signed. It is not
+    # an integrity check on the unpacked tree — editing a file under
+    # node_modules after install does not make `invalid` non-empty. The threat
+    # this closes is a tampered/substituted tarball from the registry, which is
+    # the threat #814 describes.
     if command -v npm &>/dev/null; then
         log_message "Installing agnix (AI config linter) v${AGNIX_VERSION}..."
-        local agnix_verify_dir agnix_audit_out agnix_audit_rc=0
-        agnix_verify_dir=$(create_secure_temp_dir)
-        # Guarded as an elif chain, not an early `return`: agentsys and cspell
-        # install further down in this same function, and a bare return here
-        # would silently skip them.
-        if [ -z "$agnix_verify_dir" ] || [ ! -d "$agnix_verify_dir" ]; then
+        local agnix_verify_dir agnix_audit_json agnix_invalid
+        # The assignment is the `if` condition on purpose. As a standalone
+        # statement it would abort the whole script under dev-tools.sh's
+        # `set -euo pipefail` before any guard below could run, so the
+        # "continuing without agnix" fallback would be unreachable.
+        # Likewise an elif chain rather than an early `return`: agentsys and
+        # cspell install further down in this same function.
+        if ! agnix_verify_dir=$(create_secure_temp_dir) ||
+            [ -z "$agnix_verify_dir" ] || [ ! -d "$agnix_verify_dir" ]; then
             log_warning "agnix verification scratch dir unavailable, continuing without agnix"
         elif npm install --prefix "$agnix_verify_dir" --ignore-scripts \
             "agnix@${AGNIX_VERSION}" 2>/dev/null; then
 
-            # No 2>/dev/null here: the audit's stderr IS the signal.
-            agnix_audit_out=$(cd "$agnix_verify_dir" && npm audit signatures 2>&1) ||
-                agnix_audit_rc=$?
+            # No 2>/dev/null: the audit's own output IS the signal. `|| true`
+            # keeps set -e out of it; the verdict comes from the JSON below,
+            # not from the exit code, which conflates the two failure kinds.
+            agnix_audit_json=$(cd "$agnix_verify_dir" &&
+                npm audit signatures --json 2>&1 || true)
 
-            if [ "$agnix_audit_rc" -eq 0 ]; then
+            # Count entries in `invalid`. jq is not guaranteed at this point in
+            # the build, so match the array's shape textually: `"invalid": []`
+            # (any whitespace) means it ran and found nothing wrong.
+            agnix_invalid=$(command printf '%s' "$agnix_audit_json" |
+                command tr -d ' \n' | command grep -c '"invalid":\[{' || true)
+
+            if [ "$agnix_invalid" -gt 0 ]; then
+                # Verification RAN and FAILED. npm was reachable, we hold the
+                # tarball, and it is not what its publisher signed. Its own
+                # message, at ERROR, and it aborts the build — matching the
+                # `|| return 1` on every install_github_release call above and
+                # the cargo install policy in CLAUDE.md ("Failures abort the
+                # build"). A supply-chain signal must never read as an outage.
+                log_error "agnix signature verification FAILED for v${AGNIX_VERSION} — npm served a tarball that does not match its published registry signature. Refusing to install. Audit output: ${agnix_audit_json}"
+                command rm -rf "$agnix_verify_dir"
+                return 1
+            elif command printf '%s' "$agnix_audit_json" |
+                command tr -d ' \n' | command grep -q '"invalid":\[\]'; then
+                # Audit ran, nothing invalid: install the AUDITED BYTES.
                 if npm install -g "$agnix_verify_dir/node_modules/agnix" 2>/dev/null; then
                     log_message "✓ agnix installed successfully (registry signature verified)"
                 else
                     log_warning "agnix installation failed, continuing without agnix"
                 fi
-            elif command printf '%s' "$agnix_audit_out" |
-                command grep -q "found no dependencies to audit"; then
-                # Nothing auditable — npm could not verify, rather than having
-                # verified and found a mismatch. The repo already draws this
-                # line: verify_download_or_fail() (lib/base/checksum-verification.sh)
-                # hard-fails only when verification RAN and FAILED, and falls
-                # through when it was unavailable. Same treatment here.
-                log_warning "agnix signature could not be verified (nothing auditable), continuing without agnix"
             else
-                # Verification ran and FAILED: npm was reachable, we hold the
-                # tarball, and it is not what its publisher signed. This is a
-                # supply-chain signal, not an outage, so it gets its own
-                # message and aborts the build — matching the `|| return 1` of
-                # every install_github_release call above and the cargo install
-                # policy in CLAUDE.md ("Failures abort the build").
-                log_error "agnix signature verification FAILED for v${AGNIX_VERSION} — the tarball npm served does not match its published registry signature. Refusing to install. Audit output: ${agnix_audit_out}"
-                command rm -rf "$agnix_verify_dir"
-                return 1
+                # Audit could not run (registry error, nothing auditable, or an
+                # output shape this doesn't recognize). Unverifiable, NOT a
+                # mismatch: warn and skip rather than accuse.
+                log_warning "agnix signature could not be verified (audit did not run), continuing without agnix. Audit output: ${agnix_audit_json}"
             fi
         else
             log_warning "agnix installation failed, continuing without agnix"
