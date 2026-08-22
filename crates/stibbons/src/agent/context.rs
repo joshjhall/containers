@@ -73,6 +73,50 @@ pub enum AgentError {
         /// Resolved service container name.
         container: String,
     },
+
+    /// An `agents.repos` entry (or the project name it defaults to) contains
+    /// characters that are unsafe to embed in a filesystem path.
+    #[error(
+        "invalid repo name {repo:?} in .igor.yml: repo names may only contain \
+         ASCII letters, digits, '-', '_', and '.' (no path separators or '..')"
+    )]
+    InvalidRepo {
+        /// The offending entry.
+        repo: String,
+    },
+}
+
+/// Rejects a repo name that could escape the agent `base_dir` when joined into
+/// a path.
+///
+/// Every `agents.repos` entry is interpolated straight into filesystem paths
+/// (`<base_dir>/<repo>`, `<base_dir>/<repo>-<suffix>`) that feed destructive and
+/// write operations in [`worktree`](super::worktree) — `remove_dir_all`, the
+/// `.git`/`gitdir` pointer writes, and `git -C <dir>` (which honors repo-local
+/// `core.hooksPath`). `Path::join` treats `/` and `..` as real path components,
+/// so an entry like `"../../etc"` resolves *outside* `base_dir`. `.igor.yml` is
+/// a committed project file editable by any contributor with write access, so
+/// it is a trust boundary worth enforcing at load time rather than at each use
+/// site.
+///
+/// The allow-list is deliberately strict: ASCII alphanumerics plus `-`, `_`,
+/// and `.`, with a standalone `.`/`..` rejected outright. That covers every
+/// realistic repo directory name while excluding `/`, `\`, NUL, and traversal.
+///
+/// # Errors
+///
+/// Returns [`AgentError::InvalidRepo`] when `repo` is empty, is `.` or `..`, or
+/// contains a character outside the allow-list.
+pub fn validate_repo_name(repo: &str) -> Result<(), AgentError> {
+    let invalid = || AgentError::InvalidRepo { repo: repo.to_string() };
+    if repo.is_empty() || repo == "." || repo == ".." {
+        return Err(invalid());
+    }
+    if repo.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')) {
+        Ok(())
+    } else {
+        Err(invalid())
+    }
 }
 
 /// Fully resolved configuration shared by every `agent` subcommand.
@@ -127,6 +171,13 @@ impl AgentContext {
         }
         let cfg = IgorConfig::load(cfg_path).map_err(AgentError::Config)?;
         let mut ctx = Self::from_config(cfg);
+        // Validate the *resolved* repo list (so the project-name default is
+        // covered too) at this single I/O boundary — every agent subcommand
+        // reaches its worktree paths through here, so no use site has to
+        // re-check. `from_config` stays pure and infallible.
+        for repo in &ctx.repos {
+            validate_repo_name(repo)?;
+        }
         // Golem event-sink config is orchestrator/session topology, not committed
         // project config, so it is read from the host environment at this I/O
         // boundary rather than `.igor.yml`. `from_config` stays pure/filesystem-
@@ -425,6 +476,48 @@ mod tests {
         assert_eq!(ctx.image_name, "myapp-agent");
         assert_eq!(ctx.shared_volumes, vec!["data:/data".to_string()]);
         assert_eq!(ctx.repos, vec!["myapp".to_string(), "shared-lib".to_string()]);
+    }
+
+    #[test]
+    fn validate_repo_name_accepts_ordinary_names() {
+        for ok in ["myapp", "my-repo", "my_repo", "repo.v2", "Repo123", "a"] {
+            assert!(validate_repo_name(ok).is_ok(), "{ok:?} should be accepted");
+        }
+    }
+
+    #[test]
+    fn validate_repo_name_rejects_traversal_and_separators() {
+        // Path traversal, separators, and the degenerate names that would make
+        // `base_dir.join(repo)` resolve somewhere other than a direct child.
+        for bad in
+            ["", ".", "..", "../etc", "../../etc", "a/b", "a\\b", "/abs", "repo name", "re\0po"]
+        {
+            let err = validate_repo_name(bad).unwrap_err();
+            assert!(matches!(err, AgentError::InvalidRepo { .. }), "{bad:?} got {err:?}");
+        }
+    }
+
+    #[test]
+    fn load_rejects_traversal_repo_entry() {
+        let cfg = IgorConfig {
+            schema_version: 1,
+            containers_dir: "containers".into(),
+            project: ProjectConfig { name: "myapp".into(), ..ProjectConfig::default() },
+            agents: AgentConfig {
+                repos: vec!["myapp".into(), "../../etc".into()],
+                ..AgentConfig::default()
+            },
+            ..IgorConfig::default()
+        };
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(".igor.yml");
+        cfg.save(&path).unwrap();
+
+        let err = AgentContext::load(&path).unwrap_err();
+        assert!(
+            matches!(&err, AgentError::InvalidRepo { repo } if repo == "../../etc"),
+            "got {err:?}",
+        );
     }
 
     #[test]
