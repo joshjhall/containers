@@ -16,7 +16,12 @@ test_suite "Development Tools Feature Tests"
 # Setup function - runs before each test
 setup() {
     # Create temporary directory for testing
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-dev-tools"
+    # PID-suffixed: this dir is rm -rf'd in teardown after EVERY test, and
+    # sibling suites share $RESULTS_DIR. A fixed name let this suite's churn
+    # collide with a concurrently-running suite's temp tree (reproduced: it
+    # reddened project-health-check). Matches the convention already used by
+    # runtime/project-health-check.sh, workspace-fs-health.sh, and others.
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-dev-tools-$$"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Mock environment
@@ -701,58 +706,87 @@ run_test test_agnix_signature_failure_is_fatal "agnix signature mismatch is fata
 test_agnix_audit_classifier_behavior() {
     local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
 
-    # Mirror of the classifier in install-binary-tools.sh. Kept in step by the
-    # source assertions below, which fail if the real predicates change.
+    # Mirror of the classifier in install-binary-tools.sh (#817: jq over the
+    # audit's STDOUT, which is pure JSON once stderr is captured separately).
+    # Kept in step by the source assertions below, which fail if the real
+    # predicates change.
     classify_agnix_audit() {
-        local agnix_audit_json="$1" agnix_invalid
-        agnix_invalid=$(command printf '%s' "$agnix_audit_json" |
-            command tr -d ' \n' | command grep -c '"invalid":\[{' || true)
-        if [ "$agnix_invalid" -gt 0 ]; then
-            echo "FATAL"
-        elif command printf '%s' "$agnix_audit_json" |
-            command tr -d ' \n' | command grep -q '"invalid":\[\]'; then
-            echo "INSTALL"
-        else
-            echo "SKIP"
+        local agnix_audit_json="$1" agnix_verdict
+        # Empty is decided before jq: jq exits 0 printing nothing for empty
+        # input, so it cannot report that case itself.
+        if [ -z "$agnix_audit_json" ]; then
+            echo "skip"
+            return
         fi
+        agnix_verdict=$(command printf '%s' "$agnix_audit_json" |
+            command jq -r 'if (.invalid | type) != "array" then "skip"
+                elif (.invalid | length) > 0 then "fatal"
+                else "install" end' 2>/dev/null || true)
+        [ -z "$agnix_verdict" ] && agnix_verdict="skip"
+        echo "$agnix_verdict"
     }
 
     # Clean audit — real output from `npm audit signatures --json`.
-    assert_equals "INSTALL" \
+    assert_equals "install" \
         "$(classify_agnix_audit '{"invalid": [], "missing": []}')" \
         "a clean audit installs the verified bytes"
 
-    # Registry outage — real ECONNREFUSED output. MUST NOT read as tampering.
-    assert_equals "SKIP" \
+    # Registry outage — real ECONNREFUSED body, captured from a dead registry.
+    # MUST NOT read as tampering. Note `.invalid|length` alone would return 0
+    # here, identical to a clean audit — which is why the type check comes
+    # first, and why this case is the one that most needs asserting.
+    assert_equals "skip" \
         "$(classify_agnix_audit '{"error":{"code":"ECONNREFUSED","summary":"FetchError: request failed"}}')" \
         "a registry outage warns and skips rather than accusing a mismatch"
 
     # Real mismatch — npm's documented invalid[] entry shape.
-    assert_equals "FATAL" \
+    assert_equals "fatal" \
         "$(classify_agnix_audit '{"invalid":[{"name":"agnix","version":"0.49.0","keyid":"SHA256:jl3bwswu80"}],"missing":[]}')" \
         "a populated invalid[] is fatal"
 
     # Signatures absent but not wrong — unverifiable, not a mismatch.
-    assert_equals "INSTALL" \
+    assert_equals "install" \
         "$(classify_agnix_audit '{"invalid":[],"missing":[{"name":"somepkg"}]}')" \
         "missing-but-not-invalid is not treated as a mismatch"
 
+    # A null-valued invalid key is not an array — unverifiable, not clean.
+    assert_equals "skip" \
+        "$(classify_agnix_audit '{"invalid":null,"missing":[]}')" \
+        "a null invalid key is not mistaken for an empty array"
+
     # No JSON body at all (non-registry deps) and empty output must not be
     # mistaken for a clean audit.
-    assert_equals "SKIP" \
+    assert_equals "skip" \
         "$(classify_agnix_audit 'npm error found no dependencies to audit')" \
         "nothing auditable warns and skips"
-    assert_equals "SKIP" "$(classify_agnix_audit '')" \
+    assert_equals "skip" "$(classify_agnix_audit '')" \
         "empty audit output is never read as clean"
 
+    # Diagnostics prepended to the JSON body make it unparseable — the reason
+    # stdout and stderr are captured separately rather than merged with 2>&1.
+    assert_equals "skip" \
+        "$(classify_agnix_audit 'npm warn config foo
+{"invalid":[],"missing":[]}')" \
+        "prose mixed into the JSON body is unverifiable, never silently clean"
+
     # The mirror above is only meaningful if the source still uses these exact
-    # predicates — assert both against a comment-stripped copy.
+    # predicates — assert them against a comment-stripped copy.
     local code_only="$TEST_TEMP_DIR/install-binary-tools.classifier.sh"
     command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
-    assert_file_contains "$code_only" 'grep -c .\"invalid\":\\\[{' \
-        "source detects a mismatch via a populated invalid[] array"
-    assert_file_contains "$code_only" 'grep -q .\"invalid\":\\\[\\\]' \
-        "source detects a ran-and-clean audit via an empty invalid[] array"
+    assert_file_contains "$code_only" 'jq -r' \
+        "source computes the verdict with jq, not substring matching"
+    assert_file_contains "$code_only" '(.invalid | type) != "array"' \
+        "source checks invalid[] is an ARRAY before its length (outage != clean)"
+    assert_file_contains "$code_only" '(.invalid | length) > 0' \
+        "source treats a populated invalid[] as the mismatch signal"
+    assert_file_not_contains "$code_only" 'npm audit signatures --json 2>&1' \
+        "audit stdout and stderr must stay separate, or the JSON is unparseable"
+    # Empty stdout is short-circuited before jq runs. Behaviorally this is
+    # belt-and-braces (the empty-verdict fallback below it catches the same
+    # case), so assert it at the SOURCE — a behavior-only assertion cannot
+    # tell the two paths apart and would stay green if the guard vanished.
+    assert_file_contains "$code_only" 'if \[ -z "$agnix_audit_json" \]' \
+        "empty audit stdout is decided before jq, not left to the parser"
 }
 
 run_test test_agnix_audit_classifier_behavior "agnix audit classifier separates mismatch from outage"
@@ -788,6 +822,70 @@ test_agnix_scratch_dir_guard_survives_set_e() {
 }
 
 run_test test_agnix_scratch_dir_guard_survives_set_e "agnix scratch-dir guard survives set -e"
+
+# Test: an install failure AFTER a passing audit degrades gracefully (#817).
+#
+# Once the audit passes, the bytes are verified — a failure of the global
+# install itself is an install problem (disk, permissions, npm internals), not
+# a signature problem. It must warn and continue like every other best-effort
+# npm tool here, and must NOT reach the fatal path that aborts the build.
+test_agnix_post_audit_install_failure_is_not_fatal() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    local code_only="$TEST_TEMP_DIR/install-binary-tools.postaudit.sh"
+    command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
+
+    # Extract the verified-path install's own if/else arm and assert on ITS
+    # body. A line-order check is not enough: a mutation that makes this arm
+    # fatal leaves the later warning (in the audit-failure branch) in place,
+    # so ordering alone stays green — verified by mutation.
+    local global_line arm
+    global_line=$(command grep -n 'npm install -g "$agnix_verify_dir/node_modules/agnix"' "$code_only" |
+        command head -1 | command cut -d: -f1)
+    assert_not_empty "$global_line" "the verified-path global install is present"
+
+    # The arm is the install line through its closing `fi` (5 lines: if /
+    # success log / else / failure handling / fi).
+    arm=$(command sed -n "${global_line:-1},$((${global_line:-1} + 4))p" "$code_only")
+
+    command printf '%s' "$arm" | command grep -q 'log_warning "agnix installation failed'
+    assert_equals "0" "$?" \
+        "a failure of the verified-path install logs a warning"
+
+    command printf '%s' "$arm" | command grep -q 'return 1'
+    assert_equals "1" "$?" \
+        "a post-audit install failure must NOT abort the build — the bytes were verified"
+}
+
+run_test test_agnix_post_audit_install_failure_is_not_fatal \
+    "agnix post-audit install failure warns rather than failing the build"
+
+# Test: the fatal branch cleans up its scratch dir BEFORE returning (#817).
+#
+# That branch returns early, so the unconditional `rm -rf` at the end of the
+# block is unreachable from it — it carries its own. Drop that line and the
+# scratch tree leaks on exactly the path where it holds a tampered tarball.
+test_agnix_fatal_branch_cleans_up_before_return() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    local code_only="$TEST_TEMP_DIR/install-binary-tools.cleanup.sh"
+    command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
+
+    local fatal_line cleanup_line return_line
+    fatal_line=$(command grep -n 'log_error "agnix signature verification FAILED' "$code_only" |
+        command head -1 | command cut -d: -f1)
+    # First cleanup and first `return 1` at or after the fatal log line.
+    cleanup_line=$(command awk -v s="${fatal_line:-0}" \
+        'NR >= s && /rm -rf "\$agnix_verify_dir"/ { print NR; exit }' "$code_only")
+    return_line=$(command awk -v s="${fatal_line:-0}" \
+        'NR >= s && /^[[:space:]]*return 1[[:space:]]*$/ { print NR; exit }' "$code_only")
+
+    assert_not_empty "$cleanup_line" "the fatal branch removes its scratch dir"
+    assert_not_empty "$return_line" "the fatal branch returns non-zero"
+    assert_true "[ ${cleanup_line:-0} -lt ${return_line:-0} ]" \
+        "the scratch dir is removed BEFORE the fatal return, not after"
+}
+
+run_test test_agnix_fatal_branch_cleans_up_before_return \
+    "agnix fatal branch cleans up before returning"
 
 # Test: cspell installation present in binary tools script
 test_cspell_installation() {

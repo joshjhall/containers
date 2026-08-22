@@ -500,6 +500,29 @@ install_github_binary_tools() {
     # it hard-fails only on rc 1 (verification ran and failed) and falls
     # through when verification was unavailable.
     #
+    # STDOUT AND STDERR ARE CAPTURED SEPARATELY, and that separation is what
+    # makes a real parse possible (#817). Verified against the live registry:
+    # on BOTH a clean run and an outage, stdout is pure JSON (an outage yields
+    # {"error":{...}}), while `npm warn`/`npm error` prose goes to stderr.
+    # Merging them with 2>&1 is what would force substring matching, since a
+    # single warning line prepended to the body makes it unparseable. stderr is
+    # still captured — it carries the human-readable diagnostic the JSON lacks
+    # — but it is used only for the log message, never for the verdict.
+    #
+    # The verdict is computed by jq. jq is NOT optional here: dev-tools.sh
+    # apt-installs it unconditionally (its "File processing extras" block) well
+    # before this function is called, and it is a declared tool of this feature.
+    # So there is no textual fallback — one would be untested dead code
+    # guarding a state that cannot occur.
+    #
+    # Two properties of that jq predicate are load-bearing, both established by
+    # probing rather than assumed:
+    #   - It checks the TYPE before the length. A bare `.invalid | length`
+    #     returns 0 for the outage shape — identical to a clean audit — so
+    #     length alone would silently install when the audit never ran.
+    #   - Empty output is guarded BEFORE the call, because jq exits 0 with
+    #     empty output on empty input, so a trailing `|| echo SKIP` never fires.
+    #
     # LIMIT, stated so it is not over-read: this verifies the REGISTRY-attested
     # tarball, i.e. that npm served the bytes the publisher signed. It is not
     # an integrity check on the unpacked tree — editing a file under
@@ -508,7 +531,7 @@ install_github_binary_tools() {
     # the threat #814 describes.
     if command -v npm &>/dev/null; then
         log_message "Installing agnix (AI config linter) v${AGNIX_VERSION}..."
-        local agnix_verify_dir agnix_audit_json agnix_invalid
+        local agnix_verify_dir agnix_audit_json agnix_audit_err agnix_verdict
         # The assignment is the `if` condition on purpose. As a standalone
         # statement it would abort the whole script under dev-tools.sh's
         # `set -euo pipefail` before any guard below could run, so the
@@ -521,20 +544,30 @@ install_github_binary_tools() {
         elif npm install --prefix "$agnix_verify_dir" --ignore-scripts \
             "agnix@${AGNIX_VERSION}" 2>/dev/null; then
 
-            # No 2>/dev/null: the audit's own output IS the signal. `|| true`
-            # keeps set -e out of it; the verdict comes from the JSON below,
-            # not from the exit code, which conflates the two failure kinds.
+            # Streams kept apart: stdout is the JSON the verdict is computed
+            # from, stderr is diagnostics for the log. `|| true` keeps set -e
+            # out of it — the verdict comes from the JSON, never from the exit
+            # code, which conflates the two failure kinds.
+            agnix_audit_err="${agnix_verify_dir}/audit.stderr"
             agnix_audit_json=$(cd "$agnix_verify_dir" &&
-                npm audit signatures --json 2>&1 || true)
+                npm audit signatures --json 2>"$agnix_audit_err" || true)
 
-            # jq is not guaranteed at this point in the build, so the array's
-            # shape is matched textually. Whitespace is stripped first, so this
-            # is a 0/1 "did invalid[] open with an object" flag, not a count:
-            # `"invalid":[{` means at least one entry, `"invalid":[]` none.
-            agnix_invalid=$(command printf '%s' "$agnix_audit_json" |
-                command tr -d ' \n' | command grep -c '"invalid":\[{' || true)
+            # Empty stdout is decided here, before jq: jq exits 0 and prints
+            # nothing for empty input, so it cannot report this case itself.
+            if [ -z "$agnix_audit_json" ]; then
+                agnix_verdict="skip"
+            else
+                # Type before length — see the comment block above.
+                agnix_verdict=$(command printf '%s' "$agnix_audit_json" |
+                    command jq -r 'if (.invalid | type) != "array" then "skip"
+                        elif (.invalid | length) > 0 then "fatal"
+                        else "install" end' 2>/dev/null || true)
+                # Unparseable stdout (jq failed, or printed nothing) is
+                # unverifiable, not a mismatch.
+                [ -z "$agnix_verdict" ] && agnix_verdict="skip"
+            fi
 
-            if [ "$agnix_invalid" -gt 0 ]; then
+            if [ "$agnix_verdict" = "fatal" ]; then
                 # Verification RAN and FAILED. npm was reachable, we hold the
                 # tarball, and it is not what its publisher signed. Its own
                 # message, at ERROR, and it aborts the build — matching the
@@ -542,11 +575,16 @@ install_github_binary_tools() {
                 # the cargo install policy in CLAUDE.md ("Failures abort the
                 # build"). A supply-chain signal must never read as an outage.
                 log_error "agnix signature verification FAILED for v${AGNIX_VERSION} — npm served a tarball that does not match its published registry signature. Refusing to install. Audit output: ${agnix_audit_json}"
+                # This branch returns early, so it does its OWN cleanup: the
+                # unconditional rm -rf at the end of the block is unreachable
+                # from here.
                 command rm -rf "$agnix_verify_dir"
                 return 1
-            elif command printf '%s' "$agnix_audit_json" |
-                command tr -d ' \n' | command grep -q '"invalid":\[\]'; then
+            elif [ "$agnix_verdict" = "install" ]; then
                 # Audit ran, nothing invalid: install the AUDITED BYTES.
+                # A failure HERE is an install problem, not a signature
+                # problem — the bytes were verified — so it warns like any
+                # other best-effort npm tool and never reaches the fatal path.
                 if npm install -g "$agnix_verify_dir/node_modules/agnix" 2>/dev/null; then
                     log_message "✓ agnix installed successfully (registry signature verified)"
                 else
@@ -555,8 +593,9 @@ install_github_binary_tools() {
             else
                 # Audit could not run (registry error, nothing auditable, or an
                 # output shape this doesn't recognize). Unverifiable, NOT a
-                # mismatch: warn and skip rather than accuse.
-                log_warning "agnix signature could not be verified (audit did not run), continuing without agnix. Audit output: ${agnix_audit_json}"
+                # mismatch: warn and skip rather than accuse. stderr carries the
+                # readable reason that the JSON body does not.
+                log_warning "agnix signature could not be verified (audit did not run), continuing without agnix. Audit stdout: ${agnix_audit_json:-<empty>}. Audit stderr: $(command head -c 500 "$agnix_audit_err" 2>/dev/null || true)"
             fi
         else
             log_warning "agnix installation failed, continuing without agnix"

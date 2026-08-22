@@ -124,7 +124,9 @@ any crate without a prebuilt binary. All are `--locked` and pinned to a
   `npm audit signatures` runs against that tree, and the global install then
   reads the verified directory rather than re-resolving the pin — so the
   audited bytes and the installed bytes are the same bytes, and a tampered
-  tarball's `postinstall` never executes. The audit runs with `--json`, and
+  tarball's `postinstall` never executes. The audit runs with `--json` and its
+  stdout and stderr are captured separately (containers#817), so the verdict is
+  computed by parsing pure JSON with `jq` rather than matching substrings;
   only a populated `invalid[]` — the registry saying "these bytes are not what
   the publisher signed" — is treated as a **mismatch**, which fails the build.
   Every other non-zero outcome (registry outage, DNS failure, nothing
