@@ -311,9 +311,18 @@ pub fn create_worktree(
 /// there.
 ///
 /// Falls back to `fallback` — restoring the previous behavior — when the pointer
-/// is unreadable, isn't a `gitdir:` line, or has no usable final component. Both
-/// are non-fatal: a missing pointer means the mocked/odd case the old code
-/// already handled, and the caller's subsequent writes create what's needed.
+/// is unreadable, isn't a `gitdir:` line, or yields a component that fails
+/// [`validate_repo_name`]'s allow-list. All are non-fatal: a missing pointer
+/// means the mocked/odd case the old code already handled, and the caller's
+/// subsequent writes create what's needed.
+///
+/// The name is validated even though git itself just wrote it, because it is
+/// joined into `<git_dir>/worktrees/<name>/gitdir` and *overwritten*. Reusing
+/// the same allow-list as `repo` keeps a corrupted — or, in the narrow window
+/// between the `worktree add` and this read, raced — pointer file from steering
+/// that write somewhere unexpected. The name git legitimately chooses
+/// (`<repo>-<suffix>`, optionally `-N`) always satisfies the allow-list when
+/// `repo` does, so this rejects nothing real.
 fn resolve_admin_dir_name(worktree_dir: &Path, fallback: &str) -> String {
     let Ok(data) = std::fs::read_to_string(worktree_dir.join(".git")) else {
         return fallback.to_string();
@@ -325,7 +334,7 @@ fn resolve_admin_dir_name(worktree_dir: &Path, fallback: &str) -> String {
         .trim()
         .rsplit(['/', '\\'])
         .next()
-        .filter(|name| !name.is_empty() && *name != "." && *name != "..")
+        .filter(|name| validate_repo_name(name).is_ok())
         .map_or_else(|| fallback.to_string(), ToString::to_string)
 }
 
@@ -894,33 +903,38 @@ mod tests {
         }
     }
 
-    /// [`GitRunner`] double that fails `rebase` only in the worktree whose path
-    /// contains `failing_dir`, succeeding everywhere else.
+    /// [`GitRunner`] double that fails one git subcommand for one repo only —
+    /// when the argv contains both `subcommand` and `failing_dir` — succeeding
+    /// everywhere else, and recording every call.
     ///
     /// [`MockGit`] keys its canned results on the git *subcommand*, not the
     /// `-C <dir>` argument, so it cannot express "fail repo A's rebase but not
-    /// repo B's" — exactly the shape the #712 multi-repo tests need.
-    struct FailRebaseIn {
+    /// repo B's" — exactly the shape the multi-repo tests need to distinguish
+    /// sync's attempt-all walk (#712) from create/remove's abort-on-first.
+    struct FailGitIn {
+        subcommand: String,
         failing_dir: String,
         calls: RefCell<Vec<String>>,
     }
 
-    impl FailRebaseIn {
-        fn new(failing_dir: &str) -> Self {
-            Self { failing_dir: failing_dir.to_string(), calls: RefCell::new(Vec::new()) }
+    impl FailGitIn {
+        fn new(subcommand: &str, failing_dir: &str) -> Self {
+            Self {
+                subcommand: subcommand.to_string(),
+                failing_dir: failing_dir.to_string(),
+                calls: RefCell::new(Vec::new()),
+            }
         }
     }
 
-    impl GitRunner for FailRebaseIn {
+    impl GitRunner for FailGitIn {
         fn run(&self, args: &[&str]) -> Result<String, GitError> {
             let joined = args.join(" ");
             self.calls.borrow_mut().push(joined.clone());
-            if joined.contains("rebase") && joined.contains(&self.failing_dir) {
-                return Err(GitError::NonZero {
-                    args: joined,
-                    output: "CONFLICT (content): merge conflict".into(),
-                });
+            if joined.contains(&self.subcommand) && joined.contains(&self.failing_dir) {
+                return Err(GitError::NonZero { args: joined, output: "boom".into() });
             }
+            // `sync` resolves a base branch before rebasing; keep it off detached HEAD.
             if joined.contains("rev-parse") {
                 return Ok("main".into());
             }
@@ -1366,7 +1380,7 @@ mod tests {
         std::fs::create_dir_all(base.join("alpha-agent01")).unwrap();
         std::fs::create_dir_all(base.join("beta-agent01")).unwrap();
 
-        let git = FailRebaseIn::new("alpha-agent01");
+        let git = FailGitIn::new("rebase", "alpha-agent01");
         let ctx = ctx_with_repos(base, &["alpha", "beta"]);
 
         let mut out = Vec::new();
@@ -1453,6 +1467,59 @@ mod tests {
         // `gitdir:` with a trailing separator — the last component is empty.
         std::fs::write(wt.join(".git"), "gitdir: /host/repo/.git/worktrees/\n").unwrap();
         assert_eq!(resolve_admin_dir_name(&wt, "fallback"), "fallback");
+
+        // A component that fails the repo-name allow-list (here a NUL) must not
+        // be trusted into the `<git_dir>/worktrees/<name>/gitdir` write path.
+        std::fs::write(wt.join(".git"), "gitdir: /host/repo/.git/worktrees/we\0ird\n").unwrap();
+        assert_eq!(resolve_admin_dir_name(&wt, "fallback"), "fallback");
+    }
+
+    #[test]
+    fn remove_all_repos_aborts_on_first_failure() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        // Both worktrees exist; the first is dirty, so remove refuses without
+        // --force. That refusal must stop the walk before beta is touched —
+        // the deliberate contrast with sync's accumulate-all behavior.
+        std::fs::create_dir_all(base.join("alpha-agent01")).unwrap();
+        std::fs::create_dir_all(base.join("beta-agent01")).unwrap();
+
+        let git = MockGit::new();
+        git.on("status --porcelain", Ok(" M file.rs"));
+        let ctx = ctx_with_repos(base, &["alpha", "beta"]);
+
+        let mut out = Vec::new();
+        let err = remove_all_repos(&git, &ctx, "agent01", false, &mut out).unwrap_err();
+
+        assert!(err.to_string().contains("uncommitted changes"), "got: {err}");
+        assert!(base.join("beta-agent01").exists(), "beta must be untouched after alpha aborted");
+        assert!(!git.has_call("worktree remove"), "no removal should have been attempted");
+        assert!(
+            !String::from_utf8(out).unwrap().contains("Updated"),
+            "compose must not be re-rendered when the walk aborted",
+        );
+    }
+
+    #[test]
+    fn create_all_repos_aborts_on_first_failure() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("alpha/.git")).unwrap();
+        std::fs::create_dir_all(base.join("beta/.git")).unwrap();
+
+        // `worktree add` fails for the first repo, keyed on the `-C <dir>` arg.
+        let git = FailGitIn::new("worktree add", "alpha");
+        let ctx = ctx_with_repos(base, &["alpha", "beta"]);
+
+        let mut out = Vec::new();
+        let err = create_all_repos(&git, &ctx, "agent01", false, &mut out).unwrap_err();
+
+        assert!(err.to_string().contains("boom"), "got: {err}");
+        let calls = git.calls.borrow();
+        assert!(
+            !calls.iter().any(|c| c.contains("worktree add") && c.contains("beta")),
+            "beta must not be created after alpha failed: {calls:?}",
+        );
     }
 
     #[test]
