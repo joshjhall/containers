@@ -118,7 +118,14 @@ any crate without a prebuilt binary. All are `--locked` and pinned to a
 
 - agnix (AI config linter) — pinned via `AGNIX_VERSION` and tracked by the
   weekly `check-versions` sweep; kept in lockstep with the librarian consumers'
-  `.agnix.toml` pin (joshjhall/librarian#398, containers#769)
+  `.agnix.toml` pin (joshjhall/librarian#398, containers#769). The tarball's
+  npm registry signature is verified before installation (containers#814): the
+  pinned version is installed into a throwaway prefix with `--ignore-scripts`,
+  `npm audit signatures` runs against that tree, and the global install then
+  reads the verified directory rather than re-resolving the pin — so the
+  audited bytes and the installed bytes are the same bytes, and a tampered
+  tarball's `postinstall` never executes. A signature **mismatch** fails the
+  build; an npm outage (or nothing auditable) warns and skips agnix.
 - agentsys (AI plugin marketplace)
 - cspell (spell checker for code)
 

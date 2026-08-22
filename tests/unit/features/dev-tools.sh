@@ -626,6 +626,69 @@ test_agnix_pinned_not_latest() {
 
 run_test test_agnix_pinned_not_latest "agnix is pinned via AGNIX_VERSION, not @latest"
 
+# Test: agnix tarball signature is verified before the global install (#814).
+#
+# These assertions run against a COMMENT-STRIPPED copy of the source. The block
+# they guard carries a long comment explaining the same sequence in prose, so a
+# raw assert_file_contains would stay green after the code was deleted — the
+# comment alone would satisfy it. Each assertion below was mutation-verified:
+# the property was removed from the source and this test confirmed red.
+test_agnix_signature_verified() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    local code_only="$TEST_TEMP_DIR/install-binary-tools.code-only.sh"
+
+    # Strip whole-line comments; the agnix block's prose is all full-line.
+    command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
+
+    assert_file_contains "$code_only" "npm audit signatures" \
+        "install-binary-tools.sh runs npm audit signatures (not only in a comment)"
+    assert_file_contains "$code_only" '--ignore-scripts' \
+        "the scratch install carries --ignore-scripts so a tampered postinstall never runs"
+    assert_file_contains "$code_only" 'npm install --prefix "$agnix_verify_dir"' \
+        "the audited install goes to a throwaway prefix, not the global tree"
+    assert_file_contains "$code_only" 'npm install -g "$agnix_verify_dir/node_modules/agnix"' \
+        "the global install reads the VERIFIED PATH, not a re-resolved pin"
+    assert_file_not_contains "$code_only" 'npm install -g "agnix@${AGNIX_VERSION}"' \
+        "the global install must not re-resolve the pin (that fetch is unaudited)"
+}
+
+run_test test_agnix_signature_verified "agnix signature is verified before install"
+
+# Test: the audit PRECEDES the global install (#814). Order is the whole point —
+# verifying after the global install would have already run postinstall.
+test_agnix_audit_precedes_global_install() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    local code_only="$TEST_TEMP_DIR/install-binary-tools.order.sh"
+    command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
+
+    local audit_line global_line
+    audit_line=$(command grep -n "npm audit signatures" "$code_only" |
+        command head -1 | command cut -d: -f1)
+    global_line=$(command grep -n 'npm install -g "$agnix_verify_dir/node_modules/agnix"' "$code_only" |
+        command head -1 | command cut -d: -f1)
+
+    assert_not_empty "$audit_line" "npm audit signatures is present in the code"
+    assert_not_empty "$global_line" "the verified-path global install is present in the code"
+    assert_true "[ ${audit_line:-0} -lt ${global_line:-0} ]" \
+        "npm audit signatures runs BEFORE the global install"
+}
+
+run_test test_agnix_audit_precedes_global_install "agnix audit precedes the global install"
+
+# Test: a signature MISMATCH is fatal and distinctly logged (#814). "npm was
+# unreachable" and "the tarball is not what its publisher signed" are different
+# events and must not share a message or a severity.
+test_agnix_signature_failure_is_fatal() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    local code_only="$TEST_TEMP_DIR/install-binary-tools.fatal.sh"
+    command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
+
+    assert_file_contains "$code_only" 'log_error "agnix signature verification FAILED' \
+        "a signature mismatch is logged at ERROR level with its own distinct message"
+}
+
+run_test test_agnix_signature_failure_is_fatal "agnix signature mismatch is fatal and distinctly logged"
+
 # Test: cspell installation present in binary tools script
 test_cspell_installation() {
     local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
