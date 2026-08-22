@@ -81,3 +81,4 @@
 - [Stale symlink attrs on virtiofs](stale-symlink-attrs-virtiofs.md) — nlink=0 symlinks read as permanently modified; relink with `ln -sfn` (not a bindfs bug)
 - [Stale repo-local git identity](stale-repo-local-git-identity.md) — `.git/config` `t <t@t.t>` shadows the 1Password global identity; `git config --local --unset user.name/email`
 - [Fetch before releasing](fetch-before-release-bot-owns-main.md) — auto-patch bot pushes releases+tags to main on a schedule; always `git fetch --tags` before branching or `just release-*` or you cut against a taken tag
+- [worktree-rm blocked by held build artifacts](worktree-rm-blocked-by-held-build-artifacts.md) — deregistered worktree reads as "dirty"; cargo .o files resist rm (EBADF); gh merge --delete-branch skips the remote prune
