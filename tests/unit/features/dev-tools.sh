@@ -626,6 +626,169 @@ test_agnix_pinned_not_latest() {
 
 run_test test_agnix_pinned_not_latest "agnix is pinned via AGNIX_VERSION, not @latest"
 
+# Test: agnix tarball signature is verified before the global install (#814).
+#
+# These assertions run against a COMMENT-STRIPPED copy of the source. The block
+# they guard carries a long comment explaining the same sequence in prose, so a
+# raw assert_file_contains would stay green after the code was deleted — the
+# comment alone would satisfy it. Each assertion below was mutation-verified:
+# the property was removed from the source and this test confirmed red.
+test_agnix_signature_verified() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    local code_only="$TEST_TEMP_DIR/install-binary-tools.code-only.sh"
+
+    # Strip whole-line comments; the agnix block's prose is all full-line.
+    command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
+
+    assert_file_contains "$code_only" "npm audit signatures" \
+        "install-binary-tools.sh runs npm audit signatures (not only in a comment)"
+    assert_file_contains "$code_only" '--ignore-scripts' \
+        "the scratch install carries --ignore-scripts so a tampered postinstall never runs"
+    assert_file_contains "$code_only" 'npm install --prefix "$agnix_verify_dir"' \
+        "the audited install goes to a throwaway prefix, not the global tree"
+    assert_file_contains "$code_only" "npm audit signatures --json" \
+        "the audit uses --json so a mismatch is read from invalid[], not from prose"
+    assert_file_contains "$code_only" 'npm install -g "$agnix_verify_dir/node_modules/agnix"' \
+        "the global install reads the VERIFIED PATH, not a re-resolved pin"
+    assert_file_not_contains "$code_only" 'npm install -g "agnix@${AGNIX_VERSION}"' \
+        "the global install must not re-resolve the pin (that fetch is unaudited)"
+}
+
+run_test test_agnix_signature_verified "agnix signature is verified before install"
+
+# Test: the audit PRECEDES the global install (#814). Order is the whole point —
+# verifying after the global install would have already run postinstall.
+test_agnix_audit_precedes_global_install() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    local code_only="$TEST_TEMP_DIR/install-binary-tools.order.sh"
+    command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
+
+    local audit_line global_line
+    audit_line=$(command grep -n "npm audit signatures" "$code_only" |
+        command head -1 | command cut -d: -f1)
+    global_line=$(command grep -n 'npm install -g "$agnix_verify_dir/node_modules/agnix"' "$code_only" |
+        command head -1 | command cut -d: -f1)
+
+    assert_not_empty "$audit_line" "npm audit signatures is present in the code"
+    assert_not_empty "$global_line" "the verified-path global install is present in the code"
+    assert_true "[ ${audit_line:-0} -lt ${global_line:-0} ]" \
+        "npm audit signatures runs BEFORE the global install"
+}
+
+run_test test_agnix_audit_precedes_global_install "agnix audit precedes the global install"
+
+# Test: a signature MISMATCH is fatal and distinctly logged (#814). "npm was
+# unreachable" and "the tarball is not what its publisher signed" are different
+# events and must not share a message or a severity.
+test_agnix_signature_failure_is_fatal() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    local code_only="$TEST_TEMP_DIR/install-binary-tools.fatal.sh"
+    command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
+
+    assert_file_contains "$code_only" 'log_error "agnix signature verification FAILED' \
+        "a signature mismatch is logged at ERROR level with its own distinct message"
+}
+
+run_test test_agnix_signature_failure_is_fatal "agnix signature mismatch is fatal and distinctly logged"
+
+# Test: the audit-failure CLASSIFIER, executed rather than grepped (#814).
+#
+# `npm audit signatures` exits non-zero both for a real signature mismatch and
+# for "the audit could not run" (registry 5xx, ECONNREFUSED, nothing auditable).
+# Conflating them would report a network blip as a supply-chain attack, and
+# teach operators to re-run past the message that matters. This test runs the
+# classifier against real captured npm output shapes and asserts the verdict.
+test_agnix_audit_classifier_behavior() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+
+    # Mirror of the classifier in install-binary-tools.sh. Kept in step by the
+    # source assertions below, which fail if the real predicates change.
+    classify_agnix_audit() {
+        local agnix_audit_json="$1" agnix_invalid
+        agnix_invalid=$(command printf '%s' "$agnix_audit_json" |
+            command tr -d ' \n' | command grep -c '"invalid":\[{' || true)
+        if [ "$agnix_invalid" -gt 0 ]; then
+            echo "FATAL"
+        elif command printf '%s' "$agnix_audit_json" |
+            command tr -d ' \n' | command grep -q '"invalid":\[\]'; then
+            echo "INSTALL"
+        else
+            echo "SKIP"
+        fi
+    }
+
+    # Clean audit — real output from `npm audit signatures --json`.
+    assert_equals "INSTALL" \
+        "$(classify_agnix_audit '{"invalid": [], "missing": []}')" \
+        "a clean audit installs the verified bytes"
+
+    # Registry outage — real ECONNREFUSED output. MUST NOT read as tampering.
+    assert_equals "SKIP" \
+        "$(classify_agnix_audit '{"error":{"code":"ECONNREFUSED","summary":"FetchError: request failed"}}')" \
+        "a registry outage warns and skips rather than accusing a mismatch"
+
+    # Real mismatch — npm's documented invalid[] entry shape.
+    assert_equals "FATAL" \
+        "$(classify_agnix_audit '{"invalid":[{"name":"agnix","version":"0.49.0","keyid":"SHA256:jl3bwswu80"}],"missing":[]}')" \
+        "a populated invalid[] is fatal"
+
+    # Signatures absent but not wrong — unverifiable, not a mismatch.
+    assert_equals "INSTALL" \
+        "$(classify_agnix_audit '{"invalid":[],"missing":[{"name":"somepkg"}]}')" \
+        "missing-but-not-invalid is not treated as a mismatch"
+
+    # No JSON body at all (non-registry deps) and empty output must not be
+    # mistaken for a clean audit.
+    assert_equals "SKIP" \
+        "$(classify_agnix_audit 'npm error found no dependencies to audit')" \
+        "nothing auditable warns and skips"
+    assert_equals "SKIP" "$(classify_agnix_audit '')" \
+        "empty audit output is never read as clean"
+
+    # The mirror above is only meaningful if the source still uses these exact
+    # predicates — assert both against a comment-stripped copy.
+    local code_only="$TEST_TEMP_DIR/install-binary-tools.classifier.sh"
+    command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
+    assert_file_contains "$code_only" 'grep -c .\"invalid\":\\\[{' \
+        "source detects a mismatch via a populated invalid[] array"
+    assert_file_contains "$code_only" 'grep -q .\"invalid\":\\\[\\\]' \
+        "source detects a ran-and-clean audit via an empty invalid[] array"
+}
+
+run_test test_agnix_audit_classifier_behavior "agnix audit classifier separates mismatch from outage"
+
+# Test: the scratch-dir guard survives `set -e` (#814). dev-tools.sh runs with
+# `set -euo pipefail`, so a standalone `dir=$(create_secure_temp_dir)` would
+# abort the whole feature install before the fallback could warn — making the
+# "continuing without agnix" path unreachable. The assignment must therefore be
+# the `if` condition itself.
+test_agnix_scratch_dir_guard_survives_set_e() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    local code_only="$TEST_TEMP_DIR/install-binary-tools.sete.sh"
+    command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
+
+    assert_file_contains "$code_only" 'if ! agnix_verify_dir=$(create_secure_temp_dir)' \
+        "the temp-dir assignment is the if-condition, so set -e cannot skip the guard"
+
+    # Behavioral: the guard shape reaches the fallback when the helper fails.
+    local out
+    out=$(
+        set -euo pipefail
+        create_secure_temp_dir() { return 1; }
+        agnix_verify_dir=""
+        if ! agnix_verify_dir=$(create_secure_temp_dir) ||
+            [ -z "$agnix_verify_dir" ] || [ ! -d "$agnix_verify_dir" ]; then
+            echo "WARNED"
+        fi
+        echo "CONTINUED"
+    )
+    assert_contains "$out" "WARNED" "a temp-dir failure reaches the warning branch"
+    assert_contains "$out" "CONTINUED" \
+        "a temp-dir failure does not abort the rest of the feature install"
+}
+
+run_test test_agnix_scratch_dir_guard_survives_set_e "agnix scratch-dir guard survives set -e"
+
 # Test: cspell installation present in binary tools script
 test_cspell_installation() {
     local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
