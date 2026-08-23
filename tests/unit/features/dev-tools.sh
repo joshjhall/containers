@@ -710,46 +710,29 @@ test_agnix_audit_classifier_behavior() {
     # audit's STDOUT, which is pure JSON once stderr is captured separately).
     # Kept in step by the source assertions below, which fail if the real
     # predicates change.
+    # Source and call the REAL classifier — not a hand-copied mirror. Three
+    # review cycles flagged mirror-vs-source drift as a live risk, and it was
+    # real: reverting only the source once left every mirror assertion green.
+    # The classifier is now a standalone function, so the test executes the
+    # shipped code path directly.
+    #
+    # Sourcing the file only DEFINES functions (every statement in it is inside
+    # one), so nothing installs. BASH_ENV is cleared because it rebuilds PATH
+    # on non-interactive bash and would shadow the command lookups.
     classify_agnix_audit() {
-        local agnix_audit_json="$1" agnix_verdict
-        local agnix_audit_body agnix_brace_line agnix_candidate
-        # Empty is decided before jq: jq exits 0 printing nothing for empty
-        # input, so it cannot report that case itself.
-        if [ -z "$agnix_audit_json" ]; then
-            echo "skip"
-            return
-        fi
-        # VALIDITY, not a pattern, decides where the JSON body starts.
-        agnix_audit_body=""
-        if command printf '%s' "$agnix_audit_json" |
-            command jq -e . >/dev/null 2>&1; then
-            agnix_audit_body="$agnix_audit_json"
-        else
-            for agnix_brace_line in $(command printf '%s' "$agnix_audit_json" |
-                command grep -n '{' | command cut -d: -f1); do
-                agnix_candidate=$(command printf '%s' "$agnix_audit_json" |
-                    command tail -n "+${agnix_brace_line}" |
-                    command sed '1s/^[^{]*//')
-                if command printf '%s' "$agnix_candidate" |
-                    command jq -e . >/dev/null 2>&1; then
-                    agnix_audit_body="$agnix_candidate"
-                    break
-                fi
-            done
-        fi
-        if [ -z "$agnix_audit_body" ]; then
-            echo "skip"
-            return
-        fi
-        agnix_verdict=$(command printf '%s' "$agnix_audit_body" |
-            command jq -r 'if (.invalid | type) != "array" then "skip"
-                elif (.invalid | length) > 0 then "fatal"
-                else "install" end' 2>/dev/null || true)
-        [ -z "$agnix_verdict" ] && agnix_verdict="skip"
-        echo "$agnix_verdict"
+        (
+            unset BASH_ENV
+            # shellcheck source=/dev/null
+            source "$install_file"
+            _agnix_audit_verdict "$1"
+        )
     }
 
     # Clean audit — real output from `npm audit signatures --json`.
+    # This is also the fail-CLOSED guard: several plausible edits (dropping the
+    # -s that map() needs, tightening the shape filter too far) make the
+    # classifier return "skip" for EVERYTHING, which never installs agnix and
+    # would otherwise pass a suite that only asserts mismatches stay fatal.
     assert_equals "install" \
         "$(classify_agnix_audit '{"invalid": [], "missing": []}')" \
         "a clean audit installs the verified bytes"
@@ -822,6 +805,25 @@ test_agnix_audit_classifier_behavior() {
 {"invalid":[],"missing":[]}')" \
         "a brace inside banner text does not corrupt a clean verdict"
 
+    # A stray but VALID JSON value ahead of the real body — the fourth shape
+    # found by review, and the one mere validity cannot handle: `{}` parses
+    # fine, has no invalid[], and would read as skip. Selecting by SHAPE skips
+    # it. This also covers the multi-value-stream trap: jq streams both values,
+    # so an unslurped filter returned "skip\nfatal", which matched neither
+    # branch and fell through to skip — a real mismatch, silently downgraded.
+    assert_equals "fatal" \
+        "$(classify_agnix_audit 'npm notice {}
+{"invalid":[{"name":"agnix"}],"missing":[]}')" \
+        "a stray valid-but-shapeless JSON value must not hide a real mismatch"
+    assert_equals "fatal" \
+        "$(classify_agnix_audit 'npm notice {"type":"outdated"}
+{"invalid":[{"name":"agnix"}],"missing":[]}')" \
+        "an unrelated JSON object before the body must not hide a real mismatch"
+    assert_equals "install" \
+        "$(classify_agnix_audit 'npm notice {}
+{"invalid":[],"missing":[]}')" \
+        "a stray valid JSON value does not corrupt a clean verdict"
+
     # Pretty-printed output (npm's actual multi-line JSON) must still parse.
     assert_equals "install" \
         "$(classify_agnix_audit '{
@@ -834,20 +836,23 @@ test_agnix_audit_classifier_behavior() {
     # predicates — assert them against a comment-stripped copy.
     local code_only="$TEST_TEMP_DIR/install-binary-tools.classifier.sh"
     command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
-    assert_file_contains "$code_only" 'jq -r' \
-        "source computes the verdict with jq, not substring matching"
-    assert_file_contains "$code_only" 'jq -e \.' \
-        "source picks the JSON body by testing VALIDITY, not by pattern-matching"
-    assert_file_contains "$code_only" "sed '1s/\^\[\^{\]\*//'" \
-        "source strips same-line prose ahead of a candidate brace"
-    # The loop is what makes validity-selection work: without it the code
-    # anchors on the FIRST brace and a brace inside banner text hides the body.
-    # Mutation-verified: reverting the source to the pattern-based locator
-    # passes every other assertion here but fails this one.
-    assert_file_contains "$code_only" 'for agnix_brace_line in' \
-        "source TRIES each brace position, rather than anchoring on the first"
+    # `-s` is asserted at the source level, not behaviorally: without it the
+    # `map()` filter receives a bare object and matches nothing, but pass 2
+    # then re-runs on the same body and recovers, so every tested shape still
+    # returns the right verdict. The flag is load-bearing for a multi-value
+    # stdout reaching pass 1 correctly, and this is the only way to pin it.
+    assert_file_contains "$code_only" 'jq -s -r' \
+        "source SLURPS, so a multi-value stdout cannot yield multiple verdicts"
+    assert_file_contains "$code_only" '(.error | type) == "object"' \
+        "source selects the body by audit SHAPE, not by mere validity"
+    assert_file_contains "$code_only" 'last' \
+        "source takes the LAST audit-shaped value — npm's real result ends stdout"
+    # Negative assertions against every superseded locator. Each of these was
+    # a real implementation that shipped a fail-open; none may return.
     assert_file_not_contains "$code_only" "sed -n '/{/,\$p'" \
         "source must not anchor the body on the first brace line"
+    assert_file_not_contains "$code_only" 'for agnix_brace_line in' \
+        "source must not select a candidate by bare validity"
     assert_file_contains "$code_only" '(.invalid | type) != "array"' \
         "source checks invalid[] is an ARRAY before its length (outage != clean)"
     assert_file_contains "$code_only" '(.invalid | length) > 0' \
