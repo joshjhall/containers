@@ -28,7 +28,7 @@ ENTRYPOINT="$PROJECT_ROOT/crates/stibbons/src/agent/scripts/agent-entrypoint.sh"
 
 # Extract the GOLEM_ID derivation block (the `if [[ -z ... GOLEM_ID ...]]` guard)
 # from the real entrypoint, so the test runs the actual production logic.
-_GOLEM_ID_SNIPPET="$RESULTS_DIR/_golem_id_derive.sh"
+_GOLEM_ID_SNIPPET="$TEST_SCRATCH_BASE/_golem_id_derive.sh"
 command sed -n '/^if \[\[ -z "${GOLEM_ID:-}" \]\]; then$/,/^fi$/p' \
     "$ENTRYPOINT" >"$_GOLEM_ID_SNIPPET"
 

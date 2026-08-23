@@ -19,7 +19,7 @@ SOURCE_FILE="$PROJECT_ROOT/bin/update-gpg-keys.sh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-update-gpg-keys-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-update-gpg-keys-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 }
 

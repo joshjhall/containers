@@ -20,7 +20,7 @@ SETUP_GLAB_SCRIPT="$PROJECT_ROOT/lib/runtime/commands/setup-glab"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-setup-glab-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-setup-glab-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     export TEST_HOME="$TEST_TEMP_DIR/home"

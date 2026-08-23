@@ -18,7 +18,7 @@ setup() {
     # Create temporary directory for testing
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-completions-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-completions-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
     mkdir -p "$TEST_TEMP_DIR/etc/bashrc.d"
     mkdir -p "$TEST_TEMP_DIR/etc/bash_completion.d"

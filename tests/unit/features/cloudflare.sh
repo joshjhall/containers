@@ -10,7 +10,7 @@ test_suite "cloudflare Feature Tests"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-cloudflare-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-cloudflare-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 }
 

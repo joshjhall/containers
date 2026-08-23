@@ -22,7 +22,7 @@ test_script_exists() {
 # Test: Default parameter handling
 test_default_parameters() {
     # Source the script to get functions (but don't execute)
-    local temp_script="$RESULTS_DIR/user-test.sh"
+    local temp_script="$TEST_SCRATCH_BASE/user-test.sh"
 
     # Extract just the parameter defaults from the script
     command grep -E "^(USERNAME|USER_UID|USER_GID|PROJECT_NAME|WORKING_DIR)=" "$PROJECT_ROOT/lib/base/user.sh" >"$temp_script"
@@ -121,7 +121,7 @@ test_working_dir_construction() {
 # Test: Build environment file structure
 test_build_env_structure() {
     # Test that we can create the expected environment file structure
-    local test_env_file="$RESULTS_DIR/build-env"
+    local test_env_file="$TEST_SCRATCH_BASE/build-env"
 
     # Simulate what the script writes
     command cat >"$test_env_file" <<EOF
@@ -242,7 +242,7 @@ test_bashrc_d_structure() {
     assert_equals "/home/testuser/.bashrc.d" "$bashrc_d_dir" "Bashrc.d path constructed correctly"
 
     # Test that we can create the directory structure (in test environment)
-    local test_home="$RESULTS_DIR/test-home"
+    local test_home="$TEST_SCRATCH_BASE/test-home"
     local test_bashrc_d="$test_home/.bashrc.d"
 
     mkdir -p "$test_bashrc_d"

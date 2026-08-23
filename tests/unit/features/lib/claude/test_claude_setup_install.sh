@@ -32,7 +32,7 @@ CLAUDE_SETUP="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-claude-setup-install-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-claude-setup-install-$unique_id"
 
     # Fake HOME so we don't touch the real ~/.claude
     export FAKE_HOME="$TEST_TEMP_DIR/home"

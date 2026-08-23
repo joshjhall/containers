@@ -52,7 +52,7 @@ test_suite "Example Tests"
 
 # Setup function - runs before each test
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-example"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-example"
     mkdir -p "$TEST_TEMP_DIR"
 }
 
@@ -165,7 +165,19 @@ Tests run with isolated environment variables:
 
 - `TEST_TEMP_DIR` - Temporary directory for test files
 - `PROJECT_ROOT` - Path to project root
-- `RESULTS_DIR` - Path to test results
+- `TEST_SCRATCH_BASE` - Base directory for test scratch space. Build every
+  scratch path from this, **not** from `RESULTS_DIR`.
+- `RESULTS_DIR` - Path to test reports and CI artifacts only
+
+`TEST_SCRATCH_BASE` lives **outside the repository** (under `$TMPDIR`/`/tmp`),
+and is unique per suite process. This is deliberate: the repo is commonly
+mounted through virtiofs plus a bindfs FUSE overlay, where a write is not
+reliably visible to an immediately-following read. Scratch kept under
+`RESULTS_DIR` made suites fail at random — one suite per full run, a different
+suite each time, always green standalone (#821).
+`tests/unit/test_framework_scratch_base.sh` enforces this, and will fail if a
+suite starts building scratch paths from `RESULTS_DIR` again. Override
+`TEST_SCRATCH_BASE` to relocate it.
 
 ### Mocking Functions
 

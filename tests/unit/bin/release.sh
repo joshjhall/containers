@@ -16,8 +16,8 @@ test_suite "Bin Release Script Tests"
 # Setup function - runs before each test
 setup() {
     # Create temporary VERSION and CHANGELOG files for testing
-    export TEST_VERSION_FILE="$RESULTS_DIR/VERSION"
-    export TEST_CHANGELOG_FILE="$RESULTS_DIR/CHANGELOG.md"
+    export TEST_VERSION_FILE="$TEST_SCRATCH_BASE/VERSION"
+    export TEST_CHANGELOG_FILE="$TEST_SCRATCH_BASE/CHANGELOG.md"
 
     # Create initial VERSION file
     echo "1.2.3" >"$TEST_VERSION_FILE"

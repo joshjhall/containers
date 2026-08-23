@@ -17,13 +17,13 @@ test_suite "Development Tools Feature Tests"
 setup() {
     # Create temporary directory for testing.
     # Uniquely suffixed: this dir is rm -rf'd in teardown after EVERY test, and
-    # sibling suites share $RESULTS_DIR, so a fixed name let one suite's churn
+    # sibling suites share the scratch parent, so a fixed name let one suite's churn
     # delete a concurrently-running suite's tree (reproduced). `$$-<nanos>` is
     # the convention 44 suites already use — per-test rather than per-process,
     # so even repeated setup() calls within one suite cannot collide.
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-dev-tools-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-dev-tools-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Mock environment

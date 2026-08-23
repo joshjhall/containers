@@ -20,7 +20,7 @@ SOURCE_FILE="$PROJECT_ROOT/lib/runtime/secrets/azure-keyvault.sh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-azure-keyvault-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-azure-keyvault-$unique_id"
     mkdir -p "$TEST_TEMP_DIR/bin"
 }
 

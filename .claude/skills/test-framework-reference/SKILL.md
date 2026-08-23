@@ -29,7 +29,7 @@ init_test_framework
 test_suite "Feature Name Tests"
 
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-feature"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-feature"
     mkdir -p "$TEST_TEMP_DIR"
     # Mock environment variables
 }

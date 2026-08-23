@@ -18,7 +18,7 @@ setup() {
     # Create temporary directory for testing
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-download-verify-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-download-verify-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Source the download-verify script without executing

@@ -20,7 +20,7 @@ SOURCE_SCRIPT="$PROJECT_ROOT/lib/base/run-feature.sh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N 2>/dev/null || date +%s)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-run-feature-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-run-feature-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Create a modified copy of the real script that:

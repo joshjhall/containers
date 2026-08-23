@@ -24,7 +24,7 @@ SHELL_HARDENING="$PROJECT_ROOT/lib/base/shell-hardening.sh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N 2>/dev/null || date +%s)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/shell-hardening-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/shell-hardening-$unique_id"
     mkdir -p "$TEST_TEMP_DIR/etc"
 
     # Build a patched copy of the source that replaces the /etc/shells path with

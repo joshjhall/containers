@@ -22,7 +22,7 @@ FS_HEALTH_SCRIPT="$(cd "$(dirname "$FS_HEALTH_SCRIPT")" && pwd)/$(basename "$FS_
 # ============================================================================
 
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-workspace-fs-health-$$"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-workspace-fs-health-$$"
     command mkdir -p "$TEST_TEMP_DIR"
 
     export PROJECT_ROOT="$TEST_TEMP_DIR/project"

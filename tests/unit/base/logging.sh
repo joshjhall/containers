@@ -16,7 +16,7 @@ test_suite "Logging Library Tests"
 # Setup function - runs before each test
 setup() {
     # Create temporary log directory for testing
-    export TEST_LOG_DIR="$RESULTS_DIR/test-logs"
+    export TEST_LOG_DIR="$TEST_SCRATCH_BASE/test-logs"
     export BUILD_LOG_DIR="$TEST_LOG_DIR"
     mkdir -p "$BUILD_LOG_DIR"
 

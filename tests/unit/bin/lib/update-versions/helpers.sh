@@ -61,7 +61,7 @@ test_update_checksum_variable() {
     source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
 
     # Create temporary test file
-    local test_file="$RESULTS_DIR/test_checksum_update.sh"
+    local test_file="$TEST_SCRATCH_BASE/test_checksum_update.sh"
     command cat >"$test_file" <<'EOF'
 #!/bin/bash
 K9S_AMD64_SHA256="old_checksum_abc123"
@@ -95,7 +95,7 @@ test_verify_checksum_update() {
     source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
 
     # Create temporary test file
-    local test_file="$RESULTS_DIR/test_verify_checksum.sh"
+    local test_file="$TEST_SCRATCH_BASE/test_verify_checksum.sh"
     command cat >"$test_file" <<'EOF'
 #!/bin/bash
 K9S_AMD64_SHA256="bda09dc030a08987fe2b3bed678b15b52f23d6705e872d561932d4ca07db7818"
@@ -128,7 +128,7 @@ test_update_version_comment() {
     source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
 
     # Create temporary test file
-    local test_file="$RESULTS_DIR/test_version_comment.sh"
+    local test_file="$TEST_SCRATCH_BASE/test_version_comment.sh"
     command cat >"$test_file" <<'EOF'
 #!/bin/bash
 # Verified on: 2025-01-01
@@ -205,7 +205,7 @@ test_update_checksum_rejects_short_hash() {
     source "$PROJECT_ROOT/bin/lib/version-utils.sh"
     source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
 
-    local test_file="$RESULTS_DIR/test_reject_short.sh"
+    local test_file="$TEST_SCRATCH_BASE/test_reject_short.sh"
     command cat >"$test_file" <<'EOF'
 #!/bin/bash
 MY_SHA256="old_value"
@@ -226,7 +226,7 @@ test_update_checksum_rejects_non_hex() {
     source "$PROJECT_ROOT/bin/lib/version-utils.sh"
     source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
 
-    local test_file="$RESULTS_DIR/test_reject_nonhex.sh"
+    local test_file="$TEST_SCRATCH_BASE/test_reject_nonhex.sh"
     command cat >"$test_file" <<'EOF'
 #!/bin/bash
 MY_SHA256="old_value"
@@ -247,7 +247,7 @@ test_update_checksum_rejects_empty() {
     source "$PROJECT_ROOT/bin/lib/version-utils.sh"
     source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
 
-    local test_file="$RESULTS_DIR/test_reject_empty.sh"
+    local test_file="$TEST_SCRATCH_BASE/test_reject_empty.sh"
     command cat >"$test_file" <<'EOF'
 #!/bin/bash
 MY_SHA256="old_value"
@@ -266,7 +266,7 @@ test_update_checksum_accepts_sha512() {
     source "$PROJECT_ROOT/bin/lib/version-utils.sh"
     source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
 
-    local test_file="$RESULTS_DIR/test_accept_sha512.sh"
+    local test_file="$TEST_SCRATCH_BASE/test_accept_sha512.sh"
     command cat >"$test_file" <<'EOF'
 #!/bin/bash
 MY_SHA512="old_value"

@@ -20,7 +20,7 @@ SOURCE_FILE="$PROJECT_ROOT/lib/runtime/secrets/docker-secrets.sh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-docker-secrets-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-docker-secrets-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Create mock secrets directory

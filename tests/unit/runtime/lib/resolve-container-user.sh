@@ -63,7 +63,7 @@ GETENT_EOF
 }
 
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-resolve-container-user-$$"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-resolve-container-user-$$"
     command mkdir -p "$TEST_TEMP_DIR"
 }
 

@@ -18,7 +18,7 @@ setup() {
     # Create unique temporary directory for testing (avoid collisions with parallel runs)
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-entrypoint-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-entrypoint-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Mock container environment
@@ -52,7 +52,7 @@ teardown() {
 # Extract run_startup_scripts from the real entrypoint.sh for isolated testing.
 # This replaces re-implemented for loops in tests with the actual production logic.
 # Uses the same sed -n extraction pattern as parse_bindfs_skip_paths (line 842).
-_RUN_STARTUP_SCRIPTS_FILE="$RESULTS_DIR/_run_startup_scripts.sh"
+_RUN_STARTUP_SCRIPTS_FILE="$TEST_SCRATCH_BASE/_run_startup_scripts.sh"
 command sed -n '/^run_startup_scripts()/,/^}/p' "$PROJECT_ROOT/lib/runtime/entrypoint.sh" >"$_RUN_STARTUP_SCRIPTS_FILE"
 source "$_RUN_STARTUP_SCRIPTS_FILE"
 

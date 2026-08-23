@@ -20,7 +20,7 @@ AUDIT_LOGGER="$(dirname "${BASH_SOURCE[0]}")/../../../lib/runtime/audit-logger.s
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/audit-logger-test-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/audit-logger-test-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
     export AUDIT_LOG_FILE="$TEST_TEMP_DIR/test-audit.log"
     export ENABLE_AUDIT_LOGGING="true"
@@ -441,7 +441,7 @@ run_test test_build_json_entry_validates_extra_data "build_json_entry validates 
 # Source audit-logger.sh ONCE at global scope so that associative arrays
 # (LOG_LEVELS, EVENT_CATEGORIES) created via declare -A are not scoped to a
 # function and lost when the function returns.
-FUNC_TEST_BASE_DIR="$RESULTS_DIR/audit-logger-func-init-$$"
+FUNC_TEST_BASE_DIR="$TEST_SCRATCH_BASE/audit-logger-func-init-$$"
 mkdir -p "$FUNC_TEST_BASE_DIR"
 export AUDIT_INITIALIZED=false
 export ENABLE_AUDIT_LOGGING="true"
@@ -459,7 +459,7 @@ rm -rf "$FUNC_TEST_BASE_DIR"
 _reset_audit_logger() {
     export AUDIT_INITIALIZED=false
     export ENABLE_AUDIT_LOGGING="true"
-    export TEST_TEMP_DIR="$RESULTS_DIR/audit-logger-func-test-$$-$RANDOM"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/audit-logger-func-test-$$-$RANDOM"
     mkdir -p "$TEST_TEMP_DIR"
     export AUDIT_LOG_FILE="$TEST_TEMP_DIR/test-audit.log"
     export AUDIT_LOG_FORMAT="json"
@@ -528,7 +528,7 @@ test_func_audit_log_level_filter() {
 test_func_audit_log_disabled() {
     export AUDIT_INITIALIZED=false
     export ENABLE_AUDIT_LOGGING="false"
-    export TEST_TEMP_DIR="$RESULTS_DIR/audit-logger-func-test-disabled-$$"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/audit-logger-func-test-disabled-$$"
     mkdir -p "$TEST_TEMP_DIR"
     export AUDIT_LOG_FILE="$TEST_TEMP_DIR/test-audit.log"
     # Call audit_init (should be no-op when disabled)
