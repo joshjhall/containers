@@ -532,6 +532,7 @@ install_github_binary_tools() {
     if command -v npm &>/dev/null; then
         log_message "Installing agnix (AI config linter) v${AGNIX_VERSION}..."
         local agnix_verify_dir agnix_audit_json agnix_audit_err agnix_verdict
+        local agnix_audit_body agnix_brace_line agnix_candidate
         # The assignment is the `if` condition on purpose. As a standalone
         # statement it would abort the whole script under dev-tools.sh's
         # `set -euo pipefail` before any guard below could run, so the
@@ -557,33 +558,55 @@ install_github_binary_tools() {
             if [ -z "$agnix_audit_json" ]; then
                 agnix_verdict="skip"
             else
-                # Anything before the JSON body is dropped first. stdout is pure
-                # JSON in every case probed here, but an npm banner
-                # (update-notifier, a proxy notice) landing on stdout in some
-                # other configuration would make the body unparseable — and
-                # unparseable degrades to "skip", which would turn a REAL
-                # mismatch into a benign-looking skip. That is the one direction
-                # this design must never fail in, so the noise is stripped
-                # rather than trusted not to appear.
+                # LOCATING THE JSON BODY. stdout is pure JSON in every case
+                # probed against the live registry, so the first candidate below
+                # is the whole thing and normally wins immediately. The rest
+                # exists because an npm banner (update-notifier, a proxy notice)
+                # landing on stdout in some other configuration would make the
+                # body unparseable — and unparseable falls back to "skip", which
+                # would turn a REAL mismatch into a benign-looking skip. That is
+                # the one direction this design must never fail in.
                 #
-                # TWO stages, because a banner can be positioned two ways and
-                # only handling the first leaves the same fail-open reachable
-                # through the second (both verified):
-                #   1. `sed -n '/{/,$p'` drops whole lines before the one that
-                #      first contains a brace.
-                #   2. `sed '1s/^[^{]*//'` then drops any prose preceding the
-                #      brace ON that line — the same-line case, e.g.
-                #      `npm warn config foo {"invalid":[...]}`.
-                #
-                # Type before length — see the comment block above.
-                agnix_verdict=$(command printf '%s' "$agnix_audit_json" |
-                    command sed -n '/{/,$p' | command sed '1s/^[^{]*//' |
-                    command jq -r 'if (.invalid | type) != "array" then "skip"
-                        elif (.invalid | length) > 0 then "fatal"
-                        else "install" end' 2>/dev/null || true)
-                # Unparseable stdout (jq failed, or printed nothing) is
-                # unverifiable, not a mismatch.
-                [ -z "$agnix_verdict" ] && agnix_verdict="skip"
+                # VALIDITY decides which candidate is the body, not a pattern.
+                # Three successive attempts at pattern-matching the JSON start
+                # each left the same fail-open reachable through a new banner
+                # shape (whole-line prose, prose sharing the line with the
+                # brace, then a brace inside the banner text itself). Any such
+                # pattern is a guess about text nobody controls, so instead each
+                # brace position is tried in turn and the FIRST candidate that
+                # actually PARSES is used. A stray brace in banner prose is
+                # simply skipped over, because `{deprecated} ...` is not valid
+                # JSON and the loop moves on.
+                agnix_audit_body=""
+                if command printf '%s' "$agnix_audit_json" |
+                    command jq -e . >/dev/null 2>&1; then
+                    agnix_audit_body="$agnix_audit_json"
+                else
+                    for agnix_brace_line in $(command printf '%s' "$agnix_audit_json" |
+                        command grep -n '{' | command cut -d: -f1); do
+                        agnix_candidate=$(command printf '%s' "$agnix_audit_json" |
+                            command tail -n "+${agnix_brace_line}" |
+                            command sed '1s/^[^{]*//')
+                        if command printf '%s' "$agnix_candidate" |
+                            command jq -e . >/dev/null 2>&1; then
+                            agnix_audit_body="$agnix_candidate"
+                            break
+                        fi
+                    done
+                fi
+
+                if [ -z "$agnix_audit_body" ]; then
+                    # Audit produced output, but no part of it is valid JSON.
+                    # Unverifiable — NOT a mismatch (we cannot read a verdict).
+                    agnix_verdict="skip"
+                else
+                    # Type before length — see the comment block above.
+                    agnix_verdict=$(command printf '%s' "$agnix_audit_body" |
+                        command jq -r 'if (.invalid | type) != "array" then "skip"
+                            elif (.invalid | length) > 0 then "fatal"
+                            else "install" end' 2>/dev/null || true)
+                    [ -z "$agnix_verdict" ] && agnix_verdict="skip"
+                fi
             fi
 
             if [ "$agnix_verdict" = "fatal" ]; then

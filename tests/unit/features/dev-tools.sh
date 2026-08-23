@@ -712,14 +712,36 @@ test_agnix_audit_classifier_behavior() {
     # predicates change.
     classify_agnix_audit() {
         local agnix_audit_json="$1" agnix_verdict
+        local agnix_audit_body agnix_brace_line agnix_candidate
         # Empty is decided before jq: jq exits 0 printing nothing for empty
         # input, so it cannot report that case itself.
         if [ -z "$agnix_audit_json" ]; then
             echo "skip"
             return
         fi
-        agnix_verdict=$(command printf '%s' "$agnix_audit_json" |
-            command sed -n '/{/,$p' | command sed '1s/^[^{]*//' |
+        # VALIDITY, not a pattern, decides where the JSON body starts.
+        agnix_audit_body=""
+        if command printf '%s' "$agnix_audit_json" |
+            command jq -e . >/dev/null 2>&1; then
+            agnix_audit_body="$agnix_audit_json"
+        else
+            for agnix_brace_line in $(command printf '%s' "$agnix_audit_json" |
+                command grep -n '{' | command cut -d: -f1); do
+                agnix_candidate=$(command printf '%s' "$agnix_audit_json" |
+                    command tail -n "+${agnix_brace_line}" |
+                    command sed '1s/^[^{]*//')
+                if command printf '%s' "$agnix_candidate" |
+                    command jq -e . >/dev/null 2>&1; then
+                    agnix_audit_body="$agnix_candidate"
+                    break
+                fi
+            done
+        fi
+        if [ -z "$agnix_audit_body" ]; then
+            echo "skip"
+            return
+        fi
+        agnix_verdict=$(command printf '%s' "$agnix_audit_body" |
             command jq -r 'if (.invalid | type) != "array" then "skip"
                 elif (.invalid | length) > 0 then "fatal"
                 else "install" end' 2>/dev/null || true)
@@ -787,6 +809,19 @@ test_agnix_audit_classifier_behavior() {
         "$(classify_agnix_audit 'npm warn config foo {"invalid":[],"missing":[]}')" \
         "a SAME-LINE banner before a clean body does not suppress the verdict"
 
+    # A brace INSIDE the banner text — the third shape found by review. A
+    # pattern-based locator anchors on that brace and feeds jq garbage; the
+    # parse-first-valid-candidate approach skips it because `{legacy} true`
+    # is not valid JSON, and finds the real body on the next candidate.
+    assert_equals "fatal" \
+        "$(classify_agnix_audit 'npm warn config {legacy-peer-deps} true
+{"invalid":[{"name":"agnix"}],"missing":[]}')" \
+        "a brace inside banner text must not hide a real mismatch"
+    assert_equals "install" \
+        "$(classify_agnix_audit 'npm warn config {legacy} true
+{"invalid":[],"missing":[]}')" \
+        "a brace inside banner text does not corrupt a clean verdict"
+
     # Pretty-printed output (npm's actual multi-line JSON) must still parse.
     assert_equals "install" \
         "$(classify_agnix_audit '{
@@ -801,10 +836,18 @@ test_agnix_audit_classifier_behavior() {
     command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
     assert_file_contains "$code_only" 'jq -r' \
         "source computes the verdict with jq, not substring matching"
-    assert_file_contains "$code_only" "sed -n '/{/,\$p'" \
-        "source drops whole lines before the JSON body"
+    assert_file_contains "$code_only" 'jq -e \.' \
+        "source picks the JSON body by testing VALIDITY, not by pattern-matching"
     assert_file_contains "$code_only" "sed '1s/\^\[\^{\]\*//'" \
-        "source also drops same-line prose before the brace"
+        "source strips same-line prose ahead of a candidate brace"
+    # The loop is what makes validity-selection work: without it the code
+    # anchors on the FIRST brace and a brace inside banner text hides the body.
+    # Mutation-verified: reverting the source to the pattern-based locator
+    # passes every other assertion here but fails this one.
+    assert_file_contains "$code_only" 'for agnix_brace_line in' \
+        "source TRIES each brace position, rather than anchoring on the first"
+    assert_file_not_contains "$code_only" "sed -n '/{/,\$p'" \
+        "source must not anchor the body on the first brace line"
     assert_file_contains "$code_only" '(.invalid | type) != "array"' \
         "source checks invalid[] is an ARRAY before its length (outage != clean)"
     assert_file_contains "$code_only" '(.invalid | length) > 0' \
