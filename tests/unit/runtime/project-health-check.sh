@@ -20,9 +20,36 @@ HEALTH_CHECK_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/../../../lib/runtime/40-proj
 # Test Setup / Teardown
 # ============================================================================
 
+# Per-test scratch dir, created with mktemp -d on a LOCAL filesystem --
+# deliberately NOT under $RESULTS_DIR. Two independent bugs are fixed here.
+# See #818.
+#
+# 1. Uniqueness. The old suffix was `$$`, which is constant for the whole run,
+#    so every test case shared one directory. Artifacts leaked between cases,
+#    and `append_missing_entries` is idempotent -- it skips entries a previous
+#    case already wrote, so a later assertion for those entries fails. mktemp
+#    gives each case its own directory.
+#
+# 2. Filesystem coherence -- the actual cause of the intermittent failures.
+#    $RESULTS_DIR lives in the workspace, which is a FUSE mount (bindfs /
+#    VirtioFS) in this container. Under concurrent load a just-appended block
+#    is not reliably visible to an immediately following read: the script under
+#    test appends six entries, logs "Added 6 entries", and exits 0, yet the very
+#    next grep does not see them. That is why the failing assertion moved around
+#    between runs, and why the suite always passes when run alone -- it is a
+#    race in the mount, not an ordering bug in the suite.
+#
+#    Measured on this container with a bare write-then-read loop, no test
+#    framework involved: 6 losses in 3200 iterations on the FUSE workspace,
+#    0 in 3200 on native overlay. Running this suite 100x concurrently failed
+#    2-3/100 with scratch on the workspace, and 0/100 with scratch on /tmp.
+#
+#    mktemp -d honours TMPDIR, which is native (overlay) rather than the FUSE
+#    mount, so the read-after-write race disappears. This also matches what the
+#    framework's own default setup() in tests/framework.sh already does.
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-project-health-check-$$"
-    mkdir -p "$TEST_TEMP_DIR"
+    TEST_TEMP_DIR="$(mktemp -d -t "test-project-health-check-XXXXXX")"
+    export TEST_TEMP_DIR
 
     # Create a mock project root with .git directory
     export PROJECT_ROOT="$TEST_TEMP_DIR/project"
@@ -284,40 +311,31 @@ test_partial_match_not_false_positive() {
 # Run all tests
 # ============================================================================
 
-run_test_with_setup() {
-    local test_function="$1"
-    local test_description="$2"
-
-    setup
-    run_test "$test_function" "$test_description"
-    teardown
-}
-
-run_test_with_setup test_skip_when_env_set "Skip when SKIP_PROJECT_HEALTH_CHECK=true"
-run_test_with_setup test_skip_when_no_git_dir "Skip when no .git/ directory"
-run_test_with_setup test_creates_gitignore_when_missing "Creates .gitignore when missing"
-run_test_with_setup test_appends_to_existing_gitignore "Appends to existing .gitignore"
-run_test_with_setup test_unconditional_env_entries "Unconditional .env entries"
-run_test_with_setup test_unconditional_negation_entry "Unconditional !.env.example entry"
-run_test_with_setup test_unconditional_os_entries "Unconditional OS entries (.DS_Store, Thumbs.db)"
-run_test_with_setup test_idempotent_no_duplicates "Idempotency: no duplicate entries"
-run_test_with_setup test_idempotent_negation_no_duplicates "Idempotency: no duplicate negation entries"
-run_test_with_setup test_existing_entry_not_duplicated "Pre-existing entry not duplicated"
-run_test_with_setup test_fuse_hidden_added_with_bindfs "Conditional: .fuse_hidden* with bindfs"
-run_test_with_setup test_fuse_hidden_not_added_without_bindfs "Conditional: no .fuse_hidden* without bindfs"
-run_test_with_setup test_claude_entries_added_with_dev_tools "Conditional: Claude entries with dev-tools"
-run_test_with_setup test_claude_entries_not_added_without_dev_tools "Conditional: no Claude entries without dev-tools"
-run_test_with_setup test_fuse_hidden_added_with_dev_tools "Conditional: .fuse_hidden* with dev-tools"
-run_test_with_setup test_dockerignore_created_with_dockerfile "Dockerignore created with Dockerfile"
-run_test_with_setup test_dockerignore_created_with_compose_yml "Dockerignore created with docker-compose.yml"
-run_test_with_setup test_dockerignore_created_with_compose_yaml "Dockerignore created with compose.yaml"
-run_test_with_setup test_dockerignore_not_created_without_docker_files "Dockerignore not created without Docker files"
-run_test_with_setup test_dockerignore_entries "Dockerignore has expected entries"
-run_test_with_setup test_dockerignore_appends_missing "Dockerignore appends missing entries"
-run_test_with_setup test_comment_marker_present "Comment marker present in output"
-run_test_with_setup test_section_label_present "Section label present in output"
-run_test_with_setup test_no_trailing_newline_handled "Handles file without trailing newline"
-run_test_with_setup test_partial_match_not_false_positive "Partial match not a false positive"
+run_test test_skip_when_env_set "Skip when SKIP_PROJECT_HEALTH_CHECK=true"
+run_test test_skip_when_no_git_dir "Skip when no .git/ directory"
+run_test test_creates_gitignore_when_missing "Creates .gitignore when missing"
+run_test test_appends_to_existing_gitignore "Appends to existing .gitignore"
+run_test test_unconditional_env_entries "Unconditional .env entries"
+run_test test_unconditional_negation_entry "Unconditional !.env.example entry"
+run_test test_unconditional_os_entries "Unconditional OS entries (.DS_Store, Thumbs.db)"
+run_test test_idempotent_no_duplicates "Idempotency: no duplicate entries"
+run_test test_idempotent_negation_no_duplicates "Idempotency: no duplicate negation entries"
+run_test test_existing_entry_not_duplicated "Pre-existing entry not duplicated"
+run_test test_fuse_hidden_added_with_bindfs "Conditional: .fuse_hidden* with bindfs"
+run_test test_fuse_hidden_not_added_without_bindfs "Conditional: no .fuse_hidden* without bindfs"
+run_test test_claude_entries_added_with_dev_tools "Conditional: Claude entries with dev-tools"
+run_test test_claude_entries_not_added_without_dev_tools "Conditional: no Claude entries without dev-tools"
+run_test test_fuse_hidden_added_with_dev_tools "Conditional: .fuse_hidden* with dev-tools"
+run_test test_dockerignore_created_with_dockerfile "Dockerignore created with Dockerfile"
+run_test test_dockerignore_created_with_compose_yml "Dockerignore created with docker-compose.yml"
+run_test test_dockerignore_created_with_compose_yaml "Dockerignore created with compose.yaml"
+run_test test_dockerignore_not_created_without_docker_files "Dockerignore not created without Docker files"
+run_test test_dockerignore_entries "Dockerignore has expected entries"
+run_test test_dockerignore_appends_missing "Dockerignore appends missing entries"
+run_test test_comment_marker_present "Comment marker present in output"
+run_test test_section_label_present "Section label present in output"
+run_test test_no_trailing_newline_handled "Handles file without trailing newline"
+run_test test_partial_match_not_false_positive "Partial match not a false positive"
 
 # Generate test report
 generate_report
