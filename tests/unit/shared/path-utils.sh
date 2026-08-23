@@ -21,7 +21,9 @@ test_suite "Shared Path Utilities Tests"
 
 # Setup function - runs before each test
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-shared-path-utils"
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-shared-path-utils-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Save original PATH

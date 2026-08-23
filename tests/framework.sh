@@ -74,6 +74,43 @@ PROJECT_ROOT="$CONTAINERS_DIR"
 RESULTS_DIR="$TESTS_DIR/results"
 FIXTURES_DIR="$TESTS_DIR/fixtures"
 
+# ============================================================================
+# tf_reap_stale_temp_dirs - Remove abandoned per-test scratch directories
+#
+# Suites create their TEST_TEMP_DIR under $RESULTS_DIR with a per-test unique
+# suffix, so two suites running concurrently cannot delete each other's tree.
+# The cost of that uniqueness is that any teardown a suite misses — an early
+# exit, a failed assertion that skips the rest, a killed run — leaks a NEW
+# directory rather than reusing one name. Measured at ~1,400 per full run,
+# growing without bound (one tree reached 19,910 directories / 11MB).
+#
+# So the framework reaps them centrally, at init, rather than relying on every
+# suite's teardown being complete. Only directories older than the cutoff are
+# touched, which cannot disturb a CONCURRENTLY running suite's tree — those are
+# seconds old, and the cutoff is an hour.
+#
+# Deliberately silent and non-fatal: this is scratch hygiene, and a failure to
+# reap must never redden a test run. $RESULTS_DIR is gitignored.
+# ============================================================================
+tf_reap_stale_temp_dirs() {
+    [ -d "$RESULTS_DIR" ] || return 0
+    # -mindepth/-maxdepth 1: only the per-suite scratch dirs themselves, never
+    # their contents and never $RESULTS_DIR. -mmin +60: older than an hour.
+    #
+    # `-exec` needs a real executable — the `command` builtin the rest of this
+    # repo uses for alias-safety is NOT valid there and fails the whole -exec
+    # ("-exec command: No such file or directory"), silently, because stderr is
+    # suppressed. Hence an absolute rm path, which is alias-proof anyway.
+    local rm_bin
+    for rm_bin in /bin/rm /usr/bin/rm; do
+        [ -x "$rm_bin" ] && break
+    done
+    [ -x "$rm_bin" ] || return 0
+    command find "$RESULTS_DIR" -mindepth 1 -maxdepth 1 -type d -mmin +60 \
+        -exec "$rm_bin" -rf {} + 2>/dev/null || true
+    return 0
+}
+
 # Test counters
 declare -g TESTS_RUN=0
 declare -g TESTS_PASSED=0
@@ -133,6 +170,8 @@ init_test_framework() {
     # Create directories
     mkdir -p "$RESULTS_DIR"
     mkdir -p "$FIXTURES_DIR"
+
+    tf_reap_stale_temp_dirs
 
     # Set up test environment
     export TEST_MODE=1

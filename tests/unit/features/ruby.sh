@@ -18,7 +18,9 @@ test_suite "Ruby Feature Tests"
 # Setup function - runs before each test
 setup() {
     # Create temporary directory for testing
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-ruby"
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-ruby-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Mock environment

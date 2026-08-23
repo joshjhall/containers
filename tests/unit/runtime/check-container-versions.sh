@@ -8,7 +8,9 @@ init_test_framework
 test_suite "check-versions Runtime Tests"
 
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-check-versions"
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-check-versions-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 }
 

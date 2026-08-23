@@ -18,7 +18,9 @@ AUDIT_LOGGER="$(dirname "${BASH_SOURCE[0]}")/../../../lib/runtime/audit-logger.s
 
 # Setup
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/audit-logger-test"
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/audit-logger-test-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
     export AUDIT_LOG_FILE="$TEST_TEMP_DIR/test-audit.log"
     export ENABLE_AUDIT_LOGGING="true"

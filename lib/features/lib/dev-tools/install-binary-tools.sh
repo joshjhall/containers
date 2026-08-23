@@ -7,6 +7,100 @@
 #   install_github_binary_tools — all install_github_release calls (includes lefthook)
 #   create_tool_symlinks — fd/bat/fzf symlinks
 
+# _agnix_audit_verdict — classify `npm audit signatures --json` stdout.
+#
+# Echoes exactly one of: fatal | install | skip
+#   fatal   — the audit RAN and reported a signature mismatch (populated
+#             invalid[]). The tarball is not what its publisher signed.
+#   install — the audit ran and found nothing invalid.
+#   skip    — the audit could not be read (outage, nothing auditable,
+#             unparsable output). UNVERIFIABLE, which is not the same as
+#             tampering and must never be reported as such.
+#
+# A standalone function so the tests can call THIS code rather than a
+# hand-copied mirror of it (#817).
+#
+# The selection rule is SHAPE, and the value is bounded at BOTH ends by jq
+# itself. Four narrower rules each shipped a fail-open where a real mismatch
+# read as a benign skip, every one of them a guess about text nobody controls:
+#   1. anchor on `^{`         -> broke on prose sharing the line with the brace
+#   2. anchor on any `{`      -> broke on a brace inside the prose
+#   3. first value that PARSES -> broke on a stray VALID value (a lone `{}`),
+#                                 which has no invalid[] and so reads as skip
+#   4. shape-select over a brace-to-EOF span -> broke on anything TRAILING the
+#                                 body, because the span carried the junk too
+# The lesson each time was the same: do not guess where the value starts or
+# stops. jq is the only thing that actually knows, so it decides both ends
+# (see `jq -c .` below), and shape decides which of the values it found is the
+# audit result.
+#
+# `-s` slurps every top-level value, which also removes a trap found while
+# fixing this: jq streams multiple values, so a two-value stdout produced TWO
+# verdict lines and the captured "skip\nfatal" matched neither branch and fell
+# through to skip — a real mismatch, silently downgraded. Slurping makes that
+# impossible by construction. Of the audit-shaped values the LAST wins: npm's
+# real result terminates stdout.
+_agnix_audit_verdict() {
+    local raw="$1" verdict brace_line candidate
+    local filter='
+        map(select(type == "object"
+            and ((.invalid | type) == "array"
+                 or (.error | type) == "object")))
+        | if length == 0 then "skip"
+          else (last
+            | if (.invalid | type) != "array" then "skip"
+              elif (.invalid | length) > 0 then "fatal"
+              else "install" end)
+          end'
+
+    # Empty is decided here: jq exits 0 printing nothing for empty input, so it
+    # cannot report this case itself.
+    if [ -z "$raw" ]; then
+        command echo "skip"
+        return 0
+    fi
+
+    # Pass 1 — the whole stdout. The normal case (stdout is pure JSON) and the
+    # multi-value case both resolve here.
+    #
+    # `jq -c .` is what bounds the END of the value, and it is the piece four
+    # earlier attempts were missing. jq consumes values greedily, EMITS each one
+    # it parsed on stdout, and reports only the unparsable remainder on stderr.
+    # Discarding stderr therefore yields exactly the values jq could read, no
+    # matter what trails them — so a `npm notice ...` line after the body no
+    # longer poisons the whole parse. Feeding a span from a brace to
+    # end-of-input to `jq -s` directly is all-or-nothing and was the actual bug:
+    # every candidate carried the trailing junk along with the body.
+    verdict=$(command printf '%s' "$raw" | command jq -c . 2>/dev/null |
+        command jq -s -r "$filter" 2>/dev/null || true)
+    case "$verdict" in
+        fatal | install)
+            command echo "$verdict"
+            return 0
+            ;;
+    esac
+
+    # Pass 2 — prose may PRECEDE the JSON, which stops jq before it reads
+    # anything, so pass 1 yields nothing at all. Retry from each brace with any
+    # same-line prose ahead of it removed; the `jq -c .` stage still bounds the
+    # far end. Only a real verdict ends the search; a "skip" keeps looking, so
+    # an unreadable candidate cannot terminate it early.
+    for brace_line in $(command printf '%s' "$raw" | command grep -n '{' | command cut -d: -f1); do
+        candidate=$(command printf '%s' "$raw" |
+            command tail -n "+${brace_line}" | command sed '1s/^[^{]*//')
+        verdict=$(command printf '%s' "$candidate" | command jq -c . 2>/dev/null |
+            command jq -s -r "$filter" 2>/dev/null || true)
+        case "$verdict" in
+            fatal | install)
+                command echo "$verdict"
+                return 0
+                ;;
+        esac
+    done
+
+    command echo "skip"
+}
+
 install_entr() {
     log_message "Installing entr (file watcher)..."
     local ENTR_TARBALL="entr-${ENTR_VERSION}.tar.gz"
@@ -500,6 +594,29 @@ install_github_binary_tools() {
     # it hard-fails only on rc 1 (verification ran and failed) and falls
     # through when verification was unavailable.
     #
+    # STDOUT AND STDERR ARE CAPTURED SEPARATELY, and that separation is what
+    # makes a real parse possible (#817). Verified against the live registry:
+    # on BOTH a clean run and an outage, stdout is pure JSON (an outage yields
+    # {"error":{...}}), while `npm warn`/`npm error` prose goes to stderr.
+    # Merging them with 2>&1 is what would force substring matching, since a
+    # single warning line prepended to the body makes it unparsable. stderr is
+    # still captured — it carries the human-readable diagnostic the JSON lacks
+    # — but it is used only for the log message, never for the verdict.
+    #
+    # The verdict is computed by jq. jq is NOT optional here: dev-tools.sh
+    # apt-installs it unconditionally (its "File processing extras" block) well
+    # before this function is called, and it is a declared tool of this feature.
+    # So there is no textual fallback — one would be untested dead code
+    # guarding a state that cannot occur.
+    #
+    # Two properties of that jq predicate are load-bearing, both established by
+    # probing rather than assumed:
+    #   - It checks the TYPE before the length. A bare `.invalid | length`
+    #     returns 0 for the outage shape — identical to a clean audit — so
+    #     length alone would silently install when the audit never ran.
+    #   - Empty output is guarded BEFORE the call, because jq exits 0 with
+    #     empty output on empty input, so a trailing `|| echo SKIP` never fires.
+    #
     # LIMIT, stated so it is not over-read: this verifies the REGISTRY-attested
     # tarball, i.e. that npm served the bytes the publisher signed. It is not
     # an integrity check on the unpacked tree — editing a file under
@@ -508,7 +625,7 @@ install_github_binary_tools() {
     # the threat #814 describes.
     if command -v npm &>/dev/null; then
         log_message "Installing agnix (AI config linter) v${AGNIX_VERSION}..."
-        local agnix_verify_dir agnix_audit_json agnix_invalid
+        local agnix_verify_dir agnix_audit_json agnix_audit_err agnix_verdict
         # The assignment is the `if` condition on purpose. As a standalone
         # statement it would abort the whole script under dev-tools.sh's
         # `set -euo pipefail` before any guard below could run, so the
@@ -521,20 +638,74 @@ install_github_binary_tools() {
         elif npm install --prefix "$agnix_verify_dir" --ignore-scripts \
             "agnix@${AGNIX_VERSION}" 2>/dev/null; then
 
-            # No 2>/dev/null: the audit's own output IS the signal. `|| true`
-            # keeps set -e out of it; the verdict comes from the JSON below,
-            # not from the exit code, which conflates the two failure kinds.
+            # Streams kept apart: stdout is the JSON the verdict is computed
+            # from, stderr is diagnostics for the log. `|| true` keeps set -e
+            # out of it — the verdict comes from the JSON, never from the exit
+            # code, which conflates the two failure kinds.
+            agnix_audit_err="${agnix_verify_dir}/audit.stderr"
             agnix_audit_json=$(cd "$agnix_verify_dir" &&
-                npm audit signatures --json 2>&1 || true)
+                npm audit signatures --json 2>"$agnix_audit_err" || true)
 
-            # jq is not guaranteed at this point in the build, so the array's
-            # shape is matched textually. Whitespace is stripped first, so this
-            # is a 0/1 "did invalid[] open with an object" flag, not a count:
-            # `"invalid":[{` means at least one entry, `"invalid":[]` none.
-            agnix_invalid=$(command printf '%s' "$agnix_audit_json" |
-                command tr -d ' \n' | command grep -c '"invalid":\[{' || true)
+            # Empty stdout is decided here, before jq: jq exits 0 and prints
+            # nothing for empty input, so it cannot report this case itself.
+            if [ -z "$agnix_audit_json" ]; then
+                agnix_verdict="skip"
+            else
+                # LOCATING THE JSON BODY. stdout is pure JSON in every case
+                # probed against the live registry, so the first candidate below
+                # is the whole thing and normally wins immediately. The rest
+                # exists because an npm banner (update-notifier, a proxy notice)
+                # landing on stdout in some other configuration would make the
+                # body unparsable — and unparsable falls back to "skip", which
+                # would turn a REAL mismatch into a benign-looking skip. That is
+                # the one direction this design must never fail in.
+                #
+                # SHAPE decides which value is the audit body — not a pattern,
+                # and not mere validity. Four attempts converged here:
+                #   1. pattern on `^{`      -> broke on prose sharing the line
+                #   2. pattern on any `{`   -> broke on a brace inside the prose
+                #   3. first value that PARSES -> breaks on a stray VALID value
+                #      (a lone `{}` from some other tool), which has no
+                #      `invalid` key and so reads as "skip"
+                # Each guessed at text nobody controls. The only reliable
+                # question is "does this value look like an audit result", so
+                # that is what is asked.
+                #
+                # `-s` slurps EVERY top-level value on stdout into one array —
+                # which also removes a trap found while fixing this: jq happily
+                # streams multiple values, so a two-value stdout returned TWO
+                # verdict lines, and the captured "skip\nfatal" matched neither
+                # branch and fell through to skip. A real mismatch, silently
+                # downgraded. Slurping makes that impossible by construction.
+                #
+                # Of the audit-shaped values, the LAST wins: npm's real result
+                # terminates stdout, so anything audit-shaped before it would be
+                # a preamble, and preferring the last is the safer bias when
+                # both a benign and a mismatching body are somehow present.
+                #
+                # Type before length — an `.invalid` that is not an array (an
+                # {"error":...} outage body) must read as unverifiable, never as
+                # a clean install.
+                #
+                # TWO passes, because the two failure shapes need different
+                # handling and neither pass alone covers both: unparsable prose
+                # must be stripped before jq sees anything, while a stray VALID
+                # value is only rejected once the body is parsed and its shape
+                # examined. Pass 1 is the whole stdout (the normal case, which
+                # wins immediately); pass 2 retries from each brace with
+                # same-line prose removed. A pass "wins" only on a real verdict
+                # — a "skip" keeps searching, so an unreadable candidate never
+                # ends the search early.
+                agnix_verdict=$(_agnix_audit_verdict "$agnix_audit_json")
+                # Anything other than a real verdict is unverifiable, not a
+                # mismatch.
+                case "$agnix_verdict" in
+                    fatal | install | skip) ;;
+                    *) agnix_verdict="skip" ;;
+                esac
+            fi
 
-            if [ "$agnix_invalid" -gt 0 ]; then
+            if [ "$agnix_verdict" = "fatal" ]; then
                 # Verification RAN and FAILED. npm was reachable, we hold the
                 # tarball, and it is not what its publisher signed. Its own
                 # message, at ERROR, and it aborts the build — matching the
@@ -542,11 +713,16 @@ install_github_binary_tools() {
                 # the cargo install policy in CLAUDE.md ("Failures abort the
                 # build"). A supply-chain signal must never read as an outage.
                 log_error "agnix signature verification FAILED for v${AGNIX_VERSION} — npm served a tarball that does not match its published registry signature. Refusing to install. Audit output: ${agnix_audit_json}"
+                # This branch returns early, so it does its OWN cleanup: the
+                # unconditional rm -rf at the end of the block is unreachable
+                # from here.
                 command rm -rf "$agnix_verify_dir"
                 return 1
-            elif command printf '%s' "$agnix_audit_json" |
-                command tr -d ' \n' | command grep -q '"invalid":\[\]'; then
+            elif [ "$agnix_verdict" = "install" ]; then
                 # Audit ran, nothing invalid: install the AUDITED BYTES.
+                # A failure HERE is an install problem, not a signature
+                # problem — the bytes were verified — so it warns like any
+                # other best-effort npm tool and never reaches the fatal path.
                 if npm install -g "$agnix_verify_dir/node_modules/agnix" 2>/dev/null; then
                     log_message "✓ agnix installed successfully (registry signature verified)"
                 else
@@ -555,8 +731,9 @@ install_github_binary_tools() {
             else
                 # Audit could not run (registry error, nothing auditable, or an
                 # output shape this doesn't recognize). Unverifiable, NOT a
-                # mismatch: warn and skip rather than accuse.
-                log_warning "agnix signature could not be verified (audit did not run), continuing without agnix. Audit output: ${agnix_audit_json}"
+                # mismatch: warn and skip rather than accuse. stderr carries the
+                # readable reason that the JSON body does not.
+                log_warning "agnix signature could not be verified (audit did not run), continuing without agnix. Audit stdout: ${agnix_audit_json:-<empty>}. Audit stderr: $(command head -c 500 "$agnix_audit_err" 2>/dev/null || true)"
             fi
         else
             log_warning "agnix installation failed, continuing without agnix"
