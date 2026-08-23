@@ -557,18 +557,27 @@ install_github_binary_tools() {
             if [ -z "$agnix_audit_json" ]; then
                 agnix_verdict="skip"
             else
-                # `sed -n '/^[[:space:]]*{/,$p'` drops anything before the JSON
-                # body starts. stdout is pure JSON in every case probed here,
-                # but an npm banner (update-notifier, a proxy notice) landing on
-                # stdout in some other configuration would otherwise make the
-                # body unparseable — and unparseable degrades to "skip", which
-                # would turn a REAL mismatch into a benign-looking skip. That is
-                # the one direction this design must never fail in, so the noise
-                # is stripped rather than trusted not to appear.
+                # Anything before the JSON body is dropped first. stdout is pure
+                # JSON in every case probed here, but an npm banner
+                # (update-notifier, a proxy notice) landing on stdout in some
+                # other configuration would make the body unparseable — and
+                # unparseable degrades to "skip", which would turn a REAL
+                # mismatch into a benign-looking skip. That is the one direction
+                # this design must never fail in, so the noise is stripped
+                # rather than trusted not to appear.
+                #
+                # TWO stages, because a banner can be positioned two ways and
+                # only handling the first leaves the same fail-open reachable
+                # through the second (both verified):
+                #   1. `sed -n '/{/,$p'` drops whole lines before the one that
+                #      first contains a brace.
+                #   2. `sed '1s/^[^{]*//'` then drops any prose preceding the
+                #      brace ON that line — the same-line case, e.g.
+                #      `npm warn config foo {"invalid":[...]}`.
                 #
                 # Type before length — see the comment block above.
                 agnix_verdict=$(command printf '%s' "$agnix_audit_json" |
-                    command sed -n '/^[[:space:]]*{/,$p' |
+                    command sed -n '/{/,$p' | command sed '1s/^[^{]*//' |
                     command jq -r 'if (.invalid | type) != "array" then "skip"
                         elif (.invalid | length) > 0 then "fatal"
                         else "install" end' 2>/dev/null || true)

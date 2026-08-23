@@ -719,7 +719,7 @@ test_agnix_audit_classifier_behavior() {
             return
         fi
         agnix_verdict=$(command printf '%s' "$agnix_audit_json" |
-            command sed -n '/^[[:space:]]*{/,$p' |
+            command sed -n '/{/,$p' | command sed '1s/^[^{]*//' |
             command jq -r 'if (.invalid | type) != "array" then "skip"
                 elif (.invalid | length) > 0 then "fatal"
                 else "install" end' 2>/dev/null || true)
@@ -777,14 +777,34 @@ test_agnix_audit_classifier_behavior() {
 {"invalid":[{"name":"agnix","keyid":"SHA256:x"}],"missing":[]}')" \
         "a banner before a MISMATCH body must never downgrade it to skip"
 
+    # Same-line noise, the narrower variant of the same fail-open: a banner
+    # sharing a line with the opening brace. Stripping only whole lines leaves
+    # this reachable, so both positions are asserted in both polarities.
+    assert_equals "fatal" \
+        "$(classify_agnix_audit 'npm warn config foo {"invalid":[{"name":"agnix"}],"missing":[]}')" \
+        "a SAME-LINE banner before a mismatch must never downgrade it to skip"
+    assert_equals "install" \
+        "$(classify_agnix_audit 'npm warn config foo {"invalid":[],"missing":[]}')" \
+        "a SAME-LINE banner before a clean body does not suppress the verdict"
+
+    # Pretty-printed output (npm's actual multi-line JSON) must still parse.
+    assert_equals "install" \
+        "$(classify_agnix_audit '{
+  "invalid": [],
+  "missing": []
+}')" \
+        "pretty-printed JSON is unaffected by the noise stripping"
+
     # The mirror above is only meaningful if the source still uses these exact
     # predicates — assert them against a comment-stripped copy.
     local code_only="$TEST_TEMP_DIR/install-binary-tools.classifier.sh"
     command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
     assert_file_contains "$code_only" 'jq -r' \
         "source computes the verdict with jq, not substring matching"
-    assert_file_contains "$code_only" "sed -n '/\^\[\[:space:\]\]\*{/,\$p'" \
-        "source strips any pre-JSON noise so a mismatch cannot degrade to skip"
+    assert_file_contains "$code_only" "sed -n '/{/,\$p'" \
+        "source drops whole lines before the JSON body"
+    assert_file_contains "$code_only" "sed '1s/\^\[\^{\]\*//'" \
+        "source also drops same-line prose before the brace"
     assert_file_contains "$code_only" '(.invalid | type) != "array"' \
         "source checks invalid[] is an ARRAY before its length (outage != clean)"
     assert_file_contains "$code_only" '(.invalid | length) > 0' \
