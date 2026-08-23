@@ -37,6 +37,7 @@
   "kind": "language",
   "license": "MIT OR Apache-2.0",
   "minimum_recommended": "1.84.0",
+  "primary_binary": "rustc",
   "schemaVersion": 1,
   "validation_tiers": {
     "tier3": {

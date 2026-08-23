@@ -76,3 +76,85 @@ fn every_rust_version_carries_full_component_set() {
         failures.join("\n  ")
     );
 }
+
+/// The binaries every rust install method must surface in `bin_root`, matching
+/// what `lib/features/rust.sh` puts on `PATH`. Was the `RUST_BINARIES` const in
+/// luggage until #806 moved it into the catalog.
+const REQUIRED_BINARIES: &[&str] =
+    &["rustc", "cargo", "rustup", "rust-analyzer", "rustfmt", "clippy-driver"];
+
+/// Every rust install method carries the catalog fields the engine needs:
+/// the six-binary set, the dir to link them from, and the cargo/rustup cache
+/// layout.
+///
+/// Checked PER INSTALL METHOD for the same reason as the component set above
+/// — the resolver picks exactly one method based on the target platform, so a
+/// union across methods answers a question nobody asks. Pooling previously hid
+/// an alpine arm with no `post_install` at all (#815); an alpine arm with no
+/// `binaries` would fail identically, leaving every Alpine build with a
+/// toolchain installed but nothing on `PATH`.
+#[test]
+fn every_rust_install_method_declares_binaries_and_cache_dirs() {
+    let catalog =
+        Catalog::load(CatalogSource::LocalPath(testdata_catalog())).expect("load testdata catalog");
+    let rust = catalog.tool_entry("rust").expect("catalog has a rust tool entry");
+
+    assert_eq!(
+        rust.index.primary_binary.as_deref(),
+        Some("rustc"),
+        "the rust index must declare primary_binary; the tool-id fallback would probe \
+         `<bin_root>/rust`, which never exists",
+    );
+
+    let mut failures = Vec::new();
+
+    for (version, doc) in &rust.versions {
+        for method in &doc.install_methods {
+            let named = |what: &str| format!("rust@{version} method `{}` {what}", method.name);
+
+            match method.binaries.as_deref() {
+                None => failures.push(named("declares no `binaries`")),
+                Some(binaries) => {
+                    let missing: Vec<&str> = REQUIRED_BINARIES
+                        .iter()
+                        .copied()
+                        .filter(|req| !binaries.iter().any(|b| b == req))
+                        .collect();
+                    if !missing.is_empty() {
+                        failures.push(named(&format!("missing binaries: {missing:?}")));
+                    }
+                }
+            }
+
+            if method.bin_source_dir.as_deref() != Some("cargo/bin") {
+                failures.push(named(&format!(
+                    "has bin_source_dir {:?}, expected `cargo/bin`",
+                    method.bin_source_dir,
+                )));
+            }
+
+            // The cache layout the rustup proxies need: without both, validate
+            // falls back to `$HOME/.rustup` and reports "no default toolchain
+            // configured" even on a healthy install (#463).
+            match method.cache_dirs.as_ref() {
+                None => failures.push(named("declares no `cache_dirs`")),
+                Some(dirs) => {
+                    for (var, expected) in [("CARGO_HOME", "cargo"), ("RUSTUP_HOME", "rustup")] {
+                        if dirs.get(var).map(String::as_str) != Some(expected) {
+                            failures.push(named(&format!(
+                                "has {var} = {:?}, expected {expected:?}",
+                                dirs.get(var),
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "rust catalog entries missing #806 install fields:\n  {}",
+        failures.join("\n  ")
+    );
+}

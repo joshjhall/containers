@@ -322,7 +322,7 @@ impl Installer {
 
         if !self.options.force
             && idempotency::already_installed(
-                &resolved.tool,
+                &resolved.primary_binary,
                 &resolved.version,
                 &self.options.bin_root,
             )
@@ -464,16 +464,18 @@ impl Installer {
 
         // Build the env map once so every stage that shells out (install
         // method, post-install steps, post-install validate) sees the same
-        // CARGO_HOME / RUSTUP_HOME. validate previously relied on the parent
+        // cache-dir exports. validate previously relied on the parent
         // process's exports and failed when the rustup proxy fell back to
         // `$HOME/.rustup` (issue #463).
+        //
+        // The variables come from the catalog's `cache_dirs`; `or_insert`
+        // keeps an explicit `invoke.env` value winning over the derived path.
         let mut env_map = invoke_env_map(resolved);
-        env_map
-            .entry("CARGO_HOME".to_owned())
-            .or_insert_with(|| self.options.cache_root.join("cargo").display().to_string());
-        env_map
-            .entry("RUSTUP_HOME".to_owned())
-            .or_insert_with(|| self.options.cache_root.join("rustup").display().to_string());
+        for (var, rel) in resolved.cache_dirs.iter().flatten() {
+            env_map
+                .entry(var.clone())
+                .or_insert_with(|| self.options.cache_root.join(rel).display().to_string());
+        }
         let invoke_args = plan.invoke_args.clone().unwrap_or_default();
         let user = plan.user;
         self.stage_method(resolved, &artifact, &invoke_args, &env_map, &user, logger)?;
@@ -579,6 +581,7 @@ impl Installer {
         if let Some(l) = logger {
             l.step(&format!("run install method `{}`", resolved.method_name));
         }
+        let cache_dirs = resolved.cache_dirs.clone().unwrap_or_default();
         methods::dispatch(
             resolved.method_kind,
             &resolved.method_name,
@@ -589,6 +592,9 @@ impl Installer {
                 user,
                 cache_root: &self.options.cache_root,
                 bin_root: &self.options.bin_root,
+                binaries: resolved.binaries.as_deref().unwrap_or(&[]),
+                bin_source_dir: resolved.bin_source_dir.as_deref(),
+                cache_dirs: &cache_dirs,
                 runner: self.runner.as_ref(),
             },
         )
@@ -623,7 +629,13 @@ impl Installer {
         if let Some(l) = logger {
             l.step("validate");
         }
-        validate::check(&resolved.tool, &resolved.version, &self.options.bin_root, env_map)
+        validate::check(
+            &resolved.tool,
+            &resolved.primary_binary,
+            &resolved.version,
+            &self.options.bin_root,
+            env_map,
+        )
     }
 }
 
@@ -686,6 +698,10 @@ mod tests {
                 required: None,
                 platforms: None,
             }]),
+            primary_binary: "rustc".into(),
+            binaries: None,
+            bin_source_dir: None,
+            cache_dirs: None,
             platform: Platform {
                 os: "debian".into(),
                 os_version: Some("12".into()),

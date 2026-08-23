@@ -1,21 +1,22 @@
 //! Post-install validation.
 //!
 //! After running an install method + post-install steps, validate the
-//! end-state by invoking `<bin_root>/<tool> --version` and confirming the
+//! end-state by invoking `<bin_root>/<binary> --version` and confirming the
 //! output contains the target version. Mirrors the bash feature scripts'
 //! `<tool> --version | grep -q $VERSION` smoke check.
-//!
-//! Same scope/limitation as the idempotency check (issue #404 will
-//! generalise this via catalog `validation_tiers`).
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::error::{LuggageError, Result};
-use crate::installer::idempotency::{primary_binary, run_version_check};
+use crate::installer::idempotency::run_version_check;
 
-/// Confirm that `tool` reports `version` from `<bin_root>/<binary> --version`,
-/// where `binary` is [`primary_binary`] of `tool`.
+/// Confirm that `tool` reports `version` from `<bin_root>/<binary> --version`.
+///
+/// `binary` is the catalog-resolved
+/// [`crate::ResolvedInstall::primary_binary`]; `tool` is carried separately
+/// because it names the tool in the error variants, and the two differ
+/// whenever a tool's binary is not its catalog id (rust → `rustc`).
 ///
 /// `env` is layered on top of the inherited process environment with
 /// [`Command::envs`]. For rustup-proxy binaries this must include
@@ -34,11 +35,12 @@ use crate::installer::idempotency::{primary_binary, run_version_check};
 ///   doesn't mention the target version.
 pub fn check(
     tool: &str,
+    binary: &str,
     version: &str,
     bin_root: &Path,
     env: &BTreeMap<String, String>,
 ) -> Result<String> {
-    let binary = bin_root.join(primary_binary(tool));
+    let binary = bin_root.join(binary);
     if !binary.exists() {
         return Err(LuggageError::ValidationFailed {
             tool: tool.to_owned(),
@@ -103,7 +105,7 @@ mod tests {
     #[test]
     fn missing_binary_returns_validation_failed() {
         let dir = tempdir().unwrap();
-        let err = check("rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        let err = check("rust", "rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
         assert!(matches!(err, LuggageError::ValidationFailed { .. }));
     }
 
@@ -113,7 +115,7 @@ mod tests {
     fn matching_output_passes() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
-        let captured = check("rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap();
+        let captured = check("rust", "rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap();
         assert_eq!(captured, "rustc 1.95.0 (abcdef0)");
     }
 
@@ -123,7 +125,7 @@ mod tests {
     fn mismatched_output_returns_validation_failed() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.84.0");
-        let err = check("rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        let err = check("rust", "rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
         match err {
             LuggageError::ValidationFailed { message, .. } => {
                 assert!(message.contains("1.95.0"));
@@ -155,12 +157,34 @@ mod tests {
         let mut env = BTreeMap::new();
         env.insert("LUGGAGE_TEST_VERSION".to_owned(), "1.95.0".to_owned());
 
-        check("rustc", "1.95.0", dir.path(), &env).unwrap();
+        check("rust", "rustc", "1.95.0", dir.path(), &env).unwrap();
 
         // Negative case: without the env entry, the shim emits `rustc ` and
         // the contains-version assertion must fail.
-        let err = check("rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        let err = check("rust", "rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
         assert!(matches!(err, LuggageError::ValidationFailed { .. }));
+    }
+
+    /// `tool` and `binary` are distinct arguments (#806): the probed path is
+    /// built from `binary`, while the error payload names `tool`. Conflating
+    /// them is exactly what the deleted `match tool` table did, so pin both
+    /// halves — the message must point at `<bin_root>/python3` while the
+    /// `tool` field still reads `python`.
+    #[test]
+    fn error_names_the_tool_but_the_path_uses_the_binary() {
+        let dir = tempdir().unwrap();
+        let err = check("python", "python3", "3.13.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        match err {
+            LuggageError::ValidationFailed { tool, version, message } => {
+                assert_eq!(tool, "python", "the error identifies the tool");
+                assert_eq!(version, "3.13.0");
+                assert!(
+                    message.contains("python3"),
+                    "the probed path must use the binary name, got: {message}",
+                );
+            }
+            other => panic!("expected ValidationFailed, got {other:?}"),
+        }
     }
 
     /// When `run_version_check` exhausts its `ETXTBSY` budget and returns an
@@ -184,10 +208,12 @@ mod tests {
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (never runs)");
         let _writer = OpenOptions::new().write(true).open(dir.path().join("rustc")).unwrap();
 
-        let err = check("rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        let err = check("rust", "rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
         match err {
             LuggageError::ValidationFailed { tool, version, message } => {
-                assert_eq!(tool, "rustc");
+                // The error names the TOOL (`rust`), not the binary it probed
+                // (`rustc`) — the two are separate arguments since #806.
+                assert_eq!(tool, "rust");
                 assert_eq!(version, "1.95.0");
                 assert!(
                     message.contains("failed to launch"),

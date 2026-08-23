@@ -22,6 +22,7 @@
 //!   major-only, `>=X.Y, <X.Y+1` for major.minor) and picks the highest
 //!   matching key. Anything with two or more dots is treated as `Exact`.
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use containers_common::tooldb::{
@@ -96,6 +97,24 @@ pub struct ResolvedInstall {
     /// Method-level dependencies, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<Vec<Dependency>>,
+    /// Binary the idempotency check and post-install validation invoke, from
+    /// the tool index's `primary_binary`, falling back to the tool id.
+    ///
+    /// Resolved here rather than at the check sites so both agree by
+    /// construction — they used to derive it independently through a
+    /// `match tool` table that only knew about rust.
+    pub primary_binary: String,
+    /// `binaries` for the chosen method — names to surface in `bin_root`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub binaries: Option<Vec<String>>,
+    /// `bin_source_dir` for the chosen method — cache-root-relative dir the
+    /// symlink targets live in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bin_source_dir: Option<String>,
+    /// `cache_dirs` for the chosen method — env-var name to cache-root-relative
+    /// path, created + chowned + exported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_dirs: Option<BTreeMap<String, String>>,
     /// The platform that produced this resolution.
     pub platform: Platform,
     /// Non-fatal warnings raised by the policy gate.
@@ -242,7 +261,14 @@ pub fn resolve_with_policy(
         warnings.push(ResolutionWarning::SlowOrStaleActivity { score });
     }
 
-    Ok(build_resolved(&entry.index.id, &chosen_doc.version, method, platform.clone(), warnings))
+    Ok(build_resolved(
+        &entry.index.id,
+        entry.index.primary_binary.as_deref(),
+        &chosen_doc.version,
+        method,
+        platform.clone(),
+        warnings,
+    ))
 }
 
 fn pick_version<'a>(
@@ -348,6 +374,7 @@ fn build_partial_constraint(literal: &str) -> Result<String> {
 
 fn build_resolved(
     tool: &str,
+    primary_binary: Option<&str>,
     version: &str,
     method: &InstallMethod,
     platform: Platform,
@@ -364,6 +391,12 @@ fn build_resolved(
         invoke: method.invoke.clone(),
         post_install: method.post_install.clone(),
         dependencies: method.dependencies.clone(),
+        // The tool id is the fallback: correct wherever the binary shares the
+        // catalog id, and the only sane default for an entry that says nothing.
+        primary_binary: primary_binary.unwrap_or(tool).to_owned(),
+        binaries: method.binaries.clone(),
+        bin_source_dir: method.bin_source_dir.clone(),
+        cache_dirs: method.cache_dirs.clone(),
         platform,
         warnings,
     }
@@ -398,6 +431,10 @@ mod tests {
                 scanned_at: "2026-01-01T00:00:00Z".into(),
             },
             validation_tiers: None,
+            // Deliberately absent: the fallback-to-tool-id path is what most
+            // catalog entries take, and `resolves_primary_binary_*` below
+            // covers both halves explicitly.
+            primary_binary: None,
             version_style: Some(VersionStyle::Semver),
             tag_prefix: None,
             default_version: Some("1.95.0".into()),
@@ -444,6 +481,9 @@ mod tests {
             invoke: None,
             post_install: None,
             dependencies: None,
+            binaries: None,
+            bin_source_dir: None,
+            cache_dirs: None,
         }
     }
 
@@ -820,5 +860,86 @@ mod tests {
         let r =
             resolve_with_policy(&entry, &VersionSpec::Latest, &debian_amd64(), &policy).unwrap();
         assert!(r.warnings.is_empty());
+    }
+
+    // ---- catalog-driven fields (issue #806) -------------------------------
+
+    /// Absent `primary_binary` falls back to the tool id. Correct for go and
+    /// node, whose binaries match their ids; it is also the only defensible
+    /// default for an entry that declares nothing.
+    #[test]
+    fn primary_binary_falls_back_to_tool_id() {
+        let entry = entry_with_score(ActivityScore::VeryActive);
+        assert!(entry.index.primary_binary.is_none(), "fixture must exercise the absent case");
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(r.primary_binary, "rust", "absent primary_binary resolves to the tool id");
+    }
+
+    /// A declared `primary_binary` overrides the id. This is what replaced
+    /// the `match tool { "rust" => "rustc" }` table, and what python's entry
+    /// will use for `python3` when it lands (#813).
+    #[test]
+    fn primary_binary_uses_the_catalog_value_when_present() {
+        let mut entry = entry_with_score(ActivityScore::VeryActive);
+        entry.index.primary_binary = Some("rustc".into());
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(r.primary_binary, "rustc");
+    }
+
+    /// The method-level fields ride through resolution untouched, and stay
+    /// `None` when the entry omits them (no per-tool default is invented).
+    #[test]
+    fn method_fields_pass_through_and_default_to_none() {
+        let entry = entry_with_score(ActivityScore::VeryActive);
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert!(r.binaries.is_none(), "absent binaries must not default to the rust set");
+        assert!(r.bin_source_dir.is_none());
+        assert!(r.cache_dirs.is_none(), "absent cache_dirs must not default to cargo/rustup");
+
+        let mut tool = make_tool();
+        tool.minimum_recommended = None;
+        let mut method = make_method(vec!["debian"]);
+        method.binaries = Some(vec!["rustc".into(), "cargo".into()]);
+        method.bin_source_dir = Some("cargo/bin".into());
+        method.cache_dirs = Some(BTreeMap::from([("CARGO_HOME".to_owned(), "cargo".to_owned())]));
+        let mut map = BTreeMap::new();
+        let parsed = Version::parse("1.95.0", VersionStyle::Semver).unwrap();
+        map.insert(parsed, make_version("1.95.0", vec![], vec![method]));
+        let entry = ToolEntry { index: tool, versions: map };
+
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(r.binaries.as_deref(), Some(&["rustc".to_owned(), "cargo".to_owned()][..]));
+        assert_eq!(r.bin_source_dir.as_deref(), Some("cargo/bin"));
+        assert_eq!(r.cache_dirs.unwrap().get("CARGO_HOME").map(String::as_str), Some("cargo"));
+    }
+
+    /// The fields come from the SELECTED method, not pooled across methods.
+    /// The resolver picks exactly one at install time, so a platform-specific
+    /// binary set must not leak from the arm that did not win.
+    #[test]
+    fn method_fields_come_from_the_selected_method() {
+        let mut tool = make_tool();
+        tool.minimum_recommended = None;
+
+        let mut debian = make_method(vec!["debian"]);
+        debian.binaries = Some(vec!["rustc".into()]);
+        debian.bin_source_dir = Some("cargo/bin".into());
+
+        let mut alpine = make_method(vec!["alpine"]);
+        alpine.binaries = Some(vec!["rustc-musl".into()]);
+        alpine.bin_source_dir = Some("musl/bin".into());
+
+        let mut map = BTreeMap::new();
+        let parsed = Version::parse("1.95.0", VersionStyle::Semver).unwrap();
+        map.insert(parsed, make_version("1.95.0", vec![], vec![debian, alpine]));
+        let entry = ToolEntry { index: tool, versions: map };
+
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(
+            r.binaries.as_deref(),
+            Some(&["rustc".to_owned()][..]),
+            "the debian arm won; the alpine binary set must not leak in",
+        );
+        assert_eq!(r.bin_source_dir.as_deref(), Some("cargo/bin"));
     }
 }
