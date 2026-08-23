@@ -886,7 +886,7 @@ npm notice bye')" \
     assert_file_not_contains "$code_only" 'for agnix_brace_line in' \
         "source must not select a candidate by bare validity"
     # `jq -c .` is what bounds the value's END: jq emits what it parsed on
-    # stdout and reports only the unparseable remainder on stderr, so trailing
+    # stdout and reports only the unparsable remainder on stderr, so trailing
     # junk cannot poison the parse. Without it the candidate runs to EOF.
     assert_file_contains "$code_only" 'jq -c \.' \
         "source lets jq bound where the value ENDS, not just where it starts"
@@ -895,7 +895,7 @@ npm notice bye')" \
     assert_file_contains "$code_only" '(.invalid | length) > 0' \
         "source treats a populated invalid[] as the mismatch signal"
     assert_file_not_contains "$code_only" 'npm audit signatures --json 2>&1' \
-        "audit stdout and stderr must stay separate, or the JSON is unparseable"
+        "audit stdout and stderr must stay separate, or the JSON is unparsable"
     # Empty stdout is short-circuited before jq runs. Behaviorally this is
     # belt-and-braces (the empty-verdict fallback below it catches the same
     # case), so assert it at the SOURCE — a behavior-only assertion cannot

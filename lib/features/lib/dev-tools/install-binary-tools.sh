@@ -14,7 +14,7 @@
 #             invalid[]). The tarball is not what its publisher signed.
 #   install — the audit ran and found nothing invalid.
 #   skip    — the audit could not be read (outage, nothing auditable,
-#             unparseable output). UNVERIFIABLE, which is not the same as
+#             unparsable output). UNVERIFIABLE, which is not the same as
 #             tampering and must never be reported as such.
 #
 # A standalone function so the tests can call THIS code rather than a
@@ -65,7 +65,7 @@ _agnix_audit_verdict() {
     #
     # `jq -c .` is what bounds the END of the value, and it is the piece four
     # earlier attempts were missing. jq consumes values greedily, EMITS each one
-    # it parsed on stdout, and reports only the unparseable remainder on stderr.
+    # it parsed on stdout, and reports only the unparsable remainder on stderr.
     # Discarding stderr therefore yields exactly the values jq could read, no
     # matter what trails them — so a `npm notice ...` line after the body no
     # longer poisons the whole parse. Feeding a span from a brace to
@@ -599,7 +599,7 @@ install_github_binary_tools() {
     # on BOTH a clean run and an outage, stdout is pure JSON (an outage yields
     # {"error":{...}}), while `npm warn`/`npm error` prose goes to stderr.
     # Merging them with 2>&1 is what would force substring matching, since a
-    # single warning line prepended to the body makes it unparseable. stderr is
+    # single warning line prepended to the body makes it unparsable. stderr is
     # still captured — it carries the human-readable diagnostic the JSON lacks
     # — but it is used only for the log message, never for the verdict.
     #
@@ -656,7 +656,7 @@ install_github_binary_tools() {
                 # is the whole thing and normally wins immediately. The rest
                 # exists because an npm banner (update-notifier, a proxy notice)
                 # landing on stdout in some other configuration would make the
-                # body unparseable — and unparseable falls back to "skip", which
+                # body unparsable — and unparsable falls back to "skip", which
                 # would turn a REAL mismatch into a benign-looking skip. That is
                 # the one direction this design must never fail in.
                 #
@@ -688,7 +688,7 @@ install_github_binary_tools() {
                 # a clean install.
                 #
                 # TWO passes, because the two failure shapes need different
-                # handling and neither pass alone covers both: unparseable prose
+                # handling and neither pass alone covers both: unparsable prose
                 # must be stripped before jq sees anything, while a stray VALID
                 # value is only rejected once the body is parsed and its shape
                 # examined. Pass 1 is the whole stdout (the normal case, which

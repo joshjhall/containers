@@ -218,4 +218,35 @@ test_reaper_is_not_silently_broken() {
 
 run_test test_reaper_is_not_silently_broken "actually deletes (guards the silent-failure regression)"
 
+# Test: the reaper is actually WIRED into init_test_framework, and reached
+# through the real entry point rather than only callable directly.
+#
+# Every test above calls tf_reap_stale_temp_dirs by hand, so all of them would
+# still pass if init_test_framework stopped calling it — or called it before
+# `mkdir -p "$RESULTS_DIR"`, where the `[ -d ]` guard returns early on a first
+# run. This drives the real entry point instead.
+test_reaper_is_wired_into_init() {
+    local sb out
+    sb=$(new_sandbox)
+    command mkdir -p "$sb/test-stale-wired"
+    command touch -d '3 hours ago' "$sb/test-stale-wired"
+
+    # init_test_framework() resets the suite's counters, so it is run in a
+    # CHILD shell — the same reason test_framework_git_hermetic.sh does.
+    # RESULTS_DIR is overridden AFTER sourcing so init reaps the sandbox.
+    out=$(env -u BASH_ENV bash -c '
+        set -euo pipefail
+        source "$1"
+        RESULTS_DIR="$2"
+        SKIP_DOCKER_CHECK=true init_test_framework >/dev/null 2>&1
+        command ls -1 "$RESULTS_DIR" 2>/dev/null | command sort
+    ' _ "$FRAMEWORK_SH" "$sb")
+
+    assert_not_contains "$out" "test-stale-wired" \
+        "init_test_framework reaps stale dirs — the call is still wired up"
+    command rm -rf "$sb"
+}
+
+run_test test_reaper_is_wired_into_init "init_test_framework calls the reaper"
+
 generate_report
