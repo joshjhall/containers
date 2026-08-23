@@ -16,7 +16,9 @@ test_suite "Feature Header Tests"
 # Setup function - runs before each test
 setup() {
     # Create temporary directory for testing
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-feature-header"
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-feature-header-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Mock environment variables

@@ -19,7 +19,9 @@ test_suite "log_feature_summary Tests"
 
 setup() {
     # Create temp directory for testing
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-log-feature-summary"
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-log-feature-summary-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Set up minimal logging environment

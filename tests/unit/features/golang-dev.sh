@@ -16,7 +16,9 @@ test_suite "Golang Dev Feature Tests"
 # Setup function - runs before each test
 setup() {
     # Create temporary directory for testing
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-golang-dev"
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-golang-dev-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Mock environment

@@ -8,7 +8,9 @@ init_test_framework
 test_suite "cloudflare Feature Tests"
 
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-cloudflare"
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-cloudflare-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 }
 

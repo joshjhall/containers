@@ -8,7 +8,9 @@ init_test_framework
 test_suite "check-r-dev-logs Runtime Tests"
 
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-check-r-dev-logs"
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-check-r-dev-logs-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 }
 

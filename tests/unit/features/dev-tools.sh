@@ -15,13 +15,15 @@ test_suite "Development Tools Feature Tests"
 
 # Setup function - runs before each test
 setup() {
-    # Create temporary directory for testing
-    # PID-suffixed: this dir is rm -rf'd in teardown after EVERY test, and
-    # sibling suites share $RESULTS_DIR. A fixed name let this suite's churn
-    # collide with a concurrently-running suite's temp tree (reproduced: it
-    # reddened project-health-check). Matches the convention already used by
-    # runtime/project-health-check.sh, workspace-fs-health.sh, and others.
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-dev-tools-$$"
+    # Create temporary directory for testing.
+    # Uniquely suffixed: this dir is rm -rf'd in teardown after EVERY test, and
+    # sibling suites share $RESULTS_DIR, so a fixed name let one suite's churn
+    # delete a concurrently-running suite's tree (reproduced). `$$-<nanos>` is
+    # the convention 44 suites already use — per-test rather than per-process,
+    # so even repeated setup() calls within one suite cannot collide.
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-dev-tools-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Mock environment
