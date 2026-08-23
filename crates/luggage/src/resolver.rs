@@ -25,7 +25,8 @@
 use std::fmt;
 
 use containers_common::tooldb::{
-    ActivityScore, Dependency, InstallMethod, Invoke, PostInstall, SupportStatus, Verification,
+    ActivityScore, Dependency, InstallMethod, InstallMethodKind, Invoke, PostInstall,
+    SupportStatus, Verification,
 };
 use containers_common::version::{Constraint, Version, VersionStyle};
 use serde::Serialize;
@@ -69,8 +70,16 @@ pub struct ResolvedInstall {
     pub tool: String,
     /// Concrete version chosen.
     pub version: String,
-    /// `install_methods[].name` of the chosen method.
+    /// `install_methods[].name` of the chosen method — a human-readable
+    /// label for logs and error messages, not a dispatch key.
     pub method_name: String,
+    /// `install_methods[].method_kind` of the chosen method — the
+    /// discriminant [`crate::installer::methods::dispatch`] switches on.
+    ///
+    /// `None` when the catalog entry predates the field; dispatch turns
+    /// that into a clear error rather than guessing from `method_name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method_kind: Option<InstallMethodKind>,
     /// Convenience copy of `verification.tier`.
     pub verification_tier: u8,
     /// Full verification block as it appeared in the catalog.
@@ -348,6 +357,7 @@ fn build_resolved(
         tool: tool.to_owned(),
         version: version.to_owned(),
         method_name: method.name.clone(),
+        method_kind: method.method_kind,
         verification_tier: method.verification.tier,
         verification: method.verification.clone(),
         source_url_template: method.source_url_template.clone(),
@@ -413,6 +423,7 @@ mod tests {
     fn make_method(os: Vec<&str>) -> InstallMethod {
         InstallMethod {
             name: "rustup-init".into(),
+            method_kind: Some(InstallMethodKind::ScriptInstaller),
             platform: Some(PlatformPredicate {
                 os: Some(StringOrVec(os.into_iter().map(Into::into).collect())),
                 os_version: None,
@@ -482,7 +493,45 @@ mod tests {
         let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
         assert_eq!(r.version, "1.95.0");
         assert_eq!(r.method_name, "rustup-init");
+        assert_eq!(r.method_kind, Some(InstallMethodKind::ScriptInstaller));
         assert_eq!(r.verification_tier, 3);
+    }
+
+    /// `build_resolved` must carry the chosen method's `method_kind` through
+    /// verbatim — including a `None` from a catalog entry predating the
+    /// field. Dispatch turns that `None` into a clear error, so silently
+    /// substituting a default here would defeat the check.
+    #[test]
+    fn resolve_propagates_method_kind_including_absent() {
+        let mut method = make_method(vec!["debian"]);
+        method.method_kind = None;
+        let entry = entry_with(vec![("1.95.0", make_version("1.95.0", vec![], vec![method]))]);
+
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(r.method_kind, None);
+        assert_eq!(r.method_name, "rustup-init", "name must survive independently of kind");
+    }
+
+    /// The resolver picks the method, so the kind it reports must be the
+    /// chosen one — not the first in the array.
+    #[test]
+    fn resolve_reports_the_chosen_methods_kind() {
+        let mut alpine_only = make_method(vec!["alpine"]);
+        alpine_only.method_kind = Some(InstallMethodKind::BinaryTarball);
+        let mut debian_method = make_method(vec!["debian"]);
+        debian_method.method_kind = Some(InstallMethodKind::ScriptInstaller);
+
+        let entry = entry_with(vec![(
+            "1.95.0",
+            make_version("1.95.0", vec![], vec![alpine_only, debian_method]),
+        )]);
+
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(
+            r.method_kind,
+            Some(InstallMethodKind::ScriptInstaller),
+            "must report the debian method's kind, not the skipped alpine one"
+        );
     }
 
     #[test]

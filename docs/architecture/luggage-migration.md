@@ -150,10 +150,15 @@ For each feature script (e.g. `node.sh`, `python.sh`):
    `just db-validate-vendored` — a tool newly mirrored from containers-db is
    exactly the case the drift check is there to catch.
 2. **Confirm install method support.** Check `install_methods[].platform`
-   matches the target distros, and that `installer/methods/<kind>.rs`
-   implements the variant. Rust used `script-installer` (rustup-init); other
-   features may need `tarball-extract` or `apt-deb`. If the variant isn't
-   implemented yet, that's a luggage-side issue, not a port.
+   matches the target distros, and that each method's `method_kind` is one
+   luggage implements. `method_kind` is the dispatch discriminant —
+   `script-installer`, `binary-tarball`, `package-manager`, or
+   `source-build`; the sibling `name` is a label for logs only and selects
+   nothing. Rust used `script-installer` (rustup-init); other features may
+   need `binary-tarball` or `package-manager`. If the kind isn't implemented
+   yet, that's a luggage-side issue, not a port — and a kind luggage doesn't
+   recognise (or a missing `method_kind`) fails as a catalog error rather
+   than being inferred from the method name.
 3. **Strip the inline install.** Remove from the bash script: source lines
    for `checksum-fetch.sh` / `download-verify.sh` / `checksum-verification.sh`
    (no longer needed in this script), the download `curl` invocation, the

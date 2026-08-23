@@ -23,6 +23,7 @@
         ]
       },
       "name": "rustup-init",
+      "method_kind": "script-installer",
       "platform": {
         "arch": [
           "amd64",
@@ -81,6 +82,7 @@
         ]
       },
       "name": "rustup-init-musl",
+      "method_kind": "script-installer",
       "platform": {
         "arch": [
           "amd64",
