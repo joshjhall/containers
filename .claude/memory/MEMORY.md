@@ -84,3 +84,13 @@
 - [Stale repo-local git identity](stale-repo-local-git-identity.md) — `.git/config` `t <t@t.t>` shadows the 1Password global identity; `git config --local --unset user.name/email`
 - [Fetch before releasing](fetch-before-release-bot-owns-main.md) — auto-patch bot pushes releases+tags to main on a schedule; always `git fetch --tags` before branching or `just release-*` or you cut against a taken tag
 - [worktree-rm blocked by held build artifacts](worktree-rm-blocked-by-held-build-artifacts.md) — deregistered worktree reads as "dirty"; cargo .o files resist rm (EBADF); gh merge --delete-branch skips the remote prune
+- [Cross-repo schema required-flip](cross-repo-schema-required-flip.md) — a REQUIRED catalog field needs 3 PRs (optional→consume→required); backfill _negative/ too, and prove the flip bites (#805)
+- [logger without a syslog daemon](logger-without-syslog-daemon.md) — no /dev/log in these images; `logger` discards and exits 0 — use a log file for cron output
+- [cron user column is build-time](cron-user-column-is-build-time.md) — run cron jobs as root + resolve the container user at run time; baked ${USERNAME} fails silently (#800)
+- [Luggage install-method decomposition](luggage-install-method-decomposition.md) — #805-813 chain; kind-discriminant decision; port order go→node→python
+- [npm audit signatures exit-code ambiguity](npm-audit-signatures-exit-code-ambiguity.md) — non-zero means tampering OR can't-run; classify on --json invalid[], not the exit code (#814)
+- [Vendored catalog drift gate](vendored-catalog-drift-gate.md) — shipped luggage catalog mirrors containers-db (#815); test-only edge cases live in fixtures-catalog; $CONTAINERS_DB collides in-container, use CONTAINERS_DB_SRC
+- [Pooled invariant masks a per-variant gap](pooled-invariant-masks-per-variant-gap.md) — union-across-install-methods hid an alpine entry with no post_install; assert per-alternative when the runtime picks one
+- [Unit suites share tests/results/](tests-share-results-dir.md) — fixed TEST_TEMP_DIR names collide, unique ones leak; both fixed (#817); #821 is a separate unexplained flake
+- [tests/results/ is on an incoherent FUSE mount](results-dir-fuse-incoherent.md) — writes succeed, report success, then aren't readable; the real cause of the #821 flake class (#818)
+- [Rebase before blaming your own change](rebase-before-blaming-your-change.md) — a CI failure in files your branch never touched usually means main moved; check origin/main first
