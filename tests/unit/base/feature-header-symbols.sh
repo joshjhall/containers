@@ -17,7 +17,7 @@ test_suite "Feature Header Symbol Tests"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-feature-header-symbols-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-feature-header-symbols-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Mock environment variables

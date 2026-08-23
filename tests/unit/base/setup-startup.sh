@@ -24,7 +24,7 @@ SOURCE_SCRIPT="$PROJECT_ROOT/lib/base/setup-startup.sh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-setup-startup-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-setup-startup-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Build a patched copy: replace every /etc/ reference with the sandbox path

@@ -20,7 +20,7 @@ SOURCE_FILE="$PROJECT_ROOT/lib/runtime/secrets/1password-integration.sh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-1password-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-1password-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
     mkdir -p "$TEST_TEMP_DIR/bin"
 }

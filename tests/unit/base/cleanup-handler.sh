@@ -16,7 +16,7 @@ test_suite "Cleanup Handler Tests"
 # Extract functions from cleanup-handler.sh into a temp file for isolated testing.
 # Sourcing the file directly would install EXIT traps that interfere with tests,
 # so we extract just the function definitions and array declaration.
-_CLEANUP_FUNC_FILE="$RESULTS_DIR/_cleanup_funcs.sh"
+_CLEANUP_FUNC_FILE="$TEST_SCRATCH_BASE/_cleanup_funcs.sh"
 command sed -n '
     /^declare -a _FEATURE_CLEANUP_ITEMS/p
     /^cleanup_on_interrupt()/,/^}/p
@@ -28,7 +28,7 @@ command sed -n '
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-cleanup-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-cleanup-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 }
 

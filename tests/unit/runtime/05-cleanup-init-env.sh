@@ -20,7 +20,7 @@ SOURCE_FILE="$PROJECT_ROOT/lib/runtime/05-cleanup-init-env.sh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-cleanup-init-env-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-cleanup-init-env-$unique_id"
     command mkdir -p "$TEST_TEMP_DIR"
 }
 

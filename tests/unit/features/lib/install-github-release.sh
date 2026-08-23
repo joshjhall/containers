@@ -20,7 +20,7 @@ SOURCE_FILE="$PROJECT_ROOT/lib/features/lib/install-github-release.sh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-install-gh-release-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-install-gh-release-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
     mkdir -p "$TEST_TEMP_DIR/bin"
     mkdir -p "$TEST_TEMP_DIR/usr-local-bin"

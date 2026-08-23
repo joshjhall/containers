@@ -20,7 +20,7 @@ SOURCE_FILE="$PROJECT_ROOT/lib/runtime/60-setup-git.sh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-setup-git-startup-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-setup-git-startup-$unique_id"
     command mkdir -p "$TEST_TEMP_DIR/bin"
 
     # Stub setup-git so tests never touch the real git config. The stub records

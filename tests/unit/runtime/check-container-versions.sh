@@ -10,7 +10,7 @@ test_suite "check-versions Runtime Tests"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-check-versions-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-check-versions-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 }
 

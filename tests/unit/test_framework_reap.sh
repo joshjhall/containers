@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Tests for tf_reap_stale_temp_dirs (#817).
 #
-# The framework reaps abandoned per-test scratch directories from $RESULTS_DIR
+# The framework reaps abandoned per-test scratch directories from $TEST_SCRATCH_PARENT
 # at init. Suites now name those directories uniquely, so a missed teardown
 # leaks a NEW directory rather than reusing one name — measured at ~1,400 per
 # full run, growing without bound (one tree reached 19,910 directories).
 #
 # This is a bulk `rm -rf`, so the properties that matter are what it must NOT
 # delete: a concurrently-running suite's fresh tree, anything nested inside a
-# scratch dir, and $RESULTS_DIR itself. Every assertion below therefore runs
-# against a THROWAWAY RESULTS_DIR in a mktemp sandbox — never the real one,
+# scratch dir, and the scratch parent itself. Every assertion below therefore runs
+# against a THROWAWAY scratch parent in a mktemp sandbox — never the real one,
 # which holds this suite's own report while it runs.
 
 set -euo pipefail
@@ -23,8 +23,8 @@ FRAMEWORK_SH="$SCRIPT_DIR/../framework.sh"
 test_suite "test framework stale-scratch reaper (#817)"
 
 # ---------------------------------------------------------------------------
-# Run the reaper in a CHILD shell against a sandbox RESULTS_DIR, so this
-# suite's own $RESULTS_DIR is never a target. Echoes the surviving entries,
+# Run the reaper in a CHILD shell against a sandbox scratch parent, so this
+# suite's own scratch tree is never a target. Echoes the surviving entries,
 # one per line, for the caller to assert against.
 #
 # BASH_ENV is cleared because it rebuilds PATH on non-interactive bash and
@@ -35,13 +35,13 @@ reap_in_sandbox() {
     env -u BASH_ENV bash -c '
         set -euo pipefail
         source "$1"
-        RESULTS_DIR="$2"
+        TEST_SCRATCH_PARENT="$2"
         tf_reap_stale_temp_dirs
         # List what survived (basename only, sorted for stable comparison).
-        if [ -d "$RESULTS_DIR" ]; then
-            command ls -1 "$RESULTS_DIR" 2>/dev/null | command sort
+        if [ -d "$TEST_SCRATCH_PARENT" ]; then
+            command ls -1 "$TEST_SCRATCH_PARENT" 2>/dev/null | command sort
         else
-            echo "__RESULTS_DIR_GONE__"
+            echo "__SCRATCH_PARENT_GONE__"
         fi
     ' _ "$FRAMEWORK_SH" "$sandbox"
 }
@@ -113,12 +113,12 @@ test_does_not_touch_fresh_contents() {
 
 run_test test_does_not_touch_fresh_contents "never descends into a live scratch tree"
 
-# Test: RESULTS_DIR itself survives, even when everything in it is stale AND
+# Test: the scratch parent itself survives, even when everything in it is stale AND
 # the directory itself is older than the cutoff.
 #
 # Ageing the ROOT is what makes this test meaningful. `find <root> -maxdepth 1`
 # matches the root itself, so without `-mindepth 1` the reaper would rm -rf
-# $RESULTS_DIR out from under every running suite. A sandbox left at its
+# the scratch parent out from under every running suite. A sandbox left at its
 # mktemp-fresh mtime never crosses the cutoff, so the assertion would pass
 # against a broken implementation — verified: the mindepth mutation survived
 # until this test aged the root.
@@ -132,13 +132,13 @@ test_results_dir_itself_survives() {
 
     survivors=$(reap_in_sandbox "$sb")
 
-    assert_not_contains "$survivors" "__RESULTS_DIR_GONE__" \
-        "RESULTS_DIR itself is never removed (mindepth 1)"
+    assert_not_contains "$survivors" "__SCRATCH_PARENT_GONE__" \
+        "the scratch parent itself is never removed (mindepth 1)"
     assert_dir_exists "$sb" "the results directory still exists after a full reap"
     command rm -rf "$sb"
 }
 
-run_test test_results_dir_itself_survives "never removes RESULTS_DIR itself"
+run_test test_results_dir_itself_survives "never removes the scratch parent itself"
 
 # Test: stale FILES are left alone — the reaper is scoped to directories, so a
 # report file older than the cutoff is not collateral.
@@ -157,7 +157,7 @@ test_leaves_stale_files() {
 
 run_test test_leaves_stale_files "leaves stale files alone (-type d)"
 
-# Test: a missing RESULTS_DIR is a clean no-op rather than an error. The
+# Test: a missing scratch parent is a clean no-op rather than an error. The
 # function runs at init on every suite, so it must never be able to fail a run.
 test_missing_results_dir_is_noop() {
     local sb rc=0
@@ -167,33 +167,33 @@ test_missing_results_dir_is_noop() {
     env -u BASH_ENV bash -c '
         set -euo pipefail
         source "$1"
-        RESULTS_DIR="$2"
+        TEST_SCRATCH_PARENT="$2"
         tf_reap_stale_temp_dirs
     ' _ "$FRAMEWORK_SH" "$sb" >/dev/null 2>&1 || rc=$?
 
     assert_equals "0" "$rc" \
-        "a missing RESULTS_DIR returns 0 — reaping must never redden a run"
+        "a missing scratch parent returns 0 — reaping must never redden a run"
 }
 
-run_test test_missing_results_dir_is_noop "no-ops safely when RESULTS_DIR is absent"
+run_test test_missing_results_dir_is_noop "no-ops safely when the scratch parent is absent"
 
-# Test: an EMPTY RESULTS_DIR value must not send the reaper somewhere else.
+# Test: an EMPTY scratch parent value must not send the reaper somewhere else.
 # `[ -d "" ]` is false, so the guard returns before find is ever invoked.
 test_empty_results_dir_is_noop() {
     local rc=0 out
     out=$(env -u BASH_ENV bash -c '
         set -euo pipefail
         source "$1"
-        RESULTS_DIR=""
+        TEST_SCRATCH_PARENT=""
         tf_reap_stale_temp_dirs
         echo "returned"
     ' _ "$FRAMEWORK_SH" 2>&1) || rc=$?
 
-    assert_equals "0" "$rc" "an empty RESULTS_DIR returns 0"
-    assert_contains "$out" "returned" "an empty RESULTS_DIR is a clean no-op"
+    assert_equals "0" "$rc" "an empty scratch parent returns 0"
+    assert_contains "$out" "returned" "an empty scratch parent is a clean no-op"
 }
 
-run_test test_empty_results_dir_is_noop "no-ops safely when RESULTS_DIR is empty"
+run_test test_empty_results_dir_is_noop "no-ops safely when the scratch parent is empty"
 
 # Test: the reaper actually reaps. A silently-broken implementation returns 0
 # and deletes nothing — which is exactly what the first version of this
@@ -223,7 +223,7 @@ run_test test_reaper_is_not_silently_broken "actually deletes (guards the silent
 #
 # Every test above calls tf_reap_stale_temp_dirs by hand, so all of them would
 # still pass if init_test_framework stopped calling it — or called it before
-# `mkdir -p "$RESULTS_DIR"`, where the `[ -d ]` guard returns early on a first
+# `mkdir -p "$TEST_SCRATCH_BASE"`, where the `[ -d ]` guard returns early on a first
 # run. This drives the real entry point instead.
 test_reaper_is_wired_into_init() {
     local sb out
@@ -233,13 +233,13 @@ test_reaper_is_wired_into_init() {
 
     # init_test_framework() resets the suite's counters, so it is run in a
     # CHILD shell — the same reason test_framework_git_hermetic.sh does.
-    # RESULTS_DIR is overridden AFTER sourcing so init reaps the sandbox.
+    # TEST_SCRATCH_PARENT is overridden AFTER sourcing so init reaps the sandbox.
     out=$(env -u BASH_ENV bash -c '
         set -euo pipefail
         source "$1"
-        RESULTS_DIR="$2"
+        TEST_SCRATCH_PARENT="$2"
         SKIP_DOCKER_CHECK=true init_test_framework >/dev/null 2>&1
-        command ls -1 "$RESULTS_DIR" 2>/dev/null | command sort
+        command ls -1 "$TEST_SCRATCH_PARENT" 2>/dev/null | command sort
     ' _ "$FRAMEWORK_SH" "$sb")
 
     assert_not_contains "$out" "test-stale-wired" \

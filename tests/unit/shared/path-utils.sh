@@ -23,7 +23,7 @@ test_suite "Shared Path Utilities Tests"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-shared-path-utils-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-shared-path-utils-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Save original PATH

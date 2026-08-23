@@ -950,7 +950,7 @@ STUB
 
 test_lock_timeout_exits_nonzero() {
     local out rc=0
-    out=$(_run_acquire_lock_with_flock_stub 1 "$RESULTS_DIR/timeout-test.lock") || rc=$?
+    out=$(_run_acquire_lock_with_flock_stub 1 "$TEST_SCRATCH_BASE/timeout-test.lock") || rc=$?
 
     assert_equals "1" "$rc" "a flock timeout exits 1 (never proceeds unlocked)"
     assert_contains "$out" "timed out after 600s" "the timeout is reported"
@@ -960,7 +960,7 @@ test_lock_timeout_exits_nonzero() {
 
 test_lock_acquired_continues() {
     local out rc=0
-    out=$(_run_acquire_lock_with_flock_stub 0 "$RESULTS_DIR/ok-test.lock") || rc=$?
+    out=$(_run_acquire_lock_with_flock_stub 0 "$TEST_SCRATCH_BASE/ok-test.lock") || rc=$?
 
     assert_equals "0" "$rc" "a successful acquire returns 0"
     assert_contains "$out" "CONTINUED" "setup proceeds once the lock is held"
@@ -1039,7 +1039,7 @@ test_flock_is_actually_exclusive() {
     fi
 
     local tmpdir lockfile
-    tmpdir="$RESULTS_DIR/flock-excl-$$-$(date +%s%N)"
+    tmpdir="$TEST_SCRATCH_BASE/flock-excl-$$-$(date +%s%N)"
     mkdir -p "$tmpdir"
     lockfile="$tmpdir/claude-setup.lock"
 
@@ -1142,7 +1142,7 @@ test_flock_preserves_concurrent_enabled_plugins() {
     # Self-contained temp dir: this suite uses the framework's default
     # setup/teardown, so the test owns its own scratch space.
     local tmpdir
-    tmpdir="$RESULTS_DIR/flock-race-$$-$(date +%s%N)"
+    tmpdir="$TEST_SCRATCH_BASE/flock-race-$$-$(date +%s%N)"
     mkdir -p "$tmpdir"
 
     local settings="$tmpdir/settings.json"

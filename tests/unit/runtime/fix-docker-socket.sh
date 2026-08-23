@@ -214,7 +214,7 @@ test_fix_cmd_honors_sock_override() {
 
 # --- No-op when the socket is absent (exit 0, no reconcile) ---
 test_fix_cmd_noop_when_absent() {
-    local missing="$RESULTS_DIR/674-absent.sock"
+    local missing="$TEST_SCRATCH_BASE/674-absent.sock"
     /bin/rm -f "$missing" 2>/dev/null || true
     local out rc
     out=$(DOCKER_SOCK_PATH="$missing" "$FIX_CMD" 2>&1)

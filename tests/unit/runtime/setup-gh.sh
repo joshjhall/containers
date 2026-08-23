@@ -20,7 +20,7 @@ SETUP_GH_SCRIPT="$PROJECT_ROOT/lib/runtime/commands/setup-gh"
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-setup-gh-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-setup-gh-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     export TEST_HOME="$TEST_TEMP_DIR/home"

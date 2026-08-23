@@ -16,7 +16,7 @@ test_suite "Logging Extended Tests"
 
 # Setup function - runs before each test
 setup() {
-    export TEST_LOG_DIR="$RESULTS_DIR/test-logs-ext"
+    export TEST_LOG_DIR="$TEST_SCRATCH_BASE/test-logs-ext"
     export BUILD_LOG_DIR="$TEST_LOG_DIR"
     mkdir -p "$BUILD_LOG_DIR"
 

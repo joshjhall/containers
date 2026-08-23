@@ -193,7 +193,7 @@ test_missing_env_file() {
 # Test: Script extracts versions from Dockerfile
 test_extract_dockerfile_versions() {
     # Create a temporary test Dockerfile
-    local test_dockerfile="$RESULTS_DIR/test_dockerfile"
+    local test_dockerfile="$TEST_SCRATCH_BASE/test_dockerfile"
     command cat >"$test_dockerfile" <<'EOF'
 ARG PYTHON_VERSION=3.13.6
 ARG NODE_VERSION=22
@@ -368,7 +368,7 @@ test_extract_duf_entr_versions() {
 # Test: Script handles indented version patterns
 test_handle_indented_versions() {
     # Create a temporary test script with indented versions
-    local test_script="$RESULTS_DIR/test_indented.sh"
+    local test_script="$TEST_SCRATCH_BASE/test_indented.sh"
     command cat >"$test_script" <<'EOF'
 #!/bin/bash
 if [ condition ]; then

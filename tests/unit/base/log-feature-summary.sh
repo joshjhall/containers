@@ -21,7 +21,7 @@ setup() {
     # Create temp directory for testing
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-log-feature-summary-$unique_id"
+    export TEST_TEMP_DIR="$TEST_SCRATCH_BASE/test-log-feature-summary-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Set up minimal logging environment

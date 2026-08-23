@@ -74,13 +74,82 @@ PROJECT_ROOT="$CONTAINERS_DIR"
 RESULTS_DIR="$TESTS_DIR/results"
 FIXTURES_DIR="$TESTS_DIR/fixtures"
 
+# Filesystems where a write is not reliably visible to an immediately-following
+# open() in the same process. The first four names mirror the permission-faking
+# list in lib/runtime/lib/setup-bindfs.sh; the rest cover the wider FUSE and
+# network-filesystem families. See tf_scratch_root below for why this matters.
+readonly TF_INCOHERENT_FSTYPES_RE='^(fuse|fuse\..*|fuseblk|fakeowner|virtiofs|grpcfuse|osxfs|9p|nfs|nfs[0-9]+|cifs|smbfs)$'
+
+# Report the filesystem type backing a path, or empty when it cannot be probed.
+# Absolute paths per CLAUDE.md — an alias must not be able to change the answer.
+tf_fstype_of() {
+    local tff_path="$1"
+    if command -v findmnt >/dev/null 2>&1; then
+        /usr/bin/findmnt -no FSTYPE -T "$tff_path" 2>/dev/null && return 0
+    fi
+    /usr/bin/stat -f -c %T "$tff_path" 2>/dev/null || true
+}
+
+# True when a path sits on a filesystem from the deny list above.
+tf_is_incoherent_fs() {
+    local tfi_fstype
+    tfi_fstype=$(tf_fstype_of "$1")
+    # An unprobeable filesystem is treated as acceptable: a probe failure must
+    # never hard-fail a developer's test run. The regression suite
+    # (tests/unit/test_framework_scratch_base.sh) is what turns a genuinely bad
+    # location into a red run.
+    [ -n "$tfi_fstype" ] && command printf '%s' "$tfi_fstype" |
+        command grep -qE "$TF_INCOHERENT_FSTYPES_RE"
+}
+
+# Pick the first candidate tmp root that is NOT on an incoherence-prone
+# filesystem. Falls back to /tmp so the framework always has somewhere to work.
+tf_scratch_root() {
+    local tfs_candidate
+    for tfs_candidate in "${TMPDIR:-}" /tmp /dev/shm; do
+        [ -n "$tfs_candidate" ] || continue
+        [ -d "$tfs_candidate" ] || continue
+        if ! tf_is_incoherent_fs "$tfs_candidate"; then
+            command printf '%s' "${tfs_candidate%/}"
+            return 0
+        fi
+    done
+    command printf '/tmp'
+}
+
+# Scratch space for test fixtures — deliberately OUTSIDE the repository (#821).
+#
+# This repo is commonly mounted through virtiofs plus a bindfs FUSE overlay. On
+# that stack a write is not always visible to an immediately-following open():
+# a single-process, zero-concurrency "write a file then grep it" loop misses
+# ~3/400 under tests/results, and 0/400 under /tmp. Suites that kept scratch
+# under the reports dir therefore reddened at random — one suite per full run,
+# a different suite each time, always passing when re-run standalone. The
+# per-suite unique suffixes added in #817 are orthogonal: they stop suites
+# deleting each other's trees, but cannot make a write visible to the next read.
+#
+# So scratch lives here and $RESULTS_DIR is reserved for reports and CI
+# artifacts. Keeping the base off the repo also means no new lint/gitignore
+# exclusions are needed. Override TEST_SCRATCH_BASE to relocate it.
+#
+# Defined at module scope (like RESULTS_DIR) so suites may reference it at
+# top level, and made unique per suite process so concurrent suites cannot
+# collide.
+# The parent is per-uid: /tmp is world-writable (1777), so a fixed shared name
+# lets any other local user pre-create it and choose its initial mode/ownership
+# (CWE-377). Suffixing with the uid means unrelated users cannot collide on one
+# well-known path at all; it is created with an explicit 700 below.
+TEST_SCRATCH_ROOT="$(tf_scratch_root)"
+TEST_SCRATCH_PARENT="$TEST_SCRATCH_ROOT/container-test-scratch-$(id -u 2>/dev/null || echo 0)"
+TEST_SCRATCH_BASE="${TEST_SCRATCH_BASE:-$TEST_SCRATCH_PARENT/$$-$(date +%s%N)}"
+
 # ============================================================================
 # tf_reap_stale_temp_dirs - Remove abandoned per-test scratch directories
 #
-# Suites create their TEST_TEMP_DIR under $RESULTS_DIR with a per-test unique
-# suffix, so two suites running concurrently cannot delete each other's tree.
-# The cost of that uniqueness is that any teardown a suite misses — an early
-# exit, a failed assertion that skips the rest, a killed run — leaks a NEW
+# Suites create their TEST_TEMP_DIR under $TEST_SCRATCH_BASE with a per-test
+# unique suffix, so two suites running concurrently cannot delete each other's
+# tree. The cost of that uniqueness is that any teardown a suite misses — an
+# early exit, a failed assertion that skips the rest, a killed run — leaks a NEW
 # directory rather than reusing one name. Measured at ~1,400 per full run,
 # growing without bound (one tree reached 19,910 directories / 11MB).
 #
@@ -89,13 +158,20 @@ FIXTURES_DIR="$TESTS_DIR/fixtures"
 # touched, which cannot disturb a CONCURRENTLY running suite's tree — those are
 # seconds old, and the cutoff is an hour.
 #
+# Since #821 the scratch lives outside the repo, so this sweeps the scratch
+# parent rather than $RESULTS_DIR (which now holds only reports and CI
+# artifacts, and must not be reaped). It is also the ONLY reliable cleanup:
+# an EXIT trap installed here would be silently replaced by the suites under
+# tests/unit/observability that install their own `trap cleanup EXIT`, and it
+# would not survive a kill -9 either.
+#
 # Deliberately silent and non-fatal: this is scratch hygiene, and a failure to
-# reap must never redden a test run. $RESULTS_DIR is gitignored.
+# reap must never redden a test run.
 # ============================================================================
 tf_reap_stale_temp_dirs() {
-    [ -d "$RESULTS_DIR" ] || return 0
+    [ -d "$TEST_SCRATCH_PARENT" ] || return 0
     # -mindepth/-maxdepth 1: only the per-suite scratch dirs themselves, never
-    # their contents and never $RESULTS_DIR. -mmin +60: older than an hour.
+    # their contents and never the parent. -mmin +60: older than an hour.
     #
     # `-exec` needs a real executable — the `command` builtin the rest of this
     # repo uses for alias-safety is NOT valid there and fails the whole -exec
@@ -106,7 +182,7 @@ tf_reap_stale_temp_dirs() {
         [ -x "$rm_bin" ] && break
     done
     [ -x "$rm_bin" ] || return 0
-    command find "$RESULTS_DIR" -mindepth 1 -maxdepth 1 -type d -mmin +60 \
+    command find "$TEST_SCRATCH_PARENT" -mindepth 1 -maxdepth 1 -type d -mmin +60 \
         -exec "$rm_bin" -rf {} + 2>/dev/null || true
     return 0
 }
@@ -173,6 +249,30 @@ init_test_framework() {
 
     tf_reap_stale_temp_dirs
 
+    # Create the parent and the per-run base in two steps, each with an explicit
+    # mode. `mkdir -m 700 -p a/b` applies the mode only to the DEEPEST component
+    # (SC2174), so a single -p call would leave the parent at whatever the umask
+    # allows — the very directory that needs the tight mode, since it is the one
+    # sitting in a world-writable tmp root.
+    mkdir -p "$TEST_SCRATCH_PARENT"
+    chmod 700 "$TEST_SCRATCH_PARENT" 2>/dev/null || true
+    mkdir -p "$TEST_SCRATCH_BASE"
+    chmod 700 "$TEST_SCRATCH_BASE" 2>/dev/null || true
+
+    # The scratch base is `rm -rf`'d on exit, so an override that points at a
+    # real directory would destroy it. Only self-clean a path this framework
+    # would have generated — one that still lives under the scratch parent.
+    # A relocated override is honored for writing, just never auto-deleted.
+    #
+    # Best-effort even then: the two suites under tests/unit/observability that
+    # install their own `trap cleanup EXIT` silently replace this one, and no
+    # trap survives kill -9. The reaper above is the real guarantee.
+    case "$TEST_SCRATCH_BASE" in
+        "$TEST_SCRATCH_PARENT"/?*)
+            trap 'rm -rf "$TEST_SCRATCH_BASE" 2>/dev/null || true' EXIT
+            ;;
+    esac
+
     # Set up test environment
     export TEST_MODE=1
     export LOG_LEVEL="${LOG_LEVEL:-1}" # WARN level by default in tests
@@ -199,6 +299,10 @@ init_test_framework() {
     echo -e "${TEST_COLOR_INFO}=== Test Framework Initialized ===${TEST_COLOR_RESET}"
     echo "Test run ID: $TEST_RUN_ID"
     echo "Results dir: $RESULTS_DIR"
+    echo "Scratch base: $TEST_SCRATCH_BASE"
+    if tf_is_incoherent_fs "$TEST_SCRATCH_BASE"; then
+        echo -e "${TEST_COLOR_FAIL}WARNING: scratch base is on $(tf_fstype_of "$TEST_SCRATCH_BASE") — write-then-read may be incoherent (#821)${TEST_COLOR_RESET}"
+    fi
     echo
 }
 
@@ -428,3 +532,4 @@ export -f pass_test fail_test skip_test network_tests_disabled
 export -f setup teardown run_test run_tests
 export -f start_test assert_success assert_command_exists assert_file_executable
 export -f init_test_framework generate_report
+export -f tf_fstype_of tf_is_incoherent_fs tf_scratch_root

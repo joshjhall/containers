@@ -21,7 +21,7 @@ HEALTH_CHECK_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/../../../lib/runtime/40-proj
 # ============================================================================
 
 # Per-test scratch dir, created with mktemp -d on a LOCAL filesystem --
-# deliberately NOT under $RESULTS_DIR. Two independent bugs are fixed here.
+# deliberately NOT under the reports dir. Two independent bugs are fixed here.
 # See #818.
 #
 # 1. Uniqueness. The old suffix was `$$`, which is constant for the whole run,
@@ -31,7 +31,7 @@ HEALTH_CHECK_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/../../../lib/runtime/40-proj
 #    gives each case its own directory.
 #
 # 2. Filesystem coherence -- the actual cause of the intermittent failures.
-#    $RESULTS_DIR lives in the workspace, which is a FUSE mount (bindfs /
+#    The reports dir lives in the workspace, a FUSE mount (bindfs /
 #    VirtioFS) in this container. Under concurrent load a just-appended block
 #    is not reliably visible to an immediately following read: the script under
 #    test appends six entries, logs "Added 6 entries", and exits 0, yet the very

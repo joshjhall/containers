@@ -662,7 +662,7 @@ EOF
 
 # Test: Script updates zoxide version in base setup
 test_update_zoxide_version() {
-    local test_dir="$RESULTS_DIR/test_zoxide_update"
+    local test_dir="$TEST_SCRATCH_BASE/test_zoxide_update"
     command rm -rf "$test_dir"
     mkdir -p "$test_dir/lib/base"
 
@@ -904,7 +904,7 @@ test_pin_action_rewrites_sha_pin() {
     local new_sha="abcabcabcabcabcabcabcabcabcabcabcabcabca"
     resolve_action_sha() { printf '%s\n' "abcabcabcabcabcabcabcabcabcabcabcabcabca"; }
 
-    local wf="$RESULTS_DIR/pin_action_ci.yml"
+    local wf="$TEST_SCRATCH_BASE/pin_action_ci.yml"
     command cat >"$wf" <<'EOF'
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -936,7 +936,7 @@ test_pin_action_preserves_pin_on_resolution_failure() {
     # Mock resolution failure.
     resolve_action_sha() { return 1; }
 
-    local wf="$RESULTS_DIR/pin_action_fail_ci.yml"
+    local wf="$TEST_SCRATCH_BASE/pin_action_fail_ci.yml"
     command cat >"$wf" <<'EOF'
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
 EOF
