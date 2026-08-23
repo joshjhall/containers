@@ -712,6 +712,55 @@ mod tests {
         assert!(payload.contains("GOCACHE"), "GOCACHE must be exported, got: {payload}");
     }
 
+    /// A failing installer names ITSELF in the error, rather than reporting
+    /// every tool's failure as `rustup-init` (the pre-#806 hardcoded literal).
+    /// Every other test here uses `make_artifact`, which is always named
+    /// `rustup-init` — so without this case the generalisation would be
+    /// indistinguishable from the constant it replaced.
+    #[test]
+    fn failure_step_names_the_actual_artifact() {
+        let cache = tempdir().unwrap();
+        let bin = tempdir().unwrap();
+        let tmp = tempdir().unwrap();
+        let artifact = tmp.path().join("go-installer");
+        fs::write(&artifact, b"#!/bin/sh\necho stub\n").unwrap();
+        let runner = RecordingRunner::new();
+        runner.set_outcome(
+            "su",
+            CommandOutcome {
+                status: Some(1),
+                stdout: vec![],
+                stderr: b"go-installer: bad arg".to_vec(),
+            },
+        );
+        let env = BTreeMap::new();
+        let args: Vec<String> = vec![];
+        let empty = BTreeMap::new();
+
+        let ctx = MethodContext {
+            artifact: &artifact,
+            args: &args,
+            env: &env,
+            user: "vscode",
+            cache_root: cache.path(),
+            bin_root: bin.path(),
+            binaries: &[],
+            bin_source_dir: None,
+            cache_dirs: &empty,
+            runner: &runner,
+        };
+        match run(&ctx).unwrap_err() {
+            LuggageError::PostInstallFailed { step, message } => {
+                assert_eq!(step, "go-installer", "the step must name the failing artifact");
+                assert!(
+                    !message.contains("rustup-init"),
+                    "a non-rust installer must not report itself as rustup-init, got: {message}",
+                );
+            }
+            other => panic!("expected PostInstallFailed, got {other:?}"),
+        }
+    }
+
     /// Symlinks come from the catalog's `bin_source_dir`, not a hardcoded
     /// `cargo/bin`. Pins the generalisation with a non-rust layout.
     #[test]
