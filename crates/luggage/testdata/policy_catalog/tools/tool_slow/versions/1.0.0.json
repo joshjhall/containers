@@ -9,6 +9,7 @@
   "install_methods": [
     {
       "name": "stub",
+      "method_kind": "script-installer",
       "platform": { "os": ["debian"], "arch": ["amd64"] },
       "verification": { "tier": 4, "tofu": true }
     }

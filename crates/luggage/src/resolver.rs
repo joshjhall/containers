@@ -25,7 +25,8 @@
 use std::fmt;
 
 use containers_common::tooldb::{
-    ActivityScore, Dependency, InstallMethod, Invoke, PostInstall, SupportStatus, Verification,
+    ActivityScore, Dependency, InstallMethod, InstallMethodKind, Invoke, PostInstall,
+    SupportStatus, Verification,
 };
 use containers_common::version::{Constraint, Version, VersionStyle};
 use serde::Serialize;
@@ -69,8 +70,16 @@ pub struct ResolvedInstall {
     pub tool: String,
     /// Concrete version chosen.
     pub version: String,
-    /// `install_methods[].name` of the chosen method.
+    /// `install_methods[].name` of the chosen method — a human-readable
+    /// label for logs and error messages, not a dispatch key.
     pub method_name: String,
+    /// `install_methods[].method_kind` of the chosen method — the
+    /// discriminant [`crate::installer::methods::dispatch`] switches on.
+    ///
+    /// `None` when the catalog entry predates the field; dispatch turns
+    /// that into a clear error rather than guessing from `method_name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method_kind: Option<InstallMethodKind>,
     /// Convenience copy of `verification.tier`.
     pub verification_tier: u8,
     /// Full verification block as it appeared in the catalog.
@@ -348,6 +357,7 @@ fn build_resolved(
         tool: tool.to_owned(),
         version: version.to_owned(),
         method_name: method.name.clone(),
+        method_kind: method.method_kind,
         verification_tier: method.verification.tier,
         verification: method.verification.clone(),
         source_url_template: method.source_url_template.clone(),
@@ -413,6 +423,7 @@ mod tests {
     fn make_method(os: Vec<&str>) -> InstallMethod {
         InstallMethod {
             name: "rustup-init".into(),
+            method_kind: Some(InstallMethodKind::ScriptInstaller),
             platform: Some(PlatformPredicate {
                 os: Some(StringOrVec(os.into_iter().map(Into::into).collect())),
                 os_version: None,

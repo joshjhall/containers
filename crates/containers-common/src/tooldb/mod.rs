@@ -18,7 +18,8 @@
 //! # Forward compatibility
 //!
 //! Most structs use `#[serde(deny_unknown_fields)]` to mirror the schema's
-//! `additionalProperties: false`. A few enums (`Kind`, `PostInstall`) use
+//! `additionalProperties: false`. A few enums (`Kind`, `PostInstall`,
+//! `InstallMethodKind`) use
 //! `#[serde(other)]` fallback variants so that adding a new value upstream
 //! does not break older luggage builds.
 
@@ -29,7 +30,8 @@ mod version;
 
 pub use dependency::{Dependency, DependencyPurpose};
 pub use install_method::{
-    InstallMethod, Invoke, PlatformPredicate, PostInstall, StringOrVec, Verification,
+    InstallMethod, InstallMethodKind, Invoke, PlatformPredicate, PostInstall, StringOrVec,
+    Verification,
 };
 pub use tool::{
     Activity, ActivityScore, ActivitySignals, Alternative, AlternativeRelationship, AvailableEntry,

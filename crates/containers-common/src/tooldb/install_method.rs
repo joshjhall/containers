@@ -16,8 +16,18 @@ use super::Dependency;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InstallMethod {
-    /// Method identifier (e.g., `rustup`, `apt`, `tarball`).
+    /// Human-readable label (e.g., `rustup-init`, `nodejs-tarball`).
+    ///
+    /// Diagnostics only — logs, error messages, and the `--dry-run` plan.
+    /// [`Self::method_kind`] is what luggage dispatches on.
     pub name: String,
+    /// Which installer implementation runs this method.
+    ///
+    /// `Option` because the containers-db schema ships the field optional
+    /// while the vendored catalog copy is backfilled; a `None` here is a
+    /// catalog defect that luggage reports rather than dispatching blindly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method_kind: Option<InstallMethodKind>,
     /// Predicate restricting which hosts this method applies to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub platform: Option<PlatformPredicate>,
@@ -35,6 +45,53 @@ pub struct InstallMethod {
     /// Method-level install chain (typically `system_package` deps).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<Vec<Dependency>>,
+}
+
+/// The install *shape* of an [`InstallMethod`] — which installer
+/// implementation executes it.
+///
+/// Distinct from the tool-level `kind` in `tool.schema.json`, which is a
+/// coarse category (`language`, `cli`, ...). This is the dispatch
+/// discriminant: luggage matches on it so a catalog entry using an
+/// already-implemented shape needs no luggage code change.
+///
+/// An `Unknown` fallback absorbs kinds added by a newer containers-db
+/// schema without breaking deserialization of older luggage builds —
+/// same rationale as [`PostInstall::Unknown`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InstallMethodKind {
+    /// Run a downloaded executable installer (rustup-init, nvm).
+    ScriptInstaller,
+    /// Unpack a prebuilt binary archive.
+    BinaryTarball,
+    /// Defer to the host package manager (apt/apk/dnf).
+    PackageManager,
+    /// Compile from source.
+    SourceBuild,
+    /// Forward-compatibility fallback for a kind this build doesn't know.
+    #[serde(other)]
+    Unknown,
+}
+
+impl InstallMethodKind {
+    /// The catalog spelling of this kind, for logs and error messages.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ScriptInstaller => "script-installer",
+            Self::BinaryTarball => "binary-tarball",
+            Self::PackageManager => "package-manager",
+            Self::SourceBuild => "source-build",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl std::fmt::Display for InstallMethodKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// AND-combined predicate restricting an [`InstallMethod`] to specific hosts.
@@ -232,6 +289,83 @@ mod tests {
         let pred = m.platform.unwrap();
         assert_eq!(pred.os.unwrap().0, vec!["debian", "ubuntu", "rhel"]);
         assert_eq!(m.verification.tier, 3);
+    }
+
+    #[test]
+    fn parses_all_method_kinds() {
+        let json = r#"[
+            "script-installer",
+            "binary-tarball",
+            "package-manager",
+            "source-build"
+        ]"#;
+        let kinds: Vec<InstallMethodKind> = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            kinds,
+            vec![
+                InstallMethodKind::ScriptInstaller,
+                InstallMethodKind::BinaryTarball,
+                InstallMethodKind::PackageManager,
+                InstallMethodKind::SourceBuild,
+            ]
+        );
+    }
+
+    #[test]
+    fn unknown_method_kind_falls_back() {
+        let kind: InstallMethodKind = serde_json::from_str(r#""future-installer""#).unwrap();
+        assert_eq!(kind, InstallMethodKind::Unknown);
+    }
+
+    #[test]
+    fn method_kind_round_trips_through_catalog_spelling() {
+        for kind in [
+            InstallMethodKind::ScriptInstaller,
+            InstallMethodKind::BinaryTarball,
+            InstallMethodKind::PackageManager,
+            InstallMethodKind::SourceBuild,
+        ] {
+            let json = serde_json::to_string(&kind).unwrap();
+            assert_eq!(json, format!("\"{}\"", kind.as_str()));
+            assert_eq!(serde_json::from_str::<InstallMethodKind>(&json).unwrap(), kind);
+        }
+    }
+
+    #[test]
+    fn parses_install_method_kind_field() {
+        let json = r#"{
+            "name": "rustup-init",
+            "method_kind": "script-installer",
+            "verification": { "tier": 4, "tofu": true }
+        }"#;
+        let m: InstallMethod = serde_json::from_str(json).unwrap();
+        assert_eq!(m.method_kind, Some(InstallMethodKind::ScriptInstaller));
+    }
+
+    /// The containers-db schema ships `method_kind` optional while the
+    /// vendored catalog is backfilled, so an entry without it must still
+    /// deserialize — luggage reports the gap at dispatch instead.
+    #[test]
+    fn absent_method_kind_is_none() {
+        let json = r#"{
+            "name": "rustup-init",
+            "verification": { "tier": 4, "tofu": true }
+        }"#;
+        let m: InstallMethod = serde_json::from_str(json).unwrap();
+        assert_eq!(m.method_kind, None);
+    }
+
+    /// `skip_serializing_if` keeps a `None` out of the emitted JSON, so a
+    /// round-tripped entry stays valid against the closed schema.
+    #[test]
+    fn absent_method_kind_is_omitted_on_serialize() {
+        let json = r#"{
+            "name": "rustup-init",
+            "verification": { "tier": 4, "tofu": true }
+        }"#;
+        let m: InstallMethod = serde_json::from_str(json).unwrap();
+        let out = serde_json::to_value(&m).unwrap();
+        assert!(out.get("method_kind").is_none());
     }
 
     #[test]

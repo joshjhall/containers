@@ -82,6 +82,7 @@
   "install_methods": [
     {
       "name": "rustup-init",
+      "method_kind": "script-installer",
       "platform": {
         "os": [
           "debian",
@@ -140,6 +141,7 @@
     },
     {
       "name": "rustup-init",
+      "method_kind": "script-installer",
       "platform": {
         "os": "alpine",
         "arch": [

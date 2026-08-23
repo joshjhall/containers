@@ -580,6 +580,7 @@ impl Installer {
             l.step(&format!("run install method `{}`", resolved.method_name));
         }
         methods::dispatch(
+            resolved.method_kind,
             &resolved.method_name,
             &MethodContext {
                 artifact,
@@ -651,7 +652,7 @@ fn install_basename(url: &str) -> String {
 mod tests {
     use super::*;
     use crate::Platform;
-    use containers_common::tooldb::{Dependency, Verification};
+    use containers_common::tooldb::{Dependency, InstallMethodKind, Verification};
 
     /// A minimal debian/amd64 [`ResolvedInstall`] carrying one dependency,
     /// for exercising [`Installer::captured_dependency_versions`]'s gating
@@ -661,6 +662,7 @@ mod tests {
             tool: "rust".into(),
             version: "1.96.0".into(),
             method_name: "rustup".into(),
+            method_kind: Some(InstallMethodKind::ScriptInstaller),
             verification_tier: 3,
             verification: Verification {
                 tier: 3,

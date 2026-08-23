@@ -1,15 +1,23 @@
 //! Install-method execution dispatch.
 //!
-//! Catalog `InstallMethod.name` is a free string; this module dispatches on
-//! it. Only the `rustup-init` family (`rustup-init`, `rustup-init-musl`)
-//! is wired up in this issue. Everything else returns
-//! [`crate::LuggageError::NotImplemented`] and ships in follow-up issues
-//! per #405's decomposition note.
+//! Dispatch keys off the catalog's [`InstallMethodKind`] discriminant, not
+//! the sibling `name`. `name` is a free string label for diagnostics; a
+//! match on it would need one arm per tool forever and would make every new
+//! catalog entry a luggage code change. Switching on the kind means a
+//! catalog entry using an already-implemented shape needs no code here at
+//! all.
+//!
+//! Only [`InstallMethodKind::ScriptInstaller`] is wired up so far;
+//! `binary-tarball`, `source-build`, and `package-manager` return
+//! [`crate::LuggageError::NotImplemented`] and ship in follow-up issues per
+//! #405's decomposition note.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
+
+use containers_common::tooldb::InstallMethodKind;
 
 use crate::error::{LuggageError, Result};
 
@@ -143,18 +151,43 @@ pub struct MethodContext<'a> {
     pub runner: &'a dyn CommandRunner,
 }
 
-/// Dispatch on `method_name`.
+/// Dispatch on the catalog's `install_methods[].method_kind`.
+///
+/// `method_name` is passed for diagnostics only — it never selects the
+/// implementation.
 ///
 /// # Errors
 ///
-/// - [`LuggageError::NotImplemented`] for any method other than the
-///   rustup-init shape.
-pub fn dispatch(method_name: &str, ctx: &MethodContext<'_>) -> Result<()> {
-    match method_name {
-        "rustup-init" | "rustup-init-musl" => script_installer::run(ctx),
-        _ => Err(LuggageError::NotImplemented(
-            "install method not yet wired (only rustup-init/rustup-init-musl in this issue)",
-        )),
+/// - [`LuggageError::NotImplemented`] for a kind that is valid but not yet
+///   wired up (`binary-tarball`, `package-manager`, `source-build`).
+/// - [`LuggageError::Catalog`] when the entry carries no `method_kind`, or
+///   one this build doesn't recognise. Both are catalog defects rather
+///   than missing luggage features, and both are reported rather than
+///   guessed at from `method_name`.
+pub fn dispatch(
+    kind: Option<InstallMethodKind>,
+    method_name: &str,
+    ctx: &MethodContext<'_>,
+) -> Result<()> {
+    match kind {
+        Some(InstallMethodKind::ScriptInstaller) => script_installer::run(ctx),
+        Some(InstallMethodKind::BinaryTarball) => {
+            Err(LuggageError::NotImplemented("install method kind `binary-tarball` not yet wired"))
+        }
+        Some(InstallMethodKind::PackageManager) => {
+            Err(LuggageError::NotImplemented("install method kind `package-manager` not yet wired"))
+        }
+        Some(InstallMethodKind::SourceBuild) => {
+            Err(LuggageError::NotImplemented("install method kind `source-build` not yet wired"))
+        }
+        Some(InstallMethodKind::Unknown) => Err(LuggageError::Catalog(format!(
+            "install method `{method_name}` declares a `method_kind` this build of luggage \
+             does not recognise — upgrade luggage or fix the catalog entry",
+        ))),
+        None => Err(LuggageError::Catalog(format!(
+            "install method `{method_name}` has no `method_kind`; luggage dispatches on that \
+             field and will not infer it from the method name",
+        ))),
     }
 }
 
@@ -174,8 +207,40 @@ mod tests {
         MethodContext { artifact, args, env, user, cache_root: cache, bin_root: bin, runner }
     }
 
+    /// Every not-yet-wired kind must fail as a missing luggage feature,
+    /// and must name itself so the message points at the right issue.
     #[test]
-    fn dispatch_unknown_method_returns_not_implemented() {
+    fn dispatch_unwired_kinds_return_not_implemented() {
+        for (kind, needle) in [
+            (InstallMethodKind::BinaryTarball, "binary-tarball"),
+            (InstallMethodKind::PackageManager, "package-manager"),
+            (InstallMethodKind::SourceBuild, "source-build"),
+        ] {
+            let runner = RecordingRunner::new();
+            let env = BTreeMap::new();
+            let args: Vec<String> = vec![];
+            let bin = Path::new("/tmp/bin");
+            let cache = Path::new("/tmp/cache");
+            let artifact = Path::new("/tmp/x");
+            let c = ctx(artifact, &args, &env, "vscode", cache, bin, &runner);
+
+            let err = dispatch(Some(kind), "some-method", &c).unwrap_err();
+            match err {
+                LuggageError::NotImplemented(msg) => assert!(
+                    msg.contains(needle),
+                    "message for {kind} should name the kind, got: {msg}"
+                ),
+                other => panic!("expected NotImplemented for {kind}, got {other:?}"),
+            }
+            assert!(runner.calls().is_empty(), "{kind} must not run anything");
+        }
+    }
+
+    /// An entry with no `method_kind` is a catalog defect, not a missing
+    /// feature — and must NOT fall back to guessing from the name, which is
+    /// the behaviour this issue removed.
+    #[test]
+    fn dispatch_absent_kind_is_a_catalog_error() {
         let runner = RecordingRunner::new();
         let env = BTreeMap::new();
         let args: Vec<String> = vec![];
@@ -183,8 +248,63 @@ mod tests {
         let cache = Path::new("/tmp/cache");
         let artifact = Path::new("/tmp/x");
         let c = ctx(artifact, &args, &env, "vscode", cache, bin, &runner);
-        let err = dispatch("apt", &c).unwrap_err();
-        assert!(matches!(err, LuggageError::NotImplemented(_)));
+
+        // `rustup-init` is precisely the name the old dispatch matched on.
+        let err = dispatch(None, "rustup-init", &c).unwrap_err();
+        match err {
+            LuggageError::Catalog(msg) => {
+                assert!(msg.contains("rustup-init"), "should name the method: {msg}");
+                assert!(msg.contains("method_kind"), "should name the field: {msg}");
+            }
+            other => panic!("expected Catalog error, got {other:?}"),
+        }
+        assert!(runner.calls().is_empty(), "absent kind must not run anything");
+    }
+
+    /// A kind from a newer containers-db schema deserializes to `Unknown`
+    /// rather than failing to parse; dispatch must then refuse cleanly
+    /// instead of panicking.
+    #[test]
+    fn dispatch_unknown_kind_is_a_catalog_error() {
+        let runner = RecordingRunner::new();
+        let env = BTreeMap::new();
+        let args: Vec<String> = vec![];
+        let bin = Path::new("/tmp/bin");
+        let cache = Path::new("/tmp/cache");
+        let artifact = Path::new("/tmp/x");
+        let c = ctx(artifact, &args, &env, "vscode", cache, bin, &runner);
+
+        let err = dispatch(Some(InstallMethodKind::Unknown), "future-method", &c).unwrap_err();
+        match err {
+            LuggageError::Catalog(msg) => {
+                assert!(msg.contains("future-method"), "should name the method: {msg}");
+            }
+            other => panic!("expected Catalog error, got {other:?}"),
+        }
+        assert!(runner.calls().is_empty(), "unknown kind must not run anything");
+    }
+
+    /// The name no longer selects anything: a `script-installer` entry runs
+    /// the script installer whatever it is called. `"nvm-install"` is a name
+    /// the old literal match would have rejected outright.
+    #[test]
+    fn dispatch_ignores_method_name_for_a_known_kind() {
+        let cache = tempfile::tempdir().unwrap();
+        let bin = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let artifact = tmp.path().join("installer");
+        std::fs::write(&artifact, b"#!/bin/sh\necho stub\n").unwrap();
+
+        let runner = RecordingRunner::new();
+        let env = BTreeMap::new();
+        let args: Vec<String> = vec![];
+        let c = ctx(&artifact, &args, &env, "vscode", cache.path(), bin.path(), &runner);
+
+        dispatch(Some(InstallMethodKind::ScriptInstaller), "nvm-install", &c).unwrap();
+        assert!(
+            runner.calls().iter().any(|(p, _)| p == "su"),
+            "script-installer should have run regardless of the method name"
+        );
     }
 
     #[test]
