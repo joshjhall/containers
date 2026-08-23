@@ -719,6 +719,7 @@ test_agnix_audit_classifier_behavior() {
             return
         fi
         agnix_verdict=$(command printf '%s' "$agnix_audit_json" |
+            command sed -n '/^[[:space:]]*{/,$p' |
             command jq -r 'if (.invalid | type) != "array" then "skip"
                 elif (.invalid | length) > 0 then "fatal"
                 else "install" end' 2>/dev/null || true)
@@ -762,12 +763,19 @@ test_agnix_audit_classifier_behavior() {
     assert_equals "skip" "$(classify_agnix_audit '')" \
         "empty audit output is never read as clean"
 
-    # Diagnostics prepended to the JSON body make it unparseable — the reason
-    # stdout and stderr are captured separately rather than merged with 2>&1.
-    assert_equals "skip" \
+    # A banner ahead of the JSON must not change the verdict. stdout is pure
+    # JSON in every observed case, but if some npm configuration ever prepended
+    # a notice, an unstripped body would fail to parse and degrade to "skip" —
+    # turning a REAL mismatch into a benign-looking skip. That direction is the
+    # one this whole design exists to prevent, so both polarities are asserted.
+    assert_equals "install" \
         "$(classify_agnix_audit 'npm warn config foo
 {"invalid":[],"missing":[]}')" \
-        "prose mixed into the JSON body is unverifiable, never silently clean"
+        "a banner before a clean body does not suppress the clean verdict"
+    assert_equals "fatal" \
+        "$(classify_agnix_audit 'npm notice New version available
+{"invalid":[{"name":"agnix","keyid":"SHA256:x"}],"missing":[]}')" \
+        "a banner before a MISMATCH body must never downgrade it to skip"
 
     # The mirror above is only meaningful if the source still uses these exact
     # predicates — assert them against a comment-stripped copy.
@@ -775,6 +783,8 @@ test_agnix_audit_classifier_behavior() {
     command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
     assert_file_contains "$code_only" 'jq -r' \
         "source computes the verdict with jq, not substring matching"
+    assert_file_contains "$code_only" "sed -n '/\^\[\[:space:\]\]\*{/,\$p'" \
+        "source strips any pre-JSON noise so a mismatch cannot degrade to skip"
     assert_file_contains "$code_only" '(.invalid | type) != "array"' \
         "source checks invalid[] is an ARRAY before its length (outage != clean)"
     assert_file_contains "$code_only" '(.invalid | length) > 0' \
