@@ -287,6 +287,13 @@ mod tests {
     /// The name no longer selects anything: a `script-installer` entry runs
     /// the script installer whatever it is called. `"nvm-install"` is a name
     /// the old literal match would have rejected outright.
+    ///
+    /// Unix-only, matching `script_installer`'s own `#[cfg(all(test, unix))]`
+    /// suite: its `install_symlinks` has a `#[cfg(not(unix))]` arm returning
+    /// `NotImplemented`, so asserting a *successful* dispatch is meaningless
+    /// on Windows. The error-path tests above stay unconditional — they never
+    /// reach the installer.
+    #[cfg(unix)]
     #[test]
     fn dispatch_ignores_method_name_for_a_known_kind() {
         let cache = tempfile::tempdir().unwrap();

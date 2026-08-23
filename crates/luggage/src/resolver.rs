@@ -493,7 +493,45 @@ mod tests {
         let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
         assert_eq!(r.version, "1.95.0");
         assert_eq!(r.method_name, "rustup-init");
+        assert_eq!(r.method_kind, Some(InstallMethodKind::ScriptInstaller));
         assert_eq!(r.verification_tier, 3);
+    }
+
+    /// `build_resolved` must carry the chosen method's `method_kind` through
+    /// verbatim — including a `None` from a catalog entry predating the
+    /// field. Dispatch turns that `None` into a clear error, so silently
+    /// substituting a default here would defeat the check.
+    #[test]
+    fn resolve_propagates_method_kind_including_absent() {
+        let mut method = make_method(vec!["debian"]);
+        method.method_kind = None;
+        let entry = entry_with(vec![("1.95.0", make_version("1.95.0", vec![], vec![method]))]);
+
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(r.method_kind, None);
+        assert_eq!(r.method_name, "rustup-init", "name must survive independently of kind");
+    }
+
+    /// The resolver picks the method, so the kind it reports must be the
+    /// chosen one — not the first in the array.
+    #[test]
+    fn resolve_reports_the_chosen_methods_kind() {
+        let mut alpine_only = make_method(vec!["alpine"]);
+        alpine_only.method_kind = Some(InstallMethodKind::BinaryTarball);
+        let mut debian_method = make_method(vec!["debian"]);
+        debian_method.method_kind = Some(InstallMethodKind::ScriptInstaller);
+
+        let entry = entry_with(vec![(
+            "1.95.0",
+            make_version("1.95.0", vec![], vec![alpine_only, debian_method]),
+        )]);
+
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(
+            r.method_kind,
+            Some(InstallMethodKind::ScriptInstaller),
+            "must report the debian method's kind, not the skipped alpine one"
+        );
     }
 
     #[test]
