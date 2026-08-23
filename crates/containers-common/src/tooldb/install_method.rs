@@ -45,6 +45,32 @@ pub struct InstallMethod {
     /// Method-level install chain (typically `system_package` deps).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<Vec<Dependency>>,
+    /// Binary names this method surfaces in the install `bin_root`, by
+    /// symlinking them out of [`Self::bin_source_dir`].
+    ///
+    /// Names only — the symlink takes the same name, so this cannot express
+    /// a rename (a `python3` → `python` alias stays the installing script's
+    /// job). `None` means the method surfaces nothing; luggage links exactly
+    /// what is listed and never falls back to a per-tool default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binaries: Option<Vec<String>>,
+    /// Directory holding the [`Self::binaries`] symlink targets, relative to
+    /// the installer's cache root (rust: `cargo/bin`).
+    ///
+    /// Relative because the cache root is chosen by the installer at run
+    /// time, not by the catalog. Only meaningful alongside `binaries`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bin_source_dir: Option<String>,
+    /// Persistent cache/state directories this method needs, keyed by the
+    /// environment variable that should point at each one, valued by a path
+    /// relative to the installer's cache root (rust: `CARGO_HOME` → `cargo`).
+    ///
+    /// Each entry is created, chowned to the install user, and exported to
+    /// the installer, its post-install steps, and validation. Distinct from
+    /// `Invoke::env`, which carries literal values needing no directory; an
+    /// `Invoke::env` entry for the same variable takes precedence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_dirs: Option<BTreeMap<String, String>>,
 }
 
 /// The install *shape* of an [`InstallMethod`] — which installer

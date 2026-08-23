@@ -34,6 +34,16 @@ pub struct Tool {
     /// Catalog-level summary of available verification tiers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validation_tiers: Option<ValidationTiers>,
+    /// Binary luggage `--version`-checks to decide whether this tool is
+    /// already installed, and to validate a finished install. Resolved
+    /// under the install `bin_root`.
+    ///
+    /// `None` means "same as [`Self::id`]" — correct for tools whose binary
+    /// matches their catalog id (go, node), wrong for those where it does
+    /// not (rust ships `rustc`, python ships `python3`), which must set it
+    /// explicitly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_binary: Option<String>,
     /// How version strings on this tool should be parsed. Defaults to semver.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version_style: Option<VersionStyle>,

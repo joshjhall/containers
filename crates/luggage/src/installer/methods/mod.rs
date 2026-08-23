@@ -147,6 +147,16 @@ pub struct MethodContext<'a> {
     pub cache_root: &'a Path,
     /// Bin root for symlinks (`/usr/local/bin` in production).
     pub bin_root: &'a Path,
+    /// Catalog `binaries` — names to surface in [`Self::bin_root`]. Empty
+    /// means link nothing; there is deliberately no per-tool default.
+    pub binaries: &'a [String],
+    /// Catalog `bin_source_dir` — where [`Self::binaries`] are linked from,
+    /// relative to [`Self::cache_root`]. `None` with a non-empty `binaries`
+    /// is a catalog defect the method reports.
+    pub bin_source_dir: Option<&'a str>,
+    /// Catalog `cache_dirs` — env-var name to [`Self::cache_root`]-relative
+    /// path. Each is created, chowned to [`Self::user`], and exported.
+    pub cache_dirs: &'a BTreeMap<String, String>,
     /// Command runner (production: `ProcessRunner`; tests: `RecordingRunner`).
     pub runner: &'a dyn CommandRunner,
 }
@@ -195,16 +205,31 @@ pub fn dispatch(
 mod tests {
     use super::*;
 
+    /// These dispatch tests only assert that a kind bails before touching
+    /// anything, so the catalog-driven fields are empty (no binaries to
+    /// link, no cache dirs to create) and the install user is always the
+    /// unprivileged default — none of them reach the code those vary.
     fn ctx<'a>(
         artifact: &'a Path,
         args: &'a [String],
         env: &'a BTreeMap<String, String>,
-        user: &'a str,
         cache: &'a Path,
         bin: &'a Path,
+        cache_dirs: &'a BTreeMap<String, String>,
         runner: &'a dyn CommandRunner,
     ) -> MethodContext<'a> {
-        MethodContext { artifact, args, env, user, cache_root: cache, bin_root: bin, runner }
+        MethodContext {
+            artifact,
+            args,
+            env,
+            user: "vscode",
+            cache_root: cache,
+            bin_root: bin,
+            binaries: &[],
+            bin_source_dir: None,
+            cache_dirs,
+            runner,
+        }
     }
 
     /// Every not-yet-wired kind must fail as a missing luggage feature,
@@ -218,11 +243,12 @@ mod tests {
         ] {
             let runner = RecordingRunner::new();
             let env = BTreeMap::new();
+            let cache_dirs = BTreeMap::new();
             let args: Vec<String> = vec![];
             let bin = Path::new("/tmp/bin");
             let cache = Path::new("/tmp/cache");
             let artifact = Path::new("/tmp/x");
-            let c = ctx(artifact, &args, &env, "vscode", cache, bin, &runner);
+            let c = ctx(artifact, &args, &env, cache, bin, &cache_dirs, &runner);
 
             let err = dispatch(Some(kind), "some-method", &c).unwrap_err();
             match err {
@@ -243,11 +269,12 @@ mod tests {
     fn dispatch_absent_kind_is_a_catalog_error() {
         let runner = RecordingRunner::new();
         let env = BTreeMap::new();
+        let cache_dirs = BTreeMap::new();
         let args: Vec<String> = vec![];
         let bin = Path::new("/tmp/bin");
         let cache = Path::new("/tmp/cache");
         let artifact = Path::new("/tmp/x");
-        let c = ctx(artifact, &args, &env, "vscode", cache, bin, &runner);
+        let c = ctx(artifact, &args, &env, cache, bin, &cache_dirs, &runner);
 
         // `rustup-init` is precisely the name the old dispatch matched on.
         let err = dispatch(None, "rustup-init", &c).unwrap_err();
@@ -268,11 +295,12 @@ mod tests {
     fn dispatch_unknown_kind_is_a_catalog_error() {
         let runner = RecordingRunner::new();
         let env = BTreeMap::new();
+        let cache_dirs = BTreeMap::new();
         let args: Vec<String> = vec![];
         let bin = Path::new("/tmp/bin");
         let cache = Path::new("/tmp/cache");
         let artifact = Path::new("/tmp/x");
-        let c = ctx(artifact, &args, &env, "vscode", cache, bin, &runner);
+        let c = ctx(artifact, &args, &env, cache, bin, &cache_dirs, &runner);
 
         let err = dispatch(Some(InstallMethodKind::Unknown), "future-method", &c).unwrap_err();
         match err {
@@ -304,8 +332,9 @@ mod tests {
 
         let runner = RecordingRunner::new();
         let env = BTreeMap::new();
+        let cache_dirs = BTreeMap::new();
         let args: Vec<String> = vec![];
-        let c = ctx(&artifact, &args, &env, "vscode", cache.path(), bin.path(), &runner);
+        let c = ctx(&artifact, &args, &env, cache.path(), bin.path(), &cache_dirs, &runner);
 
         dispatch(Some(InstallMethodKind::ScriptInstaller), "nvm-install", &c).unwrap();
         assert!(

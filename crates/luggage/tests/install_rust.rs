@@ -29,7 +29,6 @@ use std::sync::Arc;
 
 use luggage::installer::download::{HttpClient, MockHttpClient};
 use luggage::installer::methods::RecordingRunner;
-use luggage::installer::methods::script_installer::RUST_BINARIES;
 use luggage::installer::verify::sha::digest_hex;
 use luggage::{
     Catalog, CatalogSource, Installer, InstallerOptions, LuggageError, Platform, VersionSpec,
@@ -91,6 +90,15 @@ fn resolve_rust() -> luggage::ResolvedInstall {
         .expect("resolve rust@1.95.0")
 }
 
+/// The binaries the resolved catalog entry says to surface.
+///
+/// Read from the catalog rather than a code constant on purpose: since #806
+/// the symlink set is catalog data, so a test asserting against an in-code
+/// list would pass even if the engine ignored the catalog entirely.
+fn resolved_rust_binaries() -> Vec<String> {
+    resolve_rust().binaries.expect("the rust catalog entry declares its binaries")
+}
+
 // Serialized: this test writes executable shims and the installer execs them.
 // Under parallel test load that write-then-exec races with concurrent forks in
 // the same binary, intermittently failing with ETXTBSY. The production fix
@@ -110,8 +118,8 @@ fn install_rust_runs_full_pipeline() {
     let cargo_bin = roots.path().join("cache").join("cargo").join("bin");
     std::fs::create_dir_all(&cargo_bin).unwrap();
     write_version_shim(&cargo_bin.join("rustc"), "rustc 1.95.0 (stub)");
-    for name in RUST_BINARIES {
-        if *name != "rustc" {
+    for name in resolved_rust_binaries() {
+        if name != "rustc" {
             std::fs::write(cargo_bin.join(name), b"#!/bin/sh\necho stub\n").unwrap();
         }
     }
@@ -246,8 +254,8 @@ fn run_with_report_on_success_captures_validate_output() {
     let cargo_bin = roots.path().join("cache").join("cargo").join("bin");
     std::fs::create_dir_all(&cargo_bin).unwrap();
     write_version_shim(&cargo_bin.join("rustc"), "rustc 1.95.0 (linked)");
-    for name in RUST_BINARIES {
-        if *name != "rustc" {
+    for name in resolved_rust_binaries() {
+        if name != "rustc" {
             std::fs::write(cargo_bin.join(name), b"#!/bin/sh\necho stub\n").unwrap();
         }
     }
@@ -307,8 +315,8 @@ fn force_reruns_install_even_when_idempotent_check_matches() {
     let cargo_bin = roots.path().join("cache").join("cargo").join("bin");
     std::fs::create_dir_all(&cargo_bin).unwrap();
     write_version_shim(&cargo_bin.join("rustc"), "rustc 1.95.0 (rebuilt)");
-    for name in RUST_BINARIES {
-        if *name != "rustc" {
+    for name in resolved_rust_binaries() {
+        if name != "rustc" {
             std::fs::write(cargo_bin.join(name), b"#!/bin/sh\necho stub\n").unwrap();
         }
     }
@@ -372,7 +380,7 @@ fn already_installed_survives_etxtbsy_under_parallel_write_then_exec() {
                         &format!("rustc {version} (regression)"),
                     );
                     assert!(
-                        already_installed("rust", &version, dir.path()),
+                        already_installed("rustc", &version, dir.path()),
                         "freshly-written shim must be seen as installed despite ETXTBSY \
                          (thread {t}, iter {i})",
                     );
@@ -413,7 +421,7 @@ fn already_installed_survives_etxtbsy_under_parallel_write_then_exec_stderr() {
                         &format!("rustc {version} (regression)"),
                     );
                     assert!(
-                        already_installed("rust", &version, dir.path()),
+                        already_installed("rustc", &version, dir.path()),
                         "freshly-written stderr shim must be seen as installed despite \
                          ETXTBSY (thread {t}, iter {i})",
                     );
@@ -457,7 +465,7 @@ fn validate_check_survives_etxtbsy_under_parallel_write_then_exec() {
                         &dir.path().join("rustc"),
                         &format!("rustc {version} (regression)"),
                     );
-                    let captured = check("rust", &version, dir.path(), &BTreeMap::new())
+                    let captured = check("rust", "rustc", &version, dir.path(), &BTreeMap::new())
                         .unwrap_or_else(|e| {
                             panic!(
                                 "freshly-written shim must validate despite ETXTBSY \

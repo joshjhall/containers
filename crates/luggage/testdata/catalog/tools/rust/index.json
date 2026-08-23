@@ -40,6 +40,7 @@
   "license": "MIT OR Apache-2.0",
   "minimum_recommended": "1.95.0",
   "ordering": {},
+  "primary_binary": "rustc",
   "schemaVersion": 1,
   "source_repo": "https://github.com/rust-lang/rust",
   "validation_tiers": {

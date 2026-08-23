@@ -55,25 +55,21 @@ pub(crate) fn run_version_check(
     }
 }
 
-/// Map a catalog tool id to the primary binary name luggage should
-/// `--version`-check. Defaults to the tool id itself when no mapping
-/// exists. Stopgap until catalog `validation_tiers` lands (issue #404).
-#[must_use]
-pub fn primary_binary(tool: &str) -> &str {
-    match tool {
-        "rust" => "rustc",
-        _ => tool,
-    }
-}
-
-/// Check whether `tool` at `version` is already on disk under `bin_root`.
+/// Check whether `binary` reports `version` from `<bin_root>/<binary>`.
+///
+/// `binary` is the catalog-resolved
+/// [`crate::ResolvedInstall::primary_binary`] — the tool's `primary_binary`
+/// index field, or its id when that field is absent. It used to be derived
+/// here from a `match tool` table that only knew `"rust" => "rustc"`, which
+/// silently returned the wrong name for every tool whose binary differs from
+/// its id (python installs `python3`).
 ///
 /// Returns `false` for any reason it can't confirm — missing binary,
 /// non-zero exit, output without the version literal, I/O error. The
 /// caller must treat `false` as "go install"; only `true` should skip.
 #[must_use]
-pub fn already_installed(tool: &str, version: &str, bin_root: &Path) -> bool {
-    let binary = bin_root.join(primary_binary(tool));
+pub fn already_installed(binary: &str, version: &str, bin_root: &Path) -> bool {
+    let binary = bin_root.join(binary);
     if !binary.exists() {
         return false;
     }
@@ -196,22 +192,35 @@ mod tests {
         assert!(!already_installed("rustc", "1.95.0", dir.path()));
     }
 
+    /// The check runs whatever binary name it is handed, with no per-tool
+    /// translation of its own — the catalog already resolved
+    /// `rust` → `rustc` before this point (issue #806).
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
-    fn rust_tool_id_resolves_to_rustc_binary() {
+    fn checks_the_binary_name_it_is_given() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
         assert!(
-            already_installed("rust", "1.95.0", dir.path()),
-            "catalog tool id `rust` should map to `rustc` binary",
+            already_installed("rustc", "1.95.0", dir.path()),
+            "the resolved binary name is what gets version-checked",
         );
     }
 
+    /// Regression guard for the deleted `match tool { "rust" => "rustc" }`
+    /// table: the tool *id* must NOT be silently translated here any more.
+    /// A catalog whose `primary_binary` says `rustc` is the only reason
+    /// `rustc` ever gets probed, so passing the bare id must not find it.
+    #[cfg(unix)]
     #[test]
-    fn primary_binary_defaults_to_tool_id() {
-        assert_eq!(primary_binary("node"), "node");
-        assert_eq!(primary_binary("rust"), "rustc");
+    #[serial_test::serial]
+    fn does_not_translate_a_tool_id_to_a_binary_name() {
+        let dir = tempdir().unwrap();
+        write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
+        assert!(
+            !already_installed("rust", "1.95.0", dir.path()),
+            "no built-in id→binary mapping survives; only `rustc` is on disk",
+        );
     }
 
     /// A non-`ETXTBSY` launch error must be returned on the *first* attempt,

@@ -21,6 +21,19 @@
     {
       "name": "rustup-init",
       "method_kind": "script-installer",
+      "binaries": [
+        "rustc",
+        "cargo",
+        "rustup",
+        "rust-analyzer",
+        "rustfmt",
+        "clippy-driver"
+      ],
+      "bin_source_dir": "cargo/bin",
+      "cache_dirs": {
+        "CARGO_HOME": "cargo",
+        "RUSTUP_HOME": "rustup"
+      },
       "platform": {
         "os": ["debian", "ubuntu", "rhel"],
         "arch": ["amd64", "arm64"]
