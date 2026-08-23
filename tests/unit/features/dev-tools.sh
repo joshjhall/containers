@@ -824,6 +824,26 @@ test_agnix_audit_classifier_behavior() {
 {"invalid":[],"missing":[]}')" \
         "a stray valid JSON value does not corrupt a clean verdict"
 
+    # Noise TRAILING the body — the fifth shape found by review, and the one
+    # every prior fix missed by only ever trimming the start. `npm notice New
+    # version available` after the result is common real npm output, and an
+    # unbounded brace-to-EOF span carried it into the parse, so the whole
+    # candidate failed and a real mismatch read as skip.
+    assert_equals "fatal" \
+        "$(classify_agnix_audit '{"invalid":[{"name":"agnix"}],"missing":[]}
+npm notice New version of npm available')" \
+        "noise AFTER the body must never downgrade a mismatch to skip"
+    assert_equals "install" \
+        "$(classify_agnix_audit '{"invalid":[],"missing":[]}
+npm notice New version of npm available')" \
+        "noise AFTER the body does not suppress a clean verdict"
+    # Both ends at once.
+    assert_equals "fatal" \
+        "$(classify_agnix_audit 'npm warn config foo
+{"invalid":[{"name":"agnix"}],"missing":[]}
+npm notice bye')" \
+        "noise on BOTH sides of the body still yields the real verdict"
+
     # Pretty-printed output (npm's actual multi-line JSON) must still parse.
     assert_equals "install" \
         "$(classify_agnix_audit '{
@@ -831,6 +851,16 @@ test_agnix_audit_classifier_behavior() {
   "missing": []
 }')" \
         "pretty-printed JSON is unaffected by the noise stripping"
+    # Pretty-printed AND trailing noise — guards against a per-line parsing
+    # shortcut, which handles trailing junk but silently breaks multi-line
+    # bodies (verified: a per-line `fromjson?` returns nothing here).
+    assert_equals "fatal" \
+        "$(classify_agnix_audit '{
+  "invalid": [{"name":"agnix"}],
+  "missing": []
+}
+npm notice bye')" \
+        "a multi-line body followed by noise still yields the real verdict"
 
     # The mirror above is only meaningful if the source still uses these exact
     # predicates — assert them against a comment-stripped copy.
@@ -853,6 +883,11 @@ test_agnix_audit_classifier_behavior() {
         "source must not anchor the body on the first brace line"
     assert_file_not_contains "$code_only" 'for agnix_brace_line in' \
         "source must not select a candidate by bare validity"
+    # `jq -c .` is what bounds the value's END: jq emits what it parsed on
+    # stdout and reports only the unparseable remainder on stderr, so trailing
+    # junk cannot poison the parse. Without it the candidate runs to EOF.
+    assert_file_contains "$code_only" 'jq -c \.' \
+        "source lets jq bound where the value ENDS, not just where it starts"
     assert_file_contains "$code_only" '(.invalid | type) != "array"' \
         "source checks invalid[] is an ARRAY before its length (outage != clean)"
     assert_file_contains "$code_only" '(.invalid | length) > 0' \
