@@ -94,3 +94,4 @@
 - [Unit suites share tests/results/](tests-share-results-dir.md) — fixed TEST_TEMP_DIR names collide, unique ones leak; both fixed (#817); #821 is a separate unexplained flake
 - [tests/results/ is on an incoherent FUSE mount](results-dir-fuse-incoherent.md) — writes succeed, report success, then aren't readable; the real cause of the #821 flake class (#818)
 - [Rebase before blaming your own change](rebase-before-blaming-your-change.md) — a CI failure in files your branch never touched usually means main moved; check origin/main first
+- [FUSE scratch breaks write-then-read](fuse-scratch-breaks-write-then-read.md) — test scratch on the FUSE-mounted repo loses coherency ~0.75%/op; use TEST_SCRATCH_BASE, not RESULTS_DIR (#821)
