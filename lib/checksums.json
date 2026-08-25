@@ -193,6 +193,11 @@
           "sha256": "48f2db51b0a482adee0e6faadec431ec9d0185f449ceb90bc2d07c2dbc2841e6",
           "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.1.0/spring-boot-cli-4.1.0-bin.tar.gz",
           "added": "2026-06-14"
+        },
+        "4.1.1": {
+          "sha256": "1b2bf6991e5540728b862f49721241d3d52acb9d48e48ce5ea0d24d75978dfc4",
+          "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.1.1/spring-boot-cli-4.1.1-bin.tar.gz",
+          "added": "2026-08-24"
         }
       }
     },
@@ -537,6 +542,19 @@
             }
           },
           "added": "2026-08-18"
+        },
+        "2.5.10": {
+          "checksums": {
+            "amd64": {
+              "sha256": "511592536991d4b07179d063b93ff0c092ccedba556a4b1ea70d12d46ea0785a",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.10/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "fb1238183c5dcfe9bb48772922c2ab62fa54158bfdc78352fa2851f41a71fa5a",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.10/biome-linux-arm64"
+            }
+          },
+          "added": "2026-08-24"
         }
       }
     },
@@ -644,6 +662,19 @@
             }
           },
           "added": "2026-07-12"
+        },
+        "2.1.11": {
+          "checksums": {
+            "amd64": {
+              "sha256": "435aff51fc767a7f135717a4e3e4f3282c15e0a4ca4e2dfd1b54ef8241ee5f3f",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.11/lefthook_2.1.11_Linux_x86_64.gz"
+            },
+            "arm64": {
+              "sha256": "94568fb0f7bc62eb7d7b110534f7bb01c5153551a3f364269e742fcfaa0b1c07",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.11/lefthook_2.1.11_Linux_aarch64.gz"
+            }
+          },
+          "added": "2026-08-24"
         }
       }
     },
@@ -734,6 +765,19 @@
             }
           },
           "added": "2026-08-18"
+        },
+        "0.56.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "51729ee501593c84e2a2e8233f55959edf2bbd95cbb3998e9f8a81ecad942dba",
+              "url": "https://github.com/dprint/dprint/releases/download/0.56.1/dprint-x86_64-unknown-linux-gnu.zip"
+            },
+            "arm64": {
+              "sha256": "e9dc29baca00edf30d66b1b7a8de490c3a1bda4091bbc7b69f01f4a88db06c01",
+              "url": "https://github.com/dprint/dprint/releases/download/0.56.1/dprint-aarch64-unknown-linux-gnu.zip"
+            }
+          },
+          "added": "2026-08-24"
         }
       }
     },
@@ -846,6 +890,19 @@
             }
           },
           "added": "2026-06-07"
+        },
+        "4.53.6": {
+          "checksums": {
+            "amd64": {
+              "sha256": "c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385",
+              "url": "https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "88a1016bc1d657375a35864e4f44b6f333df8ff97b559f51bba0adcb2169df09",
+              "url": "https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_arm64"
+            }
+          },
+          "added": "2026-08-24"
         }
       }
     },
@@ -954,7 +1011,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-08-18T22:31:55Z",
+    "generated": "2026-08-24T21:31:43Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
