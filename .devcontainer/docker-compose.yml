@@ -24,7 +24,7 @@ services:
         # Pin the dev toolchain explicitly so it stays aligned with the
         # Dockerfile default, the workspace MSRV (Cargo.toml rust-version), and
         # the CI toolchain pins. Bump all of these together — see #736.
-        RUST_VERSION: "1.97.1"
+        RUST_VERSION: "1.98.0"
       cache_from:
         - type=local,src=/tmp/.buildx-cache
       cache_to:
