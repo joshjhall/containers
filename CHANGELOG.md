@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.26] - 2026-08-25
+
+### Added
+
+- Dispatch install methods on method_kind, not the name string (#820)
+
+### CI/CD
+
+- Install triage gem via bundler and execute its policy logic (#803)
+- Validate the vendored catalog against the containers-db schemas (#819)
+
+### Changed
+
+- Drive primary binary, symlink set, and cache layout from the catalog (#822)
+
+### Documentation
+
+- Record Zed postStart/entrypoint race (#785)
+- Record worktree-rm blocked by held build artifacts
+- Record luggage decomposition, cron, and test-flake findings
+- Record FUSE scratch write-then-read coherency finding
+
+### Fixed
+
+- Surface tools missing an updater case (#782)
+- Serialize concurrent runs and repair disabled plugins (#786)
+- Warn instead of silently skipping unresolved secrets (#790)
+- Let dry runs see missing cases, gate auto-merge on skips (#791)
+- Harden and simplify worktree ops (#705, #706, #712, #713) (#795)
+- Configure git identity from an every-boot startup script (#785)
+- Stop DL3064 false positives from blocking Dockerfile lint
+- Add an AGENT_ID resolution arm to golem-notify.sh (#796)
+- Re-run workspace fs-health repair hourly, not only at boot (#798)
+- Resolve the fs-health cron user at run time, not build time (#801)
+- Move unit-test scratch off the FUSE mount (#825)
+
+### Miscellaneous
+
+- Ignore local _notes.md scratch file
+- Verify agnix package signature at the npm install site (#816)
+- Update tool versions and sync Rust 1.98 pins
+
+### Testing
+
+- Functionally exercise plugin paths, retry enable, add kill-switch (#793)
+- Cover golem-notify AGENT_ID ladder branches (#799)
+- Close agnix signature-verification coverage gaps (#823)
+- Isolate project-health-check scratch dirs off the FUSE mount (#824)
+
 ## [4.19.25] - 2026-08-18
 
 ### Fixed
@@ -2285,6 +2334,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.26]: https://github.com/joshjhall/containers/compare/v4.19.25...v4.19.26
 [4.19.25]: https://github.com/joshjhall/containers/compare/v4.19.24...v4.19.25
 [4.19.24]: https://github.com/joshjhall/containers/compare/v4.19.23...v4.19.24
 [4.19.23]: https://github.com/joshjhall/containers/compare/v4.19.22...v4.19.23
