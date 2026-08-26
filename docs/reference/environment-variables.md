@@ -425,6 +425,7 @@ These variables can be set when running containers (via `docker run -e`):
 | ---------------------- | ------- | -------------------------------------------------- |
 | `SKIP_CASE_CHECK`      | `false` | Disable the workspace filesystem health check entirely |
 | `SKIP_CASE_FIX`        | `false` | Detect and report filesystem problems, but never repair them |
+| `FS_HEALTH_MAX_DEPTH`  | `8`     | Submodule recursion depth cap for the health check. A non-numeric value falls back to the default |
 | `FUSE_CLEANUP_DISABLE` | `false` | Disable periodic `.fuse_hidden*` file cleanup      |
 
 ### Host Event Forwarding

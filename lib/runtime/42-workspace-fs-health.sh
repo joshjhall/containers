@@ -121,7 +121,15 @@ FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
 # Submodule recursion depth cap. Purely a containment backstop: a gitlink graph
 # is acyclic in practice, but this script must never be the reason a container
 # fails to start, and 8 is far past any real nesting.
+#
+# Validated numeric because it is compared with `-lt`: a non-integer would make
+# `[` write "integer expression expected" to stderr at every level AND evaluate
+# false, silently disabling submodule traversal entirely. Falling back to the
+# default is strictly better than half-failing on a typo.
 FS_HEALTH_MAX_DEPTH="${FS_HEALTH_MAX_DEPTH:-8}"
+case "$FS_HEALTH_MAX_DEPTH" in
+    '' | *[!0-9]*) FS_HEALTH_MAX_DEPTH=8 ;;
+esac
 
 # Report-only mode: detect and warn, but make no changes.
 FIX_ENABLED=true

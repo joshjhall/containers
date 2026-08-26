@@ -45,7 +45,7 @@ setup() {
     export FS_HEALTH_ENV_FILE="$TEST_TEMP_DIR/fs-health.env"
 
     unset SKIP_CASE_CHECK SKIP_CASE_FIX FS_HEALTH_UPDATE_ENV FS_HEALTH_STAT \
-        2>/dev/null || true
+        FS_HEALTH_MAX_DEPTH 2>/dev/null || true
 }
 
 teardown() {
@@ -53,7 +53,8 @@ teardown() {
         command rm -rf "$TEST_TEMP_DIR"
     fi
     unset PROJECT_ROOT TEST_TEMP_DIR SKIP_CASE_CHECK SKIP_CASE_FIX \
-        FS_HEALTH_ENV_FILE FS_HEALTH_UPDATE_ENV FS_HEALTH_STAT 2>/dev/null || true
+        FS_HEALTH_ENV_FILE FS_HEALTH_UPDATE_ENV FS_HEALTH_STAT \
+        FS_HEALTH_MAX_DEPTH 2>/dev/null || true
 }
 
 # Run the script with the filesystem verdict forced via FS_CASE_STATE, so the
@@ -449,6 +450,19 @@ test_submodule_ignorecase_aligned() {
 
 test_nested_submodule_reached() {
     # Two levels deep: the walk must recurse, not just look one layer down.
+    seed_nested_submodules >/dev/null
+
+    stub_stat "0 7"
+    local output
+    output=$(run_fs_health_stderr sensitive)
+
+    assert_contains "$output" "outer/inner/AGENTS.md" \
+        "The walk should recurse into a nested submodule and label it by full path"
+}
+
+# Build a superproject -> outer -> inner chain and echo the inner worktree path.
+# Shared by the nesting and depth-cap tests.
+seed_nested_submodules() {
     local outer inner_origin
     outer=$(add_submodule "outer")
 
@@ -466,12 +480,45 @@ test_nested_submodule_reached() {
         submodule add -q "$inner_origin" "inner" >/dev/null 2>&1
     git -C "$outer" commit -qm "add inner" >/dev/null 2>&1
 
-    stub_stat "0 7"
-    local output
-    output=$(run_fs_health_stderr sensitive)
+    command printf '%s\n' "$outer/inner"
+}
 
+test_depth_cap_stops_recursion() {
+    # The cap is the one branch added purely to bound a bad outcome, so it must
+    # be shown to actually stop the walk rather than existing as dead code.
+    # Depth 1 admits the superproject (depth 0) and outer (depth 1) but must
+    # stop before inner.
+    seed_nested_submodules >/dev/null
+    stub_stat "0 7"
+    export FS_HEALTH_MAX_DEPTH=1
+
+    local output status=0
+    output=$(run_fs_health_stderr sensitive) || status=$?
+
+    assert_equals "0" "$status" \
+        "Hitting the depth cap must not make the run fail"
+    assert_contains "$output" "outer/AGENTS.md" \
+        "Depth 1 should still reach the first-level submodule"
+    assert_not_contains "$output" "outer/inner/AGENTS.md" \
+        "Depth 1 must stop before the second-level submodule"
+}
+
+test_depth_cap_rejects_non_numeric() {
+    # A non-integer would make `[ -lt ]` both noisy AND false, silently
+    # disabling submodule traversal. It must fall back to the default instead.
+    seed_nested_submodules >/dev/null
+    stub_stat "0 7"
+    export FS_HEALTH_MAX_DEPTH="not-a-number"
+
+    local output status=0
+    output=$(run_fs_health_stderr sensitive) || status=$?
+
+    assert_equals "0" "$status" \
+        "A bad FS_HEALTH_MAX_DEPTH must not make the run fail"
+    assert_not_contains "$output" "integer expression expected" \
+        "A bad FS_HEALTH_MAX_DEPTH must not leak a bash error to stderr"
     assert_contains "$output" "outer/inner/AGENTS.md" \
-        "The walk should recurse into a nested submodule and label it by full path"
+        "A bad FS_HEALTH_MAX_DEPTH should fall back to the default, not disable traversal"
 }
 
 test_uninitialized_submodule_is_silent() {
@@ -1048,6 +1095,8 @@ run_test_with_setup test_superproject_index_hides_submodule_links "Superproject 
 run_test_with_setup test_submodule_symlink_repaired "Stale symlink inside a submodule is repaired"
 run_test_with_setup test_submodule_ignorecase_aligned "Submodule core.ignorecase aligned"
 run_test_with_setup test_nested_submodule_reached "Nested submodule reached recursively"
+run_test_with_setup test_depth_cap_stops_recursion "Depth cap stops recursion"
+run_test_with_setup test_depth_cap_rejects_non_numeric "Non-numeric depth cap falls back to default"
 run_test_with_setup test_uninitialized_submodule_is_silent "Uninitialized submodule is silent and non-fatal"
 run_test_with_setup test_healthy_submodule_leaves_tree_clean "Healthy submodule leaves tree clean"
 run_test_with_setup test_skip_fix_reports_submodule_without_writing "SKIP_CASE_FIX reports submodule without writing"
