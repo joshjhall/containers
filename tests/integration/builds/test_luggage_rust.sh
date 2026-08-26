@@ -21,6 +21,9 @@ source "$SCRIPT_DIR/../../framework.sh"
 
 init_test_framework
 
+# This suite builds and runs containers (#831).
+require_docker
+
 CONTAINERS_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 export BUILD_CONTEXT="$CONTAINERS_DIR"
 

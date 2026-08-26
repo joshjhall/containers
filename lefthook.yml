@@ -300,9 +300,25 @@ pre-push:
         fi
 
     docker-compose-validate:
+      # docker is shipped by the docker feature; skip gracefully if running
+      # outside a docker-enabled container. Without this guard the hook hard-
+      # failed the whole push, and lefthook's aggregate `exit status 1` made it
+      # look like the unit-tests hook had failed — which trained people to
+      # reach for LEFTHOOK=0 and bypass every gate (#831).
+      #
+      # Probe `docker compose`, not bare `docker`: the compose plugin ships
+      # separately from the CLI, so a docker-without-plugin host would pass a
+      # `command -v docker` guard and then fail on every file.
+      skip:
+        - run: "! docker compose version >/dev/null 2>&1"
       run: |
         for f in $(git ls-files "*compose*.yml" "*compose*.yaml" 2>/dev/null); do
-          [ -f "$f" ] && docker compose -f "$f" config >/dev/null || exit 1
+          # `[ -f "$f" ] || continue` on its own line, NOT
+          # `[ -f "$f" ] && docker compose ... || exit 1`: in that form a
+          # non-regular-file match short-circuits the && and falls straight
+          # into `|| exit 1`, reporting as loudly as a real config error.
+          [ -f "$f" ] || continue
+          docker compose -f "$f" config >/dev/null || exit 1
         done
 
     dprint-yaml-check:

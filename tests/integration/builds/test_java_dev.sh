@@ -22,6 +22,9 @@ source "$SCRIPT_DIR/../../framework.sh"
 # Initialize the test framework
 init_test_framework
 
+# This suite builds and runs containers (#831).
+require_docker
+
 # For standalone testing, we build from containers directory
 export BUILD_CONTEXT="$CONTAINERS_DIR"
 
