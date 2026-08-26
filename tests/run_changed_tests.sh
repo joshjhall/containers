@@ -146,14 +146,40 @@ map_to_test() {
             return
             ;;
 
-        # lib/runtime/foo.sh → tests/unit/runtime/foo.sh
+        # lib/runtime/foo.sh → tests/unit/runtime/foo*.sh (all sibling suites)
+        #
+        # Two things beyond a plain basename match, both load-bearing (#832):
+        #
+        # 1. STRIP THE NN- ORDERING PREFIX. Runtime scripts carry a boot-order
+        #    prefix the test files do not: lib/runtime/42-workspace-fs-health.sh
+        #    is covered by tests/unit/runtime/workspace-fs-health.sh. The exact
+        #    match alone therefore resolved to a path that has never existed,
+        #    and the arm silently emitted nothing — a changed runtime script ran
+        #    no tests at push time and nobody saw an error, because "no match"
+        #    and "no tests needed" look identical here.
+        #
+        # 2. EMIT EVERY SIBLING, NOT THE FIRST. One runtime script can be
+        #    covered by several suites split along a seam (workspace-fs-health.sh,
+        #    -submodules.sh, -cron-entry.sh). Returning after the first would
+        #    make coverage depend on glob order, so a split silently narrows what
+        #    runs. Same glob-fanout shape as the lib/features/lib arm above,
+        #    minus the early return.
         lib/runtime/*.sh)
-            local base
+            local base stripped match
             base=$(basename "$file")
-            local test_path="${TESTS_DIR}/unit/runtime/${base}"
+            stripped="${base#[0-9][0-9]-}"
+
+            local test_path="${TESTS_DIR}/unit/runtime/${stripped}"
             if [ -f "$test_path" ]; then
                 echo "$test_path"
             fi
+
+            # Sibling suites: <stem>-<concern>.sh alongside the exact match.
+            for match in "${TESTS_DIR}"/unit/runtime/"${stripped%.sh}"-*.sh; do
+                if [ -f "$match" ] && [ "$match" != "$test_path" ]; then
+                    echo "$match"
+                fi
+            done
             return
             ;;
 
