@@ -281,20 +281,20 @@ init_test_framework() {
     export TEST_RUN_ID
     TEST_RUN_ID=$(date +%Y%m%d-%H%M%S)
 
-    # Check Docker is available (skip if SKIP_DOCKER_CHECK is set)
-    if [ "${SKIP_DOCKER_CHECK:-false}" != "true" ]; then
-        if ! command -v docker >/dev/null 2>&1; then
-            echo -e "${TEST_COLOR_FAIL}ERROR: Docker is not installed or not in PATH${TEST_COLOR_RESET}"
-            exit 1
-        fi
-
-        if ! docker info >/dev/null 2>&1; then
-            echo -e "${TEST_COLOR_FAIL}ERROR: Docker daemon is not running${TEST_COLOR_RESET}"
-            exit 1
-        fi
-    else
-        echo -e "${TEST_COLOR_INFO}Skipping Docker check (SKIP_DOCKER_CHECK is set)${TEST_COLOR_RESET}"
-    fi
+    # NOTE: init_test_framework deliberately does NOT check for Docker (#831).
+    # It used to abort here when `docker` was absent, which gated ~160
+    # pure-shell unit suites — none of which touch a daemon — on a tool they
+    # never call. Only 5 of 167 suites set the SKIP_DOCKER_CHECK opt-out, so a
+    # Docker-free container failed the pre-push `unit-tests` hook for reasons
+    # unrelated to the code under test.
+    #
+    # The gate now lives on the suites that genuinely need a daemon: they call
+    # require_docker() (below) explicitly. That is also strictly stronger than
+    # the runner-level guards in run_integration_tests.sh / run_all.sh /
+    # test_feature.sh, which a suite invoked directly via run_test.sh bypasses.
+    #
+    # SKIP_DOCKER_CHECK is still accepted as a no-op so the suites and
+    # .github/workflows/ci.yml that already export it keep working verbatim.
 
     echo -e "${TEST_COLOR_INFO}=== Test Framework Initialized ===${TEST_COLOR_RESET}"
     echo "Test run ID: $TEST_RUN_ID"
@@ -304,6 +304,29 @@ init_test_framework() {
         echo -e "${TEST_COLOR_FAIL}WARNING: scratch base is on $(tf_fstype_of "$TEST_SCRATCH_BASE") — write-then-read may be incoherent (#821)${TEST_COLOR_RESET}"
     fi
     echo
+}
+
+# Assert a working Docker daemon, aborting the suite if there isn't one.
+#
+# Call this from any suite that builds or runs containers, immediately after
+# init_test_framework. Unit suites must NOT call it — gating Docker-free tests
+# on Docker is exactly the defect #831 fixed.
+#
+# This is the suite-level gate. The runners (run_integration_tests.sh,
+# run_all.sh, test_feature.sh) keep their own checks for a faster, clearer
+# failure before any suite starts; this one additionally covers a suite
+# invoked directly through run_test.sh, which no runner guard sees.
+require_docker() {
+    if ! command -v docker >/dev/null 2>&1; then
+        echo -e "${TEST_COLOR_FAIL}ERROR: Docker is not installed or not in PATH${TEST_COLOR_RESET}" >&2
+        echo "This suite builds or runs containers and requires a Docker daemon." >&2
+        exit 1
+    fi
+
+    if ! docker info >/dev/null 2>&1; then
+        echo -e "${TEST_COLOR_FAIL}ERROR: Docker daemon is not running${TEST_COLOR_RESET}" >&2
+        exit 1
+    fi
 }
 
 # Define a test suite

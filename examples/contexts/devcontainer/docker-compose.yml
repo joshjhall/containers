@@ -38,6 +38,11 @@ services:
         # setup) — not arbitrary root. Use `=true` for legacy full NOPASSWD:ALL.
         - ENABLE_PASSWORDLESS_SUDO=scoped
         - INCLUDE_DEV_TOOLS=true
+        # Required because this service bind-mounts /var/run/docker.sock below.
+        # Mounting the socket without this flag installs no docker CLI and adds
+        # the user to no `docker` group, so the socket is present but unusable —
+        # and any tooling that probes for docker fails confusingly (#831).
+        - INCLUDE_DOCKER=true
       cache_from:
         - type=registry,ref=ghcr.io/project/devcontainer:cache
     # Load environment variables from .env file (optional, create from .env.example)
