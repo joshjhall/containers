@@ -101,8 +101,9 @@ pub fn ensure_supported(
             reason: "tier 4 TOFU verification is not allowed while verified downloads are \
                      required: this publisher serves no checksum, so nothing establishes the \
                      artifact's authenticity. Pin a known-good checksum for it in the catalog \
-                     (tier 2), or drop `--require-verified-downloads` \
-                     (REQUIRE_VERIFIED_DOWNLOADS=true) to accept the risk"
+                     (tier 2), or — to accept the risk — drop the \
+                     `--require-verified-downloads` flag and set \
+                     REQUIRE_VERIFIED_DOWNLOADS=false"
                 .to_owned(),
         }),
         // Both are implemented and, at this point, permitted. Tier 4's

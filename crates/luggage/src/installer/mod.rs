@@ -756,6 +756,8 @@ fn install_basename(url: &str) -> String {
 mod tests {
     use super::*;
     use crate::Platform;
+    use crate::installer::download::MockHttpClient;
+    use crate::installer::verify::sha::digest_hex;
     use containers_common::tooldb::{Dependency, InstallMethodKind, Verification};
 
     /// A minimal debian/amd64 [`ResolvedInstall`] carrying one dependency,
@@ -921,6 +923,82 @@ mod tests {
         let plan = installer.plan(&resolved).unwrap();
         let dry = Installer::report_dry_run(plan, None, 0.0);
         assert!(dry.warnings.is_empty());
+    }
+
+    /// The wiring between verification and the report is what makes a TOFU
+    /// acceptance visible, and it spans `stage_verify` → `run_stages` →
+    /// `run_with_report`. Unit-testing each layer alone would still pass if a
+    /// warning were dropped in between, so drive the real `stage_verify` and
+    /// assert the warning comes back out.
+    ///
+    /// Exercises the `logger: None` branch specifically — the one where the
+    /// per-feature log file could not be opened, and `tracing::warn!` is the
+    /// only thing keeping the acceptance from being silent.
+    #[test]
+    fn stage_verify_returns_the_tofu_warning_with_no_logger() {
+        let mut resolved = sample_resolved_with_deps();
+        resolved.verification_tier = 4;
+        resolved.verification = Verification { tier: 4, tofu: Some(true), ..resolved.verification };
+
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        let digest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        let warnings = installer.stage_verify(&resolved, digest, "get-pip.py", None).unwrap();
+
+        assert_eq!(warnings.len(), 1, "a TOFU acceptance must produce exactly one warning");
+        assert_eq!(warnings[0].tier, 4);
+        assert_eq!(warnings[0].digest, digest);
+        assert!(warnings[0].message.contains("TOFU"), "{}", warnings[0].message);
+    }
+
+    /// The same path with a real logger: the warning must reach the
+    /// per-feature log file, not only the return value. `check-build-logs.sh`
+    /// and anyone reading build output depend on this half.
+    #[test]
+    fn stage_verify_writes_the_tofu_warning_to_the_feature_log() {
+        let mut resolved = sample_resolved_with_deps();
+        resolved.verification_tier = 4;
+        resolved.verification = Verification { tier: 4, tofu: Some(true), ..resolved.verification };
+
+        let dir = tempfile::tempdir().unwrap();
+        let logger = logging::FeatureLogger::open(dir.path(), "python", "3.13.0").unwrap();
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        let digest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        let warnings =
+            installer.stage_verify(&resolved, digest, "get-pip.py", Some(&logger)).unwrap();
+        assert_eq!(warnings.len(), 1);
+
+        let body = fs::read_to_string(logger.path()).unwrap();
+        assert!(body.contains("WARNING:"), "{body}");
+        assert!(body.contains("TOFU"), "{body}");
+    }
+
+    /// Tier 3 goes through the same `stage_verify` and must stay silent —
+    /// otherwise the warning stops meaning "this one was weaker".
+    #[test]
+    fn stage_verify_is_silent_for_tier_3() {
+        let resolved = sample_resolved_with_deps(); // tier 3
+        let digest = digest_hex(Some("sha256"), b"hello").unwrap();
+        let mock = MockHttpClient::new();
+        mock.insert("https://example.test/x.sha256", format!("{digest}  art\n").into_bytes());
+
+        let mut resolved = resolved;
+        resolved.verification = Verification {
+            checksum_url_template: Some("https://example.test/x.sha256".into()),
+            ..resolved.verification
+        };
+        let installer = Installer::with_runners(
+            InstallerOptions { install_system_packages: false, ..InstallerOptions::default() },
+            Arc::new(mock),
+            Arc::new(methods::ProcessRunner),
+        );
+        let warnings = installer.stage_verify(&resolved, &digest, "art", None).unwrap();
+        assert!(warnings.is_empty());
     }
 
     /// Strict mode must refuse a TOFU install *before* the download, the way
