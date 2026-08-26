@@ -100,14 +100,37 @@ output means it acted:
 [fs-health] set core.ignorecase=true (opt out with SKIP_CASE_FIX=true)
 ```
 
-It also refreshes tracked symlinks whose filesystem attributes have gone stale
-(reporting an impossible `nlink=0`), which otherwise makes them show as
-permanently modified in `git status`:
+It also refreshes tracked symlinks whose filesystem attributes have gone stale,
+which otherwise makes them show as permanently modified in `git status`:
 
 ```text
 [fs-health] AGENTS.md: stale symlink attributes (nlink=0)
 [fs-health] refreshed AGENTS.md -> CLAUDE.md
 ```
+
+A link is treated as stale on either of two signals, and the report names which
+one fired:
+
+| Signal | Why it means "stale" |
+| ------ | -------------------- |
+| `nlink=0` | Impossible for a live symlink. A *broken* link (target missing) still reports `nlink=1`, so this never fires on one. |
+| `st_size=0` with a non-empty target | What git actually keys on — it sizes a symlink from `st_size` before reading it, so a zero size makes git diff the link against the empty blob. A live symlink's `st_size` is the length of its target, so zero-size-with-a-real-target is a self-contradiction. |
+
+Both repairs cover the superproject **and every initialized submodule,
+recursively**. This matters because `git ls-files` stops at a submodule's
+gitlink: a superproject-only pass never enumerates the submodule's symlinks at
+all, so they decay indefinitely while the top-level ones get fixed. The
+signature is a `git status` that permanently shows the submodule as modified
+(`m` in the unstaged column) and nothing else, with the dirty symlinks visible
+only one level down. Submodule paths are reported with their full prefix:
+
+```text
+[fs-health] containers/AGENTS.md: stale symlink attributes (nlink=0)
+[fs-health] refreshed containers/AGENTS.md -> CLAUDE.md
+```
+
+A submodule's `core.ignorecase` is its own config and is aligned the same way.
+Uninitialized submodules are skipped silently.
 
 Both repairs are idempotent and leave file contents untouched. Two opt-outs:
 
