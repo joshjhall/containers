@@ -206,19 +206,19 @@ check_ignorecase() {
     fi
 
     local shown="${current:-unset}"
-    echo "$LOG_PREFIX $root is on a case-insensitive mount" >&2
-    echo "$LOG_PREFIX git core.ignorecase is '$shown' (incorrect for this mount)" >&2
+    command echo "$LOG_PREFIX $root is on a case-insensitive mount" >&2
+    command echo "$LOG_PREFIX git core.ignorecase is '$shown' (incorrect for this mount)" >&2
 
     if [ "$FIX_ENABLED" != "true" ]; then
-        echo "$LOG_PREFIX SKIP_CASE_FIX=true — not changing it. To fix manually:" >&2
-        echo "$LOG_PREFIX   git -C $root config core.ignorecase true" >&2
+        command echo "$LOG_PREFIX SKIP_CASE_FIX=true — not changing it. To fix manually:" >&2
+        command echo "$LOG_PREFIX   git -C $root config core.ignorecase true" >&2
         return 0
     fi
 
     if git -C "$root" config core.ignorecase true 2>/dev/null; then
-        echo "$LOG_PREFIX set core.ignorecase=true (opt out with SKIP_CASE_FIX=true)" >&2
+        command echo "$LOG_PREFIX set core.ignorecase=true (opt out with SKIP_CASE_FIX=true)" >&2
     else
-        echo "$LOG_PREFIX Warning: could not write core.ignorecase (read-only .git?)" >&2
+        command echo "$LOG_PREFIX Warning: could not write core.ignorecase (read-only .git?)" >&2
     fi
 }
 
@@ -303,11 +303,11 @@ check_symlinks() {
 
         reason=$(symlink_stale_reason "$path" "$target") || continue
 
-        echo "$LOG_PREFIX ${label_prefix}${rel}: stale symlink attributes ($reason)" >&2
+        command echo "$LOG_PREFIX ${label_prefix}${rel}: stale symlink attributes ($reason)" >&2
 
         if [ "$FIX_ENABLED" != "true" ]; then
-            echo "$LOG_PREFIX SKIP_CASE_FIX=true — not repairing. To fix manually:" >&2
-            echo "$LOG_PREFIX   ln -sfn $target $path" >&2
+            command echo "$LOG_PREFIX SKIP_CASE_FIX=true — not repairing. To fix manually:" >&2
+            command echo "$LOG_PREFIX   ln -sfn $target $path" >&2
             continue
         fi
 
@@ -315,9 +315,9 @@ check_symlinks() {
         # directory would create the new link *inside* that directory.
         # The target is unchanged, so content and git blob identity are intact.
         if /usr/bin/ln -sfn "$target" "$path" 2>/dev/null; then
-            echo "$LOG_PREFIX refreshed ${label_prefix}${rel} -> $target" >&2
+            command echo "$LOG_PREFIX refreshed ${label_prefix}${rel} -> $target" >&2
         else
-            echo "$LOG_PREFIX Warning: could not refresh ${label_prefix}${rel} (read-only mount?)" >&2
+            command echo "$LOG_PREFIX Warning: could not refresh ${label_prefix}${rel} (read-only mount?)" >&2
         fi
     done < <(git -C "$root" ls-files -s 2>/dev/null |
         /usr/bin/awk -F'\t' '$1 ~ /^120000 / { print $2 }')

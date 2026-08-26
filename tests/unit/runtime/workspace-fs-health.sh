@@ -503,6 +503,23 @@ test_depth_cap_stops_recursion() {
         "Depth 1 must stop before the second-level submodule"
 }
 
+test_depth_cap_zero_skips_all_submodules() {
+    # 0 is a distinct path from 1: the recursion loop body never runs at all.
+    # It is also the natural way to disable submodule traversal alone, without
+    # SKIP_CASE_CHECK switching off the superproject repair too.
+    seed_nested_submodules >/dev/null
+    stub_stat "0 7"
+    export FS_HEALTH_MAX_DEPTH=0
+
+    local output status=0
+    output=$(run_fs_health_stderr sensitive) || status=$?
+
+    assert_equals "0" "$status" \
+        "Depth 0 must not make the run fail"
+    assert_not_contains "$output" "outer/" \
+        "Depth 0 must not descend into any submodule"
+}
+
 test_depth_cap_rejects_non_numeric() {
     # A non-integer would make `[ -lt ]` both noisy AND false, silently
     # disabling submodule traversal. It must fall back to the default instead.
@@ -1096,6 +1113,7 @@ run_test_with_setup test_submodule_symlink_repaired "Stale symlink inside a subm
 run_test_with_setup test_submodule_ignorecase_aligned "Submodule core.ignorecase aligned"
 run_test_with_setup test_nested_submodule_reached "Nested submodule reached recursively"
 run_test_with_setup test_depth_cap_stops_recursion "Depth cap stops recursion"
+run_test_with_setup test_depth_cap_zero_skips_all_submodules "Depth cap of 0 skips all submodules"
 run_test_with_setup test_depth_cap_rejects_non_numeric "Non-numeric depth cap falls back to default"
 run_test_with_setup test_uninitialized_submodule_is_silent "Uninitialized submodule is silent and non-fatal"
 run_test_with_setup test_healthy_submodule_leaves_tree_clean "Healthy submodule leaves tree clean"
