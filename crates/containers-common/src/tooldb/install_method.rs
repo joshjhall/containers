@@ -226,6 +226,13 @@ pub struct Verification {
     /// Tier 3 — URL template the publisher serves the checksum at.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checksum_url_template: Option<String>,
+    /// Tier 3 — the checksum URL serves a multi-entry manifest
+    /// (`<digest>  <filename>` per line, e.g. Node's `SHASUMS256.txt`) rather
+    /// than a single checksum. When `true`, the line matching the resolved
+    /// artifact filename is selected. Absent or `false` keeps the
+    /// single-checksum behaviour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checksum_manifest: Option<bool>,
     /// Tier 1 (GPG) — publisher public key URL.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpg_key_url: Option<String>,

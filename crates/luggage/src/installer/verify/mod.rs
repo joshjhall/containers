@@ -22,9 +22,14 @@ use crate::installer::template::Substitutions;
 
 /// Dispatch verification by tier.
 ///
-/// `bytes` is the artifact under test; `tool` and `version` are used in
-/// error messages. `http` is only consumed by tier 3 (and any future tier
-/// that fetches over the network).
+/// `actual_digest` is the artifact's hex digest, computed while it streamed to
+/// disk; `artifact_filename` is its on-disk basename, which manifest-mode tier
+/// 3 uses to select its line. Taking a digest rather than `&[u8]` is
+/// deliberate: with the bytes out of scope no tier can re-read a
+/// possibly-enormous artifact to hash it a second time.
+///
+/// `tool` and `version` are used in error messages. `http` is only consumed by
+/// tier 3 (and any future tier that fetches over the network).
 ///
 /// # Errors
 ///
@@ -35,7 +40,8 @@ use crate::installer::template::Substitutions;
 pub fn dispatch(
     tool: &str,
     version: &str,
-    bytes: &[u8],
+    actual_digest: &str,
+    artifact_filename: &str,
     verification: &Verification,
     subs: &Substitutions<'_>,
     http: &dyn HttpClient,
@@ -43,7 +49,9 @@ pub fn dispatch(
     match verification.tier {
         1 => Err(LuggageError::NotImplemented("tier 1 GPG/sigstore verification")),
         2 => Err(LuggageError::NotImplemented("tier 2 pinned-checksum verification")),
-        3 => tier3::verify(tool, version, bytes, verification, subs, http),
+        3 => {
+            tier3::verify(tool, version, actual_digest, artifact_filename, verification, subs, http)
+        }
         4 => Err(LuggageError::NotImplemented("tier 4 TOFU verification")),
         other => Err(LuggageError::Catalog(format!("unknown verification tier {other}"))),
     }
@@ -77,6 +85,7 @@ mod tests {
             algorithm: None,
             pinned_checksum: None,
             checksum_url_template: None,
+            checksum_manifest: None,
             gpg_key_url: None,
             signature_url_template: None,
             sigstore_identity: None,
@@ -90,7 +99,8 @@ mod tests {
         let err = dispatch(
             "rust",
             "1.95.0",
-            b"x",
+            "deadbeef",
+            "artifact.tar.gz",
             &verification(1),
             &Substitutions::default(),
             &DeadClient,
@@ -104,7 +114,8 @@ mod tests {
         let err = dispatch(
             "rust",
             "1.95.0",
-            b"x",
+            "deadbeef",
+            "artifact.tar.gz",
             &verification(2),
             &Substitutions::default(),
             &DeadClient,
@@ -118,7 +129,8 @@ mod tests {
         let err = dispatch(
             "rust",
             "1.95.0",
-            b"x",
+            "deadbeef",
+            "artifact.tar.gz",
             &verification(4),
             &Substitutions::default(),
             &DeadClient,
@@ -132,7 +144,8 @@ mod tests {
         let err = dispatch(
             "rust",
             "1.95.0",
-            b"x",
+            "deadbeef",
+            "artifact.tar.gz",
             &verification(9),
             &Substitutions::default(),
             &DeadClient,
@@ -157,6 +170,7 @@ mod tests {
             algorithm: Some("sha256".into()),
             pinned_checksum: None,
             checksum_url_template: Some("https://example.test/{rustup_target}/x.sha256".into()),
+            checksum_manifest: None,
             gpg_key_url: None,
             signature_url_template: None,
             sigstore_identity: None,
@@ -164,7 +178,8 @@ mod tests {
             tofu: None,
         };
         let subs = Substitutions::new("1.95.0", "x86_64-unknown-linux-gnu");
-        dispatch("rust", "1.95.0", b"hello", &v, &subs, &OkClient).unwrap();
+        let digest = super::sha::digest_hex(Some("sha256"), b"hello").unwrap();
+        dispatch("rust", "1.95.0", &digest, "rustup-init", &v, &subs, &OkClient).unwrap();
         // Suppress unused-warning for `Mutex`/`HashMap` imports above (kept
         // to mirror the tier3 test fixture style).
         let _: HashMap<&str, &str> = HashMap::new();

@@ -25,6 +25,7 @@ pub mod verify;
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -36,7 +37,7 @@ use tempfile::tempdir_in;
 use crate::error::{ErrorClass, LuggageError, Result};
 use crate::resolver::ResolvedInstall;
 
-use download::{HttpClient, UreqClient};
+use download::{DigestingFileSink, HttpClient, UreqClient};
 use methods::{CommandRunner, MethodContext, ProcessRunner};
 use rustup_target::rustup_target_for;
 use syspackages::{
@@ -451,16 +452,28 @@ impl Installer {
         logger: Option<&logging::FeatureLogger>,
     ) -> Result<String> {
         self.stage_system_packages(resolved, logger)?;
-        let bytes = self.stage_download(&plan, logger)?;
-        self.stage_verify(resolved, &bytes, logger)?;
+
+        // Scratch dir is created BEFORE the download so the artifact can stream
+        // straight into it — nothing buffers the whole artifact in memory, which
+        // matters at 150MB (go) as much as it did not at 15MB (rustup-init).
+        //
+        // `scratch` is a TempDir bound for the rest of this function, so its
+        // Drop removes the artifact on every exit path: the success return
+        // below, and any `?` unwinding out of verify/method/post-install.
         fs::create_dir_all(&self.options.tmp_root)
             .map_err(|e| LuggageError::Io { path: self.options.tmp_root.clone(), source: e })?;
         let scratch = tempdir_in(&self.options.tmp_root)
             .map_err(|e| LuggageError::Io { path: self.options.tmp_root.clone(), source: e })?;
-        let source_url = plan.source_url.as_deref().expect("download stage validated source_url");
-        let artifact = scratch.path().join(install_basename(source_url));
-        fs::write(&artifact, &bytes)
-            .map_err(|e| LuggageError::Io { path: artifact.clone(), source: e })?;
+        let source_url = plan.source_url.as_deref().ok_or_else(|| {
+            LuggageError::Catalog(
+                "install method has no source_url_template (cannot download)".into(),
+            )
+        })?;
+        let artifact_filename = install_basename(source_url);
+        let artifact = scratch.path().join(&artifact_filename);
+
+        let digest = self.stage_download(resolved, source_url, &artifact, logger)?;
+        self.stage_verify(resolved, &digest, &artifact_filename, logger)?;
 
         // Build the env map once so every stage that shells out (install
         // method, post-install steps, post-install validate) sees the same
@@ -531,26 +544,33 @@ impl Installer {
         Some(versions)
     }
 
+    /// Stream the artifact to `artifact`, returning its hex digest.
+    ///
+    /// The digest is computed as the bytes land (see [`DigestingFileSink`]),
+    /// so verification never re-reads the file and peak memory is a fixed
+    /// chunk rather than the artifact size.
     fn stage_download(
         &self,
-        plan: &InstallPlan,
+        resolved: &ResolvedInstall,
+        url: &str,
+        artifact: &std::path::Path,
         logger: Option<&logging::FeatureLogger>,
-    ) -> Result<Vec<u8>> {
-        let url = plan.source_url.as_deref().ok_or_else(|| {
-            LuggageError::Catalog(
-                "install method has no source_url_template (cannot download)".into(),
-            )
-        })?;
+    ) -> Result<String> {
         if let Some(l) = logger {
             l.step(&format!("download {url}"));
         }
-        self.http.get(url)
+        let mut sink =
+            DigestingFileSink::create(artifact, resolved.verification.algorithm.as_deref())?;
+        self.http.get_to_writer(url, &mut sink)?;
+        sink.flush().map_err(|e| LuggageError::Io { path: artifact.to_path_buf(), source: e })?;
+        Ok(sink.finish())
     }
 
     fn stage_verify(
         &self,
         resolved: &ResolvedInstall,
-        bytes: &[u8],
+        actual_digest: &str,
+        artifact_filename: &str,
         logger: Option<&logging::FeatureLogger>,
     ) -> Result<()> {
         let target = rustup_target_for(&resolved.platform).ok();
@@ -562,7 +582,8 @@ impl Installer {
         verify::dispatch(
             &resolved.tool,
             &resolved.version,
-            bytes,
+            actual_digest,
+            artifact_filename,
             &resolved.verification,
             &subs,
             self.http.as_ref(),
@@ -681,6 +702,7 @@ mod tests {
                 algorithm: Some("sha256".into()),
                 pinned_checksum: None,
                 checksum_url_template: None,
+                checksum_manifest: None,
                 gpg_key_url: None,
                 signature_url_template: None,
                 sigstore_identity: None,

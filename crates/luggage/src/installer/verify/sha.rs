@@ -41,6 +41,95 @@ pub fn digest_hex(algorithm: Option<&str>, bytes: &[u8]) -> Result<String> {
     }
 }
 
+/// An [`io::Write`] that digests everything written through it.
+///
+/// This is what lets the download path verify a 150MB artifact without ever
+/// holding it: bytes are hashed as they stream to disk, so the digest is
+/// finished the moment the last byte lands and nothing re-reads the file.
+///
+/// The algorithm is decoded by [`digest_hex`]'s same `match` (via
+/// [`DigestWriter::new`]) — this module stays the single place a catalog
+/// algorithm string turns into a hash computation.
+pub struct DigestWriter {
+    inner: Hasher,
+}
+
+/// The concrete hasher behind a [`DigestWriter`].
+enum Hasher {
+    /// SHA-256 — the catalog default.
+    Sha256(Sha256),
+    /// SHA-512.
+    Sha512(Sha512),
+}
+
+/// Hand-written because the `sha2` hashers are not `Debug`. Prints the
+/// algorithm only — never any digest state, which would be misleading
+/// mid-stream and is not the caller's business.
+impl std::fmt::Debug for DigestWriter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let algo = match self.inner {
+            Hasher::Sha256(_) => "sha256",
+            Hasher::Sha512(_) => "sha512",
+        };
+        f.debug_struct("DigestWriter").field("algorithm", &algo).finish()
+    }
+}
+
+impl DigestWriter {
+    /// Build a writer for the named algorithm.
+    ///
+    /// `algorithm` is matched case-insensitively; pass `None` for
+    /// [`DEFAULT_ALGORITHM`]. Accepts exactly the algorithms [`digest_hex`]
+    /// accepts, and rejects the rest with the same errors.
+    ///
+    /// # Errors
+    ///
+    /// - [`LuggageError::NotImplemented`] for a recognized-but-unwired
+    ///   SHA-family name.
+    /// - [`LuggageError::Catalog`] for an unrecognized algorithm.
+    pub fn new(algorithm: Option<&str>) -> Result<Self> {
+        let algo = algorithm.unwrap_or(DEFAULT_ALGORITHM).to_ascii_lowercase();
+        let inner = match algo.as_str() {
+            "sha256" => Hasher::Sha256(Sha256::new()),
+            "sha512" => Hasher::Sha512(Sha512::new()),
+            "sha384" | "sha224" | "blake3" => {
+                return Err(LuggageError::NotImplemented(
+                    "digest algorithm not wired (only sha256/sha512)",
+                ));
+            }
+            _ => {
+                return Err(LuggageError::Catalog(format!(
+                    "unrecognised digest algorithm `{algo}`"
+                )));
+            }
+        };
+        Ok(Self { inner })
+    }
+
+    /// Consume the writer and return the lowercase hex digest.
+    #[must_use]
+    pub fn finish(self) -> String {
+        match self.inner {
+            Hasher::Sha256(h) => hex_lower(&h.finalize()),
+            Hasher::Sha512(h) => hex_lower(&h.finalize()),
+        }
+    }
+}
+
+impl std::io::Write for DigestWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match &mut self.inner {
+            Hasher::Sha256(h) => h.update(buf),
+            Hasher::Sha512(h) => h.update(buf),
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 fn hex_lower(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {
@@ -118,6 +207,68 @@ mod tests {
     #[test]
     fn digests_equal_rejects_different_lengths() {
         assert!(!digests_equal("aa", "aaaa"));
+    }
+
+    #[test]
+    fn digest_writer_matches_digest_hex_over_the_same_bytes() {
+        use std::io::Write as _;
+        let mut w = DigestWriter::new(Some("sha256")).unwrap();
+        w.write_all(b"abc").unwrap();
+        assert_eq!(w.finish(), ABC_SHA256);
+    }
+
+    /// The property the streaming download depends on: chunked writes must
+    /// produce the same digest as one contiguous buffer.
+    #[test]
+    fn digest_writer_is_chunk_boundary_independent() {
+        use std::io::Write as _;
+        let mut w = DigestWriter::new(Some("sha256")).unwrap();
+        w.write_all(b"a").unwrap();
+        w.write_all(b"b").unwrap();
+        w.write_all(b"c").unwrap();
+        assert_eq!(w.finish(), ABC_SHA256);
+    }
+
+    #[test]
+    fn digest_writer_supports_sha512() {
+        use std::io::Write as _;
+        let mut w = DigestWriter::new(Some("sha512")).unwrap();
+        w.write_all(b"abc").unwrap();
+        assert_eq!(w.finish(), ABC_SHA512);
+    }
+
+    #[test]
+    fn digest_writer_defaults_to_sha256() {
+        use std::io::Write as _;
+        let mut w = DigestWriter::new(None).unwrap();
+        w.write_all(b"abc").unwrap();
+        assert_eq!(w.finish(), ABC_SHA256);
+    }
+
+    #[test]
+    fn digest_writer_of_nothing_is_the_empty_digest() {
+        const EMPTY_SHA256: &str =
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        assert_eq!(DigestWriter::new(Some("sha256")).unwrap().finish(), EMPTY_SHA256);
+    }
+
+    /// `DigestWriter::new` must reject exactly what `digest_hex` rejects —
+    /// they share the algorithm vocabulary.
+    #[test]
+    fn digest_writer_rejects_the_same_algorithms_digest_hex_does() {
+        assert!(matches!(
+            DigestWriter::new(Some("sha384")).unwrap_err(),
+            LuggageError::NotImplemented(_)
+        ));
+        assert!(matches!(DigestWriter::new(Some("md5")).unwrap_err(), LuggageError::Catalog(_)));
+    }
+
+    #[test]
+    fn digest_writer_algorithm_match_is_case_insensitive() {
+        use std::io::Write as _;
+        let mut w = DigestWriter::new(Some("SHA256")).unwrap();
+        w.write_all(b"abc").unwrap();
+        assert_eq!(w.finish(), ABC_SHA256);
     }
 
     #[test]
