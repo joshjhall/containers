@@ -6,40 +6,109 @@
 //!   follow-up issue.*
 //! - **tier 2** — pinned in-repo checksum. *Deferred.*
 //! - **tier 3** — publisher-served checksum file. **Implemented** — this
-//!   is what rust@1.95.0 uses and the only path the pilot needs.
-//! - **tier 4** — TOFU (trust on first use). *Deferred.*
+//!   is what rust@1.95.0 uses.
+//! - **tier 4** — TOFU (trust on first use). **Implemented** — the weakest
+//!   tier, for publishers that serve no checksum at all (`PyPA`'s
+//!   `get-pip.py`).
+//!   Accepts only *loudly*: see [`tier4`] and [`VerificationWarning`].
 //!
 //! Any other tier value is a catalog error.
+//!
+//! # Why dispatch returns warnings
+//!
+//! [`dispatch`] returns `Vec<VerificationWarning>` rather than `()`. Tiers 1–3
+//! either verify against something external or fail, so they have nothing to
+//! say and return an empty vec. Tier 4 has no external reference — its
+//! "success" is materially weaker than the others', and the caller has to be
+//! able to tell. Returning that fact as data (rather than only printing it) is
+//! what lets the installer put it in the install report, where `--json-report`
+//! consumers and the evidence pipeline can see that a TOFU artifact was
+//! accepted.
 
 pub mod sha;
 pub mod tier3;
+pub mod tier4;
 
 use containers_common::tooldb::Verification;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{LuggageError, Result};
 use crate::installer::download::HttpClient;
 use crate::installer::template::Substitutions;
 
-/// Fail fast when `verification.tier` is one this build cannot satisfy.
+/// A verification that succeeded, but on weaker grounds than a caller should
+/// assume without being told.
 ///
-/// Called before the artifact is downloaded, for two reasons. First, it keeps
-/// the *tier's* error the one the caller sees: the download path now derives a
+/// Currently only tier 4 (TOFU) produces one. It is carried on
+/// [`crate::InstallReport::warnings`] so the acceptance survives past the
+/// console into the JSON report and the evidence row — a TOFU artifact that
+/// was only ever mentioned in build output is one nobody finds later.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerificationWarning {
+    /// Verification tier that produced the warning (`4` for TOFU).
+    pub tier: u8,
+    /// Tool id.
+    pub tool: String,
+    /// Tool version.
+    pub version: String,
+    /// Digest algorithm used, when the catalog named one. `None` means the
+    /// build's default ([`sha::DEFAULT_ALGORITHM`]) was used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub algorithm: Option<String>,
+    /// The hex digest recorded for the artifact.
+    pub digest: String,
+    /// Human-readable explanation of what the verification did and did not
+    /// establish, and what to do about it.
+    pub message: String,
+}
+
+/// Fail fast when `verification.tier` is one this build will not satisfy.
+///
+/// Called before the artifact is downloaded, for three reasons. First, it keeps
+/// the *tier's* error the one the caller sees: the download path derives a
 /// [`crate::installer::verify::sha::DigestWriter`] from
 /// `verification.algorithm`, and a tier-1 entry legitimately carries
 /// `algorithm: "gpg"` — without this check that would surface as a confusing
 /// `unrecognised digest algorithm` catalog error from the digest layer instead
 /// of the accurate "tier 1 not implemented". Second, an unsupported tier is
 /// knowable before any bytes move, so there is no reason to spend a 150MB
-/// download discovering it.
+/// download discovering it. Third, `require_verified` refuses tier 4 here for
+/// the same reason `lib/features/python.sh` refuses before its fetch: an
+/// operator who has said "no unverified downloads" should not pay for the
+/// download that is about to be rejected.
 ///
 /// # Errors
 ///
-/// The same variants [`dispatch`] returns for those tiers:
-/// [`LuggageError::NotImplemented`] for tiers 1, 2 and 4, and
-/// [`LuggageError::Catalog`] for a tier outside `1..=4`.
-pub fn ensure_supported(verification: &Verification) -> Result<()> {
+/// - [`LuggageError::NotImplemented`] for tiers 1 and 2, and
+///   [`LuggageError::Catalog`] for a tier outside `1..=4` — the same variants
+///   [`dispatch`] returns for those tiers.
+/// - [`LuggageError::VerificationFailed`] for tier 4 when `require_verified`
+///   is set. This is a *policy* refusal of a supported tier, not an
+///   unimplemented one, so it is deliberately not a `NotImplemented`: it maps
+///   to [`crate::ErrorClass::Verify`] and so classifies correctly in an
+///   evidence row.
+pub fn ensure_supported(
+    tool: &str,
+    version: &str,
+    verification: &Verification,
+    require_verified: bool,
+) -> Result<()> {
     match verification.tier {
-        3 => Ok(()),
+        4 if require_verified => Err(LuggageError::VerificationFailed {
+            tool: tool.to_owned(),
+            version: version.to_owned(),
+            tier: 4,
+            reason: "tier 4 TOFU verification is not allowed while verified downloads are \
+                     required: this publisher serves no checksum, so nothing establishes the \
+                     artifact's authenticity. Pin a known-good checksum for it in the catalog \
+                     (tier 2), or drop `--require-verified-downloads` \
+                     (REQUIRE_VERIFIED_DOWNLOADS=true) to accept the risk"
+                .to_owned(),
+        }),
+        // Both are implemented and, at this point, permitted. Tier 4's
+        // *weakness* is not this guard's business — it is surfaced at
+        // verification time as a warning (see `tier4`), not by refusing here.
+        3 | 4 => Ok(()),
         other => Err(unsupported_tier(other)),
     }
 }
@@ -52,7 +121,6 @@ fn unsupported_tier(tier: u8) -> LuggageError {
     match tier {
         1 => LuggageError::NotImplemented("tier 1 GPG/sigstore verification"),
         2 => LuggageError::NotImplemented("tier 2 pinned-checksum verification"),
-        4 => LuggageError::NotImplemented("tier 4 TOFU verification"),
         other => LuggageError::Catalog(format!("unknown verification tier {other}")),
     }
 }
@@ -68,12 +136,16 @@ fn unsupported_tier(tier: u8) -> LuggageError {
 /// `tool` and `version` are used in error messages. `http` is only consumed by
 /// tier 3 (and any future tier that fetches over the network).
 ///
+/// Returns the warnings the verification produced — empty for tiers 1–3, one
+/// entry for a tier-4 acceptance (see the module docs).
+///
 /// # Errors
 ///
-/// - [`LuggageError::NotImplemented`] for tiers 1, 2, 4 — these will be
+/// - [`LuggageError::NotImplemented`] for tiers 1 and 2 — these will be
 ///   wired up in follow-up issues.
 /// - [`LuggageError::Catalog`] when `verification.tier` is not in `1..=4`.
-/// - The same errors tier 3 raises (see [`tier3::verify`]) for tier 3.
+/// - The same errors tier 3 raises (see [`tier3::verify`]) for tier 3, and
+///   tier 4 raises (see [`tier4::verify`]) for tier 4.
 pub fn dispatch(
     tool: &str,
     version: &str,
@@ -82,11 +154,21 @@ pub fn dispatch(
     verification: &Verification,
     subs: &Substitutions<'_>,
     http: &dyn HttpClient,
-) -> Result<()> {
+) -> Result<Vec<VerificationWarning>> {
     match verification.tier {
         3 => {
-            tier3::verify(tool, version, actual_digest, artifact_filename, verification, subs, http)
+            tier3::verify(
+                tool,
+                version,
+                actual_digest,
+                artifact_filename,
+                verification,
+                subs,
+                http,
+            )?;
+            Ok(Vec::new())
         }
+        4 => Ok(vec![tier4::verify(tool, version, actual_digest, verification)?]),
         other => Err(unsupported_tier(other)),
     }
 }
@@ -158,19 +240,47 @@ mod tests {
         assert!(matches!(err, LuggageError::NotImplemented(_)));
     }
 
+    /// Tier 4 is implemented now, and dispatching it must surface the
+    /// acceptance as a warning rather than as a bare `Ok` — a silent tier-4
+    /// pass is precisely the weakening this tier's implementation guards
+    /// against.
     #[test]
-    fn tier_4_returns_not_implemented() {
-        let err = dispatch(
-            "rust",
-            "1.95.0",
+    fn tier_4_dispatches_and_returns_one_warning() {
+        let v = Verification { tofu: Some(true), ..verification(4) };
+        let warnings = dispatch(
+            "python",
+            "3.13.0",
             "deadbeef",
-            "artifact.tar.gz",
-            &verification(4),
+            "get-pip.py",
+            &v,
             &Substitutions::default(),
             &DeadClient,
         )
-        .unwrap_err();
-        assert!(matches!(err, LuggageError::NotImplemented(_)));
+        .unwrap();
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].tier, 4);
+        assert_eq!(warnings[0].digest, "deadbeef");
+    }
+
+    /// Tiers 1 and 2 are explicitly out of scope and must stay unimplemented.
+    #[test]
+    fn tiers_1_and_2_remain_not_implemented() {
+        for tier in [1u8, 2] {
+            let err = dispatch(
+                "rust",
+                "1.95.0",
+                "deadbeef",
+                "artifact.tar.gz",
+                &verification(tier),
+                &Substitutions::default(),
+                &DeadClient,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(err, LuggageError::NotImplemented(_)),
+                "tier {tier} should be NotImplemented, got {err:?}"
+            );
+        }
     }
 
     #[test]
@@ -190,7 +300,48 @@ mod tests {
 
     #[test]
     fn ensure_supported_accepts_tier_3() {
-        ensure_supported(&verification(3)).unwrap();
+        ensure_supported("rust", "1.95.0", &verification(3), false).unwrap();
+    }
+
+    #[test]
+    fn ensure_supported_accepts_tier_4_when_not_strict() {
+        ensure_supported("python", "3.13.0", &verification(4), false).unwrap();
+    }
+
+    /// Strict mode turns a TOFU acceptance into a hard failure, and the
+    /// failure has to tell the operator how to get out of it — otherwise the
+    /// refusal is just an unexplained wall.
+    #[test]
+    fn strict_mode_refuses_tier_4_and_names_the_pin_remedy() {
+        let err = ensure_supported("python", "3.13.0", &verification(4), true).unwrap_err();
+        match err {
+            LuggageError::VerificationFailed { tier, ref tool, ref version, ref reason } => {
+                assert_eq!(tier, 4);
+                assert_eq!(tool, "python");
+                assert_eq!(version, "3.13.0");
+                let r = reason.to_lowercase();
+                assert!(r.contains("pin"), "names the pin remedy: {reason}");
+                assert!(r.contains("require-verified-downloads"), "{reason}");
+            }
+            other => panic!("expected VerificationFailed, got {other:?}"),
+        }
+        // The whole error, as rendered, must still identify the tool.
+        assert!(err.to_string().contains("python@3.13.0"), "{err}");
+    }
+
+    /// The refusal is a policy decision about a *supported* tier, so it must
+    /// classify as a verification failure in the evidence row — not land in
+    /// `Unknown` the way `NotImplemented` does.
+    #[test]
+    fn strict_mode_refusal_classifies_as_a_verify_error() {
+        let err = ensure_supported("python", "3.13.0", &verification(4), true).unwrap_err();
+        assert_eq!(crate::error::ErrorClass::from(&err), crate::error::ErrorClass::Verify);
+    }
+
+    /// Strict mode is about TOFU only — it must not start rejecting tier 3.
+    #[test]
+    fn strict_mode_leaves_tier_3_alone() {
+        ensure_supported("rust", "1.95.0", &verification(3), true).unwrap();
     }
 
     /// The guard must reject exactly what `dispatch` rejects, with the same
@@ -198,9 +349,9 @@ mod tests {
     /// `unsupported_tier`.
     #[test]
     fn ensure_supported_rejects_the_same_tiers_dispatch_does() {
-        for tier in [1u8, 2, 4, 9] {
+        for tier in [1u8, 2, 9] {
             let v = verification(tier);
-            let guard = ensure_supported(&v).unwrap_err();
+            let guard = ensure_supported("rust", "1.95.0", &v, false).unwrap_err();
             let dispatched = dispatch(
                 "rust",
                 "1.95.0",
@@ -226,7 +377,7 @@ mod tests {
     #[test]
     fn tier_1_with_gpg_algorithm_reports_the_tier_not_the_algorithm() {
         let v = Verification { algorithm: Some("gpg".into()), ..verification(1) };
-        let err = ensure_supported(&v).unwrap_err();
+        let err = ensure_supported("rust", "1.95.0", &v, false).unwrap_err();
         match err {
             LuggageError::NotImplemented(msg) => {
                 assert!(msg.contains("tier 1"), "got: {msg}");
@@ -260,7 +411,11 @@ mod tests {
         };
         let subs = Substitutions::new("1.95.0", "x86_64-unknown-linux-gnu");
         let digest = super::sha::digest_hex(Some("sha256"), b"hello").unwrap();
-        dispatch("rust", "1.95.0", &digest, "rustup-init", &v, &subs, &OkClient).unwrap();
+        let warnings =
+            dispatch("rust", "1.95.0", &digest, "rustup-init", &v, &subs, &OkClient).unwrap();
+        // Tier 3 verified against an external reference, so it has nothing to
+        // warn about — only tier 4 does.
+        assert!(warnings.is_empty());
         // Suppress unused-warning for `Mutex`/`HashMap` imports above (kept
         // to mirror the tier3 test fixture style).
         let _: HashMap<&str, &str> = HashMap::new();

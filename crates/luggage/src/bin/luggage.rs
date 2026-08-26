@@ -193,6 +193,22 @@ struct InstallArgs {
     #[arg(long)]
     allow_unknown_deps: bool,
 
+    /// Refuse tier-4 TOFU verification instead of accepting it with a
+    /// warning. A tier-4 artifact has no publisher checksum, so nothing
+    /// establishes its authenticity — pass this where that is unacceptable
+    /// (production images), and pin a known-good checksum in the catalog for
+    /// any tool it then refuses.
+    ///
+    /// `REQUIRE_VERIFIED_DOWNLOADS=true` in the environment does the same
+    /// thing, so an existing bash build configuration keeps working. That is
+    /// read by [`require_verified_downloads`] rather than clap's `env`
+    /// attribute on purpose: `env` makes a bool arg *take a value*, which
+    /// both breaks `--require-verified-downloads` as a bare switch and turns
+    /// the set-but-empty var that build environments commonly export into a
+    /// hard CLI error.
+    #[arg(long)]
+    require_verified_downloads: bool,
+
     /// Write a JSON [`InstallReport`] to this path. Emitted on every
     /// exit path — success, skip, dry-run, or failure — so evidence-run
     /// CI can record a row even when the install itself failed. On the
@@ -370,6 +386,8 @@ fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         // which is the JSON report's sole consumer — so tie it to that flag.
         record_dependency_versions: args.json_report.is_some(),
         fail_on_unknown_deps: !args.allow_unknown_deps,
+        require_verified_downloads: args.require_verified_downloads
+            || require_verified_downloads_from_env(),
     };
     let installer = Installer::with_options(opts);
 
@@ -404,6 +422,26 @@ fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         }
     }
     result
+}
+
+/// `true` when `REQUIRE_VERIFIED_DOWNLOADS` in the environment asks for
+/// strict verification.
+///
+/// Only the literal `true` (case-insensitively, trimmed) enables it. Build
+/// environments routinely export the variable empty or as `false`, and
+/// treating "the variable exists" as consent would silently start refusing
+/// TOFU installs that worked yesterday — so this reads the value, not the
+/// presence. That also matches the bash side, which compares against `"true"`
+/// (`lib/base/checksum-verification.sh`).
+fn require_verified_downloads_from_env() -> bool {
+    parse_require_verified(std::env::var("REQUIRE_VERIFIED_DOWNLOADS").ok().as_deref())
+}
+
+/// The value half of [`require_verified_downloads_from_env`], split out so it
+/// is testable without mutating process-wide environment state (which would
+/// race the rest of the test binary).
+fn parse_require_verified(value: Option<&str>) -> bool {
+    value.is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
 }
 
 /// Write `report` to `path` as pretty JSON, returning a typed error on
@@ -746,6 +784,22 @@ mod tests {
     #[test]
     fn spec_default_is_latest() {
         assert_eq!(build_spec(None, None), VersionSpec::Latest);
+    }
+
+    /// The env var is opt-IN by value, never by presence. Build environments
+    /// commonly export it empty; treating that as consent would start
+    /// refusing TOFU installs that worked yesterday, with no one having asked
+    /// for it.
+    #[test]
+    fn require_verified_env_is_opt_in_by_value_not_presence() {
+        assert!(parse_require_verified(Some("true")));
+        assert!(parse_require_verified(Some("TRUE")));
+        assert!(parse_require_verified(Some(" true ")));
+
+        assert!(!parse_require_verified(None), "unset");
+        assert!(!parse_require_verified(Some("")), "set-but-empty");
+        assert!(!parse_require_verified(Some("false")));
+        assert!(!parse_require_verified(Some("1")), "bash compares against `true`, not truthiness");
     }
 
     #[test]

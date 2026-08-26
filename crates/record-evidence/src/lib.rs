@@ -160,6 +160,7 @@ mod tests {
             error_class: None,
             dependencies: None,
             skipped_dependencies: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 

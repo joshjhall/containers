@@ -81,6 +81,12 @@ pub struct InstallerOptions {
     /// ([`LuggageError::UnknownDependency`]) rather than a warn-and-skip.
     /// The CLI's `--allow-unknown-deps` flag sets this to `false`.
     pub fail_on_unknown_deps: bool,
+    /// When `true`, a tier-4 (TOFU) verification is refused outright rather
+    /// than accepted with a warning — the artifact has no publisher checksum,
+    /// so nothing establishes its authenticity. Defaults to `false`, matching
+    /// the bash build's `REQUIRE_VERIFIED_DOWNLOADS` default; the CLI's
+    /// `--require-verified-downloads` flag (same env var) sets it.
+    pub require_verified_downloads: bool,
 }
 
 impl Default for InstallerOptions {
@@ -96,6 +102,7 @@ impl Default for InstallerOptions {
             install_system_packages: true,
             record_dependency_versions: false,
             fail_on_unknown_deps: true,
+            require_verified_downloads: false,
         }
     }
 }
@@ -183,6 +190,30 @@ pub struct InstallReport {
     /// unaffected.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skipped_dependencies: Vec<String>,
+    /// Verifications that succeeded on weaker grounds than the tier name
+    /// alone suggests — currently only tier-4 TOFU acceptances.
+    ///
+    /// This is the field that keeps a TOFU acceptance from being a
+    /// console-only event: without it, an artifact accepted with no publisher
+    /// checksum would look identical to a properly verified one in every
+    /// downstream consumer of this report. Like `skipped_dependencies`,
+    /// `skip_serializing_if` keeps the wire shape byte-identical to the
+    /// pre-#810 report when empty, so existing evidence rows are unaffected.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<verify::VerificationWarning>,
+}
+
+/// What a successful stage run produced, on its way into the report.
+///
+/// A plain pair rather than a tuple so the two values cannot be swapped at a
+/// call site, and so a future stage output has an obvious home.
+#[derive(Debug)]
+struct StageOutcome {
+    /// Trimmed `<bin>/<tool> --version` output from the validate stage.
+    version_output: String,
+    /// Warnings raised during verification (see
+    /// [`verify::VerificationWarning`]).
+    warnings: Vec<verify::VerificationWarning>,
 }
 
 /// The install execution engine.
@@ -350,7 +381,7 @@ impl Installer {
         // report can carry any non-strict skips through to evidence-run.
         let skipped_dependencies = plan.skipped_dependencies.clone();
         match self.run_stages(resolved, plan, logger.as_ref()) {
-            Ok(version_output) => {
+            Ok(StageOutcome { version_output, warnings }) => {
                 if let Some(l) = &logger {
                     l.feature_end();
                 }
@@ -364,6 +395,7 @@ impl Installer {
                     error_class: None,
                     dependencies: self.captured_dependency_versions(resolved),
                     skipped_dependencies,
+                    warnings,
                 };
                 (report, Ok(()))
             }
@@ -397,6 +429,7 @@ impl Installer {
             error_class: None,
             dependencies: None,
             skipped_dependencies: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -419,6 +452,7 @@ impl Installer {
             error_class: None,
             dependencies: None,
             skipped_dependencies: plan.skipped_dependencies,
+            warnings: Vec::new(),
         }
     }
 
@@ -442,6 +476,7 @@ impl Installer {
             error_class: Some(ErrorClass::from(err)),
             dependencies: None,
             skipped_dependencies: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -450,7 +485,7 @@ impl Installer {
         resolved: &ResolvedInstall,
         plan: InstallPlan,
         logger: Option<&logging::FeatureLogger>,
-    ) -> Result<String> {
+    ) -> Result<StageOutcome> {
         self.stage_system_packages(resolved, logger)?;
 
         // Reject an unsupported verification tier BEFORE downloading. The
@@ -460,7 +495,12 @@ impl Installer {
         // from the digest layer instead of the accurate "tier 1 not
         // implemented". It also avoids spending a 150MB download to learn
         // something knowable up front.
-        verify::ensure_supported(&resolved.verification)?;
+        verify::ensure_supported(
+            &resolved.tool,
+            &resolved.version,
+            &resolved.verification,
+            self.options.require_verified_downloads,
+        )?;
 
         // Scratch dir is created BEFORE the download so the artifact can stream
         // straight into it — nothing buffers the whole artifact in memory, which
@@ -482,7 +522,7 @@ impl Installer {
         let artifact = scratch.path().join(&artifact_filename);
 
         let digest = self.stage_download(resolved, source_url, &artifact, logger)?;
-        self.stage_verify(resolved, &digest, &artifact_filename, logger)?;
+        let warnings = self.stage_verify(resolved, &digest, &artifact_filename, logger)?;
 
         // Build the env map once so every stage that shells out (install
         // method, post-install steps, post-install validate) sees the same
@@ -502,7 +542,8 @@ impl Installer {
         let user = plan.user;
         self.stage_method(resolved, &artifact, &invoke_args, &env_map, &user, logger)?;
         self.stage_post_install(resolved, &user, &env_map, logger)?;
-        self.stage_validate(resolved, &env_map, logger)
+        let version_output = self.stage_validate(resolved, &env_map, logger)?;
+        Ok(StageOutcome { version_output, warnings })
     }
 
     fn stage_system_packages(
@@ -575,20 +616,29 @@ impl Installer {
         Ok(sink.finish())
     }
 
+    /// Verify the downloaded artifact, returning any warnings the tier
+    /// produced.
+    ///
+    /// Each warning is logged here as well as returned. The two destinations
+    /// serve different readers and neither substitutes for the other: the log
+    /// line is what someone watching the build (or reading
+    /// `check-build-logs.sh` output later) sees, and the returned value is
+    /// what reaches the install report, `--json-report`, and the evidence
+    /// pipeline.
     fn stage_verify(
         &self,
         resolved: &ResolvedInstall,
         actual_digest: &str,
         artifact_filename: &str,
         logger: Option<&logging::FeatureLogger>,
-    ) -> Result<()> {
+    ) -> Result<Vec<verify::VerificationWarning>> {
         let target = rustup_target_for(&resolved.platform).ok();
         let subs =
             Substitutions { version: Some(resolved.version.as_str()), rustup_target: target };
         if let Some(l) = logger {
             l.step(&format!("verify (tier {})", resolved.verification_tier));
         }
-        verify::dispatch(
+        let warnings = verify::dispatch(
             &resolved.tool,
             &resolved.version,
             actual_digest,
@@ -596,7 +646,19 @@ impl Installer {
             &resolved.verification,
             &subs,
             self.http.as_ref(),
-        )
+        )?;
+        for w in &warnings {
+            if let Some(l) = logger {
+                l.message(&format!("WARNING: {}", w.message));
+            } else {
+                // No per-feature log file this run (its directory could not be
+                // opened). The warning still has to be said out loud — a TOFU
+                // acceptance must never be silent just because logging
+                // degraded.
+                tracing::warn!("{}", w.message);
+            }
+        }
+        Ok(warnings)
     }
 
     fn stage_method(
@@ -778,6 +840,113 @@ mod tests {
         // Strict by default — unknown dep ids fail closed unless the CLI's
         // --allow-unknown-deps opts out.
         assert!(o.fail_on_unknown_deps);
+        // Permissive by default, matching the bash build's
+        // REQUIRE_VERIFIED_DOWNLOADS default: TOFU is accepted-with-warning
+        // unless the operator opts into refusing it.
+        assert!(!o.require_verified_downloads);
+    }
+
+    /// A tier-4 acceptance has to reach the report, not just the console —
+    /// that is the difference between a recorded security signal and one
+    /// nobody can find afterwards.
+    #[test]
+    fn tofu_warning_reaches_the_install_report() {
+        let warning = verify::VerificationWarning {
+            tier: 4,
+            tool: "python".into(),
+            version: "3.13.0".into(),
+            algorithm: Some("sha256".into()),
+            digest: "deadbeef".into(),
+            message: "TIER 4 TOFU: ...".into(),
+        };
+        let report = InstallReport {
+            tool: "python".into(),
+            version: "3.13.0".into(),
+            already_installed: false,
+            log_path: None,
+            duration_seconds: 1.0,
+            version_output: Some("Python 3.13.0".into()),
+            error_class: None,
+            dependencies: None,
+            skipped_dependencies: Vec::new(),
+            warnings: vec![warning.clone()],
+        };
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(json.contains("\"warnings\""), "{json}");
+        let back: InstallReport = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.warnings, vec![warning]);
+    }
+
+    /// Wire-compat guard: a run with nothing to warn about must serialize
+    /// exactly as it did before `warnings` existed, so evidence rows recorded
+    /// by older and newer builds stay comparable.
+    #[test]
+    fn a_report_with_no_warnings_omits_the_field_entirely() {
+        let report = InstallReport {
+            tool: "rust".into(),
+            version: "1.95.0".into(),
+            already_installed: false,
+            log_path: None,
+            duration_seconds: 1.0,
+            version_output: Some("rustc 1.95.0".into()),
+            error_class: None,
+            dependencies: None,
+            skipped_dependencies: Vec::new(),
+            warnings: Vec::new(),
+        };
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(!json.contains("warnings"), "{json}");
+        // And a report written by an older build (no `warnings` key) still
+        // deserializes.
+        let back: InstallReport = serde_json::from_str(&json).unwrap();
+        assert!(back.warnings.is_empty());
+    }
+
+    /// The skip / dry-run / failure paths never reach verification, so their
+    /// reports must carry no warnings rather than a stale or invented one.
+    #[test]
+    fn non_success_reports_carry_no_warnings() {
+        let resolved = sample_resolved_with_deps();
+        let skipped = Installer::report_skipped(&resolved, None, 0.0);
+        assert!(skipped.warnings.is_empty());
+
+        let err = LuggageError::Catalog("x".into());
+        let failed = Installer::report_failure(&resolved, &err, None, 0.0);
+        assert!(failed.warnings.is_empty());
+
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        let plan = installer.plan(&resolved).unwrap();
+        let dry = Installer::report_dry_run(plan, None, 0.0);
+        assert!(dry.warnings.is_empty());
+    }
+
+    /// Strict mode must refuse a TOFU install *before* the download, the way
+    /// `lib/features/python.sh` does — an operator who said "no unverified
+    /// downloads" should not pay for the fetch that is about to be rejected.
+    /// Driving `run_stages` with a client that fails any request proves no
+    /// download was attempted: a strict refusal that happened after the fetch
+    /// would surface as `DownloadFailed` instead.
+    #[test]
+    fn strict_mode_refuses_tofu_before_downloading() {
+        let mut resolved = sample_resolved_with_deps();
+        resolved.verification_tier = 4;
+        resolved.verification = Verification { tier: 4, tofu: Some(true), ..resolved.verification };
+        resolved.source_url_template = Some("https://example.test/get-pip.py".into());
+
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            require_verified_downloads: true,
+            ..InstallerOptions::default()
+        });
+        let plan = installer.plan(&resolved).unwrap();
+        let err = installer.run_stages(&resolved, plan, None).unwrap_err();
+        match err {
+            LuggageError::VerificationFailed { tier, .. } => assert_eq!(tier, 4),
+            other => panic!("expected a pre-download tier-4 refusal, got {other:?}"),
+        }
     }
 
     #[test]

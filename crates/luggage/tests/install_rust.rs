@@ -78,6 +78,7 @@ fn options_in(roots: &TempDir) -> InstallerOptions {
         install_system_packages: false,
         record_dependency_versions: false,
         fail_on_unknown_deps: true,
+        require_verified_downloads: false,
     }
 }
 
