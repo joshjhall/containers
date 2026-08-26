@@ -157,6 +157,14 @@ pub trait HttpClient: Send + Sync {
     /// - [`LuggageError::DownloadFailed`] when writing to `sink` fails.
     fn get_to_writer(&self, url: &str, sink: &mut dyn RestartableSink) -> Result<u64> {
         let bytes = self.get(url)?;
+        // Reset first, exactly as `UreqClient`'s override does, so both
+        // implementations honour the same "the sink holds this body and
+        // nothing else" contract regardless of the sink's prior state.
+        sink.restart().map_err(|e| LuggageError::DownloadFailed {
+            url: url.to_owned(),
+            attempts: 1,
+            message: format!("reset sink: {e}"),
+        })?;
         sink.write_all(&bytes).map_err(|e| LuggageError::DownloadFailed {
             url: url.to_owned(),
             attempts: 1,
@@ -356,6 +364,18 @@ mod tests {
         let err = m.get_to_writer("https://example.test/missing", &mut sink).unwrap_err();
         assert!(matches!(err, LuggageError::DownloadFailed { .. }));
         assert!(sink.is_empty(), "nothing should be written on failure");
+    }
+
+    /// Both `get_to_writer` implementations must leave the sink holding this
+    /// body and nothing else, even when handed a pre-populated sink.
+    #[test]
+    fn get_to_writer_default_impl_resets_a_prepopulated_sink() {
+        let m = MockHttpClient::new();
+        m.insert("https://example.test/x", b"payload".to_vec());
+        let mut sink: Vec<u8> = b"stale bytes from an earlier attempt".to_vec();
+        let n = m.get_to_writer("https://example.test/x", &mut sink).unwrap();
+        assert_eq!(n, 7);
+        assert_eq!(sink, b"payload");
     }
 
     #[test]

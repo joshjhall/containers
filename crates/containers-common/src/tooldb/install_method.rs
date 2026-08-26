@@ -442,4 +442,32 @@ mod tests {
         assert_eq!(v.algorithm.as_deref(), Some("gpg"));
         assert!(v.gpg_key_url.is_some());
     }
+
+    #[test]
+    fn checksum_manifest_deserializes_when_present() {
+        let json = r#"{
+            "tier": 3,
+            "algorithm": "sha256",
+            "checksum_url_template": "https://example.test/v{version}/SHASUMS256.txt",
+            "checksum_manifest": true
+        }"#;
+        let v: Verification = serde_json::from_str(json).unwrap();
+        assert_eq!(v.checksum_manifest, Some(true));
+    }
+
+    /// Absence must mean `None` (single-checksum behaviour), not a default of
+    /// `false` that would be serialized back out — every pre-existing tier-3
+    /// entry omits the key.
+    #[test]
+    fn checksum_manifest_absent_is_none_and_round_trips_omitted() {
+        let json = r#"{
+            "tier": 3,
+            "algorithm": "sha256",
+            "checksum_url_template": "https://example.test/{version}.sha256"
+        }"#;
+        let v: Verification = serde_json::from_str(json).unwrap();
+        assert_eq!(v.checksum_manifest, None);
+        let out = serde_json::to_string(&v).unwrap();
+        assert!(!out.contains("checksum_manifest"), "None must not serialize: {out}");
+    }
 }

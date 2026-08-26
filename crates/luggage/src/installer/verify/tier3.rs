@@ -326,6 +326,23 @@ mod tests {
         assert!(parse_checksum_field("").is_none());
     }
 
+    /// The checksum document is decoded as UTF-8; a body that is not must fail
+    /// closed rather than being lossily decoded into a bogus "digest".
+    #[test]
+    fn non_utf8_checksum_body_returns_verification_failed() {
+        let url = "https://example.test/x86_64-unknown-linux-gnu/rustup-init.sha256";
+        let stub = StubClient::with(url, &[0xFF, 0xFE, 0x00, 0x9F]);
+        let v = verification("https://example.test/{rustup_target}/rustup-init.sha256");
+        let subs = Substitutions::new("1.95.0", "x86_64-unknown-linux-gnu");
+        let err = verify("rust", "1.95.0", "aa", "rustup-init", &v, &subs, &stub).unwrap_err();
+        match err {
+            LuggageError::VerificationFailed { tier: 3, reason, .. } => {
+                assert!(reason.contains("not valid UTF-8"), "got: {reason}");
+            }
+            other => panic!("expected VerificationFailed, got {other:?}"),
+        }
+    }
+
     // --- multi-entry checksum manifest (Node's SHASUMS256.txt shape) --------
 
     const MANIFEST_URL: &str = "https://example.test/v22.12.0/SHASUMS256.txt";

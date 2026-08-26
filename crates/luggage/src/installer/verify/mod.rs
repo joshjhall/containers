@@ -20,6 +20,43 @@ use crate::error::{LuggageError, Result};
 use crate::installer::download::HttpClient;
 use crate::installer::template::Substitutions;
 
+/// Fail fast when `verification.tier` is one this build cannot satisfy.
+///
+/// Called before the artifact is downloaded, for two reasons. First, it keeps
+/// the *tier's* error the one the caller sees: the download path now derives a
+/// [`crate::installer::verify::sha::DigestWriter`] from
+/// `verification.algorithm`, and a tier-1 entry legitimately carries
+/// `algorithm: "gpg"` — without this check that would surface as a confusing
+/// `unrecognised digest algorithm` catalog error from the digest layer instead
+/// of the accurate "tier 1 not implemented". Second, an unsupported tier is
+/// knowable before any bytes move, so there is no reason to spend a 150MB
+/// download discovering it.
+///
+/// # Errors
+///
+/// The same variants [`dispatch`] returns for those tiers:
+/// [`LuggageError::NotImplemented`] for tiers 1, 2 and 4, and
+/// [`LuggageError::Catalog`] for a tier outside `1..=4`.
+pub fn ensure_supported(verification: &Verification) -> Result<()> {
+    match verification.tier {
+        3 => Ok(()),
+        other => Err(unsupported_tier(other)),
+    }
+}
+
+/// The error for a tier this build does not implement.
+///
+/// Single source of truth so [`ensure_supported`] and [`dispatch`] cannot drift
+/// into reporting different things about the same tier.
+fn unsupported_tier(tier: u8) -> LuggageError {
+    match tier {
+        1 => LuggageError::NotImplemented("tier 1 GPG/sigstore verification"),
+        2 => LuggageError::NotImplemented("tier 2 pinned-checksum verification"),
+        4 => LuggageError::NotImplemented("tier 4 TOFU verification"),
+        other => LuggageError::Catalog(format!("unknown verification tier {other}")),
+    }
+}
+
 /// Dispatch verification by tier.
 ///
 /// `actual_digest` is the artifact's hex digest, computed while it streamed to
@@ -47,13 +84,10 @@ pub fn dispatch(
     http: &dyn HttpClient,
 ) -> Result<()> {
     match verification.tier {
-        1 => Err(LuggageError::NotImplemented("tier 1 GPG/sigstore verification")),
-        2 => Err(LuggageError::NotImplemented("tier 2 pinned-checksum verification")),
         3 => {
             tier3::verify(tool, version, actual_digest, artifact_filename, verification, subs, http)
         }
-        4 => Err(LuggageError::NotImplemented("tier 4 TOFU verification")),
-        other => Err(LuggageError::Catalog(format!("unknown verification tier {other}"))),
+        other => Err(unsupported_tier(other)),
     }
 }
 
@@ -152,6 +186,53 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, LuggageError::Catalog(_)));
+    }
+
+    #[test]
+    fn ensure_supported_accepts_tier_3() {
+        ensure_supported(&verification(3)).unwrap();
+    }
+
+    /// The guard must reject exactly what `dispatch` rejects, with the same
+    /// error — that equivalence is the whole point of routing both through
+    /// `unsupported_tier`.
+    #[test]
+    fn ensure_supported_rejects_the_same_tiers_dispatch_does() {
+        for tier in [1u8, 2, 4, 9] {
+            let v = verification(tier);
+            let guard = ensure_supported(&v).unwrap_err();
+            let dispatched = dispatch(
+                "rust",
+                "1.95.0",
+                "deadbeef",
+                "artifact.tar.gz",
+                &v,
+                &Substitutions::default(),
+                &DeadClient,
+            )
+            .unwrap_err();
+            assert_eq!(
+                guard.to_string(),
+                dispatched.to_string(),
+                "guard and dispatch disagree about tier {tier}"
+            );
+        }
+    }
+
+    /// A tier-1 entry carries `algorithm: "gpg"`, which is not a digest
+    /// algorithm. The guard must report the TIER as unimplemented rather than
+    /// letting the digest layer complain about `gpg` (the regression this
+    /// check exists to prevent).
+    #[test]
+    fn tier_1_with_gpg_algorithm_reports_the_tier_not_the_algorithm() {
+        let v = Verification { algorithm: Some("gpg".into()), ..verification(1) };
+        let err = ensure_supported(&v).unwrap_err();
+        match err {
+            LuggageError::NotImplemented(msg) => {
+                assert!(msg.contains("tier 1"), "got: {msg}");
+            }
+            other => panic!("expected NotImplemented, got {other:?}"),
+        }
     }
 
     /// Through-the-front-door check that tier 3 actually executes when

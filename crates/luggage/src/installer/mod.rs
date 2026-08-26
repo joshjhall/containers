@@ -453,6 +453,15 @@ impl Installer {
     ) -> Result<String> {
         self.stage_system_packages(resolved, logger)?;
 
+        // Reject an unsupported verification tier BEFORE downloading. The
+        // download derives its digest algorithm from `verification.algorithm`,
+        // and a tier-1 entry legitimately carries `algorithm: "gpg"` — without
+        // this the caller would get "unrecognised digest algorithm `gpg`"
+        // from the digest layer instead of the accurate "tier 1 not
+        // implemented". It also avoids spending a 150MB download to learn
+        // something knowable up front.
+        verify::ensure_supported(&resolved.verification)?;
+
         // Scratch dir is created BEFORE the download so the artifact can stream
         // straight into it — nothing buffers the whole artifact in memory, which
         // matters at 150MB (go) as much as it did not at 15MB (rustup-init).
@@ -730,6 +739,27 @@ mod tests {
                 arch: "amd64".into(),
             },
             warnings: Vec::new(),
+        }
+    }
+
+    /// A plan with no `source_url` must return a typed `Catalog` error rather
+    /// than panicking. This path used to be an `expect(...)`; the streaming
+    /// rework turned it into a recoverable error and this pins that.
+    #[test]
+    fn missing_source_url_is_a_catalog_error_not_a_panic() {
+        let resolved = sample_resolved_with_deps(); // source_url_template: None
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        let plan = installer.plan(&resolved).unwrap();
+        assert!(plan.source_url.is_none(), "fixture must exercise the missing-URL path");
+        let err = installer.run_stages(&resolved, plan, None).unwrap_err();
+        match err {
+            LuggageError::Catalog(msg) => {
+                assert!(msg.contains("source_url_template"), "got: {msg}");
+            }
+            other => panic!("expected Catalog, got {other:?}"),
         }
     }
 
