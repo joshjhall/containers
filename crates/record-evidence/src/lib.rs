@@ -111,8 +111,28 @@ pub fn build_test_entry(inputs: RecorderInputs) -> Result<TestEntry, RecorderErr
         // enforce the "pass rows only" invariant here rather than relying on
         // the producer always leaving them `None` on skip/fail paths.
         dependencies: if result == TestResult::Pass { report.dependencies.clone() } else { None },
-        notes: None,
+        notes: verification_notes(report),
     })
+}
+
+/// Carry any [`InstallReport::warnings`] into the evidence row's `notes`.
+///
+/// A tier-4 TOFU acceptance means the artifact was installed with nothing
+/// establishing its authenticity. That fact reaches the JSON report, and this
+/// is what stops it dying there: without it, an evidence row for a TOFU
+/// install is indistinguishable from one for a properly verified install, and
+/// a later audit of the evidence database could not tell them apart.
+///
+/// `notes` is the right carrier because `TestEntry` has no warning-shaped
+/// field and this needs no schema change to containers-db — the tradeoff being
+/// that it is prose, so an audit greps it rather than querying it. If TOFU
+/// tracking ever needs to be queryable, that is a `TestEntry` schema change
+/// and a follow-up.
+fn verification_notes(report: &InstallReport) -> Option<String> {
+    if report.warnings.is_empty() {
+        return None;
+    }
+    Some(report.warnings.iter().map(|w| w.message.as_str()).collect::<Vec<_>>().join(" | "))
 }
 
 const fn derive_result(report: &InstallReport) -> TestResult {
@@ -160,6 +180,7 @@ mod tests {
             error_class: None,
             dependencies: None,
             skipped_dependencies: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -174,6 +195,53 @@ mod tests {
             os_version: Some("12".into()),
             arch: "amd64".into(),
         }
+    }
+
+    /// A TOFU acceptance has to survive the hop from install report to
+    /// evidence row. If it stops at the JSON file, an audit of the evidence
+    /// database cannot tell a TOFU install from a verified one — which is the
+    /// blind spot the warning exists to close.
+    #[test]
+    fn a_tofu_warning_reaches_the_evidence_row() {
+        let mut inputs = base_inputs();
+        inputs.luggage_report.warnings = vec![luggage::VerificationWarning {
+            tier: 4,
+            tool: "python".into(),
+            version: "3.13.0".into(),
+            algorithm: Some("sha256".into()),
+            digest: "deadbeef".into(),
+            message: "TIER 4 TOFU: accepted python@3.13.0 on trust-on-first-use".into(),
+        }];
+        let entry = build_test_entry(inputs).unwrap();
+        let notes = entry.notes.expect("a TOFU acceptance must be recorded in the row");
+        assert!(notes.contains("TIER 4 TOFU"), "{notes}");
+        assert!(notes.contains("python@3.13.0"), "{notes}");
+    }
+
+    #[test]
+    fn multiple_warnings_are_all_recorded() {
+        let warning = |tool: &str| luggage::VerificationWarning {
+            tier: 4,
+            tool: tool.into(),
+            version: "1.0".into(),
+            algorithm: None,
+            digest: "abc".into(),
+            message: format!("TOFU: {tool}"),
+        };
+        let mut inputs = base_inputs();
+        inputs.luggage_report.warnings = vec![warning("python"), warning("pip")];
+        let notes = build_test_entry(inputs).unwrap().notes.unwrap();
+        assert!(notes.contains("TOFU: python"), "{notes}");
+        assert!(notes.contains("TOFU: pip"), "{notes}");
+    }
+
+    /// The ordinary verified install must not start carrying a notes string —
+    /// that would be noise in every row and would blunt the signal the TOFU
+    /// note is meant to be.
+    #[test]
+    fn a_row_with_no_warnings_has_no_notes() {
+        let entry = build_test_entry(base_inputs()).unwrap();
+        assert!(entry.notes.is_none());
     }
 
     #[test]

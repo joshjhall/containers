@@ -193,6 +193,23 @@ struct InstallArgs {
     #[arg(long)]
     allow_unknown_deps: bool,
 
+    /// Refuse tier-4 TOFU verification instead of accepting it with a
+    /// warning. A tier-4 artifact has no publisher checksum, so nothing
+    /// establishes its authenticity — pass this where that is unacceptable
+    /// (production images), and pin a known-good checksum in the catalog for
+    /// any tool it then refuses.
+    ///
+    /// `REQUIRE_VERIFIED_DOWNLOADS` in the environment does the same thing
+    /// (falling back to `PRODUCTION_MODE` when unset), so an existing bash
+    /// build configuration keeps working. That is read by
+    /// [`require_verified_downloads_from_env`] rather than clap's `env`
+    /// attribute on purpose: `env` makes a bool arg *take a value*, which
+    /// both breaks `--require-verified-downloads` as a bare switch and turns
+    /// the set-but-empty var that build environments commonly export into a
+    /// hard CLI error.
+    #[arg(long)]
+    require_verified_downloads: bool,
+
     /// Write a JSON [`InstallReport`] to this path. Emitted on every
     /// exit path — success, skip, dry-run, or failure — so evidence-run
     /// CI can record a row even when the install itself failed. On the
@@ -370,6 +387,8 @@ fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         // which is the JSON report's sole consumer — so tie it to that flag.
         record_dependency_versions: args.json_report.is_some(),
         fail_on_unknown_deps: !args.allow_unknown_deps,
+        require_verified_downloads: args.require_verified_downloads
+            || require_verified_downloads_from_env(),
     };
     let installer = Installer::with_options(opts);
 
@@ -404,6 +423,45 @@ fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         }
     }
     result
+}
+
+/// `true` when the environment asks for strict verification.
+///
+/// Reads the same two variables, with the same precedence, as
+/// `lib/base/checksum-verification.sh`. See [`parse_require_verified`] for the
+/// rule and why it is not simply "is `REQUIRE_VERIFIED_DOWNLOADS` set".
+fn require_verified_downloads_from_env() -> bool {
+    parse_require_verified(
+        std::env::var("REQUIRE_VERIFIED_DOWNLOADS").ok().as_deref(),
+        std::env::var("PRODUCTION_MODE").ok().as_deref(),
+    )
+}
+
+/// The value half of [`require_verified_downloads_from_env`], split out so it
+/// is testable without mutating process-wide environment state (which would
+/// race the rest of the test binary).
+///
+/// The rule mirrors `lib/base/checksum-verification.sh` exactly, because a
+/// security control that refuses TOFU under the bash build but accepts it
+/// under luggage would be a silent downgrade for anyone mid-migration:
+///
+/// - An explicit `REQUIRE_VERIFIED_DOWNLOADS` of `true` or `false` decides it.
+/// - Anything else — unset, empty, or an unrecognized value — falls back to
+///   `PRODUCTION_MODE` (itself defaulting to `false`). This is the documented
+///   contract in `docs/reference/environment-variables.md`: *"defaults to
+///   `PRODUCTION_MODE`"*.
+///
+/// Values are compared case-insensitively after trimming. Note what this
+/// deliberately is *not*: presence-based. Build environments routinely export
+/// the variable empty, and treating that as consent would start refusing TOFU
+/// installs that worked yesterday with nobody having asked for it.
+fn parse_require_verified(require_verified: Option<&str>, production_mode: Option<&str>) -> bool {
+    match require_verified.map(str::trim) {
+        Some(v) if v.eq_ignore_ascii_case("true") => true,
+        Some(v) if v.eq_ignore_ascii_case("false") => false,
+        // Unset, empty, or unrecognized — defer to PRODUCTION_MODE.
+        _ => production_mode.is_some_and(|v| v.trim().eq_ignore_ascii_case("true")),
+    }
 }
 
 /// Write `report` to `path` as pretty JSON, returning a typed error on
@@ -746,6 +804,59 @@ mod tests {
     #[test]
     fn spec_default_is_latest() {
         assert_eq!(build_spec(None, None), VersionSpec::Latest);
+    }
+
+    /// The env var is opt-IN by value, never by presence. Build environments
+    /// commonly export it empty; treating that as consent would start
+    /// refusing TOFU installs that worked yesterday, with no one having asked
+    /// for it.
+    #[test]
+    fn require_verified_env_is_opt_in_by_value_not_presence() {
+        assert!(parse_require_verified(Some("true"), None));
+        assert!(parse_require_verified(Some("TRUE"), None));
+        assert!(parse_require_verified(Some(" true "), None));
+
+        assert!(!parse_require_verified(None, None), "unset");
+        assert!(!parse_require_verified(Some(""), None), "set-but-empty");
+        assert!(!parse_require_verified(Some("false"), None));
+        assert!(
+            !parse_require_verified(Some("1"), None),
+            "bash compares against `true`, not truthiness"
+        );
+    }
+
+    /// Parity with `lib/base/checksum-verification.sh`: when
+    /// `REQUIRE_VERIFIED_DOWNLOADS` is not an explicit true/false, the
+    /// decision defers to `PRODUCTION_MODE`. Without this, a production build
+    /// that only sets `PRODUCTION_MODE=true` would refuse TOFU under the bash
+    /// build but silently accept it under luggage — a downgrade of a security
+    /// control, invisible at the point it matters.
+    #[test]
+    fn production_mode_is_the_fallback_when_require_verified_is_not_explicit() {
+        for unset_ish in [None, Some(""), Some("   "), Some("yes")] {
+            assert!(
+                parse_require_verified(unset_ish, Some("true")),
+                "PRODUCTION_MODE=true should decide when rvd={unset_ish:?}"
+            );
+            assert!(
+                !parse_require_verified(unset_ish, Some("false")),
+                "PRODUCTION_MODE=false should decide when rvd={unset_ish:?}"
+            );
+            assert!(
+                !parse_require_verified(unset_ish, None),
+                "PRODUCTION_MODE unset defaults false when rvd={unset_ish:?}"
+            );
+        }
+    }
+
+    /// An explicit value wins over the fallback in both directions — notably
+    /// `REQUIRE_VERIFIED_DOWNLOADS=false` must be able to opt a production
+    /// build back out, exactly as the bash `!= "true" && != "false"` guard
+    /// allows.
+    #[test]
+    fn explicit_require_verified_overrides_production_mode() {
+        assert!(parse_require_verified(Some("true"), Some("false")));
+        assert!(!parse_require_verified(Some("false"), Some("true")));
     }
 
     #[test]
