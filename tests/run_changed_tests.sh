@@ -184,14 +184,14 @@ map_to_test() {
             for candidate in "$base" "$stripped"; do
                 local exact="${TESTS_DIR}/unit/runtime/${candidate}"
                 if [ -f "$exact" ] && [[ "$emitted" != *"|$exact|"* ]]; then
-                    echo "$exact"
+                    command echo "$exact"
                     emitted="${emitted}|$exact|"
                 fi
 
                 # Sibling suites: <stem>-<concern>.sh alongside the exact match.
                 for match in "${TESTS_DIR}"/unit/runtime/"${candidate%.sh}"-*.sh; do
                     if [ -f "$match" ] && [[ "$emitted" != *"|$match|"* ]]; then
-                        echo "$match"
+                        command echo "$match"
                         emitted="${emitted}|$match|"
                     fi
                 done
