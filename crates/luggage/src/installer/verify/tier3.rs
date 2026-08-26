@@ -18,7 +18,7 @@
 //!   line per artifact in the release, as in Node's `SHASUMS256.txt`. The
 //!   line is selected by the resolved artifact filename. Selecting by
 //!   position instead would verify a different architecture's binary and
-//!   pass, so manifest mode never guesses: an absent or unparseable entry
+//!   pass, so manifest mode never guesses: an absent or unparsable entry
 //!   fails verification.
 
 use containers_common::tooldb::Verification;
