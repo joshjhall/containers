@@ -556,3 +556,22 @@ fn reconcile_gate_flags_contradiction_for_unsupported_with_evidence() {
         "report should render the contradiction marker: {stdout}",
     );
 }
+
+/// `tool@version` and `--channel` are mutually exclusive, and the conflict
+/// must be an explicit error rather than a silent preference.
+///
+/// clap's `conflicts_with = "channel"` on `--version` cannot catch this: the
+/// inline `@version` is split out by hand, outside clap's view. Without the
+/// guard in `cmd_install`, `build_spec` prefers the channel unconditionally
+/// and the pinned version is discarded with no diagnostic — the user asks for
+/// an exact version and silently gets whatever the channel resolves to.
+#[test]
+fn install_rejects_inline_version_with_channel() {
+    let out = run(&["install", "rust@1.95.0", "--channel", "nightly"]);
+    assert_exit(&out, 1);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("specify the version once"),
+        "stderr should name the conflict, not resolve the channel: {stderr}",
+    );
+}
