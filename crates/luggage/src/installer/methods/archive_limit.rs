@@ -69,7 +69,20 @@ impl<R: Read> LimitedReader<R> {
 impl<R: Read> Read for LimitedReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.remaining == 0 {
-            self.tripped = true;
+            // The budget is spent, but that alone does not mean the archive
+            // overran it: a stream ending *exactly* on the cap is legitimate,
+            // and `read_to_end` always probes once more to confirm EOF. Ask
+            // the inner reader whether anything is actually left — only a
+            // non-empty answer is a real overrun.
+            //
+            // Without this probe an artifact whose decompressed size happens
+            // to equal the ceiling would be rejected as a bomb, and the
+            // reader would disagree with `LimitedWriter`, which accepts a
+            // write landing exactly on the cap.
+            let mut probe = [0u8; 1];
+            if self.inner.read(&mut probe)? > 0 {
+                self.tripped = true;
+            }
             return Ok(0);
         }
         // Never read more than the remaining budget, so the count cannot
@@ -225,6 +238,12 @@ mod tests {
         let mut out = Vec::new();
         r.read_to_end(&mut out).unwrap();
         assert_eq!(out.len(), 32);
+        assert!(
+            !r.tripped(),
+            "a stream ending exactly on the cap did not overrun it and must not trip — \
+             `read_to_end` probes once more to confirm EOF, and that probe must not be \
+             mistaken for truncation"
+        );
     }
 
     #[test]

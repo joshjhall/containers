@@ -685,6 +685,51 @@ fn archive_under_the_ceiling_still_extracts() {
     assert_eq!(fs::read(f.prefix.path().join("go/bin/go")).unwrap(), b"gobin");
 }
 
+/// A cap set to exactly the bytes the reader consumes must still extract, and
+/// one byte fewer must not.
+///
+/// Scope note, so this is not mistaken for more than it is: the boundary
+/// *behaviour* of the limiter — that a stream ending precisely on the cap does
+/// not trip — is pinned by `limited_reader_exact_fit_reports_all_bytes` in
+/// `archive_limit`, which is the test that fails if the EOF probe is removed.
+/// This one cannot reach that state through a real archive, because tar stops
+/// at the end-of-archive marker rather than reading to the stream's end, so it
+/// verifies the surrounding contract (exact cap works, one less does not)
+/// rather than the probe itself.
+#[test]
+fn archive_at_the_exact_consumed_ceiling_still_extracts() {
+    let raw = tar_bytes(&[("go/bin/go", b"gobin")]);
+    let compressed = gzip(&raw);
+
+    // Find the smallest cap the archive extracts under — that is exactly how
+    // many bytes the reader consumes.
+    let mut consumed = None;
+    for cap in 1..=(raw.len() as u64) {
+        let probe = Fixture::new("go.tar.gz", &compressed);
+        if probe.run_with_cap(cap).is_ok() {
+            consumed = Some(cap);
+            break;
+        }
+    }
+    let consumed = consumed.expect("archive should extract under some cap");
+
+    // At exactly that many bytes, nothing was exceeded — it must still work,
+    // and must not be misreported as a bomb.
+    let f = Fixture::new("go.tar.gz", &compressed);
+    f.run_with_cap(consumed).unwrap_or_else(|e| {
+        panic!("a cap of exactly the {consumed} consumed bytes must not trip: {e:?}")
+    });
+    assert_eq!(fs::read(f.prefix.path().join("go/bin/go")).unwrap(), b"gobin");
+
+    // One byte less genuinely truncates the read, so it must be refused —
+    // this is what proves the cap above really is the boundary.
+    let tight = Fixture::new("go.tar.gz", &compressed);
+    assert!(
+        tight.run_with_cap(consumed - 1).is_err(),
+        "one byte under the consumed size must not extract"
+    );
+}
+
 /// A genuinely truncated archive must still report truncation, not the
 /// bomb error — both stop the read early, and conflating them would point
 /// whoever debugs it at the wrong problem.
