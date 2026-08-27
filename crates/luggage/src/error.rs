@@ -61,8 +61,15 @@ impl From<&LuggageError> for ErrorClass {
             LuggageError::ValidationFailed { .. } => Self::Validate,
             // `chown` and `spawn` are emitted inside install-method
             // execution; any other stage value from a future method
-            // also belongs here.
-            LuggageError::InstallStageFailed { .. } => Self::InstallMethod,
+            // also belongs here. The three archive variants are raised by
+            // the `binary-tarball` method as it unpacks, which is that
+            // method's equivalent of running the installer — a rejected or
+            // corrupt archive is an install-method failure, not a download
+            // one (the bytes arrived and verified; unpacking them failed).
+            LuggageError::InstallStageFailed { .. }
+            | LuggageError::UnsupportedArchiveFormat { .. }
+            | LuggageError::UnsafeArchiveEntry { .. }
+            | LuggageError::ArchiveExtractionFailed { .. } => Self::InstallMethod,
             LuggageError::Io { .. }
             | LuggageError::Parse { .. }
             | LuggageError::ToolNotFound(_)
@@ -271,6 +278,48 @@ pub enum LuggageError {
     /// A URL template referenced a placeholder we don't have a value for.
     #[error("template substitution: missing key `{0}`")]
     TemplateMissingKey(String),
+
+    /// A downloaded archive's compression could not be determined from its
+    /// filename, or is one this build cannot decompress.
+    ///
+    /// Deliberately an error rather than a skip: a `binary-tarball` method
+    /// whose artifact we cannot open has nothing to fall back to, and
+    /// silently installing nothing would surface much later as a missing
+    /// binary with no explanation.
+    #[error("unsupported archive format for `{artifact}`: {message}")]
+    UnsupportedArchiveFormat {
+        /// Artifact filename the format was inferred from.
+        artifact: String,
+        /// What was expected (e.g. the recognised extensions).
+        message: String,
+    },
+
+    /// An archive entry's path would escape the extraction prefix.
+    ///
+    /// Extraction runs as root during the image build, so an entry with a
+    /// `..` component, an absolute path, or a link target pointing outside
+    /// the prefix could write anywhere on the filesystem. Such an archive is
+    /// rejected outright — never partially extracted, never skipped
+    /// entry-by-entry.
+    #[error("unsafe archive entry `{entry}` in `{artifact}`: {reason}")]
+    UnsafeArchiveEntry {
+        /// Artifact the entry came from.
+        artifact: String,
+        /// The offending entry path, as recorded in the archive.
+        entry: String,
+        /// Why it was rejected (traversal, absolute path, escaping link).
+        reason: String,
+    },
+
+    /// Reading or unpacking an archive failed (truncated, corrupt, or an I/O
+    /// error while writing an entry).
+    #[error("failed to extract `{artifact}`: {message}")]
+    ArchiveExtractionFailed {
+        /// Artifact being extracted.
+        artifact: String,
+        /// Underlying error detail.
+        message: String,
+    },
 
     /// One or more catalog dependency ids had no system-package mapping in
     /// this build of luggage, and strict mode (the default) refused to
@@ -553,6 +602,33 @@ mod tests {
                     message: "x".into(),
                 },
                 ErrorClass::Validate,
+            ),
+            // The three archive variants are raised while the binary-tarball
+            // method unpacks, which is that method's equivalent of running an
+            // installer — so they classify as InstallMethod, not Download.
+            // The bytes arrived and verified; turning them into an install is
+            // what failed.
+            (
+                LuggageError::UnsupportedArchiveFormat {
+                    artifact: "payload.zip".into(),
+                    message: "x".into(),
+                },
+                ErrorClass::InstallMethod,
+            ),
+            (
+                LuggageError::UnsafeArchiveEntry {
+                    artifact: "evil.tar.gz".into(),
+                    entry: "../../etc/passwd".into(),
+                    reason: "x".into(),
+                },
+                ErrorClass::InstallMethod,
+            ),
+            (
+                LuggageError::ArchiveExtractionFailed {
+                    artifact: "broken.tar.gz".into(),
+                    message: "x".into(),
+                },
+                ErrorClass::InstallMethod,
             ),
         ];
         for (err, expected) in cases {
