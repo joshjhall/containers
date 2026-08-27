@@ -17,6 +17,9 @@
 //! with the other install methods via [`super::layout`]; only step 2 and the
 //! `su -c` invocation are specific to this shape.
 
+// Both uses are inside the `#[cfg(unix)]` chmod block below, so an ungated
+// import is dead on Windows — and clippy runs with `-D warnings` there.
+#[cfg(unix)]
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt as _;
