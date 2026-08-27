@@ -146,14 +146,56 @@ map_to_test() {
             return
             ;;
 
-        # lib/runtime/foo.sh → tests/unit/runtime/foo.sh
+        # lib/runtime/foo.sh → tests/unit/runtime/foo*.sh (all sibling suites)
+        #
+        # Three things beyond a plain basename match, all load-bearing (#832):
+        #
+        # 1. TRY BOTH THE PREFIXED AND UNPREFIXED NAME. Runtime scripts carry a
+        #    boot-order prefix, and the test files are INCONSISTENT about
+        #    keeping it: tests/unit/runtime/05-cleanup-init-env.sh and
+        #    60-setup-git.sh keep theirs, while workspace-fs-health.sh drops it.
+        #    Matching only the prefixed name missed the third; matching only the
+        #    stripped name misses the first two — and worse, "60-setup-git.sh"
+        #    stripped to "setup-git.sh" resolves to a REAL but UNRELATED suite
+        #    (the one for lib/runtime/commands/setup-git), so a wrong-suite match
+        #    looks like success. Both spellings are therefore tried.
+        #
+        # 2. EMIT EVERY SIBLING, NOT THE FIRST. One runtime script can be
+        #    covered by several suites split along a seam (workspace-fs-health.sh,
+        #    -submodules.sh, -cron-entry.sh). Returning after the first would
+        #    make coverage depend on glob order, so a split silently narrows what
+        #    runs. Same glob-fanout shape as the lib/features/lib arm above,
+        #    minus the early return.
+        #
+        # 3. FAIL VISIBLY-EMPTY, NOT SILENTLY-WRONG. The original arm built one
+        #    path that never existed and emitted nothing; "no match" and "no
+        #    tests needed" are indistinguishable to the caller, so a changed
+        #    runtime script ran no tests at push time with no error to notice.
+        #    That is the whole bug class this arm now guards against, which is
+        #    why it is covered by tests in tests/unit/run-changed-tests.sh.
         lib/runtime/*.sh)
-            local base
+            local base stripped candidate match
             base=$(basename "$file")
-            local test_path="${TESTS_DIR}/unit/runtime/${base}"
-            if [ -f "$test_path" ]; then
-                echo "$test_path"
-            fi
+            stripped="${base#[0-9][0-9]-}"
+
+            # Deduplicate: when the name carries no NN- prefix, $base and
+            # $stripped are identical and the two passes would emit twice.
+            local emitted=""
+            for candidate in "$base" "$stripped"; do
+                local exact="${TESTS_DIR}/unit/runtime/${candidate}"
+                if [ -f "$exact" ] && [[ "$emitted" != *"|$exact|"* ]]; then
+                    command echo "$exact"
+                    emitted="${emitted}|$exact|"
+                fi
+
+                # Sibling suites: <stem>-<concern>.sh alongside the exact match.
+                for match in "${TESTS_DIR}"/unit/runtime/"${candidate%.sh}"-*.sh; do
+                    if [ -f "$match" ] && [[ "$emitted" != *"|$match|"* ]]; then
+                        command echo "$match"
+                        emitted="${emitted}|$match|"
+                    fi
+                done
+            done
             return
             ;;
 

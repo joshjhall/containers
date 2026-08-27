@@ -124,6 +124,131 @@ test_helper_ci_path_unset() {
     return 0
 }
 
+# ============================================================================
+# Runtime-script test mapping (issue #832)
+# ============================================================================
+# The lib/runtime arm of map_to_test used to match on the bare basename, so
+# lib/runtime/42-workspace-fs-health.sh resolved to
+# tests/unit/runtime/42-workspace-fs-health.sh — a path that has never existed.
+# The arm emitted nothing and the runner treated that as "no tests needed", so a
+# changed runtime script ran no tests at push time with no error to notice.
+# Splitting a suite into siblings (#832) made a second failure mode reachable:
+# emitting only the first glob match would silently narrow coverage.
+#
+# These call map_to_test directly rather than grepping the runner's source, so
+# they assert what it RESOLVES, not how it is spelled.
+
+# Extract map_to_test from the runner into this shell. The function is
+# self-contained (it reads only $TESTS_DIR/$PROJECT_ROOT and echoes paths), so
+# it can be evaluated without executing the runner's push-time side effects.
+#
+# SECURITY: this `eval`s text read from $RUNNER. That is safe ONLY because
+# $RUNNER is a fixed repo-local path ($PROJECT_ROOT/tests/run_changed_tests.sh)
+# with no env or CLI override — it is the same trust boundary as sourcing the
+# file. If $RUNNER ever becomes configurable, this becomes a code-injection
+# path into the test process and must be replaced by sourcing a dedicated
+# fragment instead of parsing one out.
+_load_map_to_test() {
+    local body
+    body=$(/usr/bin/awk '/^map_to_test\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$RUNNER")
+    [ -n "$body" ] || return 1
+    eval "$body"
+}
+
+test_runtime_mapping_strips_order_prefix() {
+    local out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    out=$(map_to_test "lib/runtime/42-workspace-fs-health.sh")
+    assert_contains "$out" "tests/unit/runtime/workspace-fs-health.sh" \
+        "NN- prefixed runtime script must map to its unprefixed suite"
+}
+
+test_runtime_mapping_emits_all_siblings() {
+    local out count
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    out=$(map_to_test "lib/runtime/42-workspace-fs-health.sh")
+
+    # Pin every known sibling by NAME, not a loose count. A bare `count > 1`
+    # would stay green if the glob silently dropped one of the three, which is
+    # the same "coverage narrows and nobody notices" failure this arm exists to
+    # prevent. Three suites cover this script today: the split pair (#832) plus
+    # the pre-existing cron-entry suite.
+    assert_contains "$out" "workspace-fs-health.sh" \
+        "the exact-match suite must be included"
+    assert_contains "$out" "workspace-fs-health-submodules.sh" \
+        "split sibling suite must be included, not just the first glob match"
+    assert_contains "$out" "workspace-fs-health-cron-entry.sh" \
+        "pre-existing cron-entry sibling must be included"
+
+    # Every emitted path must be a real file — a stale glob would otherwise
+    # feed a nonexistent path to the runner.
+    count=0
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        count=$((count + 1))
+        assert_file_exists "$path" "mapped test path must exist: $path"
+    done <<<"$out"
+
+    assert_equals "3" "$count" \
+        "exactly the three known workspace-fs-health suites must be mapped"
+}
+
+test_runtime_mapping_keeps_prefixed_suites() {
+    local out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # The test files are INCONSISTENT about keeping the NN- prefix, so both
+    # spellings must resolve. These two keep theirs; workspace-fs-health drops
+    # it. A stripped-only lookup silently breaks these.
+    out=$(map_to_test "lib/runtime/05-cleanup-init-env.sh")
+    assert_contains "$out" "tests/unit/runtime/05-cleanup-init-env.sh" \
+        "a runtime suite that KEEPS its NN- prefix must still be found"
+
+    out=$(map_to_test "lib/runtime/60-setup-git.sh")
+    assert_contains "$out" "tests/unit/runtime/60-setup-git.sh" \
+        "60-setup-git.sh must map to its OWN suite, not the stripped-name one"
+}
+
+test_runtime_mapping_no_duplicate_paths() {
+    local out uniq_count total_count
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # An unprefixed script makes the prefixed and stripped passes identical, so
+    # without dedup every path would be emitted twice and run twice.
+    out=$(map_to_test "lib/runtime/audit-logger.sh")
+    total_count=$(command printf '%s\n' "$out" | command grep -c . || true)
+    uniq_count=$(command printf '%s\n' "$out" | command grep . | command sort -u | command wc -l)
+
+    assert_equals "$total_count" "$uniq_count" \
+        "map_to_test must not emit the same test path twice"
+}
+
+test_runtime_mapping_unmatched_is_silent() {
+    local out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # A runtime script with no suite must emit nothing rather than a bogus path.
+    out=$(map_to_test "lib/runtime/99-no-such-runtime-script.sh")
+    assert_empty "$out" "an uncovered runtime script must map to no test path"
+}
+
 run_test test_runner_exports_flag "Pre-push runner exports SKIP_NETWORK_TESTS"
 run_test test_framework_defines_helper "framework.sh defines network_tests_disabled"
 run_test test_framework_exports_helper "framework.sh exports network_tests_disabled"
@@ -133,6 +258,11 @@ run_test test_version_resolution_honors_flag "version-resolution.sh honors skip 
 run_test test_helper_enabled "network_tests_disabled true when flag=1"
 run_test test_helper_dev_override "network_tests_disabled false when flag=0"
 run_test test_helper_ci_path_unset "network_tests_disabled false when flag unset (CI)"
+run_test test_runtime_mapping_strips_order_prefix "runtime mapping strips the NN- order prefix (#832)"
+run_test test_runtime_mapping_emits_all_siblings "runtime mapping emits every sibling suite (#832)"
+run_test test_runtime_mapping_unmatched_is_silent "uncovered runtime script maps to no test path (#832)"
+run_test test_runtime_mapping_keeps_prefixed_suites "runtime mapping finds suites that keep the NN- prefix (#832)"
+run_test test_runtime_mapping_no_duplicate_paths "runtime mapping emits no duplicate test paths (#832)"
 
 # Generate test report
 generate_report
