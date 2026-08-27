@@ -226,35 +226,64 @@ impl HttpClient for UreqClient {
     }
 
     fn get_to_writer(&self, url: &str, sink: &mut dyn RestartableSink) -> Result<u64> {
-        let mut last_message = String::new();
-        for attempt in 1..=self.max_attempts {
-            // Every attempt starts from an empty sink. Without this a failure
-            // partway through a 150MB body would leave those bytes in place
-            // and the retry would append after them.
-            if let Err(e) = sink.restart() {
-                return Err(LuggageError::DownloadFailed {
-                    url: url.to_owned(),
-                    attempts: attempt,
-                    message: format!("reset sink: {e}"),
-                });
-            }
-            match ureq::get(url).call() {
-                Ok(resp) => match copy_chunked(&mut resp.into_reader(), sink) {
-                    Ok(written) => return Ok(written),
-                    Err(e) => last_message = format!("stream body: {e}"),
-                },
-                Err(e) => last_message = format!("{e}"),
-            }
-            if attempt < self.max_attempts {
-                sleep(self.retry_delay);
-            }
-        }
-        Err(LuggageError::DownloadFailed {
-            url: url.to_owned(),
-            attempts: self.max_attempts,
-            message: last_message,
+        stream_with_retry(url, sink, self.max_attempts, self.retry_delay, || {
+            ureq::get(url).call().map(ureq::Response::into_reader).map_err(|e| format!("{e}"))
         })
     }
+}
+
+/// Stream `open`'s reader into `sink`, restarting the sink and reopening on
+/// each attempt, up to `max_attempts` times.
+///
+/// This is [`UreqClient::get_to_writer`]'s whole body, lifted out and made
+/// generic over the reader so the retry/reset control flow can be tested with
+/// a fake reader instead of a live HTTP layer (issue #836). `open` yields an
+/// already-formatted error string rather than a typed error, which keeps this
+/// helper free of any `ureq` dependency while preserving the exact message the
+/// caller used to produce.
+///
+/// # Errors
+///
+/// - [`LuggageError::DownloadFailed`] naming the reset failure, **immediately**,
+///   if [`RestartableSink::restart`] fails — the remaining attempts are skipped
+///   deliberately, because a sink that cannot be reset cannot host a clean retry.
+/// - [`LuggageError::DownloadFailed`] carrying the last attempt's message once
+///   the attempt budget is exhausted.
+fn stream_with_retry<R: Read>(
+    url: &str,
+    sink: &mut dyn RestartableSink,
+    max_attempts: u32,
+    retry_delay: Duration,
+    mut open: impl FnMut() -> std::result::Result<R, String>,
+) -> Result<u64> {
+    let mut last_message = String::new();
+    for attempt in 1..=max_attempts {
+        // Every attempt starts from an empty sink. Without this a failure
+        // partway through a 150MB body would leave those bytes in place
+        // and the retry would append after them.
+        if let Err(e) = sink.restart() {
+            return Err(LuggageError::DownloadFailed {
+                url: url.to_owned(),
+                attempts: attempt,
+                message: format!("reset sink: {e}"),
+            });
+        }
+        match open() {
+            Ok(mut reader) => match copy_chunked(&mut reader, sink) {
+                Ok(written) => return Ok(written),
+                Err(e) => last_message = format!("stream body: {e}"),
+            },
+            Err(e) => last_message = e,
+        }
+        if attempt < max_attempts {
+            sleep(retry_delay);
+        }
+    }
+    Err(LuggageError::DownloadFailed {
+        url: url.to_owned(),
+        attempts: max_attempts,
+        message: last_message,
+    })
 }
 
 /// Copy `reader` into `writer` in [`STREAM_CHUNK_BYTES`] chunks, returning the
@@ -319,6 +348,78 @@ impl HttpClient for MockHttpClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A reader over `body` that errors after `fail_after` bytes, or streams
+    /// the whole body cleanly when `fail_after` is `None`.
+    ///
+    /// `copy_chunked` reads into a 64 KiB buffer, so the partial bytes reach
+    /// the sink before the error surfaces — exactly the mid-body failure the
+    /// restart-and-retry logic exists for.
+    struct FailingReader {
+        body: Vec<u8>,
+        pos: usize,
+        fail_after: Option<usize>,
+    }
+
+    impl FailingReader {
+        /// Streams `body` in full, no error.
+        fn clean(body: Vec<u8>) -> Self {
+            Self { body, pos: 0, fail_after: None }
+        }
+
+        /// Streams `n` bytes of `body`, then errors.
+        fn failing_after(body: Vec<u8>, n: usize) -> Self {
+            Self { body, pos: 0, fail_after: Some(n) }
+        }
+    }
+
+    impl Read for FailingReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let limit = self.fail_after.unwrap_or(self.body.len());
+            if self.pos >= limit {
+                return if self.fail_after.is_some() {
+                    Err(std::io::Error::other("connection reset mid-body"))
+                } else {
+                    Ok(0) // clean EOF
+                };
+            }
+            let n = (limit - self.pos).min(buf.len());
+            buf[..n].copy_from_slice(&self.body[self.pos..self.pos + n]);
+            self.pos += n;
+            Ok(n)
+        }
+    }
+
+    /// A sink whose `restart()` fails on the `fail_on_call`-th invocation.
+    ///
+    /// Writes delegate to an inner `Vec<u8>`, so a test can inspect exactly
+    /// what survived the aborted run.
+    struct RestartFailingSink {
+        inner: Vec<u8>,
+        calls: u32,
+        fail_on_call: u32,
+    }
+
+    impl Write for RestartFailingSink {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.inner.write(buf)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.inner.flush()
+        }
+    }
+
+    impl RestartableSink for RestartFailingSink {
+        fn restart(&mut self) -> std::io::Result<()> {
+            self.calls += 1;
+            if self.calls == self.fail_on_call {
+                return Err(std::io::Error::other("truncate refused"));
+            }
+            self.inner.clear();
+            Ok(())
+        }
+    }
 
     #[test]
     fn mock_returns_inserted_body() {
@@ -445,6 +546,148 @@ mod tests {
         let path = dir.path().join("artifact.bin");
         let err = DigestingFileSink::create(&path, Some("md5")).unwrap_err();
         assert!(matches!(err, LuggageError::Catalog(_)));
+    }
+
+    // --- stream_with_retry orchestration (issue #836) ----------------------
+
+    /// The happy path must not retry: one open, one copy, no sleep.
+    #[test]
+    fn stream_with_retry_succeeds_on_first_attempt() {
+        let mut opens = 0;
+        let mut sink: Vec<u8> = Vec::new();
+        let n = stream_with_retry("https://example.test/x", &mut sink, 8, Duration::ZERO, || {
+            opens += 1;
+            Ok(std::io::Cursor::new(b"payload".to_vec()))
+        })
+        .unwrap();
+        assert_eq!(n, 7);
+        assert_eq!(sink, b"payload");
+        assert_eq!(opens, 1, "a successful attempt must not reopen");
+    }
+
+    /// The core retry guarantee: the retried attempt's bytes must REPLACE the
+    /// failed attempt's partial bytes, not be appended after them. A regression
+    /// here produces a silently corrupt concatenation.
+    #[test]
+    fn stream_with_retry_replaces_partial_bytes_after_mid_stream_failure() {
+        let body = b"the complete body".to_vec();
+        let mut attempt = 0;
+        let mut sink: Vec<u8> = Vec::new();
+        let n = stream_with_retry("https://example.test/x", &mut sink, 8, Duration::ZERO, || {
+            attempt += 1;
+            // First attempt dies after 7 bytes; the second streams cleanly.
+            Ok(if attempt == 1 {
+                FailingReader::failing_after(body.clone(), 7)
+            } else {
+                FailingReader::clean(body.clone())
+            })
+        })
+        .unwrap();
+        assert_eq!(attempt, 2, "should have taken exactly one retry");
+        assert_eq!(sink, b"the complete body", "retry must replace, not append");
+        assert_eq!(usize::try_from(n).unwrap(), sink.len());
+    }
+
+    /// A sink that cannot be reset cannot host a clean retry, so the loop
+    /// short-circuits: immediate `DownloadFailed` naming the reset failure,
+    /// with every remaining attempt skipped.
+    #[test]
+    fn stream_with_retry_aborts_immediately_when_restart_fails() {
+        let mut opens = 0;
+        let mut sink = RestartFailingSink { inner: Vec::new(), calls: 0, fail_on_call: 1 };
+        let err = stream_with_retry("https://example.test/x", &mut sink, 8, Duration::ZERO, || {
+            opens += 1;
+            Ok(std::io::Cursor::new(b"payload".to_vec()))
+        })
+        .unwrap_err();
+        match err {
+            LuggageError::DownloadFailed { url, attempts, message } => {
+                assert_eq!(url, "https://example.test/x");
+                assert_eq!(attempts, 1, "must report the attempt it died on, not the budget");
+                assert!(message.contains("reset sink"), "message should name the reset: {message}");
+                assert!(message.contains("truncate refused"), "should carry the io error");
+            }
+            other => panic!("expected DownloadFailed, got {other:?}"),
+        }
+        assert_eq!(opens, 0, "no attempt may proceed past a failed reset");
+        assert_eq!(sink.calls, 1, "remaining attempts must be skipped");
+    }
+
+    /// A restart failure on a LATER attempt short-circuits just the same — the
+    /// budget is abandoned wherever the reset breaks, not only on attempt 1.
+    #[test]
+    fn stream_with_retry_aborts_when_a_later_restart_fails() {
+        let mut opens = 0;
+        let mut sink = RestartFailingSink { inner: Vec::new(), calls: 0, fail_on_call: 3 };
+        let err = stream_with_retry("https://example.test/x", &mut sink, 8, Duration::ZERO, || {
+            opens += 1;
+            Err::<std::io::Cursor<Vec<u8>>, _>("connection refused".to_owned())
+        })
+        .unwrap_err();
+        match err {
+            LuggageError::DownloadFailed { attempts, message, .. } => {
+                assert_eq!(attempts, 3);
+                assert!(message.contains("reset sink"), "got {message}");
+            }
+            other => panic!("expected DownloadFailed, got {other:?}"),
+        }
+        assert_eq!(opens, 2, "attempts 1 and 2 ran; attempt 3 died at the reset");
+    }
+
+    /// Exhausting the budget reports the configured attempt count and carries
+    /// the LAST attempt's message, not the first.
+    #[test]
+    fn stream_with_retry_exhausts_attempt_budget_with_last_message() {
+        let mut attempt = 0;
+        let mut sink: Vec<u8> = Vec::new();
+        let err = stream_with_retry("https://example.test/x", &mut sink, 3, Duration::ZERO, || {
+            attempt += 1;
+            Err::<std::io::Cursor<Vec<u8>>, _>(format!("attempt {attempt} refused"))
+        })
+        .unwrap_err();
+        match err {
+            LuggageError::DownloadFailed { url, attempts, message } => {
+                assert_eq!(url, "https://example.test/x");
+                assert_eq!(attempts, 3);
+                assert_eq!(message, "attempt 3 refused", "must carry the last message");
+            }
+            other => panic!("expected DownloadFailed, got {other:?}"),
+        }
+        assert_eq!(attempt, 3, "should have used the whole budget");
+        assert!(sink.is_empty(), "nothing should survive a fully-failed download");
+    }
+
+    /// A mid-body failure that reaches the sink must also be erased from the
+    /// DIGEST, not just the file — otherwise a retried download verifies
+    /// against a hash of partial+full bytes and fails with a confusing
+    /// mismatch. The digest after a retry must equal a clean download's.
+    #[test]
+    fn stream_with_retry_digest_after_retry_matches_clean_download() {
+        use crate::installer::verify::sha::digest_hex;
+        // Multi-chunk, so the partial attempt writes real chunks to disk.
+        let body: Vec<u8> =
+            (0..(STREAM_CHUNK_BYTES * 2 + 17)).map(|i| u8::try_from(i % 251).unwrap()).collect();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("retried.tar.gz");
+        let mut sink = DigestingFileSink::create(&path, Some("sha256")).unwrap();
+
+        let mut attempt = 0;
+        let n = stream_with_retry("https://example.test/big", &mut sink, 8, Duration::ZERO, || {
+            attempt += 1;
+            Ok(if attempt == 1 {
+                FailingReader::failing_after(body.clone(), STREAM_CHUNK_BYTES + 5)
+            } else {
+                FailingReader::clean(body.clone())
+            })
+        })
+        .unwrap();
+        sink.flush().unwrap();
+        let digest = sink.finish();
+
+        assert_eq!(attempt, 2);
+        assert_eq!(usize::try_from(n).unwrap(), body.len());
+        assert_eq!(std::fs::read(&path).unwrap(), body, "file must hold only the retry's bytes");
+        assert_eq!(digest, digest_hex(Some("sha256"), &body).unwrap());
     }
 
     /// Streaming a body larger than one chunk must round-trip intact — the
