@@ -70,6 +70,17 @@ pub fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
             "specify the version once: either `tool@version` or `--version`, not both".into(),
         ));
     }
+    // ...and with `--channel` likewise. clap's `conflicts_with = "channel"` on
+    // `--version` cannot catch this: the inline version is parsed by hand, out
+    // of clap's sight. Without this guard `build_spec` silently prefers the
+    // channel and the pinned version is discarded with no error — the user
+    // asked for an exact version and would get whatever the channel resolves
+    // to instead.
+    if inline_version.is_some() && args.common.channel.is_some() {
+        return Err(LuggageError::Catalog(
+            "specify the version once: either `tool@version` or `--channel`, not both".into(),
+        ));
+    }
     let common = inline_version.map_or_else(
         || clone_common(&args.common),
         |v| {
