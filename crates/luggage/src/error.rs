@@ -603,6 +603,33 @@ mod tests {
                 },
                 ErrorClass::Validate,
             ),
+            // The three archive variants are raised while the binary-tarball
+            // method unpacks, which is that method's equivalent of running an
+            // installer — so they classify as InstallMethod, not Download.
+            // The bytes arrived and verified; turning them into an install is
+            // what failed.
+            (
+                LuggageError::UnsupportedArchiveFormat {
+                    artifact: "payload.zip".into(),
+                    message: "x".into(),
+                },
+                ErrorClass::InstallMethod,
+            ),
+            (
+                LuggageError::UnsafeArchiveEntry {
+                    artifact: "evil.tar.gz".into(),
+                    entry: "../../etc/passwd".into(),
+                    reason: "x".into(),
+                },
+                ErrorClass::InstallMethod,
+            ),
+            (
+                LuggageError::ArchiveExtractionFailed {
+                    artifact: "broken.tar.gz".into(),
+                    message: "x".into(),
+                },
+                ErrorClass::InstallMethod,
+            ),
         ];
         for (err, expected) in cases {
             assert_eq!(ErrorClass::from(err), *expected, "{err}");

@@ -98,7 +98,7 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
 
     let artifact_name = artifact_name(ctx.artifact);
     let compression = detect_compression(&artifact_name)?;
-    let prefix = ctx.prefix.map_or_else(|| PathBuf::from(DEFAULT_PREFIX), PathBuf::from);
+    let prefix = resolve_prefix(ctx.prefix)?;
 
     // 2. Unpack into a staging dir beside the artifact, so a rejected or
     //    corrupt archive never touches the prefix. `TempDir` cleans itself up
@@ -119,6 +119,25 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
     //    binaries land under the extraction prefix (go: `go/bin`), not the
     //    cache root, so the prefix is what `bin_source_dir` resolves against.
     install_binaries(ctx, &prefix)
+}
+
+/// Resolve the catalog's `prefix`, defaulting and validating it.
+///
+/// The catalog documents `prefix` as absolute, but nothing upstream enforces
+/// that. A relative value — `usr/local` missing its leading slash — would
+/// otherwise extract relative to whatever working directory the build happens
+/// to run from, scattering a tool's files somewhere unintended instead of
+/// failing. Reported as a catalog defect, mirroring how `install_binaries`
+/// treats a missing `bin_source_dir`.
+fn resolve_prefix(prefix: Option<&str>) -> Result<PathBuf> {
+    let Some(raw) = prefix else { return Ok(PathBuf::from(DEFAULT_PREFIX)) };
+    let path = PathBuf::from(raw);
+    if !path.is_absolute() {
+        return Err(LuggageError::Catalog(format!(
+            "install method `prefix` must be an absolute path, got `{raw}`",
+        )));
+    }
+    Ok(path)
 }
 
 /// The artifact's filename, for error messages and format detection.
@@ -300,6 +319,17 @@ fn merge_dir(src: &Path, dst: &Path) -> Result<()> {
             entry.file_type().map_err(|e| LuggageError::Io { path: from.clone(), source: e })?;
 
         if file_type.is_dir() {
+            // Replace a pre-existing *symlink* sitting where this directory
+            // goes, rather than descending through it. `create_dir_all`
+            // follows symlinks when testing existence, so without this a link
+            // planted at that path — by an earlier tool install, or by this
+            // archive's own earlier entries — would silently redirect the
+            // whole subtree's writes to wherever it points. The leaf branch
+            // below guards the same way for files.
+            if fs::symlink_metadata(&to).is_ok_and(|m| m.file_type().is_symlink()) {
+                fs::remove_file(&to)
+                    .map_err(|e| LuggageError::Io { path: to.clone(), source: e })?;
+            }
             fs::create_dir_all(&to)
                 .map_err(|e| LuggageError::Io { path: to.clone(), source: e })?;
             merge_dir(&from, &to)?;
@@ -785,6 +815,71 @@ mod tests {
     // Unit coverage of the path-safety helpers lives beside them, in
     // `archive_path`. The fixture tests above exercise the same rules
     // end-to-end through a real archive.
+
+    /// A relative `prefix` is a catalog defect, not a silent extraction into
+    /// whatever directory the build happens to run from.
+    #[test]
+    fn relative_prefix_is_a_catalog_error() {
+        let err = resolve_prefix(Some("usr/local")).unwrap_err();
+        match err {
+            LuggageError::Catalog(msg) => {
+                assert!(msg.contains("absolute"), "should explain the requirement: {msg}");
+                assert!(msg.contains("usr/local"), "should quote the bad value: {msg}");
+            }
+            other => panic!("expected Catalog, got {other:?}"),
+        }
+        assert_eq!(resolve_prefix(None).unwrap(), PathBuf::from(DEFAULT_PREFIX));
+        assert_eq!(resolve_prefix(Some("/opt/tool")).unwrap(), PathBuf::from("/opt/tool"));
+    }
+
+    /// A symlink already sitting where an extracted directory belongs must be
+    /// replaced, not descended through — otherwise the subtree's writes are
+    /// redirected to wherever it points.
+    #[test]
+    fn merge_replaces_a_symlink_standing_in_for_a_directory() {
+        let raw = tar_bytes(&[("bin/node", b"nodebin")]);
+        let f = Fixture::new("node.tar.gz", &gzip(&raw));
+
+        // Somewhere the archive must not reach.
+        let elsewhere = tempdir().unwrap();
+        std::os::unix::fs::symlink(elsewhere.path(), f.prefix.path().join("bin")).unwrap();
+
+        f.run_plain(0).unwrap();
+
+        let bin = f.prefix.path().join("bin");
+        assert!(
+            !fs::symlink_metadata(&bin).unwrap().file_type().is_symlink(),
+            "the stand-in symlink should have been replaced by a real directory"
+        );
+        assert_eq!(fs::read(bin.join("node")).unwrap(), b"nodebin");
+        assert_eq!(
+            fs::read_dir(elsewhere.path()).unwrap().count(),
+            0,
+            "nothing may be written through the symlink's target"
+        );
+    }
+
+    /// The leaf counterpart: a symlink where a *file* lands is replaced too,
+    /// rather than followed and its target clobbered.
+    #[test]
+    fn merge_replaces_a_symlink_standing_in_for_a_file() {
+        let raw = tar_bytes(&[("README.md", b"fresh")]);
+        let f = Fixture::new("tool.tar.gz", &gzip(&raw));
+
+        let elsewhere = tempdir().unwrap();
+        let victim = elsewhere.path().join("victim");
+        fs::write(&victim, b"untouched").unwrap();
+        std::os::unix::fs::symlink(&victim, f.prefix.path().join("README.md")).unwrap();
+
+        f.run_plain(0).unwrap();
+
+        assert_eq!(fs::read(f.prefix.path().join("README.md")).unwrap(), b"fresh");
+        assert_eq!(
+            fs::read(&victim).unwrap(),
+            b"untouched",
+            "the symlink's target must not be written through"
+        );
+    }
 
     #[test]
     fn detect_compression_is_case_insensitive() {
