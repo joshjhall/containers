@@ -172,6 +172,7 @@ impl Installer {
                 cache_dirs: &cache_dirs,
                 prefix: resolved.prefix.as_deref(),
                 strip_components: resolved.strip_components.unwrap_or(0),
+                max_extract_bytes: self.options.max_extract_bytes,
                 runner: self.runner.as_ref(),
             },
         )

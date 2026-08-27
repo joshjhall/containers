@@ -69,6 +69,7 @@ impl From<&LuggageError> for ErrorClass {
             LuggageError::InstallStageFailed { .. }
             | LuggageError::UnsupportedArchiveFormat { .. }
             | LuggageError::UnsafeArchiveEntry { .. }
+            | LuggageError::ArchiveTooLarge { .. }
             | LuggageError::ArchiveExtractionFailed { .. } => Self::InstallMethod,
             LuggageError::Io { .. }
             | LuggageError::Parse { .. }
@@ -309,6 +310,24 @@ pub enum LuggageError {
         entry: String,
         /// Why it was rejected (traversal, absolute path, escaping link).
         reason: String,
+    },
+
+    /// An archive's decompressed size exceeded the configured ceiling.
+    ///
+    /// Distinct from [`Self::ArchiveExtractionFailed`] on purpose: a
+    /// decompression bomb and a truncated archive both stop the read early,
+    /// and conflating them would tell whoever has to act on it the wrong
+    /// thing. Raised on real bytes moved, never on the archive's own
+    /// (attacker-controlled) size headers.
+    #[error(
+        "archive `{artifact}` exceeds the {limit}-byte extraction ceiling; \
+         raise LUGGAGE_MAX_EXTRACT_BYTES if this artifact is legitimately larger"
+    )]
+    ArchiveTooLarge {
+        /// Artifact that blew the budget.
+        artifact: String,
+        /// Ceiling in force, in bytes.
+        limit: u64,
     },
 
     /// Reading or unpacking an archive failed (truncated, corrupt, or an I/O
@@ -627,6 +646,13 @@ mod tests {
                 LuggageError::ArchiveExtractionFailed {
                     artifact: "broken.tar.gz".into(),
                     message: "x".into(),
+                },
+                ErrorClass::InstallMethod,
+            ),
+            (
+                LuggageError::ArchiveTooLarge {
+                    artifact: "bomb.tar.xz".into(),
+                    limit: 2 * 1024 * 1024 * 1024,
                 },
                 ErrorClass::InstallMethod,
             ),

@@ -25,6 +25,7 @@ use containers_common::tooldb::InstallMethodKind;
 
 use crate::error::{LuggageError, Result};
 
+pub mod archive_limit;
 pub mod archive_path;
 pub mod layout;
 pub mod script_installer;
@@ -172,6 +173,10 @@ pub struct MethodContext<'a> {
     /// each archive entry (`tar --strip-components`). `0` keeps the
     /// archive's own top-level directory.
     pub strip_components: u32,
+    /// Ceiling on total decompressed bytes a `binary-tarball` may produce,
+    /// guarding against decompression bombs. See
+    /// [`archive_limit::DEFAULT_MAX_EXTRACT_BYTES`].
+    pub max_extract_bytes: u64,
     /// Command runner (production: `ProcessRunner`; tests: `RecordingRunner`).
     pub runner: &'a dyn CommandRunner,
 }
@@ -243,6 +248,7 @@ mod tests {
             cache_dirs,
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner,
         }
     }

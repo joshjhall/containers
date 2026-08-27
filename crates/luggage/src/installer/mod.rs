@@ -85,6 +85,12 @@ pub struct InstallerOptions {
     /// the bash build's `REQUIRE_VERIFIED_DOWNLOADS` default; the CLI's
     /// `--require-verified-downloads` flag (same env var) sets it.
     pub require_verified_downloads: bool,
+    /// Ceiling on total decompressed bytes a `binary-tarball` install may
+    /// produce. Guards the build host's disk against a decompression bomb —
+    /// a small artifact that expands enormously. Defaults to
+    /// [`methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES`] (2 GiB); the CLI
+    /// reads `LUGGAGE_MAX_EXTRACT_BYTES` to override it.
+    pub max_extract_bytes: u64,
 }
 
 impl Default for InstallerOptions {
@@ -101,6 +107,7 @@ impl Default for InstallerOptions {
             record_dependency_versions: false,
             fail_on_unknown_deps: true,
             require_verified_downloads: false,
+            max_extract_bytes: methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
         }
     }
 }
