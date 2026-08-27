@@ -71,6 +71,25 @@ pub struct InstallMethod {
     /// `Invoke::env` entry for the same variable takes precedence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_dirs: Option<BTreeMap<String, String>>,
+    /// Absolute directory a `binary-tarball` method extracts into
+    /// (go/node: `/usr/local`).
+    ///
+    /// Absolute, unlike [`Self::bin_source_dir`] and [`Self::cache_dirs`]:
+    /// those are cache-root-relative because the cache root is an installer
+    /// run-time choice, whereas an extraction prefix is a system location the
+    /// catalog names outright. `None` means the installer's default
+    /// (`/usr/local`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    /// Leading path components to strip from each archive entry, matching
+    /// `tar --strip-components`.
+    ///
+    /// `0`/absent keeps the archive's own top-level directory (go's tarball
+    /// carries `go/`, which becomes `<prefix>/go`); `1` flattens a versioned
+    /// root directly into the prefix (node's `node-v22.../bin/node` becomes
+    /// `<prefix>/bin/node`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strip_components: Option<u32>,
 }
 
 /// The install *shape* of an [`InstallMethod`] — which installer

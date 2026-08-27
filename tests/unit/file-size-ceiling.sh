@@ -62,7 +62,13 @@ GRANDFATHERED=(
     "tests/unit/features/dev-tools.sh:1457"
     "tests/unit/runtime/entrypoint.sh:1309"
     "crates/stibbons/src/agent/commands.rs:955"
-    "crates/luggage/src/resolver.rs:946"
+    # 946 -> 958 (#808): two `ResolvedInstall` fields (`prefix`,
+    # `strip_components`) plus their `build_resolved` and fixture plumbing.
+    # Raised rather than split because the growth is field declarations in an
+    # existing struct, with no seam of its own — splitting a 958-line file to
+    # accommodate 12 lines of fields would be the larger change. The file is
+    # still a #832 split candidate on its own merits.
+    "crates/luggage/src/resolver.rs:958"
     "tests/unit/gitlab-templates.sh:943"
     "crates/stibbons/src/main.rs:901"
 )

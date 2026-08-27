@@ -609,6 +609,8 @@ mod tests {
             binaries: None,
             bin_source_dir: None,
             cache_dirs: None,
+            prefix: None,
+            strip_components: None,
             platform: Platform {
                 os: "debian".into(),
                 os_version: Some("12".into()),

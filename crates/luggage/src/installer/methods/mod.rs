@@ -7,10 +7,14 @@
 //! catalog entry using an already-implemented shape needs no code here at
 //! all.
 //!
-//! Only [`InstallMethodKind::ScriptInstaller`] is wired up so far;
-//! `binary-tarball`, `source-build`, and `package-manager` return
-//! [`crate::LuggageError::NotImplemented`] and ship in follow-up issues per
-//! #405's decomposition note.
+//! [`InstallMethodKind::ScriptInstaller`] and
+//! [`InstallMethodKind::BinaryTarball`] are wired up; `source-build` and
+//! `package-manager` return [`crate::LuggageError::NotImplemented`] and ship
+//! in follow-up issues per #405's decomposition note.
+//!
+//! The catalog-driven layout the methods share — cache dirs, env, `bin_root`
+//! symlinks (#806) — lives in [`layout`] rather than in either method, so the
+//! two cannot drift apart.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -21,7 +25,10 @@ use containers_common::tooldb::InstallMethodKind;
 
 use crate::error::{LuggageError, Result};
 
+pub mod archive_path;
+pub mod layout;
 pub mod script_installer;
+pub mod tarball;
 
 /// Outcome of running a child process.
 #[derive(Debug, Clone)]
@@ -157,6 +164,14 @@ pub struct MethodContext<'a> {
     /// Catalog `cache_dirs` — env-var name to [`Self::cache_root`]-relative
     /// path. Each is created, chowned to [`Self::user`], and exported.
     pub cache_dirs: &'a BTreeMap<String, String>,
+    /// Catalog `prefix` — absolute directory a `binary-tarball` extracts
+    /// into. `None` means the method's default (`/usr/local`). Unused by
+    /// `script-installer`, whose payload chooses its own destination.
+    pub prefix: Option<&'a str>,
+    /// Catalog `strip_components` — leading path components to drop from
+    /// each archive entry (`tar --strip-components`). `0` keeps the
+    /// archive's own top-level directory.
+    pub strip_components: u32,
     /// Command runner (production: `ProcessRunner`; tests: `RecordingRunner`).
     pub runner: &'a dyn CommandRunner,
 }
@@ -169,7 +184,7 @@ pub struct MethodContext<'a> {
 /// # Errors
 ///
 /// - [`LuggageError::NotImplemented`] for a kind that is valid but not yet
-///   wired up (`binary-tarball`, `package-manager`, `source-build`).
+///   wired up (`package-manager`, `source-build`).
 /// - [`LuggageError::Catalog`] when the entry carries no `method_kind`, or
 ///   one this build doesn't recognise. Both are catalog defects rather
 ///   than missing luggage features, and both are reported rather than
@@ -181,9 +196,7 @@ pub fn dispatch(
 ) -> Result<()> {
     match kind {
         Some(InstallMethodKind::ScriptInstaller) => script_installer::run(ctx),
-        Some(InstallMethodKind::BinaryTarball) => {
-            Err(LuggageError::NotImplemented("install method kind `binary-tarball` not yet wired"))
-        }
+        Some(InstallMethodKind::BinaryTarball) => tarball::run(ctx),
         Some(InstallMethodKind::PackageManager) => {
             Err(LuggageError::NotImplemented("install method kind `package-manager` not yet wired"))
         }
@@ -228,16 +241,20 @@ mod tests {
             binaries: &[],
             bin_source_dir: None,
             cache_dirs,
+            prefix: None,
+            strip_components: 0,
             runner,
         }
     }
 
     /// Every not-yet-wired kind must fail as a missing luggage feature,
     /// and must name itself so the message points at the right issue.
+    ///
+    /// `binary-tarball` is deliberately absent: it is wired as of #808, and
+    /// its own dispatch coverage is `dispatch_routes_binary_tarball` below.
     #[test]
     fn dispatch_unwired_kinds_return_not_implemented() {
         for (kind, needle) in [
-            (InstallMethodKind::BinaryTarball, "binary-tarball"),
             (InstallMethodKind::PackageManager, "package-manager"),
             (InstallMethodKind::SourceBuild, "source-build"),
         ] {
@@ -340,6 +357,28 @@ mod tests {
         assert!(
             runner.calls().iter().any(|(p, _)| p == "su"),
             "script-installer should have run regardless of the method name"
+        );
+    }
+
+    /// `binary-tarball` must now reach the tarball method rather than
+    /// bailing with `NotImplemented`. Proven by the *shape* of the failure:
+    /// an artifact whose name carries no recognised compression can only
+    /// produce `UnsupportedArchiveFormat` from inside `tarball::run`.
+    #[test]
+    fn dispatch_routes_binary_tarball() {
+        let runner = RecordingRunner::new();
+        let env = BTreeMap::new();
+        let cache_dirs = BTreeMap::new();
+        let args: Vec<String> = vec![];
+        let bin = Path::new("/tmp/bin");
+        let cache = Path::new("/tmp/cache");
+        let artifact = Path::new("/tmp/payload.bin");
+        let c = ctx(artifact, &args, &env, cache, bin, &cache_dirs, &runner);
+
+        let err = dispatch(Some(InstallMethodKind::BinaryTarball), "go-tarball", &c).unwrap_err();
+        assert!(
+            matches!(err, LuggageError::UnsupportedArchiveFormat { .. }),
+            "binary-tarball should reach the tarball method, got {err:?}"
         );
     }
 

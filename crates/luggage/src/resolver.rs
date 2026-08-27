@@ -115,6 +115,14 @@ pub struct ResolvedInstall {
     /// path, created + chowned + exported.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_dirs: Option<BTreeMap<String, String>>,
+    /// `prefix` for the chosen method — absolute directory a `binary-tarball`
+    /// extracts into. `None` leaves the method's default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    /// `strip_components` for the chosen method — leading path components
+    /// dropped from each archive entry. `None` means `0`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strip_components: Option<u32>,
     /// The platform that produced this resolution.
     pub platform: Platform,
     /// Non-fatal warnings raised by the policy gate.
@@ -397,6 +405,8 @@ fn build_resolved(
         binaries: method.binaries.clone(),
         bin_source_dir: method.bin_source_dir.clone(),
         cache_dirs: method.cache_dirs.clone(),
+        prefix: method.prefix.clone(),
+        strip_components: method.strip_components,
         platform,
         warnings,
     }
@@ -485,6 +495,8 @@ mod tests {
             binaries: None,
             bin_source_dir: None,
             cache_dirs: None,
+            prefix: None,
+            strip_components: None,
         }
     }
 

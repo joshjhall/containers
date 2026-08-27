@@ -170,6 +170,8 @@ impl Installer {
                 binaries: resolved.binaries.as_deref().unwrap_or(&[]),
                 bin_source_dir: resolved.bin_source_dir.as_deref(),
                 cache_dirs: &cache_dirs,
+                prefix: resolved.prefix.as_deref(),
+                strip_components: resolved.strip_components.unwrap_or(0),
                 runner: self.runner.as_ref(),
             },
         )

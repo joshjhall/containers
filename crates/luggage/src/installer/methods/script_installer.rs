@@ -13,20 +13,20 @@
 //!
 //! Everything tool-shaped — which dirs, which env vars, which binaries —
 //! comes from the resolved catalog entry, so a new tool using this shape
-//! needs no code here (issue #806).
+//! needs no code here (issue #806). Steps 1, 3's env map, and 4 are shared
+//! with the other install methods via [`super::layout`]; only step 2 and the
+//! `su -c` invocation are specific to this shape.
 
-use std::collections::BTreeMap;
 use std::fs;
-#[cfg(unix)]
-use std::os::unix::fs as unix_fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt as _;
 
 use shell_words::quote;
 
-use super::{CommandRunner, MethodContext};
+use super::MethodContext;
+use super::layout::{build_env, install_binaries, prepare_cache_dirs};
 use crate::error::{LuggageError, Result};
-use crate::installer::user::{ROOT_USER, chown_command, su_command};
+use crate::installer::user::su_command;
 
 /// Run the script-installer flow.
 ///
@@ -44,39 +44,9 @@ use crate::installer::user::{ROOT_USER, chown_command, su_command};
 ///   command failed" semantics best.)
 pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
     // 1. Ensure the catalog's cache directories exist and are owned by the
-    //    install user. `create_dir_all` runs in the parent (root) process, so
-    //    any subdirs it creates would otherwise be root-owned; the subsequent
-    //    `su -c <artifact>` child would then hit EACCES on the first write
-    //    into one of them (see issue #462).
-    //
-    //    When the install user *is* root there's nothing to transfer — root
-    //    already owns the freshly-created dirs — and `chown root:root` is at
-    //    best a no-op. Skipping it also keeps the install correct on base
-    //    images where the resolved user doesn't exist: `resolve_install_user`
-    //    falls back to `root` there, and an unconditional
-    //    `chown <user>:<user>` would otherwise fail outright (see issue #492).
-    let needs_chown = ctx.user != ROOT_USER;
-    for rel in ctx.cache_dirs.values() {
-        let dir = ctx.cache_root.join(rel);
-        fs::create_dir_all(&dir).map_err(|e| LuggageError::Io { path: dir.clone(), source: e })?;
-        if !needs_chown {
-            continue;
-        }
-        let argv = chown_command(ctx.user, &dir);
-        let outcome = ctx.runner.run(&argv[0], &argv[1..])?;
-        if !outcome.success() {
-            return Err(LuggageError::InstallStageFailed {
-                stage: "chown",
-                message: format!(
-                    "chown {} -> {} exited with status {:?}: {}",
-                    dir.display(),
-                    ctx.user,
-                    outcome.status,
-                    String::from_utf8_lossy(&outcome.stderr).trim_end(),
-                ),
-            });
-        }
-    }
+    //    install user, so the `su -c <artifact>` child below can write into
+    //    them (issues #462 / #492 — see `layout::prepare_cache_dirs`).
+    prepare_cache_dirs(ctx)?;
 
     // 2. chmod +x the downloaded installer.
     #[cfg(unix)]
@@ -91,12 +61,7 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
 
     // 3. Build the env map (caller's exports layered over the catalog's
     //    cache-dir paths) and the inner shell payload, then dispatch to su.
-    //    `or_insert` keeps an explicit `invoke.env` value winning over the
-    //    path derived from `cache_dirs` for the same variable.
-    let mut env: BTreeMap<String, String> = ctx.env.clone();
-    for (var, rel) in ctx.cache_dirs {
-        env.entry(var.clone()).or_insert_with(|| ctx.cache_root.join(rel).display().to_string());
-    }
+    let env = build_env(ctx);
 
     let mut body = String::new();
     body.push_str(&quote(&ctx.artifact.display().to_string()));
@@ -124,77 +89,17 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
         });
     }
 
-    // 4. Symlink the catalog's binaries into bin_root.
-    if !ctx.binaries.is_empty() {
-        let rel = ctx.bin_source_dir.ok_or_else(|| {
-            LuggageError::Catalog(format!(
-                "install method lists {} binaries but no `bin_source_dir` to link them from",
-                ctx.binaries.len(),
-            ))
-        })?;
-        install_symlinks(&ctx.cache_root.join(rel), ctx.binaries, ctx.bin_root, ctx.runner)?;
-    }
-
-    Ok(())
-}
-
-/// Symlink `<source_dir>/<name>` → `<bin_root>/<name>` for each name in
-/// `binaries`. Existing symlinks are replaced; existing non-symlinks are
-/// left alone (avoids clobbering distro-managed files).
-///
-/// Unix-only — the catalog marks the tools using this method `unsupported`
-/// on Windows in `support_matrix`, so this path is unreachable there. The
-/// non-unix build returns `NotImplemented` so the crate still compiles for
-/// any host that doesn't go through the resolver (e.g. `cargo build` on
-/// Windows for a developer working on something unrelated).
-#[cfg(unix)]
-fn install_symlinks(
-    source_dir: &std::path::Path,
-    binaries: &[String],
-    bin_root: &std::path::Path,
-    runner: &dyn CommandRunner,
-) -> Result<()> {
-    fs::create_dir_all(bin_root)
-        .map_err(|e| LuggageError::Io { path: bin_root.to_owned(), source: e })?;
-    for name in binaries {
-        let target = source_dir.join(name);
-        let link = bin_root.join(name);
-        if link.exists() {
-            let metadata = fs::symlink_metadata(&link)
-                .map_err(|e| LuggageError::Io { path: link.clone(), source: e })?;
-            if metadata.file_type().is_symlink() {
-                fs::remove_file(&link)
-                    .map_err(|e| LuggageError::Io { path: link.clone(), source: e })?;
-            } else {
-                continue;
-            }
-        }
-        unix_fs::symlink(&target, &link)
-            .map_err(|e| LuggageError::Io { path: link.clone(), source: e })?;
-    }
-    // The runner is unused here today (symlink syscalls go direct), but
-    // accepting it keeps the API uniform and lets future versions of this
-    // function shell out for cross-distro quirks (e.g. SELinux contexts).
-    let _ = runner;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn install_symlinks(
-    _source_dir: &std::path::Path,
-    _binaries: &[String],
-    _bin_root: &std::path::Path,
-    _runner: &dyn CommandRunner,
-) -> Result<()> {
-    Err(LuggageError::NotImplemented(
-        "script-installer is unix-only; tools using it are `unsupported` on Windows in catalog",
-    ))
+    // 4. Symlink the catalog's binaries into bin_root. This shape's binaries
+    //    live under the cache root (rust: `cargo/bin`), so that is the root
+    //    `bin_source_dir` resolves against.
+    install_binaries(ctx, ctx.cache_root)
 }
 
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
+    use std::collections::BTreeMap;
     use std::fs;
     use std::path::Path;
 
@@ -246,6 +151,8 @@ mod tests {
             binaries: &rust_binaries(),
             bin_source_dir: Some("cargo/bin"),
             cache_dirs: &rust_cache_dirs(),
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -296,6 +203,8 @@ mod tests {
             binaries: &rust_binaries(),
             bin_source_dir: Some("cargo/bin"),
             cache_dirs: &rust_cache_dirs(),
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -346,6 +255,8 @@ mod tests {
             binaries: &rust_binaries(),
             bin_source_dir: Some("cargo/bin"),
             cache_dirs: &rust_cache_dirs(),
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -382,6 +293,8 @@ mod tests {
             binaries: &rust_binaries(),
             bin_source_dir: Some("cargo/bin"),
             cache_dirs: &rust_cache_dirs(),
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -410,6 +323,8 @@ mod tests {
             binaries: &rust_binaries(),
             bin_source_dir: Some("cargo/bin"),
             cache_dirs: &rust_cache_dirs(),
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -452,6 +367,8 @@ mod tests {
             binaries: &rust_binaries(),
             bin_source_dir: Some("cargo/bin"),
             cache_dirs: &rust_cache_dirs(),
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         let err = run(&ctx).unwrap_err();
@@ -496,6 +413,8 @@ mod tests {
             binaries: &rust_binaries(),
             bin_source_dir: Some("cargo/bin"),
             cache_dirs: &rust_cache_dirs(),
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         let err = run(&ctx).unwrap_err();
@@ -539,6 +458,8 @@ mod tests {
             binaries: &[],
             bin_source_dir: None,
             cache_dirs: &empty,
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -582,6 +503,8 @@ mod tests {
             binaries: &[],
             bin_source_dir: None,
             cache_dirs: &empty,
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -620,6 +543,8 @@ mod tests {
             binaries: &binaries,
             bin_source_dir: None,
             cache_dirs: &empty,
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         match run(&ctx).unwrap_err() {
@@ -655,6 +580,8 @@ mod tests {
             binaries: &[],
             bin_source_dir: None,
             cache_dirs: &rust_cache_dirs(),
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -700,6 +627,8 @@ mod tests {
             binaries: &[],
             bin_source_dir: None,
             cache_dirs: &go_dirs,
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -747,6 +676,8 @@ mod tests {
             binaries: &[],
             bin_source_dir: None,
             cache_dirs: &empty,
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         match run(&ctx).unwrap_err() {
@@ -791,6 +722,8 @@ mod tests {
             binaries: &binaries,
             bin_source_dir: Some("golang/bin"),
             cache_dirs: &empty,
+            prefix: None,
+            strip_components: 0,
             runner: &runner,
         };
         run(&ctx).unwrap();
