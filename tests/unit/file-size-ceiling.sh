@@ -29,7 +29,14 @@
 #     lands takes its own entry with it, and the list reaches zero on its own.
 #
 # The allowlist is expected to SHRINK to empty as issue #832's follow-up PRs
-# land. It is not a permanent exemption list; every entry is a tracked debt.
+# land. It is not a permanent exemption list; every entry is a tracked debt —
+# with one deliberate exception class. A file that is ASSESSED AND DECLINED
+# (measured under the audit lens's production-LOC budget, but still over this
+# check's TOTAL-line ceiling) stays listed permanently as a measurement
+# artifact, not as debt. It cannot reach the self-emptying arm without
+# extracting its own tests, which is not a change worth making to satisfy a
+# line count. See the crates/luggage/src/resolver.rs entry (#845) for the
+# worked example.
 
 set -euo pipefail
 
@@ -68,10 +75,12 @@ GRANDFATHERED=(
     #
     # The #832 sweep ranked candidates by TOTAL lines. Measured the way the
     # audit lens actually measures (check-decomposition/loc_engine.py), this
-    # file is 271 PRODUCTION LOC against the rs budget of 400 warning / 700
-    # high — 32% under the warning bar, and check-decomposition/patterns.py
-    # emits no file-length finding for it at all. The 958 is a 541-line
-    # co-located `#[cfg(test)] mod tests` counted against the production body.
+    # file is 271 PRODUCTION LOC against that lens's budget of 300 warning /
+    # 500 high (thresholds.yml § size_thresholds.production_loc, which has no
+    # per-language override) — under the warning bar, and
+    # check-decomposition/patterns.py emits no file-length finding for it at
+    # all. The 958 is a 541-line co-located `#[cfg(test)] mod tests` counted
+    # against the production body.
     #
     # It stays listed because CEILING_LINES is measured on TOTAL lines by
     # deliberate design (see the header above): at 958 total it is over the

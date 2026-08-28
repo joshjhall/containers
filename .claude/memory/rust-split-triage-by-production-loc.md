@@ -21,19 +21,33 @@ print(measure(lines, 'rs', find_units(lines, 'rs')))
 "
 ```
 
-The `rs` budget (`check-decomposition/thresholds.yml` → `per_language.rs`) is
-**400 warning / 700 high production LOC**. Measured on 2026-08-28:
+**Use the right lens — there are two, and they differ (#695).**
+`thresholds.yml` holds both, and picking the wrong one shifts the bar by 100
+production LOC:
 
-| file | total | production LOC | verdict |
+| lens | key in `thresholds.yml` | warning / high | consumed by |
 | --- | --- | --- | --- |
-| `crates/stibbons/src/agent/worktree.rs` | 1600 | 437 | marginally over warning |
-| `crates/stibbons/src/agent/commands.rs` | 955 | 403 | ~at warning |
-| `crates/luggage/src/resolver.rs` | 958 | 271 | **well under — declined in #845** |
+| **audit** | `size_thresholds.production_loc` | **300 / 500** | `check-decomposition/patterns.py`, `/review-audit:codebase-audit` |
+| **review** | `review_size_thresholds.per_language.rs` | **400 / 700** | `ship-issue`'s `sizing.{py,sh}`, the per-PR adversarial review |
+
+The audit lens has **no per-language override** — `rs` gets the same 300/500 as
+everything else. The review lens is deliberately looser (a per-PR gate firing at
+300 LOC fires on most PRs and gets switched off) and is growth-aware via a
+`git diff --numstat` sidecar, which the audit lens is not.
+
+**A split candidate off an audit sweep is an audit-lens question — measure it
+against 300/500.** Measured on 2026-08-28:
+
+| file | total | production LOC | vs audit 300/500 |
+| --- | --- | --- | --- |
+| `crates/stibbons/src/agent/worktree.rs` | 1600 | 437 | over warning |
+| `crates/stibbons/src/agent/commands.rs` | 955 | 403 | over warning |
+| `crates/luggage/src/resolver.rs` | 958 | 271 | **under — declined in #845** |
 
 A quick corroboration in either direction: `check-decomposition/patterns.py`
-emits **no `file-length` finding** for a file inside its budget, even when a
-`decomposition-seam` row is present. A seam alone is not a reason to split — it
-describes where a split *would* fall, not whether one is warranted.
+emits **no `file-length` finding** for a file inside the audit budget, even when
+a `decomposition-seam` row is present. A seam alone is not a reason to split —
+it describes where a split *would* fall, not whether one is warranted.
 
 **Do not extract tests to shrink a total.** `#[path = "x_tests.rs"] mod tests;`
 would satisfy a line count while making the code less idiomatic; co-located
