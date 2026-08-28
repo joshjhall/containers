@@ -47,9 +47,10 @@ use crate::installer::template::{Substitutions, substitute_url};
 ///   references an unknown placeholder.
 /// - [`LuggageError::DownloadFailed`] when the checksum file cannot be
 ///   fetched.
-/// - [`LuggageError::VerificationFailed`] when the response is not UTF-8, the
-///   expected digest cannot be parsed, a manifest has no line for
-///   `artifact_filename`, a manifest line is malformed, or the digests differ.
+/// - [`LuggageError::VerificationFailed`] when the response exceeds the
+///   buffered-response ceiling, is not UTF-8, the expected digest cannot be
+///   parsed, a manifest has no line for `artifact_filename`, a manifest line
+///   is malformed, or the digests differ.
 pub fn verify(
     tool: &str,
     version: &str,
@@ -73,10 +74,19 @@ pub fn verify(
         reason,
     };
 
-    // The checksum document itself is small by construction (a digest, or one
-    // short line per release artifact), so the buffered `get` is right here —
-    // and the parsers below want a `&str`.
-    let body = http.get(&url)?;
+    // The buffered `get` is right here — the parsers below want a `&str`, and
+    // it enforces a size ceiling so a publisher cannot make this allocate
+    // without bound. The overrun is folded into `fail` rather than propagated:
+    // an oversized checksum document has failed to establish the artifact's
+    // digest, which is a verification failure, and tier 3 fails closed on
+    // every other unusable-document case (non-UTF-8, unparsable, no matching
+    // manifest entry) too.
+    let body = http.get(&url).map_err(|e| match e {
+        LuggageError::ResponseTooLarge { limit, .. } => {
+            fail(format!("checksum file at {url} exceeds the {limit}-byte response ceiling"))
+        }
+        other => other,
+    })?;
     let body_str = std::str::from_utf8(&body)
         .map_err(|_| fail(format!("checksum file at {url} is not valid UTF-8")))?;
 
@@ -481,6 +491,98 @@ mod tests {
         let digest = "8".repeat(64);
         let body = format!("\n{digest}  a.tar.xz\n\n");
         assert_eq!(select_manifest_digest(&body, "a.tar.xz").unwrap(), digest);
+    }
+
+    // --- oversized checksum documents (issue #835) -------------------------
+
+    /// A client whose `get` always reports the response ceiling, standing in
+    /// for a publisher endpoint that served an oversized body. The cap itself
+    /// lives in `UreqClient` and is tested there; what matters here is that
+    /// tier 3 translates it rather than letting it escape as a `Download`
+    /// error that would misattribute the failure.
+    struct OversizedClient {
+        limit: u64,
+    }
+
+    impl HttpClient for OversizedClient {
+        fn get(&self, url: &str) -> Result<Vec<u8>> {
+            Err(LuggageError::ResponseTooLarge { url: url.to_owned(), limit: self.limit })
+        }
+    }
+
+    /// AC: exceeding the cap is a `VerificationFailed` naming the limit — NOT
+    /// a truncation that then fails as a confusing digest mismatch.
+    #[test]
+    fn oversized_checksum_body_fails_verification_naming_the_limit() {
+        let stub = OversizedClient { limit: 1024 * 1024 };
+        let v = verification("https://example.test/{rustup_target}/rustup-init.sha256");
+        let subs = Substitutions::new("1.95.0", "x86_64-unknown-linux-gnu");
+        let err = verify("rust", "1.95.0", "aa", "rustup-init", &v, &subs, &stub).unwrap_err();
+        match err {
+            LuggageError::VerificationFailed { tier: 3, tool, reason, .. } => {
+                assert_eq!(tool, "rust");
+                assert!(reason.contains("1048576"), "message must name the limit: {reason}");
+                assert!(
+                    !reason.contains("digest mismatch"),
+                    "must not be reported as a mismatch: {reason}"
+                );
+            }
+            other => panic!("expected VerificationFailed, got {other:?}"),
+        }
+    }
+
+    /// The same holds in manifest mode, which is the branch that made this
+    /// worth guarding — a release manifest is the one body expected to have
+    /// many lines.
+    #[test]
+    fn oversized_manifest_body_fails_verification() {
+        let stub = OversizedClient { limit: 1024 * 1024 };
+        let v = manifest_verification(MANIFEST_TEMPLATE);
+        let subs = Substitutions::new("22.12.0", "x86_64-unknown-linux-gnu");
+        let err = verify("node", "22.12.0", "aa", "node.tar.xz", &v, &subs, &stub).unwrap_err();
+        match err {
+            LuggageError::VerificationFailed { tier: 3, reason, .. } => {
+                assert!(reason.contains("1048576"), "message must name the limit: {reason}");
+            }
+            other => panic!("expected VerificationFailed, got {other:?}"),
+        }
+    }
+
+    /// Only the ceiling is translated: an ordinary fetch failure still
+    /// surfaces as a `DownloadFailed`, so a dead network is not misreported as
+    /// a failed verification.
+    #[test]
+    fn an_ordinary_download_failure_is_not_recast_as_verification_failed() {
+        struct DeadClient;
+        impl HttpClient for DeadClient {
+            fn get(&self, url: &str) -> Result<Vec<u8>> {
+                Err(LuggageError::DownloadFailed {
+                    url: url.to_owned(),
+                    attempts: 8,
+                    message: "connection refused".into(),
+                })
+            }
+        }
+        let v = verification("https://example.test/{rustup_target}/rustup-init.sha256");
+        let subs = Substitutions::new("1.95.0", "x86_64-unknown-linux-gnu");
+        let err =
+            verify("rust", "1.95.0", "aa", "rustup-init", &v, &subs, &DeadClient).unwrap_err();
+        assert!(matches!(err, LuggageError::DownloadFailed { .. }), "got {err:?}");
+    }
+
+    /// AC: a realistic manifest — Node's `SHASUMS256.txt` shape, four entries
+    /// — is far under the ceiling and still verifies. Guards against a cap set
+    /// so tight it rejects real publisher documents.
+    #[test]
+    fn a_realistic_manifest_is_far_under_the_ceiling() {
+        let artifact = "node-v22.12.0-linux-arm64.tar.xz";
+        let digest = digest_hex(Some("sha256"), b"arm64 tarball bytes").unwrap();
+        let body = manifest_listing(artifact, &digest);
+        assert!(body.len() < 10 * 1024, "a real manifest is kilobytes, not megabytes");
+        let stub = StubClient::with(MANIFEST_URL, body.as_bytes());
+        let v = manifest_verification(MANIFEST_TEMPLATE);
+        let subs = Substitutions::new("22.12.0", "aarch64-unknown-linux-gnu");
+        verify("node", "22.12.0", &digest, artifact, &v, &subs, &stub).unwrap();
     }
 
     /// Manifest mode is opt-in: a manifest body under the DEFAULT
