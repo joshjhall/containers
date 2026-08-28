@@ -23,6 +23,7 @@
 - [Auto-patch inline checksums](auto-patch-inline-checksums.md) — inline *_SHA256 pins in setup.sh need TOOL_CHECKSUM_REGISTRY_INLINE
 - [check-versions scrape pins nonexistent](check-versions-scrape-pins-nonexistent.md) — read downloadable artifact filenames, not scraped HTML (jdtls #582)
 - [Luggage vendored catalog](luggage-vendored-catalog.md) — builds read vendored snapshot (crates/luggage/testdata/catalog), not sibling repo
+- [Rust split triage by production LOC](rust-split-triage-by-production-loc.md) — rank .rs split candidates by production LOC (loc_engine.py), not total lines; co-located tests inflate totals (#845)
 - [Luggage release deferred until v5](luggage-release-deferred-until-v5.md) — no apt/Homebrew/cargo release for luggage until v5 substantially complete
 - [Auto-merge needs explicit consent](feedback_auto_merge_consent.md) — gh pr merge --auto needs per-turn authorization, separate from default-ship
 - [Golem autonomy contract](feedback_golem_autonomy_contract.md) — auto-approve push/PR-create + auto-merge green PRs; escalate only real failures/plan-gates/conflicts, in-conversation not via golem attach

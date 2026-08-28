@@ -29,7 +29,14 @@
 #     lands takes its own entry with it, and the list reaches zero on its own.
 #
 # The allowlist is expected to SHRINK to empty as issue #832's follow-up PRs
-# land. It is not a permanent exemption list; every entry is a tracked debt.
+# land. It is not a permanent exemption list; every entry is a tracked debt —
+# with one deliberate exception class. A file that is ASSESSED AND DECLINED
+# (measured under the audit lens's production-LOC budget, but still over this
+# check's TOTAL-line ceiling) stays listed permanently as a measurement
+# artifact, not as debt. It cannot reach the self-emptying arm without
+# extracting its own tests, which is not a change worth making to satisfy a
+# line count. See the crates/luggage/src/resolver.rs entry (#845) for the
+# worked example.
 
 set -euo pipefail
 
@@ -62,12 +69,26 @@ GRANDFATHERED=(
     "tests/unit/features/dev-tools.sh:1457"
     "tests/unit/runtime/entrypoint.sh:1309"
     "crates/stibbons/src/agent/commands.rs:955"
-    # 946 -> 958 (#808): two `ResolvedInstall` fields (`prefix`,
-    # `strip_components`) plus their `build_resolved` and fixture plumbing.
-    # Raised rather than split because the growth is field declarations in an
-    # existing struct, with no seam of its own — splitting a 958-line file to
-    # accommodate 12 lines of fields would be the larger change. The file is
-    # still a #832 split candidate on its own merits.
+    # ASSESSED AND DECLINED (#845) — NOT a pending split. This entry is
+    # retained for a measurement reason only, and is the one entry below that
+    # is not tracked debt.
+    #
+    # The #832 sweep ranked candidates by TOTAL lines. Measured the way the
+    # audit lens actually measures (check-decomposition/loc_engine.py), this
+    # file is 271 PRODUCTION LOC against that lens's budget of 300 warning /
+    # 500 high (thresholds.yml § size_thresholds.production_loc, which has no
+    # per-language override) — under the warning bar, and
+    # check-decomposition/patterns.py emits no file-length finding for it at
+    # all. The 958 is a 541-line co-located `#[cfg(test)] mod tests` counted
+    # against the production body.
+    #
+    # It stays listed because CEILING_LINES is measured on TOTAL lines by
+    # deliberate design (see the header above): at 958 total it is over the
+    # 900 ceiling, so removing this entry would fail
+    # test_no_ungrandfathered_file_over_ceiling. The self-emptying arm only
+    # fires below 900, which this file cannot reach without extracting its
+    # tests — rejected in #845, since co-located tests are idiomatic Rust and
+    # this repo's dominant convention. Do not "fix" that by moving the tests.
     "crates/luggage/src/resolver.rs:958"
     "tests/unit/gitlab-templates.sh:943"
 )
