@@ -156,6 +156,7 @@ mod tests {
             cache_dirs: &rust_cache_dirs(),
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -208,6 +209,7 @@ mod tests {
             cache_dirs: &rust_cache_dirs(),
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -260,6 +262,7 @@ mod tests {
             cache_dirs: &rust_cache_dirs(),
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -298,6 +301,7 @@ mod tests {
             cache_dirs: &rust_cache_dirs(),
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -328,6 +332,7 @@ mod tests {
             cache_dirs: &rust_cache_dirs(),
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -372,6 +377,7 @@ mod tests {
             cache_dirs: &rust_cache_dirs(),
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         let err = run(&ctx).unwrap_err();
@@ -418,6 +424,7 @@ mod tests {
             cache_dirs: &rust_cache_dirs(),
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         let err = run(&ctx).unwrap_err();
@@ -463,6 +470,7 @@ mod tests {
             cache_dirs: &empty,
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -508,6 +516,7 @@ mod tests {
             cache_dirs: &empty,
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -548,6 +557,7 @@ mod tests {
             cache_dirs: &empty,
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         match run(&ctx).unwrap_err() {
@@ -585,6 +595,7 @@ mod tests {
             cache_dirs: &rust_cache_dirs(),
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -632,6 +643,7 @@ mod tests {
             cache_dirs: &go_dirs,
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -681,6 +693,7 @@ mod tests {
             cache_dirs: &empty,
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         match run(&ctx).unwrap_err() {
@@ -727,6 +740,7 @@ mod tests {
             cache_dirs: &empty,
             prefix: None,
             strip_components: 0,
+            max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             runner: &runner,
         };
         run(&ctx).unwrap();

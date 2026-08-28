@@ -59,6 +59,7 @@ use flate2::read::GzDecoder;
 use tar::{Archive, EntryType};
 
 use super::MethodContext;
+use super::archive_limit::{LimitedReader, LimitedWriter};
 use super::archive_path::{safe_relative_path, strip_prefix_components, validate_link_target};
 use super::layout::{install_binaries, prepare_cache_dirs};
 use crate::error::{LuggageError, Result};
@@ -108,7 +109,14 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
         .tempdir_in(ctx.artifact.parent().unwrap_or_else(|| Path::new(".")))
         .map_err(|e| LuggageError::Io { path: ctx.artifact.to_owned(), source: e })?;
 
-    extract(ctx.artifact, &artifact_name, compression, staging.path(), ctx.strip_components)?;
+    extract(
+        ctx.artifact,
+        &artifact_name,
+        compression,
+        staging.path(),
+        ctx.strip_components,
+        ctx.max_extract_bytes,
+    )?;
 
     // 3. Merge staging into the prefix.
     fs::create_dir_all(&prefix)
@@ -181,6 +189,7 @@ fn extract(
     compression: Compression,
     dest: &Path,
     strip: u32,
+    max_bytes: u64,
 ) -> Result<()> {
     let file = File::open(artifact)
         .map_err(|e| LuggageError::Io { path: artifact.to_owned(), source: e })?;
@@ -189,13 +198,22 @@ fn extract(
     match compression {
         Compression::Gzip => {
             // gzip streams straight into the tar reader — no intermediate.
-            unpack(Archive::new(GzDecoder::new(reader)), artifact_name, dest, strip)
+            // The limiter sits on the *decompressed* side, so it measures
+            // expansion rather than artifact size.
+            let limited = LimitedReader::new(GzDecoder::new(reader), max_bytes);
+            unpack_limited(limited, artifact_name, dest, strip, max_bytes)
         }
         Compression::Xz => {
             // `lzma_rs::xz_decompress` writes into a sink rather than
             // exposing a `Read`, so xz lands as a plain `.tar` beside the
             // archive first. The temp file is dropped as soon as the unpack
             // finishes.
+            //
+            // The ceiling therefore has to sit on the WRITER: this path
+            // materialises the whole decompressed stream before a single
+            // entry is read, so a reader-side cap would fire only after the
+            // bomb was already on disk — exactly the outcome it exists to
+            // prevent.
             let plain = tempfile::Builder::new()
                 .prefix("luggage-xz-")
                 .suffix(".tar")
@@ -203,20 +221,55 @@ fn extract(
                 .map_err(|e| LuggageError::Io { path: artifact.to_owned(), source: e })?;
             {
                 let mut reader = reader;
-                let mut writer = BufWriter::new(plain.as_file());
-                lzma_rs::xz_decompress(&mut reader, &mut writer).map_err(|e| {
-                    LuggageError::ArchiveExtractionFailed {
+                let mut writer = LimitedWriter::new(BufWriter::new(plain.as_file()), max_bytes);
+                let outcome = lzma_rs::xz_decompress(&mut reader, &mut writer);
+                // Check the limiter first: the write error surfaces through
+                // `xz_decompress` as an opaque decompression failure, and
+                // reporting a bomb as "corrupt archive" would send whoever
+                // reads it looking for the wrong problem.
+                if writer.tripped() {
+                    return Err(LuggageError::ArchiveTooLarge {
                         artifact: artifact_name.to_owned(),
-                        message: format!("xz decompression failed: {e}"),
-                    }
+                        limit: max_bytes,
+                    });
+                }
+                outcome.map_err(|e| LuggageError::ArchiveExtractionFailed {
+                    artifact: artifact_name.to_owned(),
+                    message: format!("xz decompression failed: {e}"),
                 })?;
             }
             let tar_file = plain
                 .reopen()
                 .map_err(|e| LuggageError::Io { path: plain.path().to_owned(), source: e })?;
+            // The temp file is already bounded by the writer above, so the
+            // tar read needs no second limiter.
             unpack(Archive::new(BufReader::new(tar_file)), artifact_name, dest, strip)
         }
     }
+}
+
+/// Unpack through a [`LimitedReader`], converting an exhausted budget into
+/// [`LuggageError::ArchiveTooLarge`].
+///
+/// The reader signals its cap with EOF so the tar layer unwinds cleanly; that
+/// EOF is indistinguishable from a truncated archive until the limiter is
+/// consulted, which is what this wrapper exists to do.
+fn unpack_limited<R: std::io::Read>(
+    limited: LimitedReader<R>,
+    artifact_name: &str,
+    dest: &Path,
+    strip: u32,
+    max_bytes: u64,
+) -> Result<()> {
+    let mut archive = Archive::new(limited);
+    let result = unpack_entries(&mut archive, artifact_name, dest, strip);
+    if archive.into_inner().tripped() {
+        return Err(LuggageError::ArchiveTooLarge {
+            artifact: artifact_name.to_owned(),
+            limit: max_bytes,
+        });
+    }
+    result
 }
 
 /// Walk every archive entry, validate its path (and link target), and write
@@ -228,6 +281,17 @@ fn extract(
 /// from what we checked.
 fn unpack<R: std::io::Read>(
     mut archive: Archive<R>,
+    artifact_name: &str,
+    dest: &Path,
+    strip: u32,
+) -> Result<()> {
+    unpack_entries(&mut archive, artifact_name, dest, strip)
+}
+
+/// The entry loop itself, borrowing the archive so a caller holding a limiter
+/// can reclaim it afterwards to ask whether the budget was exhausted.
+fn unpack_entries<R: std::io::Read>(
+    archive: &mut Archive<R>,
     artifact_name: &str,
     dest: &Path,
     strip: u32,
@@ -347,545 +411,5 @@ fn merge_dir(src: &Path, dst: &Path) -> Result<()> {
 }
 
 #[cfg(all(test, unix))]
-mod tests {
-    use super::*;
-
-    use std::collections::BTreeMap;
-    use std::io::Write as _;
-
-    use tar::{Builder, Header};
-    use tempfile::tempdir;
-
-    use crate::installer::methods::RecordingRunner;
-
-    /// Write `path` straight into a header's raw name field.
-    ///
-    /// `Header::set_path` / `Builder::append_data` refuse paths containing
-    /// `..` or a leading `/` — the tar crate will not *produce* a malicious
-    /// archive. That is a reasonable default for a writer and a problem for
-    /// these tests, which must feed exactly such an archive to the reader.
-    /// Writing the 100-byte name field directly is how a hostile archive is
-    /// synthesised without a checked-in binary blob.
-    fn set_raw_name(header: &mut Header, path: &str) {
-        let bytes = path.as_bytes();
-        assert!(bytes.len() < 100, "fixture paths must fit the short name field");
-        let name = &mut header.as_old_mut().name;
-        name.fill(0);
-        name[..bytes.len()].copy_from_slice(bytes);
-    }
-
-    /// One entry to place in a fixture archive.
-    enum Entry<'a> {
-        /// A regular file with the given contents.
-        File(&'a str, &'a [u8]),
-        /// A link of the given kind pointing at the given target.
-        Link(&'a str, &'a str, EntryType),
-    }
-
-    /// Build an uncompressed tar in memory from a list of entries.
-    ///
-    /// Fixtures are constructed in-test rather than checked in as binary
-    /// blobs so the malicious ones are readable as code — a reviewer can see
-    /// exactly what `../../etc/passwd` entry the traversal test asserts is
-    /// rejected, which a committed `.tar.gz` would hide.
-    fn tar_of(entries: &[Entry<'_>]) -> Vec<u8> {
-        let mut builder = Builder::new(Vec::new());
-        for entry in entries {
-            let mut header = Header::new_gnu();
-            match entry {
-                Entry::File(path, contents) => {
-                    header.set_size(contents.len() as u64);
-                    header.set_mode(0o644);
-                    set_raw_name(&mut header, path);
-                    header.set_cksum();
-                    builder.append(&header, *contents).unwrap();
-                }
-                Entry::Link(path, target, kind) => {
-                    header.set_size(0);
-                    header.set_mode(0o777);
-                    header.set_entry_type(*kind);
-                    set_raw_name(&mut header, path);
-                    set_raw_linkname(&mut header, target);
-                    header.set_cksum();
-                    builder.append(&header, std::io::empty()).unwrap();
-                }
-            }
-        }
-        builder.into_inner().unwrap()
-    }
-
-    /// Shorthand for the common all-files case.
-    fn tar_bytes(entries: &[(&str, &[u8])]) -> Vec<u8> {
-        let entries: Vec<_> = entries.iter().map(|(p, c)| Entry::File(p, c)).collect();
-        tar_of(&entries)
-    }
-
-    /// Write `target` straight into a header's raw linkname field.
-    ///
-    /// Same reason as [`set_raw_name`]: `set_link_name` rejects the escaping
-    /// targets these fixtures exist to exercise.
-    fn set_raw_linkname(header: &mut Header, target: &str) {
-        let bytes = target.as_bytes();
-        assert!(bytes.len() < 100, "fixture link targets must fit the linkname field");
-        let linkname = &mut header.as_old_mut().linkname;
-        linkname.fill(0);
-        linkname[..bytes.len()].copy_from_slice(bytes);
-    }
-
-    /// Build a tar containing a single link entry pointing at `target`.
-    fn tar_with_link(link_path: &str, target: &str, kind: EntryType) -> Vec<u8> {
-        tar_of(&[Entry::Link(link_path, target, kind)])
-    }
-
-    fn gzip(raw: &[u8]) -> Vec<u8> {
-        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-        encoder.write_all(raw).unwrap();
-        encoder.finish().unwrap()
-    }
-
-    fn xz(raw: &[u8]) -> Vec<u8> {
-        let mut out = Vec::new();
-        lzma_rs::xz_compress(&mut std::io::Cursor::new(raw), &mut out).unwrap();
-        out
-    }
-
-    /// Owns the tempdirs for a run so they outlive the borrowed context.
-    struct Fixture {
-        _tmp: tempfile::TempDir,
-        cache: tempfile::TempDir,
-        bin: tempfile::TempDir,
-        prefix: tempfile::TempDir,
-        artifact: PathBuf,
-        runner: RecordingRunner,
-    }
-
-    impl Fixture {
-        fn new(name: &str, bytes: &[u8]) -> Self {
-            let tmp = tempdir().unwrap();
-            let artifact = tmp.path().join(name);
-            fs::write(&artifact, bytes).unwrap();
-            Self {
-                _tmp: tmp,
-                cache: tempdir().unwrap(),
-                bin: tempdir().unwrap(),
-                prefix: tempdir().unwrap(),
-                artifact,
-                runner: RecordingRunner::new(),
-            }
-        }
-
-        fn run(
-            &self,
-            strip: u32,
-            user: &str,
-            binaries: &[String],
-            bin_source_dir: Option<&str>,
-            cache_dirs: &BTreeMap<String, String>,
-        ) -> Result<()> {
-            let args: Vec<String> = vec![];
-            let env = BTreeMap::new();
-            let prefix = self.prefix.path().display().to_string();
-            super::run(&MethodContext {
-                artifact: &self.artifact,
-                args: &args,
-                env: &env,
-                user,
-                cache_root: self.cache.path(),
-                bin_root: self.bin.path(),
-                binaries,
-                bin_source_dir,
-                cache_dirs,
-                prefix: Some(&prefix),
-                strip_components: strip,
-                runner: &self.runner,
-            })
-        }
-
-        /// The common case: no binaries, no cache dirs, unprivileged user.
-        fn run_plain(&self, strip: u32) -> Result<()> {
-            self.run(strip, "vscode", &[], None, &BTreeMap::new())
-        }
-    }
-
-    // ---- happy paths -----------------------------------------------------
-
-    /// go's shape: gzip, strip 0, so the archive's own `go/` top level is
-    /// preserved under the prefix.
-    #[test]
-    fn extracts_gzip_keeping_top_level_at_strip_zero() {
-        let raw = tar_bytes(&[("go/bin/go", b"gobin"), ("go/VERSION", b"go1.25.0")]);
-        let f = Fixture::new("go1.25.0.linux-amd64.tar.gz", &gzip(&raw));
-
-        f.run_plain(0).unwrap();
-
-        assert_eq!(fs::read(f.prefix.path().join("go/bin/go")).unwrap(), b"gobin");
-        assert_eq!(fs::read(f.prefix.path().join("go/VERSION")).unwrap(), b"go1.25.0");
-    }
-
-    /// node's shape: xz, strip 1, so the versioned root flattens directly
-    /// into the prefix.
-    #[test]
-    fn extracts_xz_flattening_versioned_root_at_strip_one() {
-        let raw = tar_bytes(&[
-            ("node-v22.0.0-linux-x64/bin/node", b"nodebin"),
-            ("node-v22.0.0-linux-x64/README.md", b"readme"),
-        ]);
-        let f = Fixture::new("node-v22.0.0-linux-x64.tar.xz", &xz(&raw));
-
-        f.run_plain(1).unwrap();
-
-        assert_eq!(fs::read(f.prefix.path().join("bin/node")).unwrap(), b"nodebin");
-        assert_eq!(fs::read(f.prefix.path().join("README.md")).unwrap(), b"readme");
-        assert!(
-            !f.prefix.path().join("node-v22.0.0-linux-x64").exists(),
-            "strip 1 must not leave the versioned root behind"
-        );
-    }
-
-    /// Both spellings of each compression are accepted.
-    #[test]
-    fn accepts_short_extension_spellings() {
-        for (name, bytes) in [
-            ("payload.tgz", gzip(&tar_bytes(&[("a.txt", b"a")]))),
-            ("payload.txz", xz(&tar_bytes(&[("a.txt", b"a")]))),
-        ] {
-            let f = Fixture::new(name, &bytes);
-            f.run_plain(0).unwrap_or_else(|e| panic!("{name} should extract, got {e:?}"));
-            assert_eq!(fs::read(f.prefix.path().join("a.txt")).unwrap(), b"a", "{name}");
-        }
-    }
-
-    /// The prefix is shared with other tools (node strips straight into
-    /// `/usr/local`), so extraction must merge into existing directories
-    /// rather than replace them.
-    #[test]
-    fn merges_into_a_populated_prefix() {
-        let raw = tar_bytes(&[("bin/node", b"nodebin")]);
-        let f = Fixture::new("node.tar.gz", &gzip(&raw));
-
-        // A pre-existing sibling that must survive the merge.
-        fs::create_dir_all(f.prefix.path().join("bin")).unwrap();
-        fs::write(f.prefix.path().join("bin/pre-existing"), b"keep").unwrap();
-
-        f.run_plain(0).unwrap();
-
-        assert_eq!(fs::read(f.prefix.path().join("bin/node")).unwrap(), b"nodebin");
-        assert_eq!(
-            fs::read(f.prefix.path().join("bin/pre-existing")).unwrap(),
-            b"keep",
-            "merging must not clobber unrelated files already in the prefix"
-        );
-    }
-
-    // ---- traversal rejection (the #808 security requirement) -------------
-
-    /// A `..` component must be rejected outright — not sanitized, not
-    /// skipped. This is the archive shape that would otherwise let a build
-    /// running as root write outside the prefix.
-    #[test]
-    fn rejects_parent_dir_traversal_entry() {
-        let raw = tar_bytes(&[("go/bin/go", b"ok"), ("../../etc/passwd", b"pwned")]);
-        let f = Fixture::new("evil.tar.gz", &gzip(&raw));
-
-        let err = f.run_plain(0).unwrap_err();
-        match err {
-            LuggageError::UnsafeArchiveEntry { entry, reason, .. } => {
-                assert!(entry.contains(".."), "error should name the entry: {entry}");
-                assert!(reason.contains(".."), "reason should explain: {reason}");
-            }
-            other => panic!("expected UnsafeArchiveEntry, got {other:?}"),
-        }
-    }
-
-    /// An absolute entry path ignores `-C` entirely under a naive extractor.
-    #[test]
-    fn rejects_absolute_entry_path() {
-        let raw = tar_bytes(&[("/etc/cron.d/pwn", b"pwned")]);
-        let f = Fixture::new("evil.tar.gz", &gzip(&raw));
-
-        let err = f.run_plain(0).unwrap_err();
-        match err {
-            LuggageError::UnsafeArchiveEntry { reason, .. } => {
-                assert!(reason.contains("absolute"), "reason should explain: {reason}");
-            }
-            other => panic!("expected UnsafeArchiveEntry, got {other:?}"),
-        }
-    }
-
-    /// The subtle case: the link entry itself sits safely inside the prefix,
-    /// but its *target* points out. A later entry written through the link
-    /// would land outside, so the link is rejected when it is unpacked.
-    #[test]
-    fn rejects_symlink_escaping_the_prefix() {
-        let raw = tar_with_link("pkg/escape", "../../../etc", EntryType::Symlink);
-        let f = Fixture::new("evil.tar.gz", &gzip(&raw));
-
-        let err = f.run_plain(0).unwrap_err();
-        match err {
-            LuggageError::UnsafeArchiveEntry { reason, .. } => {
-                assert!(reason.contains("escapes"), "reason should explain: {reason}");
-            }
-            other => panic!("expected UnsafeArchiveEntry, got {other:?}"),
-        }
-    }
-
-    /// An absolute link target is refused without walking components.
-    #[test]
-    fn rejects_absolute_symlink_target() {
-        let raw = tar_with_link("pkg/escape", "/etc/shadow", EntryType::Symlink);
-        let f = Fixture::new("evil.tar.gz", &gzip(&raw));
-
-        let err = f.run_plain(0).unwrap_err();
-        match err {
-            LuggageError::UnsafeArchiveEntry { reason, .. } => {
-                assert!(reason.contains("absolute"), "reason should explain: {reason}");
-            }
-            other => panic!("expected UnsafeArchiveEntry, got {other:?}"),
-        }
-    }
-
-    /// Hardlinks carry a target just as symlinks do, and are checked the
-    /// same way.
-    #[test]
-    fn rejects_hardlink_escaping_the_prefix() {
-        let raw = tar_with_link("pkg/escape", "../../../etc/passwd", EntryType::Link);
-        let f = Fixture::new("evil.tar.gz", &gzip(&raw));
-
-        assert!(
-            matches!(f.run_plain(0), Err(LuggageError::UnsafeArchiveEntry { .. })),
-            "an escaping hardlink must be rejected like a symlink"
-        );
-    }
-
-    /// A link that stays inside the prefix is legitimate and must extract —
-    /// the validation rejects escapes, not links as a category.
-    #[test]
-    fn allows_symlink_that_stays_inside_the_prefix() {
-        let raw = tar_of(&[
-            Entry::File("pkg/real.txt", b"real"),
-            Entry::Link("pkg/alias.txt", "real.txt", EntryType::Symlink),
-        ]);
-
-        let f = Fixture::new("ok.tar.gz", &gzip(&raw));
-        f.run_plain(0).unwrap();
-
-        let alias = f.prefix.path().join("pkg/alias.txt");
-        assert!(fs::symlink_metadata(&alias).unwrap().file_type().is_symlink());
-        assert_eq!(fs::read(&alias).unwrap(), b"real");
-    }
-
-    /// Rejection must happen before anything reaches the prefix — a refused
-    /// archive leaves no half-installed state behind.
-    #[test]
-    fn rejected_archive_leaves_the_prefix_untouched() {
-        // The benign entry precedes the malicious one, so a naive extractor
-        // would already have written it by the time it hit the traversal.
-        let raw = tar_bytes(&[("go/bin/go", b"ok"), ("../escape", b"pwned")]);
-        let f = Fixture::new("evil.tar.gz", &gzip(&raw));
-
-        assert!(f.run_plain(0).is_err());
-        assert!(
-            !f.prefix.path().join("go").exists(),
-            "no entry may reach the prefix when the archive is rejected"
-        );
-        assert_eq!(
-            fs::read_dir(f.prefix.path()).unwrap().count(),
-            0,
-            "prefix must be empty after a rejected archive"
-        );
-    }
-
-    // ---- format + corruption errors --------------------------------------
-
-    /// An unrecognised extension is a typed error, never a silent skip that
-    /// would surface much later as a missing binary.
-    #[test]
-    fn unrecognised_extension_is_a_typed_error() {
-        let f = Fixture::new("payload.zip", b"PK\x03\x04");
-
-        let err = f.run_plain(0).unwrap_err();
-        match err {
-            LuggageError::UnsupportedArchiveFormat { artifact, message } => {
-                assert_eq!(artifact, "payload.zip");
-                assert!(message.contains(".tar.gz"), "should list what it expected: {message}");
-            }
-            other => panic!("expected UnsupportedArchiveFormat, got {other:?}"),
-        }
-        assert_eq!(fs::read_dir(f.prefix.path()).unwrap().count(), 0);
-    }
-
-    /// A `.tar.gz` whose bytes are not gzip fails as an extraction error.
-    #[test]
-    fn corrupt_archive_is_an_extraction_error() {
-        let f = Fixture::new("broken.tar.gz", b"not actually gzip at all");
-
-        assert!(
-            matches!(f.run_plain(0), Err(LuggageError::ArchiveExtractionFailed { .. })),
-            "a corrupt archive should surface as ArchiveExtractionFailed"
-        );
-        assert_eq!(fs::read_dir(f.prefix.path()).unwrap().count(), 0);
-    }
-
-    /// Truncated xz likewise, and specifically from the decompression step.
-    #[test]
-    fn corrupt_xz_is_an_extraction_error() {
-        let mut bytes = xz(&tar_bytes(&[("a.txt", b"a")]));
-        bytes.truncate(bytes.len() / 2);
-        let f = Fixture::new("broken.tar.xz", &bytes);
-
-        match f.run_plain(0).unwrap_err() {
-            LuggageError::ArchiveExtractionFailed { message, .. } => {
-                assert!(message.contains("xz"), "should name the failing step: {message}");
-            }
-            other => panic!("expected ArchiveExtractionFailed, got {other:?}"),
-        }
-    }
-
-    // ---- #806 parity -----------------------------------------------------
-
-    /// Binaries are symlinked out of the *prefix* (go: `go/bin`), not the
-    /// cache root — the one place this method's layout differs from
-    /// script-installer's.
-    #[test]
-    fn symlinks_binaries_from_the_extraction_prefix() {
-        let raw = tar_bytes(&[("go/bin/go", b"gobin"), ("go/bin/gofmt", b"gofmtbin")]);
-        let f = Fixture::new("go.tar.gz", &gzip(&raw));
-        let binaries = vec!["go".to_owned(), "gofmt".to_owned()];
-
-        f.run(0, "vscode", &binaries, Some("go/bin"), &BTreeMap::new()).unwrap();
-
-        for name in &binaries {
-            let link = f.bin.path().join(name);
-            assert!(
-                fs::symlink_metadata(&link).unwrap().file_type().is_symlink(),
-                "{name} should be a symlink in bin_root"
-            );
-            assert_eq!(fs::read_link(&link).unwrap(), f.prefix.path().join("go/bin").join(name));
-        }
-    }
-
-    /// Cache dirs are created and chowned to the install user, exactly as
-    /// script-installer does (#806 parity).
-    #[test]
-    fn creates_and_chowns_cache_dirs() {
-        let raw = tar_bytes(&[("go/bin/go", b"gobin")]);
-        let f = Fixture::new("go.tar.gz", &gzip(&raw));
-        let cache_dirs = BTreeMap::from([
-            ("GOPATH".to_owned(), "go".to_owned()),
-            ("GOMODCACHE".to_owned(), "go-mod".to_owned()),
-        ]);
-
-        f.run(0, "vscode", &[], None, &cache_dirs).unwrap();
-
-        assert!(f.cache.path().join("go").is_dir());
-        assert!(f.cache.path().join("go-mod").is_dir());
-        let chowns: Vec<_> = f.runner.calls().into_iter().filter(|(p, _)| p == "chown").collect();
-        assert_eq!(chowns.len(), 2, "expected one chown per cache dir, got {chowns:?}");
-    }
-
-    /// #492 parity: a root install user gets no chown — root already owns
-    /// the freshly-created dirs, and on base images without the resolved
-    /// user an unconditional chown would fail outright.
-    #[test]
-    fn skips_chown_for_a_root_install_user() {
-        let raw = tar_bytes(&[("go/bin/go", b"gobin")]);
-        let f = Fixture::new("go.tar.gz", &gzip(&raw));
-        let cache_dirs = BTreeMap::from([("GOPATH".to_owned(), "go".to_owned())]);
-
-        f.run(0, "root", &[], None, &cache_dirs).unwrap();
-
-        assert!(f.cache.path().join("go").is_dir(), "the dir must still be created");
-        assert!(
-            !f.runner.calls().iter().any(|(p, _)| p == "chown"),
-            "a root install user must not trigger a chown"
-        );
-    }
-
-    /// Listing binaries without a `bin_source_dir` is a catalog defect, and
-    /// must be reported rather than guessed at.
-    #[test]
-    fn binaries_without_source_dir_is_a_catalog_error() {
-        let raw = tar_bytes(&[("go/bin/go", b"gobin")]);
-        let f = Fixture::new("go.tar.gz", &gzip(&raw));
-
-        let err = f.run(0, "vscode", &["go".to_owned()], None, &BTreeMap::new()).unwrap_err();
-        assert!(matches!(err, LuggageError::Catalog(_)), "expected a catalog error, got {err:?}");
-    }
-
-    // Unit coverage of the path-safety helpers lives beside them, in
-    // `archive_path`. The fixture tests above exercise the same rules
-    // end-to-end through a real archive.
-
-    /// A relative `prefix` is a catalog defect, not a silent extraction into
-    /// whatever directory the build happens to run from.
-    #[test]
-    fn relative_prefix_is_a_catalog_error() {
-        let err = resolve_prefix(Some("usr/local")).unwrap_err();
-        match err {
-            LuggageError::Catalog(msg) => {
-                assert!(msg.contains("absolute"), "should explain the requirement: {msg}");
-                assert!(msg.contains("usr/local"), "should quote the bad value: {msg}");
-            }
-            other => panic!("expected Catalog, got {other:?}"),
-        }
-        assert_eq!(resolve_prefix(None).unwrap(), PathBuf::from(DEFAULT_PREFIX));
-        assert_eq!(resolve_prefix(Some("/opt/tool")).unwrap(), PathBuf::from("/opt/tool"));
-    }
-
-    /// A symlink already sitting where an extracted directory belongs must be
-    /// replaced, not descended through — otherwise the subtree's writes are
-    /// redirected to wherever it points.
-    #[test]
-    fn merge_replaces_a_symlink_standing_in_for_a_directory() {
-        let raw = tar_bytes(&[("bin/node", b"nodebin")]);
-        let f = Fixture::new("node.tar.gz", &gzip(&raw));
-
-        // Somewhere the archive must not reach.
-        let elsewhere = tempdir().unwrap();
-        std::os::unix::fs::symlink(elsewhere.path(), f.prefix.path().join("bin")).unwrap();
-
-        f.run_plain(0).unwrap();
-
-        let bin = f.prefix.path().join("bin");
-        assert!(
-            !fs::symlink_metadata(&bin).unwrap().file_type().is_symlink(),
-            "the stand-in symlink should have been replaced by a real directory"
-        );
-        assert_eq!(fs::read(bin.join("node")).unwrap(), b"nodebin");
-        assert_eq!(
-            fs::read_dir(elsewhere.path()).unwrap().count(),
-            0,
-            "nothing may be written through the symlink's target"
-        );
-    }
-
-    /// The leaf counterpart: a symlink where a *file* lands is replaced too,
-    /// rather than followed and its target clobbered.
-    #[test]
-    fn merge_replaces_a_symlink_standing_in_for_a_file() {
-        let raw = tar_bytes(&[("README.md", b"fresh")]);
-        let f = Fixture::new("tool.tar.gz", &gzip(&raw));
-
-        let elsewhere = tempdir().unwrap();
-        let victim = elsewhere.path().join("victim");
-        fs::write(&victim, b"untouched").unwrap();
-        std::os::unix::fs::symlink(&victim, f.prefix.path().join("README.md")).unwrap();
-
-        f.run_plain(0).unwrap();
-
-        assert_eq!(fs::read(f.prefix.path().join("README.md")).unwrap(), b"fresh");
-        assert_eq!(
-            fs::read(&victim).unwrap(),
-            b"untouched",
-            "the symlink's target must not be written through"
-        );
-    }
-
-    #[test]
-    fn detect_compression_is_case_insensitive() {
-        assert_eq!(detect_compression("GO.TAR.GZ").unwrap(), Compression::Gzip);
-        assert_eq!(detect_compression("Node.Tar.Xz").unwrap(), Compression::Xz);
-        assert!(detect_compression("payload.tar").is_err());
-        assert!(detect_compression("payload").is_err());
-    }
-}
+#[path = "tarball_tests.rs"]
+mod tests;

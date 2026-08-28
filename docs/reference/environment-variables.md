@@ -199,6 +199,7 @@ Control which version of each language to install:
 | `PRODUCTION_MODE`            | `false` | Enable production hardening (nologin for service users)             |
 | `RESTRICT_SHELLS`            | `true`  | Limit `/etc/shells` to bash only                                    |
 | `REQUIRE_VERIFIED_DOWNLOADS` | `false` | Block Tier 4 TOFU checksum fallback (defaults to `PRODUCTION_MODE`) |
+| `LUGGAGE_MAX_EXTRACT_BYTES`  | `2147483648` (2 GiB) | Ceiling on total decompressed bytes a `binary-tarball` install may produce, guarding against decompression bombs. A malformed or zero value is a hard error, not a fallback to the default. |
 | `ENABLE_JSON_LOGGING`        | `false` | Emit structured JSON log output                                     |
 | `ENABLE_AUDIT_LOGGING`       | `false` | Enable audit logging for security events                            |
 

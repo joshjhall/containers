@@ -79,6 +79,7 @@ fn options_in(roots: &TempDir) -> InstallerOptions {
         record_dependency_versions: false,
         fail_on_unknown_deps: true,
         require_verified_downloads: false,
+        max_extract_bytes: luggage::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
     }
 }
 

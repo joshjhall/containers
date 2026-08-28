@@ -20,6 +20,7 @@ use crate::{
     clone_common, require_verified_downloads_from_env, resolve_for, split_tool_version,
     write_json_report,
 };
+use luggage::installer::methods::archive_limit::max_extract_bytes_from_env;
 
 /// `luggage catalog add-version <tool>@<version>` — clone the latest existing
 /// version entry into a new one and list it in `available[]`.
@@ -107,6 +108,10 @@ pub fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         fail_on_unknown_deps: !args.allow_unknown_deps,
         require_verified_downloads: args.require_verified_downloads
             || require_verified_downloads_from_env(),
+        // A malformed ceiling aborts the install rather than falling back to
+        // the default: an operator who set it wrong should hear about it, not
+        // silently get a limit they did not choose.
+        max_extract_bytes: max_extract_bytes_from_env()?,
     };
     let installer = Installer::with_options(opts);
 
