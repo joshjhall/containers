@@ -40,9 +40,14 @@ against 300/500.** Measured on 2026-08-28:
 
 | file | total | production LOC | vs audit 300/500 |
 | --- | --- | --- | --- |
-| `crates/stibbons/src/agent/worktree.rs` | 1600 | 437 | over warning |
-| `crates/stibbons/src/agent/commands.rs` | 955 | 403 | over warning |
+| `crates/stibbons/src/agent/worktree.rs` | 1600 | 437 | over warning — **unassessed** |
+| `crates/stibbons/src/agent/commands.rs` | 955 | 403 | over warning — **unassessed** |
 | `crates/luggage/src/resolver.rs` | 958 | 271 | **under — declined in #845** |
+
+Only the resolver.rs row is a settled verdict (#845). The other two rows are
+measurements carried here for context, not adjudications: being over the
+warning bar makes a file a genuine candidate, but each still needs its own
+assessment — the same one #845 got — before anyone plans a split.
 
 A quick corroboration in either direction: `check-decomposition/patterns.py`
 emits **no `file-length` finding** for a file inside the audit budget, even when
