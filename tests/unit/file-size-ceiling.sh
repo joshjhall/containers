@@ -70,7 +70,6 @@ GRANDFATHERED=(
     # still a #832 split candidate on its own merits.
     "crates/luggage/src/resolver.rs:958"
     "tests/unit/gitlab-templates.sh:943"
-    "crates/stibbons/src/main.rs:901"
 )
 
 # Directories swept, and the extensions swept within them.
