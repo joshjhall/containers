@@ -55,7 +55,13 @@ impl From<&LuggageError> for ErrorClass {
             LuggageError::PackageManagerFailed { .. } | LuggageError::UnknownDependency { .. } => {
                 Self::Infra
             }
-            LuggageError::DownloadFailed { .. } => Self::Download,
+            // An oversized response is refused by the download layer, before
+            // any verification logic sees a byte — so it classifies with the
+            // fetch that produced it, not with the tier that would have
+            // parsed it.
+            LuggageError::DownloadFailed { .. } | LuggageError::ResponseTooLarge { .. } => {
+                Self::Download
+            }
             LuggageError::VerificationFailed { .. } => Self::Verify,
             LuggageError::PostInstallFailed { .. } => Self::PostInstall,
             LuggageError::ValidationFailed { .. } => Self::Validate,
@@ -246,6 +252,25 @@ pub enum LuggageError {
         attempts: u32,
         /// Underlying error message.
         message: String,
+    },
+
+    /// A buffered HTTP response exceeded the in-memory ceiling.
+    ///
+    /// Distinct from [`Self::DownloadFailed`] on purpose. A download failure is
+    /// transient and worth retrying; an oversized body is deterministic — the
+    /// endpoint will serve the same bytes next time — so the two call for
+    /// different reactions from both the retry loop and whoever reads the
+    /// message. Same split as [`Self::ArchiveTooLarge`] versus
+    /// [`Self::ArchiveExtractionFailed`].
+    #[error(
+        "response from {url} exceeds the {limit}-byte buffered-response ceiling; \
+         this endpoint should serve a small checksum document"
+    )]
+    ResponseTooLarge {
+        /// URL that served the oversized body.
+        url: String,
+        /// Ceiling in force, in bytes.
+        limit: u64,
     },
 
     /// Host package manager (apt/apk/dnf) refused to install one or more
@@ -595,6 +620,12 @@ mod tests {
                     attempts: 1,
                     message: "x".into(),
                 },
+                ErrorClass::Download,
+            ),
+            // Refused by the download layer before verification sees a byte,
+            // so it classifies with the fetch, not with the tier.
+            (
+                LuggageError::ResponseTooLarge { url: "https://x".into(), limit: 1024 },
                 ErrorClass::Download,
             ),
             (
