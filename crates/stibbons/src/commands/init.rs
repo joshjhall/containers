@@ -171,3 +171,80 @@ fn write_outputs(inputs: &InitInputs, reg: &Registry) -> Result<(), Box<dyn std:
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn selection_of(ids: &[&str], reg: &Registry) -> Selection {
+        let explicit: HashSet<String> = ids.iter().map(|s| (*s).to_string()).collect();
+        feature::resolve(&explicit, reg)
+    }
+
+    #[test]
+    fn fills_registry_defaults_into_an_empty_map() {
+        let reg = Registry::new();
+        let mut versions = BTreeMap::new();
+
+        fill_default_versions(&mut versions, &selection_of(&["python"], &reg), &reg);
+
+        let py = reg.get("python").unwrap();
+        let arg = py.version_arg.as_ref().expect("python declares a version arg");
+        assert_eq!(
+            versions.get(arg),
+            py.default_version.as_ref(),
+            "should fill the registry default"
+        );
+    }
+
+    /// The load-bearing behavior of `entry().or_insert_with()`: a version the
+    /// user pinned explicitly must survive the fill rather than be clobbered
+    /// back to the registry default.
+    #[test]
+    fn does_not_clobber_an_explicit_version() {
+        let reg = Registry::new();
+        let py = reg.get("python").unwrap();
+        let arg = py.version_arg.clone().expect("python declares a version arg");
+
+        let mut versions = BTreeMap::new();
+        versions.insert(arg.clone(), "3.9-pinned".to_string());
+
+        fill_default_versions(&mut versions, &selection_of(&["python"], &reg), &reg);
+
+        assert_eq!(
+            versions.get(&arg).map(String::as_str),
+            Some("3.9-pinned"),
+            "an explicitly-set version must survive the fill"
+        );
+        assert_ne!(
+            versions.get(&arg),
+            py.default_version.as_ref(),
+            "guard: the pin must differ from the default for this test to mean anything"
+        );
+    }
+
+    #[test]
+    fn unselected_features_contribute_nothing() {
+        let reg = Registry::new();
+        let mut versions = BTreeMap::new();
+
+        fill_default_versions(&mut versions, &selection_of(&["python"], &reg), &reg);
+
+        let selection = selection_of(&["python"], &reg);
+        for arg in versions.keys() {
+            let owned =
+                reg.all().any(|f| selection.has(&f.id) && f.version_arg.as_ref() == Some(arg));
+            assert!(owned, "version arg {arg:?} belongs to no selected feature");
+        }
+    }
+
+    #[test]
+    fn empty_selection_fills_nothing() {
+        let reg = Registry::new();
+        let mut versions = BTreeMap::new();
+
+        fill_default_versions(&mut versions, &selection_of(&[], &reg), &reg);
+
+        assert!(versions.is_empty(), "nothing selected should fill nothing, got {versions:?}");
+    }
+}
