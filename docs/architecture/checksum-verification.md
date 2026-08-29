@@ -80,6 +80,12 @@ prominent security warning. Returns exit code 2 (not 0) so callers can
 distinguish "verified" from "unverified". Blocked entirely when
 `REQUIRE_VERIFIED_DOWNLOADS=true` or `PRODUCTION_MODE=true`.
 
+Luggage implements the same tier with the same semantics, differing only in
+how it reports (a structured warning and an error value rather than exit
+codes) and in how the two variables interact — see
+[Luggage verification tiers](luggage-migration.md#verification-tiers) and the
+[precedence rules](../reference/environment-variables.md#require_verified_downloads-precedence).
+
 ## Fan-In Analysis
 
 `checksum-verification.sh` is sourced by every feature that downloads binaries:
@@ -141,5 +147,7 @@ like blocking TOFU in production.
 
 - [Security Checksums Reference](../reference/security-checksums.md) —
   per-language checksum details and production recommendations
+- [Luggage Migration Playbook](luggage-migration.md#verification-tiers) — the
+  same tier model as implemented by the luggage build engine
 - [God Modules](god-modules.md) — high fan-in module patterns
   (`feature-header.sh`, `logging.sh`)

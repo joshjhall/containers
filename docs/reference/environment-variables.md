@@ -198,10 +198,36 @@ Control which version of each language to install:
 | ---------------------------- | ------- | ------------------------------------------------------------------- |
 | `PRODUCTION_MODE`            | `false` | Enable production hardening (nologin for service users)             |
 | `RESTRICT_SHELLS`            | `true`  | Limit `/etc/shells` to bash only                                    |
-| `REQUIRE_VERIFIED_DOWNLOADS` | `false` | Block Tier 4 TOFU checksum fallback (defaults to `PRODUCTION_MODE`) |
+| `REQUIRE_VERIFIED_DOWNLOADS` | `false` | Block Tier 4 TOFU checksum fallback (defaults to `PRODUCTION_MODE`). Governs both the bash installers and luggage, whose CLI equivalent is `--require-verified-downloads` — see below |
 | `LUGGAGE_MAX_EXTRACT_BYTES`  | `2147483648` (2 GiB) | Ceiling on total decompressed bytes a `binary-tarball` install may produce, guarding against decompression bombs. A malformed or zero value is a hard error, not a fallback to the default. |
 | `ENABLE_JSON_LOGGING`        | `false` | Emit structured JSON log output                                     |
 | `ENABLE_AUDIT_LOGGING`       | `false` | Enable audit logging for security events                            |
+
+#### `REQUIRE_VERIFIED_DOWNLOADS` precedence
+
+The strict posture can be requested three ways, and they do not simply
+override one another:
+
+1. **The `--require-verified-downloads` flag is one-way.** Passing it to
+   luggage requires verification unconditionally. It cannot be switched back
+   off by `REQUIRE_VERIFIED_DOWNLOADS=false`, and there is no
+   `--no-require-verified-downloads`.
+1. **Otherwise `REQUIRE_VERIFIED_DOWNLOADS` decides**, if it holds exactly
+   `true` or `false` (case-insensitive, surrounding whitespace trimmed).
+   `false` here is a deliberate opt-out and wins over `PRODUCTION_MODE=true`.
+1. **Otherwise `PRODUCTION_MODE` decides.** This is the fallback for an unset,
+   empty, whitespace-only, or unrecognized value — `1`, `yes`, and `on` are
+   _not_ recognized and fall through to this step.
+
+The parse is value-based rather than presence-based on purpose: build
+environments commonly export a variable empty, and that must not silently
+start refusing installs. For the same reason the flag carries no clap `env`
+attribute — binding an env var to a boolean flag would make it take a value,
+breaking the bare switch and turning a set-but-empty variable into a hard CLI
+error.
+
+Tier 4 is the only tier this gates; see
+[Luggage verification tiers](../architecture/luggage-migration.md#verification-tiers).
 
 > **Note**: The Dockerfile is the authoritative source for default versions.
 > These values drift with automated patch releases — check the `ARG` declarations
