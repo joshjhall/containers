@@ -256,7 +256,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
 ARG MOJO_VERSION=25.4
-ARG PIXI_VERSION=0.77.1
+ARG PIXI_VERSION=0.78.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_MOJO}" = "true" ] || [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
@@ -320,7 +320,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.8.12
+ARG MISE_VERSION=2026.8.14
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi
@@ -385,7 +385,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=1.1.3
+ARG TERRAGRUNT_VERSION=1.1.4
 ARG TFDOCS_VERSION=0.24.0
 ARG TFLINT_VERSION=0.64.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -497,7 +497,7 @@ ARG CLAUDE_CHANNEL=latest
 # Librarian plugin marketplace pin (version contract; tracked by check-versions).
 # Must be a *signed release tag* (v0.4.0+): the build fetches the signed release
 # tarball and verifies it with cosign before install (fail-closed, #671).
-ARG LIBRARIAN_REF=v0.11.0
+ARG LIBRARIAN_REF=v0.12.0
 # Librarian plugins to install from the local marketplace (comma-separated).
 # When unset, all defaults install. Set to empty "" to install none.
 ARG CLAUDE_LIBRARIAN_PLUGINS

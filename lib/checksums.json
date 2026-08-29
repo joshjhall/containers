@@ -555,6 +555,19 @@
             }
           },
           "added": "2026-08-24"
+        },
+        "2.5.11": {
+          "checksums": {
+            "amd64": {
+              "sha256": "629a72d30e5b625b70723a651c510c0c2d4adc7c9b7334a690afe848ba4426ce",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.11/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "b1e422c4cf5de788553f612b3952deadd6cb7669b35659197af14c4b1f763fab",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.11/biome-linux-arm64"
+            }
+          },
+          "added": "2026-08-29"
         }
       }
     },
@@ -675,6 +688,19 @@
             }
           },
           "added": "2026-08-24"
+        },
+        "2.1.12": {
+          "checksums": {
+            "amd64": {
+              "sha256": "dad908593c859d139b886c14913a44401d95288aa7642d9bdf6f3bd36bd788ff",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.12/lefthook_2.1.12_Linux_x86_64.gz"
+            },
+            "arm64": {
+              "sha256": "d96ac16753f6d3d69b92098621c2a2427522a9c2c3e78cd7c9b4a9790b0b8f17",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.12/lefthook_2.1.12_Linux_aarch64.gz"
+            }
+          },
+          "added": "2026-08-29"
         }
       }
     },
@@ -989,6 +1015,19 @@
             }
           },
           "added": "2026-07-26"
+        },
+        "1.6.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "de3391f79ed42622d937e6cd5b7642a7ea8bb7d1473607e80b879ba73ef216b0",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.6.0/codegraph-linux-x64.tar.gz"
+            },
+            "arm64": {
+              "sha256": "6dc935a7b8f1a61e688a578b98ea34680eb2e36d7b91db079d64f4011f1a668f",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.6.0/codegraph-linux-arm64.tar.gz"
+            }
+          },
+          "added": "2026-08-29"
         }
       }
     },
@@ -1011,7 +1050,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-08-24T21:31:43Z",
+    "generated": "2026-08-29T16:22:19Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
