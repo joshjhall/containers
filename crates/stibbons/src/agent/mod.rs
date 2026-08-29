@@ -23,6 +23,7 @@ mod commands;
 pub mod context;
 pub mod db;
 pub mod docker;
+pub mod git;
 #[cfg(test)]
 pub mod test_support;
 pub mod worktree;

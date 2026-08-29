@@ -65,7 +65,20 @@ CEILING_LINES=900
 GRANDFATHERED=(
     "tests/unit/features/claude-code-setup.sh:2545"
     "tests/unit/bin/update-versions.sh:1615"
-    "crates/stibbons/src/agent/worktree.rs:1600"
+    # SPLIT AND RATCHETED DOWN (#843). Was worktree.rs:1600; the module became a
+    # directory (worktree/mod.rs + worktree/sync.rs) with the git CLI layer
+    # lifted out to agent/git.rs, so the path changed and the max drops 1600 ->
+    # 996. The split did its real job on the audit lens: 437 -> 287 production
+    # LOC (under the 300 warning bar) and 29 -> 20 top-level units, clearing both
+    # the file-length and god-module findings.
+    #
+    # It stays listed only because CEILING_LINES counts TOTAL lines, and 996 is
+    # still over 900 — the remainder is a co-located `#[cfg(test)] mod tests`,
+    # which is idiomatic Rust and not worth extracting to chase this number
+    # (same reasoning as the resolver.rs entry below). Genuine further
+    # decomposition would have to come from splitting production concerns, and
+    # the audit lens no longer asks for any.
+    "crates/stibbons/src/agent/worktree/mod.rs:996"
     "tests/unit/features/dev-tools.sh:1457"
     "tests/unit/runtime/entrypoint.sh:1309"
     "crates/stibbons/src/agent/commands.rs:955"

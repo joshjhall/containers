@@ -14,18 +14,22 @@
 //!
 //! Layering mirrors the sibling `agent` commands:
 //!
-//! - [`GitRunner`] — a trait over the `git` CLI (with a test double), the git
-//!   analogue of [`super::docker::DockerRunner`].
-//! - [`resolve_git_dir`] / [`detect_worktree_mounts`] — pure filesystem helpers,
-//!   directly unit-testable.
-//! - [`create_worktree`] / [`remove_worktree`] / [`sync_worktree`] —
-//!   orchestration over a `&dyn GitRunner`.
+//! - [`GitRunner`](super::git::GitRunner) — a trait over the `git` CLI (with a
+//!   test double), the git analogue of [`super::docker::DockerRunner`]. It and
+//!   [`resolve_git_dir`](super::git::resolve_git_dir) live in the sibling
+//!   [`super::git`] module (#843).
+//! - [`detect_worktree_mounts`] — a pure filesystem helper, directly
+//!   unit-testable.
+//! - [`create_worktree`] / [`remove_worktree`] — orchestration over a
+//!   `&dyn GitRunner`. The rebase half ([`sync_worktree`](sync::sync_worktree))
+//!   lives in the [`sync`] submodule (#843).
 //! - [`collect_worktree_status`] — the read-only scan behind `worktree list`.
 //! - [`run`] — the single entry point wired into `main.rs`.
 
+pub mod sync;
+
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use clap::Subcommand;
 use containers_common::config::IgorConfig;
@@ -35,6 +39,10 @@ use containers_common::template::{RenderContext, Renderer};
 
 use super::CONFIG_PATH;
 use super::context::{AgentContext, agent_suffix, validate_agent_num, validate_repo_name};
+// The git CLI abstraction moved to the sibling `git` module (#843). Nothing
+// outside this module referenced those items by a `worktree::` path, so the
+// move needs no re-export.
+use super::git::{GitRunner, ProcessGitRunner, resolve_git_dir};
 
 /// Boxed error alias matching the stibbons CLI convention (`main.rs`).
 type CmdResult = Result<(), Box<dyn std::error::Error>>;
@@ -88,108 +96,6 @@ pub enum WorktreeCommands {
         #[arg(long)]
         dry_run: bool,
     },
-}
-
-/// Error from invoking the `git` binary itself (spawn failure or a non-zero
-/// exit from a captured [`GitRunner::run`] call). Mirrors
-/// [`super::docker::DockerError`].
-#[derive(Debug, thiserror::Error)]
-pub enum GitError {
-    /// The `git` process could not be spawned (e.g. binary not on `PATH`).
-    #[error("failed to run git: {0}")]
-    Spawn(#[source] std::io::Error),
-
-    /// `git` ran but exited non-zero. Carries the trimmed combined output so
-    /// callers can surface git's own message.
-    #[error("git {args} failed: {output}")]
-    NonZero {
-        /// The argv that failed, space-joined, for the message.
-        args: String,
-        /// Trimmed combined stdout+stderr from the failed invocation.
-        output: String,
-    },
-}
-
-/// Abstracts the `git` CLI so worktree logic is testable without a real repo.
-///
-/// The git analogue of [`super::docker::DockerRunner`]: a production impl that
-/// shells out, and a recording test double under `#[cfg(test)]`.
-pub trait GitRunner {
-    /// Runs `git <args>` and returns the trimmed combined stdout+stderr.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`GitError::Spawn`] if the process cannot start, or
-    /// [`GitError::NonZero`] if `git` exits non-zero.
-    fn run(&self, args: &[&str]) -> Result<String, GitError>;
-}
-
-/// Production [`GitRunner`] backed by `std::process::Command`.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct ProcessGitRunner;
-
-impl GitRunner for ProcessGitRunner {
-    fn run(&self, args: &[&str]) -> Result<String, GitError> {
-        // Clear the ambient git-dir env: every call targets an explicit repo via
-        // `-C <dir>`, so an inherited `GIT_DIR`/`GIT_WORK_TREE` (set by a parent
-        // git process — e.g. a pre-push hook, or `git` invoking a subcommand)
-        // would silently redirect operations to the wrong repository. Worktree
-        // creation is especially sensitive: a leaked `GIT_DIR` makes
-        // `git worktree add` register the branch against the parent repo,
-        // colliding with its existing worktrees.
-        let output = Command::new("git")
-            .args(args)
-            .env_remove("GIT_DIR")
-            .env_remove("GIT_WORK_TREE")
-            .output()
-            .map_err(GitError::Spawn)?;
-
-        // Combine stdout+stderr like Go's `CombinedOutput`, then trim. Ordering
-        // is not meaningful to callers — they inspect substrings or surface the
-        // whole blob on error.
-        let mut combined = String::from_utf8_lossy(&output.stdout).into_owned();
-        combined.push_str(&String::from_utf8_lossy(&output.stderr));
-        let combined = combined.trim().to_string();
-
-        if output.status.success() {
-            Ok(combined)
-        } else {
-            Err(GitError::NonZero { args: args.join(" "), output: combined })
-        }
-    }
-}
-
-/// Resolves a repo's real git directory, handling both a normal repo (`.git` is
-/// a directory) and a worktree/submodule checkout (`.git` is a pointer file
-/// holding `gitdir: <path>`).
-///
-/// A relative `gitdir:` path is resolved against `repo_path`, matching the Go
-/// `resolveGitDir`. When `.git` is absent the conventional `<repo>/.git` path is
-/// returned so callers still get a usable (if not-yet-created) location.
-///
-/// # Errors
-///
-/// Returns an error if the `.git` pointer file exists but cannot be read.
-pub fn resolve_git_dir(repo_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let git_path = repo_path.join(".git");
-    // No `.git` yet — hand back the conventional location.
-    let Ok(meta) = std::fs::metadata(&git_path) else {
-        return Ok(git_path);
-    };
-
-    if meta.is_dir() {
-        return Ok(git_path);
-    }
-
-    // Pointer file: parse `gitdir: <path>`.
-    let data = std::fs::read_to_string(&git_path)?;
-    let gitdir = data.trim().strip_prefix("gitdir:").map_or_else(|| data.trim(), str::trim);
-    let gitdir_path = Path::new(gitdir);
-    if gitdir_path.is_absolute() {
-        Ok(gitdir_path.to_path_buf())
-    } else {
-        Ok(repo_path.join(gitdir_path))
-    }
 }
 
 /// Resolves the `(main_repo, worktree_dir)` pair for `repo`/`suffix` under
@@ -507,186 +413,6 @@ fn render_worktree_list(rows: &[WorktreeStatus], out: &mut dyn Write) -> CmdResu
     Ok(())
 }
 
-/// Rejects a base ref that git's option parser would treat as a flag.
-///
-/// `git rebase <base>` passes `base` positionally, but git parses *any* argv
-/// element beginning with `-` as an option regardless of position — so a value
-/// like `--exec=<cmd>` reaching `git rebase` is arbitrary command execution, not
-/// an "unknown ref" error. Since `sync_worktree` is documented as the seam the
-/// orchestrator's rebase dispatch calls (potentially with a ref sourced from PR
-/// or branch metadata), reject dash-prefixed refs up front. Legitimate branch
-/// names can never begin with `-` (`git check-ref-format` forbids it), so this
-/// loses no valid input.
-fn reject_optionlike_ref(base: &str) -> CmdResult {
-    if base.starts_with('-') {
-        return Err(format!(
-            "invalid base ref {base:?}: refs cannot begin with '-' (would be parsed as a git option)"
-        )
-        .into());
-    }
-    Ok(())
-}
-
-/// Resolves the branch `sync` rebases onto: an explicit `--onto` ref wins;
-/// otherwise the main repo's currently-checked-out branch
-/// (`rev-parse --abbrev-ref HEAD`).
-///
-/// # Errors
-///
-/// Returns an error when the ref is option-like (begins with `-`, see
-/// [`reject_optionlike_ref`]), or when there is no `--onto` and the main repo is
-/// in detached HEAD (branch resolves to `HEAD` or empty), pointing the caller at
-/// `--onto`.
-fn resolve_base_branch(
-    git: &dyn GitRunner,
-    main_repo_str: &str,
-    onto: Option<&str>,
-) -> Result<String, Box<dyn std::error::Error>> {
-    if let Some(r) = onto {
-        reject_optionlike_ref(r)?;
-        return Ok(r.to_string());
-    }
-    let branch =
-        git.run(&["-C", main_repo_str, "rev-parse", "--abbrev-ref", "HEAD"])?.trim().to_string();
-    if branch.is_empty() || branch == "HEAD" {
-        return Err("main repo is in detached HEAD; pass --onto <ref> to choose a base".into());
-    }
-    Ok(branch)
-}
-
-/// Rebases one worktree's branch onto `base_branch`.
-///
-/// Topology-agnostic (per issue #309's 2026-06-21 note): only ever runs
-/// `git rebase <base>` inside the worktree — no merge into the parent branch, no
-/// push. A dirty worktree is **refused before** any rebase (mirroring
-/// [`remove_worktree`]'s gate), since rebasing over uncommitted work aborts
-/// messily. `dry_run` prints the command it would run without touching the branch.
-///
-/// A rebase that hits conflicts exits non-zero and the error is propagated,
-/// leaving the worktree mid-rebase for the user or the orchestrator's
-/// `rebase-agent` to resolve — we deliberately do **not** auto-abort, which would
-/// hide the conflict.
-///
-/// # Errors
-///
-/// Returns an error if `repo` is not a safe name, if the worktree is dirty, or
-/// if `git rebase` fails (e.g. conflicts).
-pub fn sync_worktree(
-    git: &dyn GitRunner,
-    base_dir: &Path,
-    repo: &str,
-    suffix: &str,
-    base_branch: &str,
-    dry_run: bool,
-    out: &mut dyn Write,
-) -> Result<SyncOutcome, Box<dyn std::error::Error>> {
-    let (_main_repo, worktree_dir) = worktree_paths(base_dir, repo, suffix)?;
-    if !worktree_dir.exists() {
-        writeln!(out, "  worktree {} does not exist", worktree_dir.display())?;
-        return Ok(SyncOutcome::Skipped);
-    }
-    let worktree_str = worktree_dir.display().to_string();
-
-    // Refuse to rebase over uncommitted work — git itself aborts a dirty rebase,
-    // but a clear up-front error beats git's cryptic mid-operation message.
-    if worktree_is_dirty(git, &worktree_str) {
-        return Err(format!(
-            "worktree {} has uncommitted changes; commit or stash them before sync",
-            worktree_dir.display()
-        )
-        .into());
-    }
-
-    if dry_run {
-        writeln!(out, "  [dry-run] git -C {worktree_str} rebase --end-of-options {base_branch}")?;
-        return Ok(SyncOutcome::Skipped);
-    }
-
-    // `--end-of-options` stops git parsing later argv as flags, so the base ref
-    // is always treated positionally (defense in depth atop reject_optionlike_ref).
-    let output = git.run(&["-C", &worktree_str, "rebase", "--end-of-options", base_branch])?;
-    writeln!(out, "  rebased {} onto {base_branch}", worktree_dir.display())?;
-    let trimmed = output.trim();
-    if !trimmed.is_empty() {
-        writeln!(out, "    {trimmed}")?;
-    }
-    Ok(SyncOutcome::Rebased)
-}
-
-/// What [`sync_worktree`] did to one repo's worktree, for the per-repo summary.
-///
-/// Only the two *successful* shapes are modelled — a failure is carried by the
-/// `Err` arm of the return type, so this cannot represent "failed" and no caller
-/// can mistake one for the other.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SyncOutcome {
-    /// The rebase ran.
-    Rebased,
-    /// Nothing was rebased: the worktree doesn't exist, or this was a dry run.
-    Skipped,
-}
-
-/// Syncs every repo's worktree for one agent, attempting **all** repos before
-/// returning.
-///
-/// A rebase conflict is an expected, non-error outcome that [`sync_worktree`]
-/// deliberately surfaces rather than auto-aborting. Propagating the first one
-/// with `?` (the pre-#712 behavior) left every later repo unsynced even when it
-/// would have rebased cleanly, with no indication of which repos were reached.
-/// So failures are accumulated: each repo is attempted, a
-/// succeeded/skipped/failed summary is printed, and an aggregate error is
-/// returned only after the whole list has been walked.
-///
-/// `resolve_base_branch` is called per repo (each has its own current branch
-/// when `--onto` is absent) and a resolution failure is accumulated the same
-/// way, so one repo with a detached HEAD doesn't strand the others.
-///
-/// # Errors
-///
-/// Returns an aggregate error naming every repo that failed, after all repos
-/// have been attempted.
-fn sync_all_repos(
-    git: &dyn GitRunner,
-    ctx: &AgentContext,
-    suffix: &str,
-    onto: Option<&str>,
-    dry_run: bool,
-    out: &mut dyn Write,
-) -> CmdResult {
-    let mut rebased = Vec::new();
-    let mut skipped = Vec::new();
-    let mut failed = Vec::new();
-
-    for repo in &ctx.repos {
-        let main_repo_str = ctx.base_dir.join(repo).display().to_string();
-        let result = resolve_base_branch(git, &main_repo_str, onto)
-            .and_then(|base| sync_worktree(git, &ctx.base_dir, repo, suffix, &base, dry_run, out));
-        match result {
-            Ok(SyncOutcome::Rebased) => rebased.push(repo.clone()),
-            Ok(SyncOutcome::Skipped) => skipped.push(repo.clone()),
-            Err(e) => {
-                // Report each failure as it happens so the operator sees which
-                // repo failed next to its own output, not only in the summary.
-                writeln!(out, "  {repo}: {e}")?;
-                failed.push(format!("{repo}: {e}"));
-            }
-        }
-    }
-
-    writeln!(
-        out,
-        "Sync summary: {} rebased, {} skipped, {} failed",
-        rebased.len(),
-        skipped.len(),
-        failed.len()
-    )?;
-    if failed.is_empty() {
-        Ok(())
-    } else {
-        Err(format!("sync failed for {} repo(s): {}", failed.len(), failed.join("; ")).into())
-    }
-}
-
 /// Re-renders `.devcontainer/docker-compose.yml` with `mounts` populated in the
 /// worktree-mounts slot, honoring the same drift-detection contract as
 /// `init`/`add`/`remove`/`update`: a compose file the user has hand-edited since
@@ -751,7 +477,7 @@ fn update_compose_worktree_mounts(cfg: &IgorConfig, mounts: Vec<String>, force: 
 /// # Errors
 ///
 /// Propagates the first repo's creation failure, or a compose render/write
-/// failure. Unlike [`sync_all_repos`], a failure here aborts the remaining
+/// failure. Unlike [`sync_all_repos`](sync::sync_all_repos), a failure here aborts the remaining
 /// repos: creation failures are genuine errors (bad git state, I/O), not the
 /// expected-and-recoverable conflict outcome that motivated #712's accumulation.
 fn create_all_repos(
@@ -833,7 +559,7 @@ pub fn run(command: &WorktreeCommands) -> CmdResult {
             let num = validate_agent_num(n, ctx.max_agents)?;
             let suffix = agent_suffix(num);
             writeln!(out, "Syncing worktrees for agent {num} ...")?;
-            sync_all_repos(&git, &ctx, &suffix, onto.as_deref(), *dry_run, &mut out)
+            sync::sync_all_repos(&git, &ctx, &suffix, onto.as_deref(), *dry_run, &mut out)
         }
         WorktreeCommands::Create { n, force } => {
             let num = validate_agent_num(n, ctx.max_agents)?;
@@ -852,95 +578,13 @@ pub fn run(command: &WorktreeCommands) -> CmdResult {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-
     use super::*;
-
-    /// Recording [`GitRunner`] test double. Records every argv and returns a
-    /// canned result matched by the first two args, mirroring `MockDocker`.
-    #[derive(Default)]
-    struct MockGit {
-        calls: RefCell<Vec<Vec<String>>>,
-        /// Keyed by the first two args joined (e.g. `"worktree add"`); value is
-        /// `Ok`/`Err` plus canned output.
-        results: RefCell<std::collections::HashMap<String, Result<String, ()>>>,
-    }
-
-    impl MockGit {
-        fn new() -> Self {
-            Self::default()
-        }
-
-        /// Pin a canned result for calls whose 2nd/3rd argv join to `key`.
-        fn on(&self, key: &str, result: Result<&str, ()>) {
-            self.results.borrow_mut().insert(key.to_string(), result.map(ToString::to_string));
-        }
-
-        fn has_call(&self, substr: &str) -> bool {
-            self.calls.borrow().iter().any(|c| c.join(" ").contains(substr))
-        }
-    }
-
-    impl GitRunner for MockGit {
-        fn run(&self, args: &[&str]) -> Result<String, GitError> {
-            self.calls.borrow_mut().push(args.iter().map(ToString::to_string).collect());
-            // Worktree subcommands land at args[2..] because of the `-C <dir>`
-            // prefix; key on the subcommand + verb.
-            let key = if args.len() >= 4 {
-                format!("{} {}", args[2], args[3])
-            } else if args.len() >= 3 {
-                format!("{} {}", args[1], args[2])
-            } else {
-                String::new()
-            };
-            match self.results.borrow().get(&key) {
-                Some(Ok(out)) => Ok(out.clone()),
-                Some(Err(())) => {
-                    Err(GitError::NonZero { args: args.join(" "), output: "mock error".into() })
-                }
-                None => Ok(String::new()),
-            }
-        }
-    }
-
-    /// [`GitRunner`] double that fails one git subcommand for one repo only —
-    /// when the argv contains both `subcommand` and `failing_dir` — succeeding
-    /// everywhere else, and recording every call.
-    ///
-    /// [`MockGit`] keys its canned results on the git *subcommand*, not the
-    /// `-C <dir>` argument, so it cannot express "fail repo A's rebase but not
-    /// repo B's" — exactly the shape the multi-repo tests need to distinguish
-    /// sync's attempt-all walk (#712) from create/remove's abort-on-first.
-    struct FailGitIn {
-        subcommand: String,
-        failing_dir: String,
-        calls: RefCell<Vec<String>>,
-    }
-
-    impl FailGitIn {
-        fn new(subcommand: &str, failing_dir: &str) -> Self {
-            Self {
-                subcommand: subcommand.to_string(),
-                failing_dir: failing_dir.to_string(),
-                calls: RefCell::new(Vec::new()),
-            }
-        }
-    }
-
-    impl GitRunner for FailGitIn {
-        fn run(&self, args: &[&str]) -> Result<String, GitError> {
-            let joined = args.join(" ");
-            self.calls.borrow_mut().push(joined.clone());
-            if joined.contains(&self.subcommand) && joined.contains(&self.failing_dir) {
-                return Err(GitError::NonZero { args: joined, output: "boom".into() });
-            }
-            // `sync` resolves a base branch before rebasing; keep it off detached HEAD.
-            if joined.contains("rev-parse") {
-                return Ok("main".into());
-            }
-            Ok(String::new())
-        }
-    }
+    // `sync_worktree` is exercised here only for the shared `worktree_paths`
+    // name-validation gate it goes through; its own behavior is covered in
+    // `sync`'s test module.
+    use super::sync::sync_worktree;
+    use crate::agent::git::GitError;
+    use crate::agent::test_support::{FailGitIn, MockGit, ctx_with_repos};
 
     /// [`GitRunner`] double whose `worktree add` materializes the worktree
     /// directory and writes `gitdir: <gitdir>` into its `.git` pointer, the way
@@ -963,49 +607,6 @@ mod tests {
             }
             Ok(String::new())
         }
-    }
-
-    #[test]
-    fn resolve_git_dir_directory_case() {
-        let tmp = tempfile::tempdir().unwrap();
-        let repo = tmp.path().join("myrepo");
-        std::fs::create_dir_all(repo.join(".git")).unwrap();
-
-        let resolved = resolve_git_dir(&repo).unwrap();
-        assert_eq!(resolved, repo.join(".git"));
-    }
-
-    #[test]
-    fn resolve_git_dir_pointer_file_absolute() {
-        let tmp = tempfile::tempdir().unwrap();
-        let repo = tmp.path().join("myrepo");
-        std::fs::create_dir_all(&repo).unwrap();
-        let target = tmp.path().join("real/.git/worktrees/x");
-        std::fs::write(repo.join(".git"), format!("gitdir: {}\n", target.display())).unwrap();
-
-        let resolved = resolve_git_dir(&repo).unwrap();
-        assert_eq!(resolved, target);
-    }
-
-    #[test]
-    fn resolve_git_dir_pointer_file_relative() {
-        let tmp = tempfile::tempdir().unwrap();
-        let repo = tmp.path().join("myrepo");
-        std::fs::create_dir_all(&repo).unwrap();
-        std::fs::write(repo.join(".git"), "gitdir: ../shared/.git\n").unwrap();
-
-        let resolved = resolve_git_dir(&repo).unwrap();
-        assert_eq!(resolved, repo.join("../shared/.git"));
-    }
-
-    #[test]
-    fn resolve_git_dir_missing_returns_conventional() {
-        let tmp = tempfile::tempdir().unwrap();
-        let repo = tmp.path().join("myrepo");
-        std::fs::create_dir_all(&repo).unwrap();
-
-        let resolved = resolve_git_dir(&repo).unwrap();
-        assert_eq!(resolved, repo.join(".git"));
     }
 
     #[test]
@@ -1232,211 +833,6 @@ mod tests {
         assert!(text.contains("clean"));
     }
 
-    #[test]
-    fn resolve_base_branch_uses_onto_override() {
-        let git = MockGit::new();
-        let base = resolve_base_branch(&git, "/repo", Some("develop")).unwrap();
-        assert_eq!(base, "develop");
-        assert!(!git.has_call("rev-parse"), "an explicit --onto must not shell out to git");
-    }
-
-    #[test]
-    fn resolve_base_branch_defaults_to_main_branch() {
-        let git = MockGit::new();
-        git.on("rev-parse --abbrev-ref", Ok("main"));
-        let base = resolve_base_branch(&git, "/repo", None).unwrap();
-        assert_eq!(base, "main");
-    }
-
-    #[test]
-    fn resolve_base_branch_detached_head_errors() {
-        let git = MockGit::new();
-        git.on("rev-parse --abbrev-ref", Ok("HEAD"));
-        let err = resolve_base_branch(&git, "/repo", None).unwrap_err();
-        assert!(err.to_string().contains("--onto"), "got: {err}");
-    }
-
-    #[test]
-    fn sync_worktree_refuses_dirty() {
-        let tmp = tempfile::tempdir().unwrap();
-        let base = tmp.path();
-        std::fs::create_dir_all(base.join("myapp-agent01")).unwrap();
-
-        let git = MockGit::new();
-        git.on("status --porcelain", Ok(" M file.rs"));
-
-        let mut out = Vec::new();
-        let err =
-            sync_worktree(&git, base, "myapp", "agent01", "main", false, &mut out).unwrap_err();
-        assert!(err.to_string().contains("uncommitted changes"), "got: {err}");
-        assert!(!git.has_call("rebase"), "must not rebase a dirty worktree");
-    }
-
-    #[test]
-    fn sync_worktree_dry_run_prints_no_rebase() {
-        let tmp = tempfile::tempdir().unwrap();
-        let base = tmp.path();
-        std::fs::create_dir_all(base.join("myapp-agent01")).unwrap();
-
-        let git = MockGit::new();
-        // Clean worktree (default empty porcelain).
-        let mut out = Vec::new();
-        let outcome =
-            sync_worktree(&git, base, "myapp", "agent01", "main", true, &mut out).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Skipped, "a dry run rebases nothing");
-        let text = String::from_utf8(out).unwrap();
-        assert!(text.contains("[dry-run]"));
-        assert!(text.contains("rebase --end-of-options main"));
-        assert!(!git.has_call("rebase"), "dry-run must not actually rebase");
-    }
-
-    #[test]
-    fn sync_worktree_runs_rebase() {
-        let tmp = tempfile::tempdir().unwrap();
-        let base = tmp.path();
-        std::fs::create_dir_all(base.join("myapp-agent01")).unwrap();
-
-        let git = MockGit::new();
-        let mut out = Vec::new();
-        let outcome =
-            sync_worktree(&git, base, "myapp", "agent01", "main", false, &mut out).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Rebased);
-        assert!(git.has_call("rebase --end-of-options main"), "expected the rebase call");
-        assert!(String::from_utf8(out).unwrap().contains("rebased"));
-    }
-
-    #[test]
-    fn sync_worktree_propagates_rebase_conflict() {
-        let tmp = tempfile::tempdir().unwrap();
-        let base = tmp.path();
-        std::fs::create_dir_all(base.join("myapp-agent01")).unwrap();
-
-        let git = MockGit::new();
-        // Clean worktree, but the rebase itself fails (conflicts). The error must
-        // surface — sync deliberately does NOT auto-abort or swallow it.
-        git.on("rebase --end-of-options", Err(()));
-
-        let mut out = Vec::new();
-        let err =
-            sync_worktree(&git, base, "myapp", "agent01", "main", false, &mut out).unwrap_err();
-        assert!(err.to_string().contains("rebase"), "error should reflect the git failure: {err}");
-        assert!(
-            !String::from_utf8(out).unwrap().contains("rebased"),
-            "must not print a success line when the rebase failed",
-        );
-    }
-
-    #[test]
-    fn resolve_base_branch_rejects_optionlike_onto() {
-        let git = MockGit::new();
-        let err = resolve_base_branch(&git, "/repo", Some("--exec=touch pwned")).unwrap_err();
-        assert!(err.to_string().contains("cannot begin with '-'"), "got: {err}");
-        assert!(!git.has_call("rev-parse"), "a rejected ref must not shell out");
-    }
-
-    #[test]
-    fn sync_worktree_missing_dir_noops() {
-        let tmp = tempfile::tempdir().unwrap();
-        let base = tmp.path();
-
-        let git = MockGit::new();
-        let mut out = Vec::new();
-        let outcome =
-            sync_worktree(&git, base, "myapp", "agent01", "main", false, &mut out).unwrap();
-
-        assert_eq!(outcome, SyncOutcome::Skipped);
-        assert!(String::from_utf8(out).unwrap().contains("does not exist"));
-        assert!(!git.has_call("rebase"), "a missing worktree must not rebase");
-    }
-
-    // --- #712: sync attempts every repo and reports a per-repo summary ---
-
-    /// Builds an [`AgentContext`] over `repos` rooted at `base_dir`, for the
-    /// `sync_all_repos` tests (which need a context, not just a base dir).
-    fn ctx_with_repos(base_dir: &Path, repos: &[&str]) -> AgentContext {
-        use containers_common::config::{AgentConfig, ProjectConfig};
-
-        let mut ctx = AgentContext::from_config(IgorConfig {
-            schema_version: 1,
-            containers_dir: "containers".into(),
-            project: ProjectConfig { name: "myapp".into(), ..ProjectConfig::default() },
-            agents: AgentConfig {
-                repos: repos.iter().map(ToString::to_string).collect(),
-                ..AgentConfig::default()
-            },
-            ..IgorConfig::default()
-        });
-        ctx.base_dir = base_dir.to_path_buf();
-        ctx
-    }
-
-    #[test]
-    fn sync_all_repos_attempts_every_repo_after_a_failure() {
-        let tmp = tempfile::tempdir().unwrap();
-        let base = tmp.path();
-        // Two worktrees on disk; the first one's rebase will conflict.
-        std::fs::create_dir_all(base.join("alpha-agent01")).unwrap();
-        std::fs::create_dir_all(base.join("beta-agent01")).unwrap();
-
-        let git = FailGitIn::new("rebase", "alpha-agent01");
-        let ctx = ctx_with_repos(base, &["alpha", "beta"]);
-
-        let mut out = Vec::new();
-        let err = sync_all_repos(&git, &ctx, "agent01", None, false, &mut out).unwrap_err();
-
-        // The second repo was still attempted despite the first repo failing.
-        let calls = git.calls.borrow();
-        assert!(
-            calls.iter().any(|c| c.contains("rebase") && c.contains("beta-agent01")),
-            "beta must still be rebased after alpha failed: {calls:?}"
-        );
-        // The aggregate error names the failing repo.
-        assert!(err.to_string().contains("alpha"), "got: {err}");
-        assert!(!err.to_string().contains("beta:"), "beta succeeded; got: {err}");
-
-        let text = String::from_utf8(out).unwrap();
-        assert!(text.contains("1 rebased"), "summary should count beta: {text}");
-        assert!(text.contains("1 failed"), "summary should count alpha: {text}");
-    }
-
-    #[test]
-    fn sync_all_repos_succeeds_when_every_repo_rebases() {
-        let tmp = tempfile::tempdir().unwrap();
-        let base = tmp.path();
-        std::fs::create_dir_all(base.join("alpha-agent01")).unwrap();
-        std::fs::create_dir_all(base.join("beta-agent01")).unwrap();
-
-        let git = MockGit::new();
-        git.on("rev-parse --abbrev-ref", Ok("main"));
-        let ctx = ctx_with_repos(base, &["alpha", "beta"]);
-
-        let mut out = Vec::new();
-        sync_all_repos(&git, &ctx, "agent01", None, false, &mut out).unwrap();
-
-        let text = String::from_utf8(out).unwrap();
-        assert!(text.contains("2 rebased, 0 skipped, 0 failed"), "got: {text}");
-    }
-
-    #[test]
-    fn sync_all_repos_counts_missing_worktrees_as_skipped() {
-        let tmp = tempfile::tempdir().unwrap();
-        let base = tmp.path();
-        // Only alpha exists; beta's worktree was never created.
-        std::fs::create_dir_all(base.join("alpha-agent01")).unwrap();
-
-        let git = MockGit::new();
-        git.on("rev-parse --abbrev-ref", Ok("main"));
-        let ctx = ctx_with_repos(base, &["alpha", "beta"]);
-
-        let mut out = Vec::new();
-        sync_all_repos(&git, &ctx, "agent01", None, false, &mut out).unwrap();
-
-        let text = String::from_utf8(out).unwrap();
-        assert!(text.contains("1 rebased, 1 skipped, 0 failed"), "got: {text}");
-    }
-
     // --- #706: admin-dir name is read back from git, not assumed ---
 
     #[test]
@@ -1515,7 +911,7 @@ mod tests {
         let err = create_all_repos(&git, &ctx, "agent01", false, &mut out).unwrap_err();
 
         assert!(err.to_string().contains("boom"), "got: {err}");
-        let calls = git.calls.borrow();
+        let calls = git.calls();
         assert!(
             !calls.iter().any(|c| c.contains("worktree add") && c.contains("beta")),
             "beta must not be created after alpha failed: {calls:?}",
