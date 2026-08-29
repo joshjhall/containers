@@ -15,6 +15,8 @@ mod commands;
 mod labels;
 mod render;
 mod services;
+#[cfg(test)]
+mod test_support;
 mod wizard;
 
 use clap::Parser;

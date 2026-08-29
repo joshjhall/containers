@@ -142,29 +142,12 @@ mod tests {
     use super::*;
     use containers_common::config::{AgentConfig, ProjectConfig};
     use containers_common::feature::{self, Registry};
-    use std::sync::Mutex;
 
-    /// Serializes tests that mutate the process-global current directory, since
-    /// `plan_render` classifies files by relative path against the CWD and
-    /// cargo runs tests in a binary concurrently.
-    static CWD_LOCK: Mutex<()> = Mutex::new(());
-
-    /// Restores the process CWD to its captured value when dropped.
-    struct RestoreCwd(std::path::PathBuf);
-    impl Drop for RestoreCwd {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.0);
-        }
-    }
-
-    /// Runs `f` with the process CWD set to `dir`, restoring the previous CWD
-    /// (and releasing the lock) even if `f` panics.
-    fn with_cwd<T>(dir: &Path, f: impl FnOnce() -> T) -> T {
-        let _guard = CWD_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let _restore = RestoreCwd(std::env::current_dir().unwrap());
-        std::env::set_current_dir(dir).unwrap();
-        f()
-    }
+    // `plan_render` classifies files by relative path against the process CWD,
+    // so these tests point it at a temp dir. The guard lives in
+    // `crate::test_support` so every CWD-mutating test in this binary
+    // serializes on one lock (see that module's docs).
+    use crate::test_support::with_cwd;
 
     /// Build a minimal render context (python selected) for exercising
     /// `plan_render` against a temp dir.
