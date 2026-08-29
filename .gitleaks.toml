@@ -1,0 +1,69 @@
+# Gitleaks configuration
+#
+# Exists to keep documentation placeholders from failing a full-history scan
+# (#852) without weakening detection anywhere. The CI step runs
+# `gitleaks/gitleaks-action@v2`, which accepts no input parameters and so
+# discovers this file by its root location; `lefthook.yml`'s
+# `gitleaks protect --staged` finds it the same way. Neither needs a
+# `--config` flag.
+#
+# Why a full-history scan used to fail: on a `pull_request` event the action
+# scans only the PR's own commits, so the placeholders below are never seen.
+# A `workflow_dispatch` (or any other full-history path) scans every commit,
+# reaches 184f4a3b, and exits non-zero on values that were never secrets.
+
+[extend]
+# Load-bearing. Without this, a root .gitleaks.toml REPLACES the entire default
+# rule set rather than adding to it — which would turn every scan green by
+# disabling detection, the exact failure this file must not cause.
+useDefault = true
+
+# Note both stanzas below are [[allowlists]] (plural, scoped) rather than a
+# single global [allowlist]. A global path allowlist over examples/ was measured
+# to suppress a real AWS key and a real GitHub PAT planted in the same file —
+# it blinds the scanner to the whole directory. These are deliberately narrower.
+
+[[allowlists]]
+description = """
+Build artifacts and test output.
+
+These are gitignored, so a history scan never reaches them — but a filesystem
+scan (`--no-git`, and lefthook's local runs) walks them and trips on the
+high-entropy byte runs inside compiled Rust rmeta files and captured test
+reports. Nothing here is source, so nothing here can leak a committed
+credential.
+"""
+paths = ['''^target/''', '''^tests/results/''']
+
+[[allowlists]]
+description = """
+Base64 placeholder values in example Kubernetes manifests.
+
+Matched by value, not by path, so the exemption travels with the placeholder
+rather than with the file. Both prefixes are the base64 of a literal
+self-describing placeholder:
+  ZXhhbXBsZS... -> "example-..."  (e.g. example-password-change-me)
+  ZmFrZS...     -> "fake-..."     (e.g. fake-ssh-key)
+A real credential does not base64-encode to either prefix, so it stays caught.
+"""
+regexTarget = "secret"
+regexes = ['''^ZXhhbXBsZS[A-Za-z0-9+/=]*$''', '''^ZmFrZS[A-Za-z0-9+/=]*$''']
+
+[[allowlists]]
+description = """
+The kubernetes-secret-yaml rule matches a `kind: Secret` + `data:` block as a
+whole, so it fires on the shape of the manifest rather than on any one value —
+and a Secret example is useless as documentation without that shape.
+
+targetRules scopes this to that single rule: every other rule (including
+generic-api-key and the provider-specific token rules) still applies in full
+under examples/. Scoping this way also avoids redefining the upstream rule,
+so improvements to its regex keep flowing from the default set.
+"""
+targetRules = ["kubernetes-secret-yaml"]
+paths = ['''^examples/''']
+
+# No allowlist is needed for tests/unit/gitleaks-allowlist.sh, whose
+# counter-test plants credential-shaped values. It assembles them at runtime
+# from a split prefix, so no complete token is ever stored in the file and
+# neither gitleaks nor GitHub Push Protection has anything to match.

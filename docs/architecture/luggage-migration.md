@@ -13,7 +13,8 @@ see `crates/luggage/src/installer/`.
 ## What moves to luggage
 
 - Upstream download URL templating
-- Checksum fetch + tier-3 verification
+- Checksum fetch + tier-3 and tier-4 verification (see
+  [Verification tiers](#verification-tiers))
 - Installer execution under the target user (`su` wrapping)
 - Catalog-declared `post_install` steps (e.g., `rustup component add` for rust)
 - System-package dependency installation (the catalog's `dependencies[]`)
@@ -138,6 +139,79 @@ skips cleanly when no upstream checkout is present.
 [gen]: ../../crates/luggage/src/catalog_gen.rs
 [updaters]: ../../bin/lib/update-versions/updaters.sh
 [drift]: ../../bin/check-catalog-drift.sh
+
+## Verification tiers
+
+Every download luggage performs is verified at one of four tiers, declared per
+tool in the catalog (`verification.tier`). The tiers mirror the bash model
+documented in [Checksum Verification System](checksum-verification.md) — same
+numbering, same meaning — so a tool's tier reads identically whichever engine
+installs it.
+
+| Tier | What it is                    | Status in luggage |
+| ---- | ----------------------------- | ----------------- |
+| 1    | Signature (GPG / sigstore)    | Not implemented   |
+| 2    | Pinned in-repo checksum       | Not implemented   |
+| 3    | Publisher-served checksum file | Implemented      |
+| 4    | Trust-on-first-use (TOFU)     | Implemented       |
+
+Tiers 1 and 2 return a `NotImplemented` error if a catalog entry asks for
+them; an unrecognized tier number is a catalog error.
+
+### Tier 4 — trust on first use
+
+Tier 4 exists for publishers that serve no checksum at all (PyPA's
+`get-pip.py`, for example). Luggage computes the digest from the bytes it just
+downloaded and proceeds.
+
+**What that establishes:** the artifact did not change between download and
+use within this run.
+
+**What it does not establish:** authenticity. Because the digest is derived
+from the downloaded bytes rather than compared against anything the publisher
+signed, a machine-in-the-middle, a compromised mirror, or a compromised
+upstream would produce a digest that matches perfectly. Tier 4 is the weakest
+tier and is not evidence that the artifact is genuine.
+
+Two properties keep it honest:
+
+- **Acceptance is never silent.** Every tier-4 install emits a warning naming
+  the tool, version, algorithm, and digest, and stating both the guarantee and
+  the non-guarantee above.
+- **It fails closed.** The catalog entry must acknowledge TOFU explicitly
+  (`tofu: true`), and a malformed digest is rejected rather than accepted.
+
+### Refusing tier 4
+
+Pass `--require-verified-downloads`, or set `REQUIRE_VERIFIED_DOWNLOADS=true`
+(or `PRODUCTION_MODE=true`, which it defaults to). The full precedence — the
+flag is one-way, and unrecognized values fall through to `PRODUCTION_MODE` — is
+documented in
+[Environment Variables](../reference/environment-variables.md#require_verified_downloads-precedence).
+
+The refusal happens **before** the download rather than after it, so a strict
+run never fetches an artifact it has already decided it cannot verify. It
+surfaces as a verification failure — not a "not implemented" error — because it
+is a policy refusal of a tier luggage does support.
+
+### Where an acceptance is recorded
+
+An operator auditing which images installed unverified artifacts has two
+places to look:
+
+- **`InstallReport.warnings[]`** — the structured warning, with `tier`, `tool`,
+  `version`, `algorithm`, `digest`, and `message`. Written to the JSON report
+  when luggage runs with `--json-report`, and omitted entirely from the
+  serialized report when empty, so an ordinary verified install is unchanged.
+- **The evidence row's `notes`** — the warning messages joined with `" | "`.
+  `null` when there were no warnings, so a non-empty `notes` on a build is
+  itself the signal. Note this is prose today: an audit greps it rather than
+  querying it. Making acceptances queryable in the evidence schema is tracked
+  separately (#850).
+
+Each warning is also written to the per-feature build log as a `WARNING:` line
+(falling back to the tracing logger if that log cannot be opened), so an
+acceptance is visible during the build as well as after it.
 
 ## Porting recipe
 
