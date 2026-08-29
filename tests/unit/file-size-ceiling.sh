@@ -14,29 +14,45 @@
 # A growth-graded lens structurally cannot serve as the ceiling. This check is
 # the ceiling, and it is deliberately NOT growth-graded.
 #
-# THE DESIGN: A GRANDFATHERED RATCHET, NOT A FLAT CAP. A bare "no file over 900"
-# either fails on day one against every known offender, or has to be set above
-# 2,545 and catches nothing. So:
+# WHAT IS COUNTED: PRODUCTION LOC, NOT TOTAL LINES (#873).
+#
+# This check originally measured `wc -l`, which counts a file's own tests and
+# comments against its budget. That is the wrong unit, and the evidence was
+# unambiguous: every one of the eight files grandfathered under the total-line
+# ceiling was under 900 PRODUCTION LOC, most by an order of magnitude
+# (update-versions.sh: 1,615 total, 38 production). The allowlist was not
+# tracking oversized files. It was tracking files with thorough test suites and
+# thorough comments — the two things a ratchet should never penalize.
+#
+# The failure mode that made it concrete: #845 assessed resolver.rs and declined
+# the split (271 production LOC, comfortably inside budget), and #843 genuinely
+# split worktree.rs (437 -> 287 production LOC, clearing both audit findings).
+# Neither could retire its entry, because both files were still over 900 TOTAL.
+# A check that cannot register success is measuring the wrong thing.
+#
+# So a line is counted only if it is not blank, not a comment, and not inside a
+# co-located test region. Co-located `#[cfg(test)]` tests are idiomatic Rust and
+# this repo's dominant convention; extracting them to satisfy a line count was
+# explicitly rejected in #845, and this check no longer asks anyone to.
+#
+# THE DESIGN: A FORWARD-LOOKING CAP WITH A RATCHET STILL AVAILABLE.
 #
 #   - A file NOT in the allowlist may not cross CEILING_LINES. Full stop.
-#   - A file IN the allowlist carries its line count at the time of grandfathering
-#     as its personal maximum. It may shrink freely; growing past that number
-#     fails. This is the ratchet: the population can only get smaller.
+#   - A file IN the allowlist carries its production LOC at the time of
+#     grandfathering as its personal maximum. It may shrink freely; growing past
+#     that number fails. The population can only get smaller.
 #   - A file in the allowlist that drops BELOW the ceiling fails with
 #     "remove from the allowlist". Without this arm the allowlist would rot —
 #     entries would outlive the problem and quietly re-authorise regrowth up to
-#     a stale number. With it, the list is self-emptying: each split PR that
-#     lands takes its own entry with it, and the list reaches zero on its own.
+#     a stale number. With it, the list is self-emptying.
 #
-# The allowlist is expected to SHRINK to empty as issue #832's follow-up PRs
-# land. It is not a permanent exemption list; every entry is a tracked debt —
-# with one deliberate exception class. A file that is ASSESSED AND DECLINED
-# (measured under the audit lens's production-LOC budget, but still over this
-# check's TOTAL-line ceiling) stays listed permanently as a measurement
-# artifact, not as debt. It cannot reach the self-emptying arm without
-# extracting its own tests, which is not a change worth making to satisfy a
-# line count. See the crates/luggage/src/resolver.rs entry (#845) for the
-# worked example.
+# THE ALLOWLIST TURNED OVER COMPLETELY. All eight total-line entries are gone —
+# none was ever a real offender. One new entry took their place: the corrected
+# metric found a file the old ceiling never caught (758 total lines, under the
+# old 900 bar, but 617 production LOC). That swap is the whole point of #873: the
+# check stops penalizing well-tested, well-commented files and starts catching
+# genuinely large ones. An entry here is now a real debt with a tracked issue,
+# and should stay rare.
 
 set -euo pipefail
 
@@ -48,62 +64,42 @@ init_test_framework
 
 test_suite "File size ceiling tests"
 
-# The hard ceiling, in total lines. Matches issue #832's own "over 900" framing.
+# The hard ceiling, in PRODUCTION LOC (see the header for why not total lines).
 #
-# Measured on TOTAL lines rather than the production-LOC engine the audit lens
-# uses, deliberately: this check must be cheap, dependency-free, and trivially
-# auditable by a human reading the failure message. Production LOC is the right
-# unit for "is this file well-decomposed?"; total lines is the right unit for
-# "did this file grow?", which is the only question here.
-CEILING_LINES=900
+# 500 is not a new number: it is `size_thresholds.production_loc.high` from
+# check-decomposition/thresholds.yml — the audit lens's existing high bar, which
+# check-decomposition/patterns.py already applies repo-wide. Reusing it keeps one
+# number with one meaning, instead of a second unrelated threshold that drifts.
+#
+# The measurement is ported into awk below rather than shelling out to that
+# engine, deliberately: this check must stay cheap, dependency-free, and
+# trivially auditable by a human reading the failure message. It runs in CI paths
+# where neither python3 nor /opt/librarian is guaranteed.
+CEILING_LINES=500
 
-# Grandfathered files: "path:max_lines". Each entry is the file's line count
-# when issue #832 catalogued it. See the header for the three rules.
+# Grandfathered files: "path:max_production_loc". See the header for the rules.
 #
-# tests/unit/runtime/workspace-fs-health.sh is deliberately ABSENT — #832 split
-# it below the ceiling, which is what every entry below is expected to become.
+# All EIGHT total-line entries are gone (#873) — every one measured under 900
+# production LOC once its own tests and comments stopped counting against it, so
+# none was ever a real offender.
+#
+# The one entry below is the opposite case, and is why this list still exists:
+# the corrected metric FOUND a genuinely oversized file that the total-line
+# ceiling never caught (758 total, under the old 900 bar, but 617 production
+# LOC). The audit lens agrees exactly and rates it HIGH. That is the trade this
+# change makes — it stops flagging well-tested files and starts flagging large
+# ones.
+#
+# Add an entry only for a genuine offender with a tracked issue, in the form
+# "path:N" where N is its production LOC at the time of grandfathering.
 GRANDFATHERED=(
-    "tests/unit/features/claude-code-setup.sh:2545"
-    "tests/unit/bin/update-versions.sh:1615"
-    # SPLIT AND RATCHETED DOWN (#843). Was worktree.rs:1600; the module became a
-    # directory (worktree/mod.rs + worktree/sync.rs) with the git CLI layer
-    # lifted out to agent/git.rs, so the path changed and the max drops 1600 ->
-    # 996. The split did its real job on the audit lens: 437 -> 287 production
-    # LOC (under the 300 warning bar) and 29 -> 20 top-level units, clearing both
-    # the file-length and god-module findings.
-    #
-    # It stays listed only because CEILING_LINES counts TOTAL lines, and 996 is
-    # still over 900 — the remainder is a co-located `#[cfg(test)] mod tests`,
-    # which is idiomatic Rust and not worth extracting to chase this number
-    # (same reasoning as the resolver.rs entry below). Genuine further
-    # decomposition would have to come from splitting production concerns, and
-    # the audit lens no longer asks for any.
-    "crates/stibbons/src/agent/worktree/mod.rs:996"
-    "tests/unit/features/dev-tools.sh:1457"
-    "tests/unit/runtime/entrypoint.sh:1309"
-    "crates/stibbons/src/agent/commands.rs:955"
-    # ASSESSED AND DECLINED (#845) — NOT a pending split. This entry is
-    # retained for a measurement reason only, and is the one entry below that
-    # is not tracked debt.
-    #
-    # The #832 sweep ranked candidates by TOTAL lines. Measured the way the
-    # audit lens actually measures (check-decomposition/loc_engine.py), this
-    # file is 271 PRODUCTION LOC against that lens's budget of 300 warning /
-    # 500 high (thresholds.yml § size_thresholds.production_loc, which has no
-    # per-language override) — under the warning bar, and
-    # check-decomposition/patterns.py emits no file-length finding for it at
-    # all. The 958 is a 541-line co-located `#[cfg(test)] mod tests` counted
-    # against the production body.
-    #
-    # It stays listed because CEILING_LINES is measured on TOTAL lines by
-    # deliberate design (see the header above): at 958 total it is over the
-    # 900 ceiling, so removing this entry would fail
-    # test_no_ungrandfathered_file_over_ceiling. The self-emptying arm only
-    # fires below 900, which this file cannot reach without extracting its
-    # tests — rejected in #845, since co-located tests are idiomatic Rust and
-    # this repo's dominant convention. Do not "fix" that by moving the tests.
-    "crates/luggage/src/resolver.rs:958"
-    "tests/unit/gitlab-templates.sh:943"
+    # 617 production LOC (>500). Not a pending split by default:
+    # check-decomposition/patterns.py reports "declined: single cohesive unit —
+    # no internal seam to cut (617 production LOC, 2 top-level units)", so a
+    # forced split here would be the metric-chasing #845 warned against.
+    # Tracked for assessment in #874; the entry holds it at its current size
+    # meanwhile — it may shrink freely, but it cannot grow.
+    "crates/luggage/src/installer/methods/script_installer.rs:617"
 )
 
 # Directories swept, and the extensions swept within them.
@@ -120,6 +116,102 @@ _allowed_max() {
         fi
     done
     return 0
+}
+
+# _production_loc — echo a file's production LOC: total lines minus blanks,
+# comments, and any co-located test region.
+#
+# Transcribed from check-decomposition/loc_engine.py's `measure()` so the two
+# lenses agree on what a "line" means, but implemented in awk so this check keeps
+# no python3 / librarian dependency.
+#
+# Rules, in the order awk applies them per line:
+#
+#   1. TRAILING TEST REGION (rs). A column-zero `#[cfg(test)]` introducing a
+#      `mod` BLOCK excludes everything to EOF — the conventional trailing
+#      placement. Two traps, both found by differential-testing this port
+#      against the engine over all 610 swept files:
+#        - Column zero matters. An INDENTED `#[cfg(test)]` is a nested test
+#          module already inside a production item; treating it as a whole-file
+#          marker swallows every production item after it (#727 upstream).
+#        - It must introduce a BLOCK, not a one-line `#[cfg(test)] mod foo;`
+#          declaration. crates/stibbons/src/main.rs has exactly that on line 18;
+#          a naive to-EOF rule scored the file 6 production LOC instead of 111.
+#   2. PER-UNIT TEST ATTRIBUTES (rs). A standalone `tests/*.rs` integration file
+#      has no trailing region at all — every fn carries its own `#[test]`. Such
+#      a unit is excluded from its attribute to the line before the next
+#      column-zero item. Without this arm crates/luggage/tests/cli.rs scored 456
+#      instead of 42.
+#   3. PER-UNIT TEST FUNCTIONS (sh). A shell suite likewise has no trailing
+#      region: its `test_foo()` functions are interleaved with helpers all the
+#      way down, so a banner rule alone excludes nothing. Each column-zero
+#      `test_*()` is excluded to the line before the next column-zero unit
+#      header. Without this arm tests/unit/bin/update-versions.sh scored 1151
+#      instead of 38.
+#   4. TEST BANNER (sh). A `# --- tests ---` banner excludes to EOF.
+#   5. BLANK. Whitespace-only.
+#   6. COMMENT. A leading `//`, `/*` or `*` for rs; a leading `#` for sh.
+#
+# Matching is pinned to [ \t] rather than awk's locale-dependent whitespace
+# classes so the count is stable regardless of LC_ALL, matching the upstream
+# engine's own reasoning about exotic whitespace.
+#
+# Parity with loc_engine.py is verified across every swept file; see the issue
+# (#873) for the differential-testing harness used.
+_production_loc() {
+    local path="$1" lang
+    case "$path" in
+        # Quoted because `sh` is also a command name: an unquoted `lang=sh`
+        # reads to shellcheck as a mistaken command substitution (SC2209).
+        *.rs) lang="rs" ;;
+        *) lang="sh" ;;
+    esac
+
+    command awk -v lang="$lang" '
+        # --- rs: trailing `#[cfg(test)] mod … {` region, to EOF -------------
+        # Armed by a column-zero `#[cfg(test)]`, but only fires once the next
+        # line proves it introduces a block rather than a `mod foo;` decl.
+        lang == "rs" && cfg_armed {
+            cfg_armed = 0
+            if ($0 ~ /^mod[ \t]+[A-Za-z0-9_]+[ \t]*\{/ || $0 ~ /^mod[ \t]+[A-Za-z0-9_]+[ \t]*$/) {
+                in_tests = 1
+            }
+        }
+        lang == "rs" && !in_tests && /^#\[cfg\(test\)\]/ { cfg_armed = 1; next }
+
+        # --- sh: `# --- tests ---` banner, to EOF ---------------------------
+        lang == "sh" && !in_tests && /^#[ \t]*-+[ \t]*[Tt]ests?[ \t]*-+/ { in_tests = 1 }
+        in_tests { next }
+
+        # --- rs: per-unit `#[test]` / `#[cfg(test)]` attributes -------------
+        # A test attribute marks the unit that FOLLOWS it, so the exclusion must
+        # survive that unit'"'"'s own header line and end only at the NEXT
+        # column-zero item. `just_marked` carries the flag across the header the
+        # attribute introduced; without it the header itself cleared the flag and
+        # every test body was counted (agent_integration.rs: 42 vs 3).
+        # The attribute LINE itself is not part of the unit it marks (the
+        # engine'"'"'s unit spans start at the `fn`/`mod` header), so it still
+        # counts. Set the flag and fall through to the counter.
+        lang == "rs" && /^#\[(test|cfg\(test\))/ { in_test_unit = 1; just_marked = 1 }
+        lang == "rs" && /^(pub[ \t]|pub\(|async[ \t]|unsafe[ \t]|extern[ \t]|fn[ \t]|mod[ \t]|struct[ \t]|enum[ \t]|impl[ \t<]|trait[ \t]|const[ \t]|static[ \t]|type[ \t]|use[ \t]|macro_rules!)/ {
+            if (just_marked) { just_marked = 0 } else { in_test_unit = 0 }
+        }
+        lang == "rs" && in_test_unit { next }
+
+        # --- sh: per-unit `test_*()` functions ------------------------------
+        lang == "sh" && /^[A-Za-z_][A-Za-z0-9_]*[ \t]*\([ \t]*\)/ {
+            in_test_fn = /^test_[A-Za-z0-9_]*[ \t]*\([ \t]*\)/ ? 1 : 0
+        }
+        lang == "sh" && /^function[ \t]+test_[A-Za-z0-9_]*[ \t]*\([ \t]*\)/ { in_test_fn = 1 }
+        in_test_fn { next }
+
+        /^[ \t]*$/ { next }                                   # blank
+        lang == "rs" && /^[ \t]*(\/\/|\/\*|\*)/ { next }      # rust comment
+        lang == "sh" && /^[ \t]*#/ { next }                   # shell comment
+
+        { n++ }
+        END { print n + 0 }
+    ' "$path"
 }
 
 # _scan_files — emit every swept file as a repo-relative path.
@@ -140,20 +232,19 @@ _scan_files() {
 test_no_ungrandfathered_file_over_ceiling() {
     local violations=0 path lines allowed
     while IFS= read -r path; do
-        lines=$(command wc -l <"$PROJECT_ROOT/$path")
-        lines=$((lines))
+        lines=$(_production_loc "$PROJECT_ROOT/$path")
         [ "$lines" -le "$CEILING_LINES" ] && continue
 
         allowed=$(_allowed_max "$path")
         if [ -z "$allowed" ]; then
             assert_true false \
-                "$path is $lines lines, over the $CEILING_LINES-line ceiling. Split it, or add it to GRANDFATHERED with a tracked issue."
+                "$path is $lines production LOC (excluding comments and co-located tests), over the $CEILING_LINES ceiling. Split it, or add it to GRANDFATHERED with a tracked issue."
             violations=$((violations + 1))
         fi
     done < <(_scan_files)
 
     if [ "$violations" -eq 0 ]; then
-        assert_true true "no un-grandfathered file exceeds $CEILING_LINES lines"
+        assert_true true "no un-grandfathered file exceeds $CEILING_LINES production LOC"
     fi
 }
 
@@ -171,11 +262,10 @@ test_grandfathered_files_do_not_grow() {
             continue
         fi
 
-        lines=$(command wc -l <"$PROJECT_ROOT/$path")
-        lines=$((lines))
+        lines=$(_production_loc "$PROJECT_ROOT/$path")
         if [ "$lines" -gt "$allowed" ]; then
             assert_true false \
-                "$path grew to $lines lines, past its grandfathered maximum of $allowed. Split it rather than raising the number."
+                "$path grew to $lines production LOC, past its grandfathered maximum of $allowed. Split it rather than raising the number."
             violations=$((violations + 1))
         fi
     done
@@ -194,11 +284,10 @@ test_grandfathered_entries_retire_when_fixed() {
         allowed="${entry##*:}"
         [ -f "$PROJECT_ROOT/$path" ] || continue
 
-        lines=$(command wc -l <"$PROJECT_ROOT/$path")
-        lines=$((lines))
+        lines=$(_production_loc "$PROJECT_ROOT/$path")
         if [ "$lines" -le "$CEILING_LINES" ]; then
             assert_true false \
-                "$path is now $lines lines, under the $CEILING_LINES-line ceiling. Remove it from GRANDFATHERED (recorded max was $allowed)."
+                "$path is now $lines production LOC, under the $CEILING_LINES ceiling. Remove it from GRANDFATHERED (recorded max was $allowed)."
             violations=$((violations + 1))
         fi
     done
