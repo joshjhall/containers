@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.27] - 2026-08-29
+
+### Added
+
+- Stream large downloads to disk + verify multi-entry checksum manifests (#833)
+- Implement tier-4 TOFU verification with loud warnings + strict-mode refusal (#847)
+- Implement the binary-tarball install method (gzip/xz, strip-components, traversal-safe) (#858)
+- Cap the tier-3 checksum/manifest response size before buffering (#865)
+
+### Changed
+
+- Split workspace-fs-health suite, add file-size ratchet (#848)
+- Extract install stages into installer/stages.rs (#859)
+- Split bin/luggage.rs into a directory binary (#860)
+- Split main.rs into cli + per-command modules (#866)
+- Decline the resolver.rs split, record the assessment (#845) (#868)
+- Split worktree.rs into git + worktree/sync modules (#843) (#872)
+
+### Documentation
+
+- Document tier-4 TOFU posture; fix gitleaks full-history scan (#876)
+
+### Fixed
+
+- Repair symlinks and ignorecase inside submodules (#829)
+- Skip compose validation without Docker, ungate unit tests (#834)
+- Bound decompressed size of binary-tarball extractions (#861)
+- Measure the file-size ceiling in production LOC, not total lines (#873) (#875)
+
+### Miscellaneous
+
+- Update tool versions and refresh checksums
+
+### Testing
+
+- Cover get_to_writer retry/reset orchestration (#855)
+- Unit-cover the command modules extracted from main.rs (#869)
+
 ## [4.19.26] - 2026-08-25
 
 ### Added
@@ -45,7 +83,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Ignore local _notes.md scratch file
 - Verify agnix package signature at the npm install site (#816)
-- Update tool versions and sync Rust 1.98 pins
 
 ### Testing
 
@@ -2334,6 +2371,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.27]: https://github.com/joshjhall/containers/compare/v4.19.26...v4.19.27
 [4.19.26]: https://github.com/joshjhall/containers/compare/v4.19.25...v4.19.26
 [4.19.25]: https://github.com/joshjhall/containers/compare/v4.19.24...v4.19.25
 [4.19.24]: https://github.com/joshjhall/containers/compare/v4.19.23...v4.19.24
