@@ -141,7 +141,11 @@ _allowed_max() {
 #      has no trailing region at all — every fn carries its own `#[test]`. Such
 #      a unit is excluded from its attribute to the line before the next
 #      column-zero item. Without this arm crates/luggage/tests/cli.rs scored 456
-#      instead of 42.
+#      instead of 42. The two attributes differ on their OWN line, because the
+#      engine reaches them by different paths: a `#[test]` line counts (spans
+#      start at the fn header, so it belongs to the preceding unit), while a
+#      column-zero `#[cfg(test)]` does not (it also matches the whole-file
+#      region regex, whose span starts at the marker).
 #   3. PER-UNIT TEST FUNCTIONS (sh). A shell suite likewise has no trailing
 #      region: its `test_foo()` functions are interleaved with helpers all the
 #      way down, so a banner rule alone excludes nothing. Each column-zero
@@ -156,8 +160,24 @@ _allowed_max() {
 # classes so the count is stable regardless of LC_ALL, matching the upstream
 # engine's own reasoning about exotic whitespace.
 #
-# Parity with loc_engine.py is verified across every swept file; see the issue
-# (#873) for the differential-testing harness used.
+# KNOWN FALSE NEGATIVE, inherited from the engine and accepted: a PRODUCTION
+# function literally named `test_*()` is excluded as if it were a test. Three
+# files do this (bin/test-version-compatibility.sh, bin/test-completions.sh,
+# bin/lib/validate-backups/checks.sh); loc_engine.py excludes exactly the same
+# lines, so this port matches rather than diverges, and all three sit far under
+# the ceiling either way. The exposure is that such a file could hide production
+# bulk behind the naming convention. Accepted because matching the audit lens is
+# worth more than a stricter private rule — but if a `test_*`-heavy production
+# file ever approaches the ceiling, revisit this.
+#
+# PARITY: differential-tested against loc_engine.py over all 610 swept files.
+# 2 files still differ — template/mod.rs (6 vs 3) and luggage/tests/install_rust.rs
+# (84 vs 85) — both on the engine's unit-span model for a `#[cfg(test)] mod foo;`
+# declaration, which cannot be reproduced line-at-a-time without reimplementing
+# that model; every approximation tried traded these two for a different pair.
+# Both files sit 400+ LOC under the ceiling, so neither gap can flip a verdict.
+# The synthetic-fixture test at the bottom of this file pins each rule above with
+# values taken from the engine, so a future edit cannot silently regress them.
 _production_loc() {
     local path="$1" lang
     case "$path" in
@@ -170,14 +190,22 @@ _production_loc() {
     command awk -v lang="$lang" '
         # --- rs: trailing `#[cfg(test)] mod … {` region, to EOF -------------
         # Armed by a column-zero `#[cfg(test)]`, but only fires once the next
-        # line proves it introduces a block rather than a `mod foo;` decl.
+        # line proves it introduces a `mod … {` BLOCK — the conventional
+        # trailing placement — rather than a `mod foo;` one-line declaration.
+        # crates/stibbons/src/main.rs:18 is exactly that declaration, and a
+        # naive to-EOF rule scored the file 6 production LOC instead of 111.
+        #
+        # A `#[cfg(test)] mod foo;` DECLARATION is therefore not treated as a
+        # region at all. The engine does extend such a unit to the next item,
+        # which is the single accepted residual below (template/mod.rs, 5 vs 3);
+        # matching it exactly needs the engine'"'"'s full unit-span model, and
+        # every attempt to approximate it here traded that 2-line gap for a new
+        # one elsewhere. Both files sit ~500 LOC under the ceiling.
         lang == "rs" && cfg_armed {
             cfg_armed = 0
-            if ($0 ~ /^mod[ \t]+[A-Za-z0-9_]+[ \t]*\{/ || $0 ~ /^mod[ \t]+[A-Za-z0-9_]+[ \t]*$/) {
-                in_tests = 1
-            }
+            if ($0 ~ /^mod[ \t]+[A-Za-z0-9_]+[ \t]*\{/) { in_tests = 1 }
         }
-        lang == "rs" && !in_tests && /^#\[cfg\(test\)\]/ { cfg_armed = 1; next }
+        lang == "rs" && !in_tests && /^#\[cfg\(test\)\]/ { cfg_armed = 1 }
 
         # --- sh: `# --- tests ---` banner, to EOF ---------------------------
         lang == "sh" && !in_tests && /^#[ \t]*-+[ \t]*[Tt]ests?[ \t]*-+/ { in_tests = 1 }
@@ -189,10 +217,26 @@ _production_loc() {
         # column-zero item. `just_marked` carries the flag across the header the
         # attribute introduced; without it the header itself cleared the flag and
         # every test body was counted (agent_integration.rs: 42 vs 3).
-        # The attribute LINE itself is not part of the unit it marks (the
-        # engine'"'"'s unit spans start at the `fn`/`mod` header), so it still
-        # counts. Set the flag and fall through to the counter.
-        lang == "rs" && /^#\[(test|cfg\(test\))/ { in_test_unit = 1; just_marked = 1 }
+        # The attribute LINE itself is NOT part of the unit it marks: the
+        # engine'"'"'s spans start at the `fn`/`mod` header, so an attribute
+        # belongs to whatever unit PRECEDES it and counts as production when
+        # that one is production. So the exclusion is armed here and only takes
+        # effect from the next line (`pending_test`), rather than set directly —
+        # setting it here skipped the attribute line itself and undercounted
+        # every production-to-test boundary (luggage/tests/cli.rs: 40 vs 42).
+        # ...with one asymmetry between the two attributes, which the engine
+        # creates by handling them on different code paths:
+        #   `#[test]`      — no region rule matches it, so the line counts
+        #                    (it belongs to the preceding unit).
+        #   `#[cfg(test)]` — a COLUMN-ZERO one also matches the engine'"'"'s
+        #                    whole-file region regex, whose span starts at the
+        #                    MARKER, so the line is excluded.
+        # Hence `#[cfg(test)]` skips its own line and `#[test]` does not.
+        lang == "rs" && /^#\[cfg\(test\)\]/ { pending_test = 1; next }
+        lang == "rs" && /^#\[test\]/ { pending_test = 1 }
+        lang == "rs" && pending_test && !/^#\[(test|cfg\(test\))/ {
+            pending_test = 0; in_test_unit = 1; just_marked = 1
+        }
         lang == "rs" && /^(pub[ \t]|pub\(|async[ \t]|unsafe[ \t]|extern[ \t]|fn[ \t]|mod[ \t]|struct[ \t]|enum[ \t]|impl[ \t<]|trait[ \t]|const[ \t]|static[ \t]|type[ \t]|use[ \t]|macro_rules!)/ {
             if (just_marked) { just_marked = 0 } else { in_test_unit = 0 }
         }
@@ -307,6 +351,79 @@ test_grandfathered_list_has_no_duplicates() {
     assert_empty "$dupes" "GRANDFATHERED must list each path at most once"
 }
 
+# The measurement engine itself, on synthetic fixtures.
+#
+# The three arms above only exercise _production_loc against whatever real files
+# happen to be in the tree, which is incidental coverage: it moves when the repo
+# moves, and it cannot pin a specific rule. Each case below is a trap that was
+# ACTUALLY WRONG at some point while porting the awk from loc_engine.py, with
+# the expected value taken from that engine. They are the regression net for the
+# rules documented above _production_loc.
+test_production_loc_edge_cases() {
+    local tmp
+    tmp=$(command mktemp -d)
+    # shellcheck disable=SC2064  # expand $tmp now, not at trap time
+    trap "command rm -rf '$tmp'" RETURN
+
+    # A trailing `#[cfg(test)] mod tests { … }` block excludes to EOF.
+    command printf '%s\n' \
+        'pub fn real() {' '    let a = 1;' '}' \
+        '#[cfg(test)]' 'mod tests {' '    fn t() {}' '}' >"$tmp/trailing.rs"
+    assert_equals "3" "$(_production_loc "$tmp/trailing.rs")" \
+        "a trailing #[cfg(test)] mod block is excluded to EOF"
+
+    # An INDENTED #[cfg(test)] is a nested module, not a whole-file marker: it
+    # must not swallow the production items that follow (#727 upstream).
+    command printf '%s\n' \
+        'mod outer {' '    #[cfg(test)]' '    mod inner {}' '}' \
+        'pub fn after() {' '    let b = 2;' '}' >"$tmp/nested.rs"
+    assert_equals "7" "$(_production_loc "$tmp/nested.rs")" \
+        "an indented #[cfg(test)] does not trigger whole-file exclusion"
+
+    # A one-line `#[cfg(test)] mod foo;` DECLARATION is not a trailing region.
+    # Getting this wrong scored crates/stibbons/src/main.rs 6 LOC instead of 111.
+    command printf '%s\n' \
+        '#[cfg(test)]' 'mod test_support;' 'mod wizard;' \
+        'fn main() {' '    let c = 3;' '}' >"$tmp/decl.rs"
+    assert_equals "4" "$(_production_loc "$tmp/decl.rs")" \
+        "a one-line #[cfg(test)] mod declaration does not exclude to EOF"
+
+    # A per-unit #[test] excludes its fn, but the ATTRIBUTE line itself counts:
+    # the engine's unit spans start at the fn header, so the attribute belongs
+    # to the preceding (production) unit. Missing this undercounted every
+    # production-to-test boundary.
+    command printf '%s\n' \
+        'fn helper() {' '    let a = 1;' '}' \
+        '#[test]' 'fn t1() {' '    assert!(true);' '}' >"$tmp/attr.rs"
+    assert_equals "4" "$(_production_loc "$tmp/attr.rs")" \
+        "#[test] excludes its fn but the attribute line still counts"
+
+    # A standalone `#[cfg(test)] fn` (no mod block) is excluded per-unit — and
+    # unlike #[test], its attribute line does NOT count, because a column-zero
+    # #[cfg(test)] also matches the engine's whole-file region regex.
+    command printf '%s\n' \
+        '#[cfg(test)]' 'fn helper() {' '    let x = 1;' '}' \
+        'pub fn real() {' '    let y = 2;' '}' >"$tmp/cfgfn.rs"
+    assert_equals "3" "$(_production_loc "$tmp/cfgfn.rs")" \
+        "a cfg-gated test helper fn is excluded, attribute line included"
+
+    # sh: a `test_*()` function is excluded; the next column-zero function ends
+    # it. Missing this scored tests/unit/bin/update-versions.sh 1151 vs 38.
+    command printf '%s\n' \
+        'helper() {' '    echo hi' '}' \
+        'test_thing() {' '    assert_true true' '}' \
+        'another() {' '    echo bye' '}' >"$tmp/suite.sh"
+    assert_equals "6" "$(_production_loc "$tmp/suite.sh")" \
+        "sh test_*() bodies are excluded and end at the next function"
+
+    # Blanks and comments never count, in either language.
+    command printf '%s\n' \
+        '// a comment' '' '   ' 'pub fn only() {' '    let z = 1;' '}' >"$tmp/noise.rs"
+    assert_equals "3" "$(_production_loc "$tmp/noise.rs")" \
+        "blanks and comments are excluded"
+}
+
+run_test test_production_loc_edge_cases "_production_loc handles the documented edge cases"
 run_test test_no_ungrandfathered_file_over_ceiling "no un-grandfathered file exceeds the ceiling"
 run_test test_grandfathered_files_do_not_grow "grandfathered files do not grow past their recorded maximum"
 run_test test_grandfathered_entries_retire_when_fixed "grandfathered entries retire once under the ceiling"
