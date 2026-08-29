@@ -77,22 +77,32 @@ if ! command -v gitleaks >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; the
     exit 0
 fi
 
-# AC1: the scan that used to fail must now pass.
+# AC1: the full-history scan that used to fail must now pass.
 #
-# Scanned via git history rather than --no-git. The distinction matters: a
-# filesystem scan also walks gitignored build output (target/, tests/results/),
-# whose compiled byte runs trip entropy rules and would make this test's result
-# depend on whether a cargo build or a prior test run happened to leave
-# artifacts behind. CI scans commits, so this mirrors CI.
+# This scans ALL history, which is the scenario #852 is about: the placeholders
+# live in commit 184f4a3b, and only a scan that walks back to it sees them.
 #
-# --log-opts=-1 limits it to HEAD: the full-history sweep is CI's job and takes
-# ~1.3s against ~2000 commits, which is more than a unit test should spend.
-test_committed_tree_scan_is_clean() {
+# Two narrower options were tried and rejected, both because they pass
+# vacuously — measured, not assumed:
+#
+#   --log-opts=-1  scans only the tip commit's patch. Once this lands and later
+#                  commits stop touching secrets.yaml, gitleaks has nothing to
+#                  examine and reports clean. Verified: with the allowlist
+#                  deliberately gutted, that form STILL reported no leaks, so it
+#                  could not have caught a regression in the thing it tests.
+#   --no-git       walks the filesystem, including gitignored build output whose
+#                  compiled byte runs trip entropy rules, making the result
+#                  depend on whether a cargo build happened to run first.
+#
+# The cost is ~1.5s against ~2000 commits. That is high for a unit test, and
+# accepted deliberately: a fast test that cannot fail is worth less than a slow
+# one that can.
+test_full_history_scan_is_clean() {
     local out rc=0
     out=$(cd "$PROJECT_ROOT" && gitleaks detect --redact --no-banner \
-        --exit-code=2 --log-opts=-1 2>&1) || rc=$?
+        --exit-code=2 2>&1) || rc=$?
     assert_equals "0" "$rc" \
-        "a gitleaks scan of committed content must exit 0 (#852 AC1): $out"
+        "a full-history gitleaks scan must exit 0 on a clean checkout (#852 AC1): $out"
 }
 
 # AC3: the load-bearing counter-test. A real credential planted in the very
@@ -171,7 +181,7 @@ run_test test_config_exists ".gitleaks.toml exists at the repo root"
 run_test test_extends_the_default_ruleset "[extend] useDefault = true is present"
 run_test test_uses_scoped_allowlists_not_a_global_one "uses scoped [[allowlists]], not a global [allowlist]"
 run_test test_path_exemption_is_rule_scoped "the examples/ path exemption is rule-scoped"
-run_test test_committed_tree_scan_is_clean "a scan of committed content exits 0 (AC1)"
+run_test test_full_history_scan_is_clean "a full-history scan exits 0 (AC1)"
 run_test test_placeholders_are_exempt "example placeholder values are exempt"
 run_test test_real_secrets_are_still_detected "planted real secrets are still caught (AC3)"
 

@@ -61,7 +61,7 @@ under examples/. Scoping this way also avoids redefining the upstream rule,
 so improvements to its regex keep flowing from the default set.
 """
 targetRules = ["kubernetes-secret-yaml"]
-paths = ['''^examples/''']
+paths = ['''^examples/kubernetes/''']
 
 # No allowlist is needed for tests/unit/gitleaks-allowlist.sh, whose
 # counter-test plants credential-shaped values. It assembles them at runtime
