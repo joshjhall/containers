@@ -1,12 +1,12 @@
 {
   "source": {
     "repository": "https://github.com/nodejs/release-keys",
-    "commit": "b28073028e6d6855cfb53bf7fa0137599c01f967",
-    "commit_date": "2026-07-01T14:22:04+00:00",
-    "commit_message": "chore: fix `verify-key-signature` workflow (#54)"
+    "commit": "5b7f55f4a7e35d1176d27a6b81b0c3c3b794216b",
+    "commit_date": "2026-08-27T12:50:41+00:00",
+    "commit_message": "meta: retire targos key (#58)"
   },
   "fetched": {
-    "date": "2026-08-16",
+    "date": "2026-08-30",
     "by": "automated"
   },
   "keyring": {
