@@ -115,8 +115,12 @@ pre-commit:
       glob: "*.json"
       exclude:
         - "tests/results/**"
-        - ".vscode/**"
-        - ".devcontainer/**"
+        # Same rule as dprint-yaml: mirror dprint.json's excludes only.
+        # .vscode/** is excluded there, so passing it to `dprint fmt` exits 14
+        # ("no files found") and fails the hook. .devcontainer/** is NOT
+        # excluded there, so it stays lintable — leaving it out here let a
+        # misformatted devcontainer.json through commit and then blocked the
+        # push on `dprint check {all_files}`.
       run: dprint fmt {staged_files}
       stage_fixed: true
 
