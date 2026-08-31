@@ -1,30 +1,17 @@
 {
-  // LSP binary overrides for Zed extensions whose own binary fetch races
-  // their postinstall (toast: "failed to start language server <name>").
-  // The matching binaries ship in this container via the dev-tools feature;
-  // redirecting here skips the per-extension npm install / download entirely.
-  //
-  // Mirrored at the container level by:
-  //   lib/features/lib/dev-tools/zed-lsp-config-first-startup.sh
-  "lsp": {
-    "dprint": {
-      "binary": {
-        "path": "/usr/local/bin/dprint",
-        "arguments": ["lsp"]
-      }
-    },
-    "taplo": {
-      "binary": {
-        "path": "/usr/local/bin/taplo",
-        "arguments": ["lsp", "stdio"]
-      }
-    }
-  },
   // Format YAML/JSON with dprint on save (matches CI + .vscode/settings.json).
-  // The `lsp.dprint` block above only points Zed at the dprint binary; without
-  // these per-language formatter overrides Zed falls back to its built-in
-  // formatter, which reindents YAML to 4 spaces. dprint enforces the 2-space
-  // indent from dprint.json's pretty_yaml plugin.
+  // Without these per-language formatter overrides Zed falls back to its
+  // built-in formatter, which reindents YAML to 4 spaces. dprint enforces the
+  // 2-space indent from dprint.json's pretty_yaml plugin.
+  //
+  // NOTE: deliberately no `lsp.dprint.binary.path` override here. The binary
+  // lives at /usr/local/bin/dprint inside the container but at a different
+  // path on a host (Homebrew: /opt/homebrew/bin/dprint), so pinning it in
+  // committed repo settings makes the LSP fail to spawn every time the repo is
+  // opened locally. The container-side override is written to
+  // ~/.config/zed/settings.json by:
+  //   lib/features/lib/dev-tools/zed-lsp-config-first-startup.sh
+  // On a host, the Zed dprint extension resolves its own binary.
   "format_on_save": "on",
   "languages": {
     "YAML": {
