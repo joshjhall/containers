@@ -2,8 +2,17 @@ name: Issue Labeler
 
 # Translates the Severity/Effort dropdowns from the form-based issue templates
 # (.github/ISSUE_TEMPLATE/*.yml) into `severity/*` and `effort/*` labels so every
-# web-UI issue is visible to /next-issue priority ordering. Issues filed without
-# those selections get a `needs-triage` label and a one-time nudge comment.
+# web-UI issue is visible to /next-issue priority ordering.
+#
+# Triage state is decided from the issue's *effective* severity/effort — the
+# value parsed out of the form body OR a `severity/*` / `effort/*` label already
+# on the issue. That second half matters: CLI-created issues (/workflow:file-issue,
+# `gh issue create --label ...`) carry their labels through the API and have no
+# form headings at all, so a body-only check flagged every one of them and never
+# cleared the flag (issue #881). An issue missing either namespace gets a
+# `needs-triage` label and a one-time nudge comment; one that has both gets a
+# stale flag removed. This mirrors .gitlab/triage/triage-policies.yml, whose
+# flag/clear rules are logical negations of each other over the same prefixes.
 
 on:
   issues:
@@ -70,6 +79,17 @@ jobs:
 
             const current = context.payload.issue.labels.map((l) => l.name);
 
+            // Effective state = parsed from the body OR already on the issue.
+            // The second disjunct is what makes CLI-created issues work: they
+            // arrive fully labeled through the API with no form body to parse
+            // (#881). Checking `current` here — rather than only inside the
+            // `toAdd` branch below — is the whole fix; dropping either
+            // `current.some(...)` reinstates the bug.
+            const hasSeverity =
+              severity !== null || current.some((n) => n.startsWith('severity/'));
+            const hasEffort =
+              effort !== null || current.some((n) => n.startsWith('effort/'));
+
             if (toAdd.length > 0) {
               await github.rest.issues.addLabels({
                 owner,
@@ -78,8 +98,14 @@ jobs:
                 labels: toAdd,
               });
               core.info(`Applied: ${toAdd.join(', ')}`);
-              // A prior run may have flagged this issue before it was edited
-              // to include selections — clear the stale triage flag.
+            }
+
+            // Fully labeled — nothing to triage. Clear a stale flag if a prior
+            // run left one (or if the issue was labeled by hand after being
+            // flagged). This lives OUTSIDE the `toAdd` branch on purpose: a
+            // CLI-created issue adds no labels here, so the removal would
+            // otherwise sit in a branch it can never reach.
+            if (hasSeverity && hasEffort) {
               if (current.includes(NEEDS_TRIAGE)) {
                 await github.rest.issues.removeLabel({
                   owner,
@@ -92,8 +118,10 @@ jobs:
               return;
             }
 
-            // No selections parsed: flag for triage (idempotently).
-            core.info('No severity/effort selections found — flagging triage.');
+            // Missing a severity and/or an effort label: flag for triage
+            // (idempotently). Half-labeled counts as missing — one namespace
+            // alone is not enough for /next-issue to prioritize the issue.
+            core.info('Missing severity and/or effort labels — flagging triage.');
 
             try {
               await github.rest.issues.getLabel({ owner, repo, name: NEEDS_TRIAGE });
