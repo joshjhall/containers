@@ -80,6 +80,8 @@
 - [UBI arm64 mirror depsolve flake](ubi-arm64-mirror-depsolve-flake.md) — rhel-9-arm64 base build fails on transient microdnf glibc depsolve (partial UBI aarch64 mirror sync); retry `gh run rerun --failed`, don't pin/code-fix (v4.19.18)
 - [Case-insensitive mount shares inodes](case-insensitive-mount-shared-inode.md) — case-shadowed entries share an inode; `git clean -fd` deletes real source; fix via core.ignorecase
 - [Stale symlink attrs on virtiofs](stale-symlink-attrs-virtiofs.md) — nlink=0 symlinks read as permanently modified; relink with `ln -sfn` (not a bindfs bug); hits every fresh worktree — fs-health doesn't reach those (#882)
+- [workflow.js must be readable in-worktree](workflow-js-must-be-readable-in-worktree.md) — copy ship-issue/workflow.js into .claude/memory/tmp/ before invoking the review harness; pass diff/files inline, never as paths
+- [Worktree guard blocks eval + heredocs](worktree-guard-blocks-eval-and-heredocs.md) — refuses the literal `eval` (incl. `yq eval`), python heredocs, poll loops; re-spell, don't conclude the tool is unavailable
 - [Cron legs need a boot env snapshot](cron-legs-need-boot-env-snapshot.md) — periodic leg of a startup script sees no container env; snapshot absence disables it; parse that file, never source it (#794)
 - [Skips render as passes](skips-render-as-passes.md) — interpreter-gated tests skipped silently in CI for months; fail-in-CI/skip-locally, and osv-scanner needs explicit --config (#768/#764)
 - [Stale repo-local git identity](stale-repo-local-git-identity.md) — `.git/config` `t <t@t.t>` shadows the 1Password global identity; `git config --local --unset user.name/email`
