@@ -186,6 +186,91 @@ test_worktree_ignorecase_aligned() {
         "core.ignorecase should be aligned with a linked worktree present"
 }
 
+# Add a worktree at an absolute path OUTSIDE the project root, with a tracked
+# symlink. `git worktree add` can place one anywhere, not just under
+# .worktrees/ — that entry has no useful relative form and exercises the
+# absolute-label branch every in-tree fixture skips.
+# Args: $1 = absolute path for the worktree
+seed_outside_worktree() {
+    local outside="$1"
+
+    if ! git -C "$PROJECT_ROOT" rev-parse HEAD >/dev/null 2>&1; then
+        echo "base" >"$PROJECT_ROOT/base.txt"
+        git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
+        git -C "$PROJECT_ROOT" commit -qm "base commit" >/dev/null 2>&1
+    fi
+
+    git -C "$PROJECT_ROOT" worktree add -q -b wt-outside "$outside" >/dev/null 2>&1
+
+    echo "wt content" >"$outside/CLAUDE.md"
+    command ln -s CLAUDE.md "$outside/AGENTS.md"
+    git -C "$outside" add -A >/dev/null 2>&1
+    git -C "$outside" commit -qm "seed outside worktree" >/dev/null 2>&1
+}
+
+test_worktree_outside_project_root_uses_absolute_label() {
+    # The absolute-label else-branch: a worktree outside the project root keeps
+    # its full path in the log line.
+    local outside="$TEST_TEMP_DIR/outside-wt"
+    seed_outside_worktree "$outside"
+
+    stub_stat "0 7"
+
+    local output
+    output=$(run_fs_health_stderr sensitive)
+
+    assert_contains "$output" "${outside}/AGENTS.md" \
+        "A worktree outside the project root should be labeled by absolute path"
+    assert_equals "CLAUDE.md" "$(command readlink "$outside/AGENTS.md")" \
+        "Its symlink target must be preserved"
+}
+
+test_outside_worktree_does_not_write_shared_config() {
+    # An out-of-tree worktree can sit on a DIFFERENT mount, so the project's
+    # case-sensitivity verdict does not describe it — unlike a submodule, which
+    # is inside the project's worktree by construction.
+    #
+    # But core.ignorecase is NOT per-worktree: every worktree shares the single
+    # .git/config, so there is no "align just this one" to perform. Writing it
+    # from an out-of-tree worktree's pass would rewrite the setting for the
+    # superproject and every sibling. The pass must therefore leave the config
+    # alone and let the project's own mount stay the authority — while still
+    # doing the symlink repair, which IS per-worktree.
+    local outside="$TEST_TEMP_DIR/outside-wt"
+    seed_outside_worktree "$outside"
+    git -C "$PROJECT_ROOT" config --unset core.ignorecase 2>/dev/null || true
+
+    stub_stat "0 7"
+
+    # insensitive: the superproject's own alignment SHOULD happen, so this pins
+    # that the suppression is scoped to the worktree pass and does not disable
+    # the repair the script exists to do.
+    local output
+    output=$(run_fs_health_stderr insensitive)
+
+    assert_equals "true" "$(get_ignorecase)" \
+        "The superproject's own core.ignorecase must still be aligned"
+    assert_contains "$output" "${outside}/AGENTS.md" \
+        "The out-of-tree worktree's symlink repair must still run"
+    assert_not_contains "$output" "$outside is on a case-insensitive mount" \
+        "The out-of-tree worktree must not report a case-sensitivity verdict of its own"
+}
+
+test_outside_worktree_never_flips_shared_config() {
+    # The inverse, and the one that would actually corrupt state: with the
+    # PROJECT itself on a case-sensitive mount, the out-of-tree worktree's pass
+    # must not set core.ignorecase=true on the shared config.
+    local outside="$TEST_TEMP_DIR/outside-wt"
+    seed_outside_worktree "$outside"
+    git -C "$PROJECT_ROOT" config --unset core.ignorecase 2>/dev/null || true
+
+    stub_stat "0 7"
+    run_fs_health sensitive >/dev/null
+
+    assert_equals "unset" "$(get_ignorecase)" \
+        "An out-of-tree worktree must never write the repo's shared core.ignorecase"
+}
+
 # ============================================================================
 # Anti-recursion gate
 # ============================================================================
@@ -302,6 +387,9 @@ run_test_with_setup test_multiple_worktrees_all_reached "Every linked worktree i
 run_test_with_setup test_superproject_still_repaired_alongside "Superproject still repaired alongside worktrees"
 run_test_with_setup test_healthy_worktree_leaves_tree_clean "Healthy worktree leaves tree clean"
 run_test_with_setup test_worktree_ignorecase_aligned "core.ignorecase aligned with a worktree present"
+run_test_with_setup test_worktree_outside_project_root_uses_absolute_label "Worktree outside the project root uses an absolute label"
+run_test_with_setup test_outside_worktree_does_not_write_shared_config "Out-of-tree worktree does not claim a case verdict"
+run_test_with_setup test_outside_worktree_never_flips_shared_config "Out-of-tree worktree never writes shared core.ignorecase"
 run_test_with_setup test_run_from_worktree_does_not_enumerate_siblings "Running from a worktree does not enumerate siblings"
 run_test_with_setup test_deleted_worktree_dir_is_silent "Pruned-but-registered worktree is silent and non-fatal"
 run_test_with_setup test_no_worktrees_is_silent "Project with no linked worktrees is silent"

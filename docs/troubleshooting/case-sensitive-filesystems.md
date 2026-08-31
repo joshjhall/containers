@@ -156,6 +156,16 @@ registered worktree whose directory has been deleted but not pruned is skipped
 silently, like an uninitialized submodule. Each worktree's own submodules are
 walked as usual.
 
+A worktree created **outside** the project root (`git worktree add` accepts any
+path) gets the symlink repair but never a `core.ignorecase` decision. Unlike a
+submodule, such a worktree can sit on a different mount, so the project's
+case-sensitivity verdict is not evidence about it — and `core.ignorecase` is not
+per-worktree: every worktree shares the repository's single `.git/config`, so
+there is no "align just this one" to perform. Writing it from an out-of-tree
+worktree would silently change the setting for the main checkout and every
+sibling, so the project's own mount stays the sole authority. The symlink
+repair, which really is per-worktree, still runs.
+
 A worktree created hours into container uptime is picked up by the **hourly
 cron leg** below, which re-runs the same scan against the same project root.
 

@@ -392,7 +392,7 @@ repair_repo_tree() {
 # new branches: SKIP_CASE_CHECK exited long before this point, and SKIP_CASE_FIX
 # is read inside the same shared FIX_ENABLED the other roots use.
 repair_linked_worktrees() {
-    local main_toplevel wt rel label
+    local main_toplevel wt rel label saved_state
 
     # ONLY enumerate from the main worktree. `git worktree list` is repo-GLOBAL:
     # asked from inside a linked worktree it returns the whole set, including
@@ -437,7 +437,37 @@ repair_linked_worktrees() {
             label="${rel}/"
         fi
 
-        repair_repo_tree "$wt" "$label" 0
+        # A worktree INSIDE the project root is on the project's mount by
+        # construction, exactly like a submodule, so the verdict detected once at
+        # startup describes it and its core.ignorecase is aligned normally.
+        #
+        # A worktree OUTSIDE it carries no such guarantee: `git worktree add
+        # /some/other/volume/wt` can put it on a filesystem whose
+        # case-sensitivity differs. The startup verdict is then evidence about
+        # somewhere else — and, crucially, core.ignorecase is NOT per-worktree:
+        # every worktree shares the repository's single .git/config, so
+        # "aligning" one from a foreign mount's verdict would silently rewrite
+        # the setting for the superproject and every sibling. Re-detecting per
+        # root does not help for the same reason — there is still only one value
+        # to write, and letting the outsider win is strictly worse than leaving
+        # the project's own mount in charge.
+        #
+        # So an out-of-tree worktree gets the SYMLINK repair — which is genuinely
+        # per-worktree, and is the actual subject of #882 — with the case verdict
+        # downgraded to `unknown`, the existing value that makes check_ignorecase
+        # return without writing.
+        #
+        # Save/restore around the call rather than an assignment prefix: a prefix
+        # on a shell FUNCTION has scoping that differs between bash modes, so
+        # leaking the downgraded verdict into later roots is a real risk.
+        if [ "$rel" != "$wt" ]; then
+            repair_repo_tree "$wt" "$label" 0
+        else
+            saved_state="$FS_CASE_STATE"
+            FS_CASE_STATE=unknown
+            repair_repo_tree "$wt" "$label" 0
+            FS_CASE_STATE="$saved_state"
+        fi
     done < <(git -C "$PROJECT_ROOT" worktree list --porcelain 2>/dev/null |
         /usr/bin/awk '/^worktree / { print substr($0, 10) }')
 
