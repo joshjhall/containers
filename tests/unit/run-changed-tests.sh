@@ -177,16 +177,18 @@ test_runtime_mapping_emits_all_siblings() {
     out=$(map_to_test "lib/runtime/42-workspace-fs-health.sh")
 
     # Pin every known sibling by NAME, not a loose count. A bare `count > 1`
-    # would stay green if the glob silently dropped one of the three, which is
+    # would stay green if the glob silently dropped one of the four, which is
     # the same "coverage narrows and nobody notices" failure this arm exists to
-    # prevent. Three suites cover this script today: the split pair (#832) plus
-    # the pre-existing cron-entry suite.
+    # prevent. Four suites cover this script today: the split pair (#832), the
+    # pre-existing cron-entry suite, and the worktree suite (#882).
     assert_contains "$out" "workspace-fs-health.sh" \
         "the exact-match suite must be included"
     assert_contains "$out" "workspace-fs-health-submodules.sh" \
         "split sibling suite must be included, not just the first glob match"
     assert_contains "$out" "workspace-fs-health-cron-entry.sh" \
         "pre-existing cron-entry sibling must be included"
+    assert_contains "$out" "workspace-fs-health-worktrees.sh" \
+        "linked-worktree sibling suite must be included (#882)"
 
     # Every emitted path must be a real file — a stale glob would otherwise
     # feed a nonexistent path to the runner.
@@ -197,8 +199,8 @@ test_runtime_mapping_emits_all_siblings() {
         assert_file_exists "$path" "mapped test path must exist: $path"
     done <<<"$out"
 
-    assert_equals "3" "$count" \
-        "exactly the three known workspace-fs-health suites must be mapped"
+    assert_equals "4" "$count" \
+        "exactly the four known workspace-fs-health suites must be mapped"
 }
 
 test_runtime_mapping_keeps_prefixed_suites() {
