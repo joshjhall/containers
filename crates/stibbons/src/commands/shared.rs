@@ -144,6 +144,52 @@ mod tests {
         assert_eq!(join_or_none(&["a".to_string(), "b".to_string()]), "a, b");
     }
 
+    /// The wording of the uninitialized-project error is the user-facing
+    /// contract: it is what tells a first-time user which command to run.
+    #[test]
+    fn load_project_config_errors_when_no_igor_yml_present() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let err = with_cwd(tmp.path(), load_project_config).unwrap_err();
+
+        assert_eq!(err.to_string(), "no .igor.yml found; run `stibbons init` first");
+    }
+
+    #[test]
+    fn load_project_config_parses_a_present_igor_yml() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join(".igor.yml"), "project:\n  name: demo\n").unwrap();
+
+        let cfg = with_cwd(tmp.path(), load_project_config).unwrap();
+
+        assert_eq!(cfg.project.name, "demo", "the file should be parsed, not merely detected");
+    }
+
+    /// A malformed file must surface `IgorConfig::load`'s parse error rather
+    /// than being reported as an uninitialized project.
+    #[test]
+    fn load_project_config_surfaces_parse_errors() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join(".igor.yml"), "project: [unclosed\n").unwrap();
+
+        let err = with_cwd(tmp.path(), load_project_config).unwrap_err();
+
+        // Pin the message to the one `IgorConfig::load` produces for the same
+        // bytes. A bare "not the missing-file message" check would also pass if
+        // the parse error were swapped for some other generic failure.
+        let direct = IgorConfig::load(tmp.path().join(".igor.yml")).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            direct.to_string(),
+            "the parse error should be propagated verbatim from IgorConfig::load"
+        );
+        assert_ne!(
+            err.to_string(),
+            "no .igor.yml found; run `stibbons init` first",
+            "a present-but-invalid file is a parse failure, not a missing file"
+        );
+    }
+
     /// Creates `<root>/<dir>/Dockerfile`.
     fn seed_dockerfile(root: &Path, dir: &str) {
         let target = root.join(dir);
