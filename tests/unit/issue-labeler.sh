@@ -177,6 +177,11 @@ low — Minor inconvenience
 
 small — A couple of files'
 
+# Same, but with the Effort dropdown left unselected entirely.
+PARTIAL_FORM_BODY='### Severity
+
+low — Minor inconvenience'
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -239,6 +244,35 @@ test_half_labeled_is_flagged() {
     calls=$(run_script "$SCRATCH/script.js" "Plain prose body." "severity/low")
     assert_called "$calls" "addLabels needs-triage" \
         "issue with severity but no effort was not flagged"
+}
+
+# The restructure made the addLabels(toAdd) block and the hasSeverity/hasEffort
+# gate sequential rather than mutually exclusive, so a run can now both apply a
+# label and flag for triage. That combination is only reachable when the body
+# supplies one heading and the issue carries no label for the other namespace —
+# a state the other cases never produce (they leave toAdd empty).
+test_partial_form_body_labels_and_flags() {
+    local calls
+    calls=$(run_script "$SCRATCH/script.js" "$PARTIAL_FORM_BODY" "")
+    assert_called "$calls" "addLabels severity/low" \
+        "form-parsed severity label was not applied on a partial body"
+    assert_called "$calls" "addLabels needs-triage" \
+        "partially-labeled issue was not flagged — effort is still missing"
+    assert_not_called "$calls" "removeLabel needs-triage" \
+        "triage flag was cleared for an issue that is still missing effort"
+}
+
+# The converse of test_half_labeled_is_flagged: an already-flagged half-labeled
+# issue must KEEP the flag. Guards the hasSeverity && hasEffort gate against
+# being loosened to an OR, which would clear a flag that is still correct.
+test_half_labeled_keeps_existing_flag() {
+    local calls
+    calls=$(run_script "$SCRATCH/script.js" "Plain prose body." \
+        "severity/low,needs-triage")
+    assert_not_called "$calls" "removeLabel needs-triage" \
+        "needs-triage was cleared from an issue still missing an effort label"
+    assert_not_called "$calls" "addLabels needs-triage" \
+        "needs-triage was re-added to an issue that already carries it"
 }
 
 # Idempotency: the nudge is guarded by a hidden marker, so a re-run on an
@@ -325,6 +359,10 @@ run_test test_form_body_still_labeled \
     "form-body issue still gets severity/effort labels applied"
 run_test test_half_labeled_is_flagged \
     "half-labeled issue (severity only) is flagged"
+run_test test_partial_form_body_labels_and_flags \
+    "partial form body applies its label and still flags for triage"
+run_test test_half_labeled_keeps_existing_flag \
+    "half-labeled issue keeps an existing needs-triage flag"
 run_test test_nudge_not_reposted \
     "nudge comment is not re-posted when already present"
 run_test test_check_is_non_vacuous \
