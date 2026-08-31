@@ -49,8 +49,13 @@ test_suite "test framework does not gate Docker-free suites on Docker (#831)"
 # only `docker`, and point the child at that single dir. The environment is
 # otherwise identical to the parent's — just one binary short.
 # ---------------------------------------------------------------------------
+# Takes an optional mirror subdir name, so a caller can build a SECOND,
+# independent mirror. That separation matters: the daemon-down test below plants
+# a `docker` shim into its own mirror, and doing that in the shared one would
+# make `command -v docker` succeed there — silently breaking every test above
+# that depends on this mirror being docker-free.
 make_docker_free_bin() {
-    local mirror="$TEST_SCRATCH_BASE/docker-free-bin"
+    local mirror="$TEST_SCRATCH_BASE/${1:-docker-free-bin}"
     /usr/bin/mkdir -p "$mirror"
 
     local dir entry name
@@ -78,6 +83,42 @@ make_docker_free_bin() {
 }
 
 DOCKER_FREE_PATH="$(make_docker_free_bin)"
+
+# ---------------------------------------------------------------------------
+# Build a PATH where `docker` EXISTS but its daemon is down — the second of
+# require_docker()'s two failure branches (#837).
+#
+# This is the shape #831 describes: the binary is installed (Docker Desktop
+# stopped, or a socket mounted but dead), so `command -v docker` succeeds and
+# only the `docker info` probe fails. Mirroring alone cannot produce it — a
+# docker-free PATH always exits down the FIRST branch — so this mirror gets a
+# real executable `docker` planted in it that fails specifically on `info`.
+#
+# It lives in its own mirror dir, never the shared one: a `docker` on
+# DOCKER_FREE_PATH would invalidate every absent-binary test above.
+# ---------------------------------------------------------------------------
+make_daemon_down_bin() {
+    local mirror
+    mirror="$(make_docker_free_bin docker-down-bin)"
+
+    # Fails on `info` (any subcommand chain containing it), succeeds otherwise,
+    # so `command -v docker` passes the first branch and the second one fires.
+    /usr/bin/cat >"$mirror/docker" <<'SHIM'
+#!/usr/bin/env bash
+for arg in "$@"; do
+    [ "$arg" = "info" ] && {
+        /usr/bin/echo "Cannot connect to the Docker daemon. Is the docker daemon running?" >&2
+        exit 1
+    }
+done
+exit 0
+SHIM
+    /usr/bin/chmod +x "$mirror/docker"
+
+    /usr/bin/printf '%s' "$mirror"
+}
+
+DAEMON_DOWN_PATH="$(make_daemon_down_bin)"
 
 # Run $body in a child shell with the framework sourced. The caller chooses the
 # PATH and whether SKIP_DOCKER_CHECK is exported. Paths travel through the
@@ -175,6 +216,44 @@ test_require_docker_fails_without_docker() {
         "require_docker must say why it failed"
 }
 
+# Sanity check for the daemon-down mirror, the mirror-image of the docker-free
+# one above: this PATH must RESOLVE docker and must fail `docker info`. Without
+# both halves the daemon-down test could pass for the wrong reason — exiting via
+# the missing-binary branch — and prove nothing about the branch under test.
+test_shim_path_resolves_docker_but_fails_info() {
+    local out
+    out=$(run_in_child "$DAEMON_DOWN_PATH" "" '
+        command -v docker >/dev/null 2>&1 \
+            && /usr/bin/echo "docker=present" \
+            || /usr/bin/echo "docker=absent"
+        docker info >/dev/null 2>&1 \
+            && /usr/bin/echo "info=ok" \
+            || /usr/bin/echo "info=failed"
+    ' 2>&1 || true)
+
+    assert_contains "$out" "docker=present" \
+        "the daemon-down PATH must resolve docker, or the daemon branch is never reached"
+    assert_contains "$out" "info=failed" \
+        "the shim must fail 'docker info', or there is no daemon-down condition to detect"
+}
+
+# The uncovered branch (#837): binary present, daemon down. A regression that
+# swallowed `docker info`'s exit code would pass every other test in this file.
+test_require_docker_fails_when_daemon_is_down() {
+    local out status
+    out=$(run_in_child "$DAEMON_DOWN_PATH" "" 'require_docker 2>&1' 2>&1) && status=0 || status=$?
+
+    assert_not_equals "0" "$status" \
+        "require_docker must fail when the docker daemon is not running"
+    # Asserted verbatim: the message is contract, checked by string elsewhere.
+    assert_contains "$out" "Docker daemon is not running" \
+        "require_docker must say the daemon is down"
+    # Proves WHICH branch fired — without this the test would pass on a host
+    # that simply has no docker at all.
+    assert_not_contains "$out" "Docker is not installed" \
+        "require_docker must take the daemon branch, not the missing-binary one"
+}
+
 # SKIP_DOCKER_CHECK is an init-time no-op and must NOT weaken require_docker —
 # otherwise the 7 suites that export it could silently skip a real gate.
 test_require_docker_ignores_skip_docker_check() {
@@ -217,6 +296,8 @@ run_test test_init_succeeds_without_docker_and_without_optout "init_test_framewo
 run_test test_init_does_not_emit_the_docker_error "init_test_framework does not probe Docker at all"
 run_test test_skip_docker_check_is_still_accepted "SKIP_DOCKER_CHECK=true remains accepted as a no-op"
 run_test test_require_docker_fails_without_docker "require_docker fails clearly when docker is absent"
+run_test test_shim_path_resolves_docker_but_fails_info "daemon-down PATH resolves docker but fails 'docker info'"
+run_test test_require_docker_fails_when_daemon_is_down "require_docker fails clearly when the daemon is down"
 run_test test_require_docker_ignores_skip_docker_check "require_docker ignores SKIP_DOCKER_CHECK"
 run_test test_integration_suites_call_require_docker "integration build suites self-gate on Docker"
 run_test test_no_unit_suite_calls_require_docker "no unit suite gates on Docker"
