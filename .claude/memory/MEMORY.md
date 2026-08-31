@@ -79,12 +79,12 @@
 - [npm-global tools tracked via check-versions](npm-global-tools-tracked-via-check-versions.md) — no dependabot; agnix & npm globals pin in dev-tools.sh + check_npm helper + auto-patch writeback (#769/PR#770)
 - [UBI arm64 mirror depsolve flake](ubi-arm64-mirror-depsolve-flake.md) — rhel-9-arm64 base build fails on transient microdnf glibc depsolve (partial UBI aarch64 mirror sync); retry `gh run rerun --failed`, don't pin/code-fix (v4.19.18)
 - [Case-insensitive mount shares inodes](case-insensitive-mount-shared-inode.md) — case-shadowed entries share an inode; `git clean -fd` deletes real source; fix via core.ignorecase
-- [Stale symlink attrs on virtiofs](stale-symlink-attrs-virtiofs.md) — nlink=0 symlinks read as permanently modified; relink with `ln -sfn` (not a bindfs bug)
+- [Stale symlink attrs on virtiofs](stale-symlink-attrs-virtiofs.md) — nlink=0 symlinks read as permanently modified; relink with `ln -sfn` (not a bindfs bug); hits every fresh worktree — fs-health doesn't reach those (#882)
 - [Cron legs need a boot env snapshot](cron-legs-need-boot-env-snapshot.md) — periodic leg of a startup script sees no container env; snapshot absence disables it; parse that file, never source it (#794)
 - [Skips render as passes](skips-render-as-passes.md) — interpreter-gated tests skipped silently in CI for months; fail-in-CI/skip-locally, and osv-scanner needs explicit --config (#768/#764)
 - [Stale repo-local git identity](stale-repo-local-git-identity.md) — `.git/config` `t <t@t.t>` shadows the 1Password global identity; `git config --local --unset user.name/email`
 - [Fetch before releasing](fetch-before-release-bot-owns-main.md) — auto-patch bot pushes releases+tags to main on a schedule; always `git fetch --tags` before branching or `just release-*` or you cut against a taken tag
-- [worktree-rm blocked by held build artifacts](worktree-rm-blocked-by-held-build-artifacts.md) — deregistered worktree reads as "dirty"; cargo .o files resist rm (EBADF); gh merge --delete-branch skips the remote prune
+- [worktree-rm blocked by held build artifacts](worktree-rm-blocked-by-held-build-artifacts.md) — deregistered worktree reads as "dirty"; cargo artifacts resist rm because rust-analyzer holds them open — `lsof +D` finds it, don't wait for a restart; gh merge --delete-branch skips the remote prune
 - [Cross-repo schema required-flip](cross-repo-schema-required-flip.md) — a REQUIRED catalog field needs 3 PRs (optional→consume→required); backfill _negative/ too, and prove the flip bites (#805)
 - [logger without a syslog daemon](logger-without-syslog-daemon.md) — no /dev/log in these images; `logger` discards and exits 0 — use a log file for cron output
 - [cron user column is build-time](cron-user-column-is-build-time.md) — run cron jobs as root + resolve the container user at run time; baked ${USERNAME} fails silently (#800)

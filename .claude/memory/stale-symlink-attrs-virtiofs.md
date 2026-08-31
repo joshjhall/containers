@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 1d2ee9f2-91fb-4c3e-86fa-a0de57fbb891
-  modified: 2026-08-18T21:11:17.779Z
+  modified: 2026-08-31T19:00:38.977Z
 ---
 
 Long-lived symlinks on a virtiofs bind mount can end up with cached attributes
@@ -31,10 +31,16 @@ that directory. Enumerate candidates cheaply with
 Automated at startup by `lib/runtime/42-workspace-fs-health.sh`.
 Related: [[case-insensitive-mount-shared-inode]].
 
-**Also appears in fresh worktrees.** `worktree-new.sh` can produce a worktree
-whose repo-root symlinks (`AGENTS.md` → `CLAUDE.md`, `.codegraph` →
-`/cache/codegraph`) are already stale, so they surface as *deletions* in
-`git diff`/`git diff --stat` before you have touched anything. Seen on #830.
+**Also appears in fresh worktrees — and the startup automation above does NOT
+cover them.** `worktree-new.sh` can produce a worktree whose repo-root symlinks
+(`AGENTS.md` → `CLAUDE.md`, `.codegraph` → `/cache/codegraph`) are already
+stale, so they surface as *deletions* in `git diff`/`git diff --stat` before you
+have touched anything. Seen on #830, again on #871 — expect it on **every**
+golem run, not occasionally.
+
+`42-workspace-fs-health.sh` scans `PROJECT_ROOT` plus its submodules; a linked
+worktree is neither, and #828's proposed fix caps discovery at depth 1 of
+`/workspace` while worktrees sit at depth 3. Filed as #882.
 
 **How to apply:** run `git diff --stat` before staging in a new worktree, and
 treat symlink deletions you did not make as this bug, not as your change.
