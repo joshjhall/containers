@@ -208,6 +208,69 @@ seed_outside_worktree() {
     git -C "$outside" commit -qm "seed outside worktree" >/dev/null 2>&1
 }
 
+test_worktree_path_with_spaces_is_reached() {
+    # The porcelain parse cuts after the first space rather than splitting on
+    # whitespace, specifically so a path containing spaces survives. Without a
+    # fixture that has one, a later "simplification" to `awk '{print $2}'` would
+    # truncate such paths and still pass the whole suite.
+    # Built inline rather than via add_worktree: that helper derives the branch
+    # name from the path, and git rejects a branch name containing spaces. The
+    # PATH is what is under test here, so the branch gets a separate valid name.
+    local wt="$PROJECT_ROOT/.worktrees/issue 882 with spaces"
+
+    echo "base" >"$PROJECT_ROOT/base.txt"
+    git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
+    git -C "$PROJECT_ROOT" commit -qm "base commit" >/dev/null 2>&1
+    git -C "$PROJECT_ROOT" worktree add -q -b wt-spaced "$wt" >/dev/null 2>&1
+
+    echo "wt content" >"$wt/CLAUDE.md"
+    command ln -s CLAUDE.md "$wt/AGENTS.md"
+    git -C "$wt" add -A >/dev/null 2>&1
+    git -C "$wt" commit -qm "seed spaced worktree" >/dev/null 2>&1
+
+    stub_stat "0 7"
+
+    local output
+    output=$(run_fs_health_stderr sensitive)
+
+    assert_contains "$output" ".worktrees/issue 882 with spaces/AGENTS.md" \
+        "A worktree path containing spaces must survive the porcelain parse"
+    assert_equals "CLAUDE.md" "$(command readlink "$wt/AGENTS.md")" \
+        "Its symlink target must be preserved"
+}
+
+test_submodule_inside_worktree_reached() {
+    # Both the script comment and the docs claim a worktree's own submodules are
+    # walked (it is handed to repair_repo_tree at depth 0). Pin that end to end,
+    # rather than trusting the claim.
+    local wt sub_origin
+    wt=$(add_worktree ".worktrees/issue-882")
+
+    sub_origin="$TEST_TEMP_DIR/origin-wt-sub"
+    command mkdir -p "$sub_origin"
+    git -C "$sub_origin" init -q .
+    git -C "$sub_origin" config user.email "test@example.com"
+    git -C "$sub_origin" config user.name "Test User"
+    echo "sub content" >"$sub_origin/CLAUDE.md"
+    command ln -s CLAUDE.md "$sub_origin/AGENTS.md"
+    git -C "$sub_origin" add -A >/dev/null 2>&1
+    git -C "$sub_origin" commit -qm "seed wt submodule" >/dev/null 2>&1
+
+    git -C "$wt" -c protocol.file.allow=always \
+        submodule add -q "$sub_origin" "vendor" >/dev/null 2>&1
+    git -C "$wt" commit -qm "add submodule" >/dev/null 2>&1
+
+    stub_stat "0 7"
+
+    local output
+    output=$(run_fs_health_stderr sensitive)
+
+    assert_contains "$output" ".worktrees/issue-882/vendor/AGENTS.md" \
+        "A submodule INSIDE a linked worktree should be walked and labeled by full path"
+    assert_equals "CLAUDE.md" "$(command readlink "$wt/vendor/AGENTS.md")" \
+        "The nested submodule's symlink target must be preserved"
+}
+
 test_worktree_outside_project_root_uses_absolute_label() {
     # The absolute-label else-branch: a worktree outside the project root keeps
     # its full path in the log line.
@@ -387,6 +450,8 @@ run_test_with_setup test_multiple_worktrees_all_reached "Every linked worktree i
 run_test_with_setup test_superproject_still_repaired_alongside "Superproject still repaired alongside worktrees"
 run_test_with_setup test_healthy_worktree_leaves_tree_clean "Healthy worktree leaves tree clean"
 run_test_with_setup test_worktree_ignorecase_aligned "core.ignorecase aligned with a worktree present"
+run_test_with_setup test_worktree_path_with_spaces_is_reached "Worktree path containing spaces is reached"
+run_test_with_setup test_submodule_inside_worktree_reached "Submodule inside a linked worktree is walked"
 run_test_with_setup test_worktree_outside_project_root_uses_absolute_label "Worktree outside the project root uses an absolute label"
 run_test_with_setup test_outside_worktree_does_not_write_shared_config "Out-of-tree worktree does not claim a case verdict"
 run_test_with_setup test_outside_worktree_never_flips_shared_config "Out-of-tree worktree never writes shared core.ignorecase"

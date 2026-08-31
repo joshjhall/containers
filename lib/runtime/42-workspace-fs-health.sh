@@ -403,22 +403,54 @@ repair_linked_worktrees() {
     #
     # `--git-dir` != `--git-common-dir` is the repo-standard linked-worktree
     # idiom (the golem nesting guard uses the same comparison).
+    #
+    # Both sides are resolved with `cd ... && pwd -P` rather than
+    # `rev-parse --path-format=absolute`, for two independent reasons:
+    #
+    #   1. PORTABILITY. --path-format arrived in git 2.31, but Debian 11
+    #      (Bullseye) — a supported base image — ships 2.30.2. There the flag is
+    #      unrecognized, rev-parse errors, the `|| return 0` fires, and this
+    #      whole function silently no-ops. It is designed to fail silent-and-safe,
+    #      so that regression would surface as nothing at all: the #882 repair
+    #      simply never running on one of the supported distros.
+    #
+    #   2. NORMALIZATION. --git-common-dir can come back relative, and `pwd -P`
+    #      resolves symlinks on both sides — so a PROJECT_ROOT reached through a
+    #      symlinked path component (exactly the environment this script exists
+    #      for) cannot produce a false mismatch between the two forms.
     local git_dir common_dir
-    git_dir=$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null) || return 0
-    common_dir=$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute \
-        --git-common-dir 2>/dev/null) || return 0
+    git_dir=$(git -C "$PROJECT_ROOT" rev-parse --git-dir 2>/dev/null) || return 0
+    common_dir=$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null) || return 0
+
+    # Relative outputs are relative to PROJECT_ROOT, so resolve from there.
+    git_dir=$(cd "$PROJECT_ROOT" 2>/dev/null && cd "$git_dir" 2>/dev/null && pwd -P) || return 0
+    common_dir=$(cd "$PROJECT_ROOT" 2>/dev/null && cd "$common_dir" 2>/dev/null && pwd -P) || return 0
     [ "$git_dir" = "$common_dir" ] || return 0
 
     # Resolve the main worktree's own path so its entry can be skipped below.
     # git lists it first, but keying off position would be fragile; comparing
     # paths is not.
+    #
+    # `pwd -P` for the same normalization reason as above: `--show-toplevel` and
+    # the path recorded by `worktree list` need not be byte-identical when
+    # PROJECT_ROOT sits behind a symlink. A false mismatch here is not fatal —
+    # the main root would simply be walked a second time, mislabeled with an
+    # absolute path — but it is a confusing duplicate diagnostic for the very
+    # root the run already covered, so both sides are resolved the same way.
     main_toplevel=$(git -C "$PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null) || return 0
+    main_toplevel=$(cd "$main_toplevel" 2>/dev/null && pwd -P) || return 0
 
     # `worktree list --porcelain` emits stanzas whose first line is
     # "worktree <path>". Cut after the first space rather than splitting on
     # whitespace, so a path containing spaces survives intact.
     while IFS= read -r wt; do
         [ -n "$wt" ] || continue
+
+        # Canonicalize the listed path too, so the skip below compares like with
+        # like. A path that cannot be entered (deleted worktree) keeps its
+        # original form and is dropped by the .git check just after.
+        wt=$(cd "$wt" 2>/dev/null && pwd -P) || wt="$wt"
+
         [ "$wt" != "$main_toplevel" ] || continue
 
         # No .git means nothing to repair here: a worktree whose directory was
