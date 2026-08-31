@@ -174,6 +174,15 @@ mod tests {
 
         let err = with_cwd(tmp.path(), load_project_config).unwrap_err();
 
+        // Pin the message to the one `IgorConfig::load` produces for the same
+        // bytes. A bare "not the missing-file message" check would also pass if
+        // the parse error were swapped for some other generic failure.
+        let direct = IgorConfig::load(tmp.path().join(".igor.yml")).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            direct.to_string(),
+            "the parse error should be propagated verbatim from IgorConfig::load"
+        );
         assert_ne!(
             err.to_string(),
             "no .igor.yml found; run `stibbons init` first",
