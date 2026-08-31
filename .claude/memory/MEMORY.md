@@ -96,3 +96,4 @@
 - [tests/results/ is on an incoherent FUSE mount](results-dir-fuse-incoherent.md) — writes succeed, report success, then aren't readable; the real cause of the #821 flake class (#818)
 - [Rebase before blaming your own change](rebase-before-blaming-your-change.md) — a CI failure in files your branch never touched usually means main moved; check origin/main first
 - [FUSE scratch breaks write-then-read](fuse-scratch-breaks-write-then-read.md) — test scratch on the FUSE-mounted repo loses coherency ~0.75%/op; use TEST_SCRATCH_BASE, not RESULTS_DIR (#821)
+- [clap `env` attr breaks bool flags](clap-env-attr-breaks-bool-flags.md) — `#[arg(env=...)]` on a bool makes it value-taking; bare switch fails and a set-but-empty var kills every invocation (#810)

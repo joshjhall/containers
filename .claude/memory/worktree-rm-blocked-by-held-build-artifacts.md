@@ -43,3 +43,18 @@ worktree: the merge succeeds server-side but the local branch-switch dies on
 branch is never pruned**. Confirm with `gh pr view <N> --json state` and delete
 the ref explicitly (`gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>`)
 rather than assuming the flag ran. Related: [[git-env-leak-breaks-worktree-tests]].
+
+**Squash-merge adds a third symptom** (observed 2026-08-27, PR #859). After a
+squash merge, `git branch -d feature/issue-N` refuses with "not fully merged":
+the branch tip is not an ancestor of the squash commit, by construction. That
+warning carries no information after a squash — confirm the content actually
+landed with `git diff --stat feature/issue-N origin/main -- <changed-paths>`
+(empty = identical), then use `-D`. Also note `gh pr merge --delete-branch`
+aborts the *remote* prune when the local delete fails, so the remote branch
+survives; delete it with `git push origin --delete` (add `--no-verify` — the
+pre-push hooks run on a deletion, where they are meaningless, and can block it).
+
+**When EBADF persists with no holder:** if the `/proc/*/cwd` scan finds nothing
+and `rm -rf` still reports EBADF, check `du -sh` — a 0-byte residue is empty
+directory scaffolding over inodes FUSE has already unlinked. Nothing is
+reclaimable and it clears on the next container restart; don't keep retrying.

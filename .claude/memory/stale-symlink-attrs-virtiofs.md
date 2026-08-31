@@ -30,3 +30,13 @@ that directory. Enumerate candidates cheaply with
 
 Automated at startup by `lib/runtime/42-workspace-fs-health.sh`.
 Related: [[case-insensitive-mount-shared-inode]].
+
+**Also appears in fresh worktrees.** `worktree-new.sh` can produce a worktree
+whose repo-root symlinks (`AGENTS.md` → `CLAUDE.md`, `.codegraph` →
+`/cache/codegraph`) are already stale, so they surface as *deletions* in
+`git diff`/`git diff --stat` before you have touched anything. Seen on #830.
+
+**How to apply:** run `git diff --stat` before staging in a new worktree, and
+treat symlink deletions you did not make as this bug, not as your change.
+`git checkout -- <paths>` restores them. Worth catching early: left unnoticed
+they ride along into the commit as spurious symlink removals.
