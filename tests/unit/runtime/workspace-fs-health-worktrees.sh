@@ -397,6 +397,40 @@ test_deleted_worktree_dir_is_silent() {
         "A pruned-but-registered worktree should produce no output"
 }
 
+test_uncanonicalizable_path_keeps_its_own_form() {
+    # The canonicalization fallback must restore the LISTED path when the
+    # directory cannot be entered, not an empty string.
+    #
+    # `wt=$(...) || wt="$wt"` looks like it does that but does not: bash assigns
+    # before evaluating `||`, so $wt is already empty by the time the fallback
+    # runs. That spelling still *behaved* here — the next check became
+    # `[ -e "/.git" ]`, false, so the entry was dropped anyway — which is
+    # exactly why it needs pinning rather than trusting the observable.
+    #
+    # Asserted by making the empty-path branch distinguishable: a real /.git on
+    # this host would make the buggy form descend into the filesystem root. It
+    # cannot be created in a test, so assert the honest, always-true property
+    # instead — a deleted worktree stays silent and non-fatal, and no log line
+    # ever names a root-anchored path.
+    local wt
+    wt=$(add_worktree ".worktrees/issue-882")
+    add_worktree ".worktrees/issue-200" >/dev/null
+    command rm -rf "$wt"
+    stub_stat "0 7"
+
+    local output status=0
+    output=$(run_fs_health_stderr sensitive) || status=$?
+
+    assert_equals "0" "$status" \
+        "An unenterable worktree path must never make the run fail"
+    assert_not_contains "$output" "/.git" \
+        "The fallback must never leave a root-anchored path in play"
+    assert_not_contains "$output" "issue-882/AGENTS.md" \
+        "The deleted worktree must be dropped, not repaired"
+    assert_contains "$output" "refreshed .worktrees/issue-200/AGENTS.md" \
+        "A sibling worktree must still be repaired in the same pass"
+}
+
 test_no_worktrees_is_silent() {
     # The overwhelmingly common case: a project with no linked worktrees at all
     # must be unchanged by this pass.
@@ -473,6 +507,7 @@ run_test_with_setup test_outside_worktree_does_not_write_shared_config "Out-of-t
 run_test_with_setup test_outside_worktree_never_flips_shared_config "Out-of-tree worktree never writes shared core.ignorecase"
 run_test_with_setup test_run_from_worktree_does_not_enumerate_siblings "Running from a worktree does not enumerate siblings"
 run_test_with_setup test_deleted_worktree_dir_is_silent "Pruned-but-registered worktree is silent and non-fatal"
+run_test_with_setup test_uncanonicalizable_path_keeps_its_own_form "Unenterable worktree path is dropped safely"
 run_test_with_setup test_no_worktrees_is_silent "Project with no linked worktrees is silent"
 run_test_with_setup test_skip_fix_reports_worktree_without_writing "SKIP_CASE_FIX reports worktree without writing"
 run_test_with_setup test_skip_check_does_nothing_with_worktree "SKIP_CASE_CHECK skips the worktree pass"

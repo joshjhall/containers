@@ -392,7 +392,7 @@ repair_repo_tree() {
 # new branches: SKIP_CASE_CHECK exited long before this point, and SKIP_CASE_FIX
 # is read inside the same shared FIX_ENABLED the other roots use.
 repair_linked_worktrees() {
-    local main_toplevel wt rel label saved_state
+    local main_toplevel wt wt_listed rel label saved_state
 
     # ONLY enumerate from the main worktree. `git worktree list` is repo-GLOBAL:
     # asked from inside a linked worktree it returns the whole set, including
@@ -449,7 +449,15 @@ repair_linked_worktrees() {
         # Canonicalize the listed path too, so the skip below compares like with
         # like. A path that cannot be entered (deleted worktree) keeps its
         # original form and is dropped by the .git check just after.
-        wt=$(cd "$wt" 2>/dev/null && pwd -P) || wt="$wt"
+        #
+        # The original is saved FIRST because `wt=$(...) || wt="$wt"` does not
+        # work: bash performs the assignment before evaluating `||`, so on
+        # failure $wt is already the empty string and the fallback restores
+        # nothing. That spelling happens to behave here — `[ -e "/.git" ]` is
+        # false, so the entry is still dropped — but only by luck, and the bug
+        # would bite anywhere the empty path resolved to something real.
+        wt_listed="$wt"
+        wt=$(cd "$wt_listed" 2>/dev/null && pwd -P) || wt="$wt_listed"
 
         [ "$wt" != "$main_toplevel" ] || continue
 
