@@ -73,14 +73,14 @@ add_worktree() {
 
     # A worktree cannot be added from a repo with no commits.
     if ! git -C "$PROJECT_ROOT" rev-parse HEAD >/dev/null 2>&1; then
-        echo "base" >"$PROJECT_ROOT/base.txt"
+        command echo "base" >"$PROJECT_ROOT/base.txt"
         git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
         git -C "$PROJECT_ROOT" commit -qm "base commit" >/dev/null 2>&1
     fi
 
     git -C "$PROJECT_ROOT" worktree add -q -b "$branch" "$wt" >/dev/null 2>&1
 
-    echo "wt content" >"$wt/CLAUDE.md"
+    command echo "wt content" >"$wt/CLAUDE.md"
     command ln -s CLAUDE.md "$wt/AGENTS.md"
     git -C "$wt" add -A >/dev/null 2>&1
     git -C "$wt" commit -qm "seed worktree symlink" >/dev/null 2>&1
@@ -172,18 +172,34 @@ test_healthy_worktree_leaves_tree_clean() {
         "The worktree should stay clean after a no-op pass"
 }
 
-test_worktree_ignorecase_aligned() {
-    # Worktrees SHARE .git/config, so this write is the same one the main root
-    # makes. Asserted anyway because the alignment must hold when reached
-    # through the worktree root, and the shared config is what makes the repeat
-    # idempotent and silent rather than a second report.
+test_worktree_ignorecase_reported_once() {
+    # core.ignorecase is SHARED repo-wide config, and the superproject's own
+    # repair runs first — so by the time the worktree root is reached the value
+    # is already correct. A bare `assert_equals true "$(get_ignorecase)"` would
+    # therefore pass whether the worktree pass ran, was skipped, or was broken:
+    # it re-confirms what the superproject suite already covers.
+    #
+    # What IS observable, and what actually matters, is that the second visit
+    # takes check_ignorecase's "already correct — say nothing" branch. So assert
+    # on the REPORT: exactly one "case-insensitive mount" line for the whole run.
+    # A worktree pass that re-reported (or, worse, re-wrote) the shared config
+    # would emit a second line naming the worktree root, and that is the noise a
+    # user would actually see.
     add_worktree ".worktrees/issue-882" >/dev/null
     git -C "$PROJECT_ROOT" config --unset core.ignorecase 2>/dev/null || true
 
-    run_fs_health insensitive
+    local output mount_lines
+    output=$(run_fs_health_stderr insensitive)
 
     assert_equals "true" "$(get_ignorecase)" \
         "core.ignorecase should be aligned with a linked worktree present"
+
+    mount_lines=$(command printf '%s\n' "$output" |
+        /usr/bin/grep -c "is on a case-insensitive mount" || true)
+    assert_equals "1" "$mount_lines" \
+        "The shared config must be reported once, not again for the worktree root"
+    assert_not_contains "$output" ".worktrees/issue-882 is on a case-insensitive mount" \
+        "The worktree root must not re-report an already-correct shared config"
 }
 
 # Add a worktree at an absolute path OUTSIDE the project root, with a tracked
@@ -195,14 +211,14 @@ seed_outside_worktree() {
     local outside="$1"
 
     if ! git -C "$PROJECT_ROOT" rev-parse HEAD >/dev/null 2>&1; then
-        echo "base" >"$PROJECT_ROOT/base.txt"
+        command echo "base" >"$PROJECT_ROOT/base.txt"
         git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
         git -C "$PROJECT_ROOT" commit -qm "base commit" >/dev/null 2>&1
     fi
 
     git -C "$PROJECT_ROOT" worktree add -q -b wt-outside "$outside" >/dev/null 2>&1
 
-    echo "wt content" >"$outside/CLAUDE.md"
+    command echo "wt content" >"$outside/CLAUDE.md"
     command ln -s CLAUDE.md "$outside/AGENTS.md"
     git -C "$outside" add -A >/dev/null 2>&1
     git -C "$outside" commit -qm "seed outside worktree" >/dev/null 2>&1
@@ -218,12 +234,12 @@ test_worktree_path_with_spaces_is_reached() {
     # PATH is what is under test here, so the branch gets a separate valid name.
     local wt="$PROJECT_ROOT/.worktrees/issue 882 with spaces"
 
-    echo "base" >"$PROJECT_ROOT/base.txt"
+    command echo "base" >"$PROJECT_ROOT/base.txt"
     git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
     git -C "$PROJECT_ROOT" commit -qm "base commit" >/dev/null 2>&1
     git -C "$PROJECT_ROOT" worktree add -q -b wt-spaced "$wt" >/dev/null 2>&1
 
-    echo "wt content" >"$wt/CLAUDE.md"
+    command echo "wt content" >"$wt/CLAUDE.md"
     command ln -s CLAUDE.md "$wt/AGENTS.md"
     git -C "$wt" add -A >/dev/null 2>&1
     git -C "$wt" commit -qm "seed spaced worktree" >/dev/null 2>&1
@@ -251,7 +267,7 @@ test_submodule_inside_worktree_reached() {
     git -C "$sub_origin" init -q .
     git -C "$sub_origin" config user.email "test@example.com"
     git -C "$sub_origin" config user.name "Test User"
-    echo "sub content" >"$sub_origin/CLAUDE.md"
+    command echo "sub content" >"$sub_origin/CLAUDE.md"
     command ln -s CLAUDE.md "$sub_origin/AGENTS.md"
     git -C "$sub_origin" add -A >/dev/null 2>&1
     git -C "$sub_origin" commit -qm "seed wt submodule" >/dev/null 2>&1
@@ -449,7 +465,7 @@ run_test_with_setup test_worktree_symlink_repaired "Stale symlink inside a linke
 run_test_with_setup test_multiple_worktrees_all_reached "Every linked worktree is reached"
 run_test_with_setup test_superproject_still_repaired_alongside "Superproject still repaired alongside worktrees"
 run_test_with_setup test_healthy_worktree_leaves_tree_clean "Healthy worktree leaves tree clean"
-run_test_with_setup test_worktree_ignorecase_aligned "core.ignorecase aligned with a worktree present"
+run_test_with_setup test_worktree_ignorecase_reported_once "Shared core.ignorecase reported once, not per worktree"
 run_test_with_setup test_worktree_path_with_spaces_is_reached "Worktree path containing spaces is reached"
 run_test_with_setup test_submodule_inside_worktree_reached "Submodule inside a linked worktree is walked"
 run_test_with_setup test_worktree_outside_project_root_uses_absolute_label "Worktree outside the project root uses an absolute label"
