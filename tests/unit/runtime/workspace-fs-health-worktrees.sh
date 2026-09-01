@@ -397,21 +397,19 @@ test_deleted_worktree_dir_is_silent() {
         "A pruned-but-registered worktree should produce no output"
 }
 
-test_uncanonicalizable_path_keeps_its_own_form() {
-    # The canonicalization fallback must restore the LISTED path when the
-    # directory cannot be entered, not an empty string.
+test_deleted_worktree_dropped_without_disturbing_siblings() {
+    # An unenterable worktree path (deleted but still registered) must drop out
+    # of the walk without failing the run or eating its siblings.
     #
-    # `wt=$(...) || wt="$wt"` looks like it does that but does not: bash assigns
-    # before evaluating `||`, so $wt is already empty by the time the fallback
-    # runs. That spelling still *behaved* here — the next check became
-    # `[ -e "/.git" ]`, false, so the entry was dropped anyway — which is
-    # exactly why it needs pinning rather than trusting the observable.
-    #
-    # Asserted by making the empty-path branch distinguishable: a real /.git on
-    # this host would make the buggy form descend into the filesystem root. It
-    # cannot be created in a test, so assert the honest, always-true property
-    # instead — a deleted worktree stays silent and non-fatal, and no log line
-    # ever names a root-anchored path.
+    # SCOPE, stated honestly: this does NOT discriminate the
+    # `wt_listed="$wt"; ... || wt="$wt_listed"` spelling from the naive
+    # `wt=$(...) || wt="$wt"` one that self-clobbers to the empty string. Both
+    # reach `[ -e "/.git" ]`, which is false on any sane host, so both drop the
+    # entry and pass here. Telling them apart would need a real /.git, which a
+    # test cannot create. The correctness argument for the fix lives in the
+    # source comment and its commit message; this test pins the surrounding
+    # BEHAVIOR (silent, non-fatal, siblings still repaired) and is not a
+    # regression guard for that spelling.
     local wt
     wt=$(add_worktree ".worktrees/issue-882")
     add_worktree ".worktrees/issue-200" >/dev/null
@@ -423,8 +421,8 @@ test_uncanonicalizable_path_keeps_its_own_form() {
 
     assert_equals "0" "$status" \
         "An unenterable worktree path must never make the run fail"
-    assert_not_contains "$output" "/.git" \
-        "The fallback must never leave a root-anchored path in play"
+    assert_not_contains "$output" " /.git" \
+        "No log line should name a root-anchored path"
     assert_not_contains "$output" "issue-882/AGENTS.md" \
         "The deleted worktree must be dropped, not repaired"
     assert_contains "$output" "refreshed .worktrees/issue-200/AGENTS.md" \
@@ -507,7 +505,7 @@ run_test_with_setup test_outside_worktree_does_not_write_shared_config "Out-of-t
 run_test_with_setup test_outside_worktree_never_flips_shared_config "Out-of-tree worktree never writes shared core.ignorecase"
 run_test_with_setup test_run_from_worktree_does_not_enumerate_siblings "Running from a worktree does not enumerate siblings"
 run_test_with_setup test_deleted_worktree_dir_is_silent "Pruned-but-registered worktree is silent and non-fatal"
-run_test_with_setup test_uncanonicalizable_path_keeps_its_own_form "Unenterable worktree path is dropped safely"
+run_test_with_setup test_deleted_worktree_dropped_without_disturbing_siblings "Deleted worktree dropped without disturbing siblings"
 run_test_with_setup test_no_worktrees_is_silent "Project with no linked worktrees is silent"
 run_test_with_setup test_skip_fix_reports_worktree_without_writing "SKIP_CASE_FIX reports worktree without writing"
 run_test_with_setup test_skip_check_does_nothing_with_worktree "SKIP_CASE_CHECK skips the worktree pass"
