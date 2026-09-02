@@ -4,7 +4,10 @@
 //!
 //! - **tier 1** — signatures (GPG / sigstore). Strongest. *Deferred to a
 //!   follow-up issue.*
-//! - **tier 2** — pinned in-repo checksum. *Deferred.*
+//! - **tier 2** — pinned in-repo checksum. **Implemented** — the digest is a
+//!   constant that landed through code review, so verification fetches
+//!   nothing and does not trust the publisher's endpoint at fetch time. This
+//!   is the remedy tier 4's warning and the strict-mode refusal point at.
 //! - **tier 3** — publisher-served checksum file. **Implemented** — this
 //!   is what rust@1.95.0 uses.
 //! - **tier 4** — TOFU (trust on first use). **Implemented** — the weakest
@@ -26,6 +29,7 @@
 //! accepted.
 
 pub mod sha;
+pub mod tier2;
 pub mod tier3;
 pub mod tier4;
 
@@ -79,7 +83,7 @@ pub struct VerificationWarning {
 ///
 /// # Errors
 ///
-/// - [`LuggageError::NotImplemented`] for tiers 1 and 2, and
+/// - [`LuggageError::NotImplemented`] for tier 1, and
 ///   [`LuggageError::Catalog`] for a tier outside `1..=4` — the same variants
 ///   [`dispatch`] returns for those tiers.
 /// - [`LuggageError::VerificationFailed`] for tier 4 when `require_verified`
@@ -106,10 +110,13 @@ pub fn ensure_supported(
                      REQUIRE_VERIFIED_DOWNLOADS=false"
                 .to_owned(),
         }),
-        // Both are implemented and, at this point, permitted. Tier 4's
+        // All three are implemented and, at this point, permitted. Tier 4's
         // *weakness* is not this guard's business — it is surfaced at
         // verification time as a warning (see `tier4`), not by refusing here.
-        3 | 4 => Ok(()),
+        // Tier 2 needs no `require_verified` arm: a pinned checksum *is* a
+        // verified download, so it satisfies the strict posture rather than
+        // being excused from it.
+        2..=4 => Ok(()),
         other => Err(unsupported_tier(other)),
     }
 }
@@ -121,7 +128,6 @@ pub fn ensure_supported(
 fn unsupported_tier(tier: u8) -> LuggageError {
     match tier {
         1 => LuggageError::NotImplemented("tier 1 GPG/sigstore verification"),
-        2 => LuggageError::NotImplemented("tier 2 pinned-checksum verification"),
         other => LuggageError::Catalog(format!("unknown verification tier {other}")),
     }
 }
@@ -142,11 +148,12 @@ fn unsupported_tier(tier: u8) -> LuggageError {
 ///
 /// # Errors
 ///
-/// - [`LuggageError::NotImplemented`] for tiers 1 and 2 — these will be
-///   wired up in follow-up issues.
+/// - [`LuggageError::NotImplemented`] for tier 1 — wired up in a follow-up
+///   issue.
 /// - [`LuggageError::Catalog`] when `verification.tier` is not in `1..=4`.
-/// - The same errors tier 3 raises (see [`tier3::verify`]) for tier 3, and
-///   tier 4 raises (see [`tier4::verify`]) for tier 4.
+/// - The same errors each implemented tier raises: tier 2 (see
+///   [`tier2::verify`]), tier 3 (see [`tier3::verify`]), tier 4 (see
+///   [`tier4::verify`]).
 pub fn dispatch(
     tool: &str,
     version: &str,
@@ -157,6 +164,10 @@ pub fn dispatch(
     http: &dyn HttpClient,
 ) -> Result<Vec<VerificationWarning>> {
     match verification.tier {
+        2 => {
+            tier2::verify(tool, version, actual_digest, verification)?;
+            Ok(Vec::new())
+        }
         3 => {
             tier3::verify(
                 tool,
@@ -211,6 +222,9 @@ mod tests {
         }
     }
 
+    /// Tier 1 (GPG/sigstore) stays out of scope. #849 moved tier 2 out of the
+    /// unimplemented set; this is what keeps tier 1 from being swept along
+    /// with it.
     #[test]
     fn tier_1_returns_not_implemented() {
         let err = dispatch(
@@ -226,8 +240,11 @@ mod tests {
         assert!(matches!(err, LuggageError::NotImplemented(_)));
     }
 
+    /// A tier-2 entry that reaches `dispatch` with no pin is catalog drift —
+    /// the tier is implemented, so the error must be `Catalog`, not
+    /// `NotImplemented`.
     #[test]
-    fn tier_2_returns_not_implemented() {
+    fn tier_2_without_a_pin_is_a_catalog_error() {
         let err = dispatch(
             "rust",
             "1.95.0",
@@ -238,7 +255,7 @@ mod tests {
             &DeadClient,
         )
         .unwrap_err();
-        assert!(matches!(err, LuggageError::NotImplemented(_)));
+        assert!(matches!(err, LuggageError::Catalog(_)), "got {err:?}");
     }
 
     /// Tier 4 is implemented now, and dispatching it must surface the
@@ -263,25 +280,47 @@ mod tests {
         assert_eq!(warnings[0].digest, "deadbeef");
     }
 
-    /// Tiers 1 and 2 are explicitly out of scope and must stay unimplemented.
+    /// Through-the-front-door check that tier 2 actually executes when
+    /// dispatched, and — the part that matters for the report — that it adds
+    /// no warning. Only tier 4's materially-weaker acceptance does.
+    /// (The deeper tier-2 cases live in `tier2::tests`.)
     #[test]
-    fn tiers_1_and_2_remain_not_implemented() {
-        for tier in [1u8, 2] {
-            let err = dispatch(
-                "rust",
-                "1.95.0",
-                "deadbeef",
-                "artifact.tar.gz",
-                &verification(tier),
-                &Substitutions::default(),
-                &DeadClient,
-            )
-            .unwrap_err();
-            assert!(
-                matches!(err, LuggageError::NotImplemented(_)),
-                "tier {tier} should be NotImplemented, got {err:?}"
-            );
-        }
+    fn tier_2_executes_via_dispatch() {
+        let digest = super::sha::digest_hex(Some("sha256"), b"hello").unwrap();
+        let v = Verification { pinned_checksum: Some(digest.clone()), ..verification(2) };
+        let warnings = dispatch(
+            "node",
+            "24.0.0",
+            &digest,
+            "node.tar.gz",
+            &v,
+            &Substitutions::default(),
+            &DeadClient,
+        )
+        .unwrap();
+        assert!(warnings.is_empty());
+    }
+
+    /// Tier 2 fetches nothing, so dispatching it must not touch the HTTP
+    /// client at all — that offline property is what distinguishes it from
+    /// tier 3 operationally, and it is the reason a pin does not trust the
+    /// publisher's endpoint at fetch time.
+    #[test]
+    fn tier_2_dispatch_makes_no_http_request() {
+        let digest = super::sha::digest_hex(Some("sha256"), b"offline").unwrap();
+        let v = Verification { pinned_checksum: Some(digest.clone()), ..verification(2) };
+        // Every `DeadClient::get` returns `DownloadFailed`, so any fetch would
+        // surface here as an `Err`. Reaching `Ok` proves none was made.
+        dispatch(
+            "node",
+            "24.0.0",
+            &digest,
+            "node.tar.gz",
+            &v,
+            &Substitutions::default(),
+            &DeadClient,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -297,6 +336,21 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, LuggageError::Catalog(_)));
+    }
+
+    #[test]
+    fn ensure_supported_accepts_tier_2() {
+        ensure_supported("node", "24.0.0", &verification(2), false).unwrap();
+    }
+
+    /// Strict mode demands verified downloads; a pinned checksum *is* one, so
+    /// the guard must let tier 2 through rather than treating "stricter" as
+    /// "fewer tiers". This is the case #849 exists for: the operator who hits
+    /// the tier-4 refusal and follows its advice to pin a checksum must end up
+    /// with a build that passes.
+    #[test]
+    fn strict_mode_accepts_tier_2() {
+        ensure_supported("node", "24.0.0", &verification(2), true).unwrap();
     }
 
     #[test]
@@ -350,7 +404,12 @@ mod tests {
     /// `unsupported_tier`.
     #[test]
     fn ensure_supported_rejects_the_same_tiers_dispatch_does() {
-        for tier in [1u8, 2, 9] {
+        // Tier 2 left this set in #849. The guard answers "is this tier
+        // supported", which tier 2 now is; whether a *particular* tier-2 entry
+        // carries a usable pin is a dispatch-time question (see
+        // `tier_2_without_a_pin_is_a_catalog_error`), so the two legitimately
+        // differ there and only the unsupported tiers belong here.
+        for tier in [1u8, 9] {
             let v = verification(tier);
             let guard = ensure_supported("rust", "1.95.0", &v, false).unwrap_err();
             let dispatched = dispatch(

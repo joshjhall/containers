@@ -32,7 +32,7 @@
 use containers_common::tooldb::Verification;
 
 use super::VerificationWarning;
-use super::sha::DEFAULT_ALGORITHM;
+use super::sha::{DEFAULT_ALGORITHM, is_hex_digest};
 use crate::error::{LuggageError, Result};
 
 /// Accept a TOFU artifact, returning the warning that acceptance must carry.
@@ -113,17 +113,6 @@ fn tofu_message(tool: &str, version: &str, algorithm: &str, digest: &str) -> Str
          {tool}@{version} in the catalog (tier 2); to refuse TOFU outright, pass \
          `--require-verified-downloads` (REQUIRE_VERIFIED_DOWNLOADS=true)."
     )
-}
-
-/// `true` when `s` is a non-empty string of hex digits.
-///
-/// Deliberately does not check length against a specific algorithm: the
-/// catalog's `algorithm` may name a digest whose width this build does not
-/// hard-code, and the value came from our own hasher anyway. The check that
-/// matters is that it is *a digest at all* rather than an empty string or an
-/// error message that leaked into the slot.
-fn is_hex_digest(s: &str) -> bool {
-    !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 #[cfg(test)]
