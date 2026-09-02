@@ -132,6 +132,43 @@ only one level down. Submodule paths are reported with their full prefix:
 A submodule's `core.ignorecase` is its own config and is aligned the same way.
 Uninitialized submodules are skipped silently.
 
+Both repairs also cover every **linked worktree** of the project — the
+`.worktrees/issue-N` checkouts the golem flow creates. A linked worktree is
+neither of the two roots above: it has its own working tree and its own index,
+so `git ls-files` in the superproject never names it, and it is not a gitlink,
+so the submodule walk never descends into it. Without this pass every fresh
+worktree arrived with its tracked symlinks already showing as modified, so
+`git status` could not be trusted as a clean-tree signal and a `git add -A`
+would commit the symlink deletions. Worktree paths are reported relative to the
+project root:
+
+```text
+[fs-health] .worktrees/issue-882/AGENTS.md: stale symlink attributes (nlink=0)
+[fs-health] refreshed .worktrees/issue-882/AGENTS.md -> CLAUDE.md
+```
+
+Worktrees are enumerated **only when the scan starts from the main worktree**.
+`git worktree list` is repo-global, so asking from inside a linked worktree
+returns the whole set including the caller; restricting it to the primary
+checkout keeps the walk loop-free and keeps
+`workspace-fs-health /path/to/a/worktree` scoped to the worktree you named. A
+registered worktree whose directory has been deleted but not pruned is skipped
+silently, like an uninitialized submodule. Each worktree's own submodules are
+walked as usual.
+
+A worktree created **outside** the project root (`git worktree add` accepts any
+path) gets the symlink repair but never a `core.ignorecase` decision. Unlike a
+submodule, such a worktree can sit on a different mount, so the project's
+case-sensitivity verdict is not evidence about it — and `core.ignorecase` is not
+per-worktree: every worktree shares the repository's single `.git/config`, so
+there is no "align just this one" to perform. Writing it from an out-of-tree
+worktree would silently change the setting for the main checkout and every
+sibling, so the project's own mount stays the sole authority. The symlink
+repair, which really is per-worktree, still runs.
+
+A worktree created hours into container uptime is picked up by the **hourly
+cron leg** below, which re-runs the same scan against the same project root.
+
 Both repairs are idempotent and leave file contents untouched. Two opt-outs:
 
 | Variable           | Effect                                          |

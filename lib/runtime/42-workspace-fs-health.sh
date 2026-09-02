@@ -23,6 +23,13 @@
 # superproject-only pass never even enumerates a submodule's symlinks — they
 # decay forever. A submodule's core.ignorecase is likewise its own config.
 #
+# They also run against every LINKED WORKTREE of the project (issue #882). A
+# worktree under .worktrees/ is neither the superproject nor a submodule: it has
+# its own working tree and its own index, and it is not a gitlink in the
+# superproject's index, so neither of the two enumerations above reaches it.
+# Every freshly created golem worktree therefore arrived with its tracked
+# symlinks already reading as modified.
+#
 # Skip everything with:   SKIP_CASE_CHECK=true
 # Detect and report, but never write:  SKIP_CASE_FIX=true
 #
@@ -368,10 +375,151 @@ repair_repo_tree() {
 }
 
 # ============================================================================
+# Linked worktrees
+# ============================================================================
+
+# Repair every linked worktree of $PROJECT_ROOT (issue #882).
+#
+# A linked worktree is invisible to both enumerations above: it is not in the
+# superproject's index at all (so `ls-files` never names it), and it is not a
+# gitlink (so the submodule walk never descends into it). It does have its own
+# working tree and its own index, which is exactly what makes it a repo root in
+# its own right — and what makes every fresh golem worktree start out with its
+# tracked symlinks reading as modified.
+#
+# Each worktree is handed to repair_repo_tree at depth 0, so it gets BOTH
+# repairs and its own submodules walked, and both opt-outs keep working with no
+# new branches: SKIP_CASE_CHECK exited long before this point, and SKIP_CASE_FIX
+# is read inside the same shared FIX_ENABLED the other roots use.
+repair_linked_worktrees() {
+    local main_toplevel wt wt_listed rel label saved_state
+
+    # ONLY enumerate from the main worktree. `git worktree list` is repo-GLOBAL:
+    # asked from inside a linked worktree it returns the whole set, including
+    # the caller, so this function would repair its own root a second time and
+    # sweep in every sibling. Gating on the primary checkout makes the walk
+    # loop-free by construction — and keeps `workspace-fs-health <a-worktree>`
+    # scoped to the worktree the user actually named.
+    #
+    # `--git-dir` != `--git-common-dir` is the repo-standard linked-worktree
+    # idiom (the golem nesting guard uses the same comparison).
+    #
+    # Both sides are resolved with `cd ... && pwd -P` rather than
+    # `rev-parse --path-format=absolute`, for two independent reasons:
+    #
+    #   1. PORTABILITY. --path-format arrived in git 2.31, but Debian 11
+    #      (Bullseye) — a supported base image — ships 2.30.2. There the flag is
+    #      unrecognized, rev-parse errors, the `|| return 0` fires, and this
+    #      whole function silently no-ops. It is designed to fail silent-and-safe,
+    #      so that regression would surface as nothing at all: the #882 repair
+    #      simply never running on one of the supported distros.
+    #
+    #   2. NORMALIZATION. --git-common-dir can come back relative, and `pwd -P`
+    #      resolves symlinks on both sides — so a PROJECT_ROOT reached through a
+    #      symlinked path component (exactly the environment this script exists
+    #      for) cannot produce a false mismatch between the two forms.
+    local git_dir common_dir
+    git_dir=$(git -C "$PROJECT_ROOT" rev-parse --git-dir 2>/dev/null) || return 0
+    common_dir=$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null) || return 0
+
+    # Relative outputs are relative to PROJECT_ROOT, so resolve from there.
+    git_dir=$(cd "$PROJECT_ROOT" 2>/dev/null && cd "$git_dir" 2>/dev/null && pwd -P) || return 0
+    common_dir=$(cd "$PROJECT_ROOT" 2>/dev/null && cd "$common_dir" 2>/dev/null && pwd -P) || return 0
+    [ "$git_dir" = "$common_dir" ] || return 0
+
+    # Resolve the main worktree's own path so its entry can be skipped below.
+    # git lists it first, but keying off position would be fragile; comparing
+    # paths is not.
+    #
+    # `pwd -P` for the same normalization reason as above: `--show-toplevel` and
+    # the path recorded by `worktree list` need not be byte-identical when
+    # PROJECT_ROOT sits behind a symlink. A false mismatch here is not fatal —
+    # the main root would simply be walked a second time, mislabeled with an
+    # absolute path — but it is a confusing duplicate diagnostic for the very
+    # root the run already covered, so both sides are resolved the same way.
+    main_toplevel=$(git -C "$PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null) || return 0
+    main_toplevel=$(cd "$main_toplevel" 2>/dev/null && pwd -P) || return 0
+
+    # `worktree list --porcelain` emits stanzas whose first line is
+    # "worktree <path>". Cut after the first space rather than splitting on
+    # whitespace, so a path containing spaces survives intact.
+    while IFS= read -r wt; do
+        [ -n "$wt" ] || continue
+
+        # Canonicalize the listed path too, so the skip below compares like with
+        # like. A path that cannot be entered (deleted worktree) keeps its
+        # original form and is dropped by the .git check just after.
+        #
+        # The original is saved FIRST because `wt=$(...) || wt="$wt"` does not
+        # work: bash performs the assignment before evaluating `||`, so on
+        # failure $wt is already the empty string and the fallback restores
+        # nothing. That spelling happens to behave here — `[ -e "/.git" ]` is
+        # false, so the entry is still dropped — but only by luck, and the bug
+        # would bite anywhere the empty path resolved to something real.
+        wt_listed="$wt"
+        wt=$(cd "$wt_listed" 2>/dev/null && pwd -P) || wt="$wt_listed"
+
+        [ "$wt" != "$main_toplevel" ] || continue
+
+        # No .git means nothing to repair here: a worktree whose directory was
+        # deleted but not pruned, or a bare entry. Same silent non-event the
+        # submodule walk makes of an uninitialized gitlink.
+        [ -e "${wt}/.git" ] || continue
+
+        # Label lines by the worktree's path relative to the project root
+        # (".worktrees/issue-882/"), so a finding is unambiguous once worktrees
+        # and submodules are both in play. A worktree living outside the project
+        # root has no useful relative form, so it keeps its absolute path.
+        rel="${wt#"$main_toplevel"/}"
+        if [ "$rel" = "$wt" ]; then
+            label="${wt}/"
+        else
+            label="${rel}/"
+        fi
+
+        # A worktree INSIDE the project root is on the project's mount by
+        # construction, exactly like a submodule, so the verdict detected once at
+        # startup describes it and its core.ignorecase is aligned normally.
+        #
+        # A worktree OUTSIDE it carries no such guarantee: `git worktree add
+        # /some/other/volume/wt` can put it on a filesystem whose
+        # case-sensitivity differs. The startup verdict is then evidence about
+        # somewhere else — and, crucially, core.ignorecase is NOT per-worktree:
+        # every worktree shares the repository's single .git/config, so
+        # "aligning" one from a foreign mount's verdict would silently rewrite
+        # the setting for the superproject and every sibling. Re-detecting per
+        # root does not help for the same reason — there is still only one value
+        # to write, and letting the outsider win is strictly worse than leaving
+        # the project's own mount in charge.
+        #
+        # So an out-of-tree worktree gets the SYMLINK repair — which is genuinely
+        # per-worktree, and is the actual subject of #882 — with the case verdict
+        # downgraded to `unknown`, the existing value that makes check_ignorecase
+        # return without writing.
+        #
+        # Save/restore around the call rather than an assignment prefix: a prefix
+        # on a shell FUNCTION has scoping that differs between bash modes, so
+        # leaking the downgraded verdict into later roots is a real risk.
+        if [ "$rel" != "$wt" ]; then
+            repair_repo_tree "$wt" "$label" 0
+        else
+            saved_state="$FS_CASE_STATE"
+            FS_CASE_STATE=unknown
+            repair_repo_tree "$wt" "$label" 0
+            FS_CASE_STATE="$saved_state"
+        fi
+    done < <(git -C "$PROJECT_ROOT" worktree list --porcelain 2>/dev/null |
+        /usr/bin/awk '/^worktree / { print substr($0, 10) }')
+
+    return 0
+}
+
+# ============================================================================
 # Run
 # ============================================================================
 
 repair_repo_tree "$PROJECT_ROOT" "" 0
+repair_linked_worktrees
 
 # Record the resolved environment so the hourly cron leg can re-run this same
 # script against the same project with the same opt-out. Written last, so the
