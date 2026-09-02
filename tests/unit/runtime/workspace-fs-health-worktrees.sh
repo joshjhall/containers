@@ -57,6 +57,51 @@ STAT_STUB_EOF
     export FS_HEALTH_STAT="$stub"
 }
 
+# Install a git stub that FAILS one specific `rev-parse` probe (or the
+# `worktree list` call) and defers to the real git for everything else. Sets
+# FS_HEALTH_GIT (issue #886).
+#
+# The four resolution fallbacks in repair_linked_worktrees are `|| return 0` by
+# design — this script must never be why a container fails to start — so their
+# failure path is invisible from the outside. That is precisely how the
+# git-2.31 `--path-format=absolute` regression no-opped the entire #882 feature
+# on Debian 11 (git 2.30.2) with no diagnostic at all. These tests make each
+# fallback observable.
+#
+# A PATH-shadowed stub cannot be used: /etc/bash_env rebuilds PATH for
+# non-interactive bash, so the stub is silently ignored inside the script's own
+# bash invocation (.claude/memory/bash-env-breaks-path-stubs.md). Hence the
+# FS_HEALTH_GIT seam, mirroring stub_stat's use of FS_HEALTH_STAT.
+#
+# Args: $1 = the rev-parse flag to fail (e.g. "--show-toplevel"), or the
+#            literal "worktree" to fail `worktree list`
+stub_git_failing() {
+    local failing="$1"
+    local stub="$TEST_TEMP_DIR/git-stub"
+
+    # Resolve the real git ONCE, here, rather than hardcoding a path: this image
+    # has both /usr/local/bin/git and /usr/bin/git, and PATH picks the former.
+    # Baking in the wrong one would make the stub defer to a different git than
+    # the rest of the suite uses.
+    local real_git
+    real_git=$(command -v git)
+
+    command cat >"$stub" <<GIT_STUB_EOF
+#!/bin/bash
+# Scan the whole argv: the script calls \`git -C <dir> rev-parse <flag>\`, so the
+# flag is never at a fixed position. Everything not matched falls through to the
+# real git, so the fixture repo keeps working normally.
+for _arg in "\$@"; do
+    if [ "\$_arg" = "$failing" ]; then
+        exit 128
+    fi
+done
+exec "$real_git" "\$@"
+GIT_STUB_EOF
+    command chmod +x "$stub"
+    export FS_HEALTH_GIT="$stub"
+}
+
 # Add a linked worktree containing a tracked symlink, mirroring the real
 # .worktrees/issue-N layout the golem flow creates.
 #
@@ -376,6 +421,251 @@ test_run_from_worktree_does_not_enumerate_siblings() {
 }
 
 # ============================================================================
+# Git environment leak immunity (issue #886, AC1)
+# ============================================================================
+
+test_git_dir_leak_does_not_defeat_the_gate() {
+    # git reads GIT_DIR/GIT_WORK_TREE BEFORE honoring `-C`, so a caller that
+    # exported either would point all three rev-parse probes at a different
+    # repository — while the code still reads as if scoped to PROJECT_ROOT. The
+    # gate those probes feed is what keeps the walk loop-free, so a skewed
+    # answer either silently disables the #882 repair or enumerates the wrong
+    # repo's worktrees.
+    local wt
+    wt=$(add_worktree ".worktrees/issue-886")
+
+    # A second, unrelated repo for the environment to point at.
+    local foreign="$TEST_TEMP_DIR/foreign"
+    command mkdir -p "$foreign"
+    git -C "$foreign" init -q .
+    git -C "$foreign" config user.email "test@example.com"
+    git -C "$foreign" config user.name "Test User"
+    command echo "foreign" >"$foreign/f.txt"
+    git -C "$foreign" add -A >/dev/null 2>&1
+    git -C "$foreign" commit -qm "foreign base" >/dev/null 2>&1
+
+    stub_stat "0 7"
+
+    local output
+    output=$(GIT_DIR="$foreign/.git" GIT_WORK_TREE="$foreign" \
+        run_fs_health_stderr sensitive)
+
+    assert_contains "$output" "refreshed .worktrees/issue-886/AGENTS.md" \
+        "A leaked GIT_DIR/GIT_WORK_TREE must not stop PROJECT_ROOT's worktree from being repaired"
+    assert_equals "CLAUDE.md" "$(command readlink "$wt/AGENTS.md")" \
+        "The repaired symlink's target must be preserved under a leaked git environment"
+}
+
+test_git_common_dir_leak_does_not_defeat_the_gate() {
+    # The OTHER half of the gate's equality. The issue named only GIT_DIR and
+    # GIT_WORK_TREE; GIT_COMMON_DIR overrides --git-common-dir the same way, so
+    # leaking it alone could make git_dir != common_dir and silently classify
+    # the main checkout as a linked worktree — disabling the whole pass.
+    local wt
+    wt=$(add_worktree ".worktrees/issue-886")
+
+    local foreign="$TEST_TEMP_DIR/foreign-common"
+    command mkdir -p "$foreign"
+    git -C "$foreign" init -q .
+
+    stub_stat "0 7"
+
+    local output
+    output=$(GIT_COMMON_DIR="$foreign/.git" run_fs_health_stderr sensitive)
+
+    assert_contains "$output" "refreshed .worktrees/issue-886/AGENTS.md" \
+        "A leaked GIT_COMMON_DIR must not disable the linked-worktree pass"
+}
+
+test_git_index_file_leak_does_not_hide_symlinks() {
+    # Reaches PAST the worktree pass into the two original repairs: ls-files is
+    # what check_symlinks and the submodule walk iterate, and GIT_INDEX_FILE
+    # makes it enumerate a foreign index — so every tracked symlink would look
+    # like it does not exist.
+    seed_symlinks
+
+    local foreign="$TEST_TEMP_DIR/foreign-index"
+    command mkdir -p "$foreign"
+    git -C "$foreign" init -q .
+    command echo "unrelated" >"$foreign/other.txt"
+    git -C "$foreign" add -A >/dev/null 2>&1
+
+    stub_stat "0 7"
+
+    local output
+    output=$(GIT_INDEX_FILE="$foreign/.git/index" run_fs_health_stderr sensitive)
+
+    assert_contains "$output" "refreshed good.link" \
+        "A leaked GIT_INDEX_FILE must not hide the superproject's own tracked symlinks"
+}
+
+# ============================================================================
+# Resolution fail-safes (issue #886, AC2)
+# ============================================================================
+#
+# Every probe below is guarded by `|| return 0`: the pass is designed to fail
+# silent-and-safe so it can never be why a container fails to start. That makes
+# the failure path invisible from outside — exactly how the git-2.31
+# `--path-format=absolute` regression no-opped the whole #882 feature on Debian
+# 11 with no diagnostic. These pin the no-op as OBSERVABLE BEHAVIOR (worktree
+# left unrepaired, run still succeeds) rather than as a code comment.
+
+test_git_dir_probe_failure_is_a_silent_noop() {
+    local wt
+    wt=$(add_worktree ".worktrees/issue-886")
+    stub_stat "0 7"
+    stub_git_failing "--git-dir"
+
+    local before output status=0
+    before=$(/usr/bin/stat -c '%Y' "$wt/AGENTS.md" 2>/dev/null)
+    output=$(run_fs_health_stderr sensitive) || status=$?
+
+    assert_equals "0" "$status" \
+        "A failed --git-dir probe must never make the run fail"
+    assert_not_contains "$output" ".worktrees/issue-886" \
+        "A failed --git-dir probe must skip the worktree pass silently"
+    assert_equals "$before" "$(/usr/bin/stat -c '%Y' "$wt/AGENTS.md" 2>/dev/null)" \
+        "A failed --git-dir probe must leave the worktree symlink untouched"
+}
+
+test_git_common_dir_probe_failure_is_a_silent_noop() {
+    local wt
+    wt=$(add_worktree ".worktrees/issue-886")
+    stub_stat "0 7"
+    stub_git_failing "--git-common-dir"
+
+    local output status=0
+    output=$(run_fs_health_stderr sensitive) || status=$?
+
+    assert_equals "0" "$status" \
+        "A failed --git-common-dir probe must never make the run fail"
+    assert_not_contains "$output" ".worktrees/issue-886" \
+        "A failed --git-common-dir probe must skip the worktree pass silently"
+}
+
+test_show_toplevel_probe_failure_is_a_silent_noop() {
+    local wt
+    wt=$(add_worktree ".worktrees/issue-886")
+    stub_stat "0 7"
+    stub_git_failing "--show-toplevel"
+
+    local output status=0
+    output=$(run_fs_health_stderr sensitive) || status=$?
+
+    assert_equals "0" "$status" \
+        "A failed --show-toplevel probe must never make the run fail"
+    assert_not_contains "$output" ".worktrees/issue-886" \
+        "A failed --show-toplevel probe must skip the worktree pass silently"
+}
+
+test_unsupported_flag_noops_without_killing_the_superproject_repair() {
+    # The #884 regression in miniature: a probe git does not understand (there,
+    # --path-format=absolute against Debian 11's git 2.30.2) makes the pass
+    # vanish. The load-bearing half is the SECOND assertion — the superproject's
+    # own repair must survive, so the failure is scoped to the worktree pass and
+    # does not take the whole script down with it.
+    seed_symlinks
+    add_worktree ".worktrees/issue-886" >/dev/null
+    stub_stat "0 7"
+    stub_git_failing "--git-dir"
+
+    local output status=0
+    output=$(run_fs_health_stderr sensitive) || status=$?
+
+    assert_equals "0" "$status" \
+        "An unsupported probe must not fail the run"
+    assert_not_contains "$output" ".worktrees/issue-886" \
+        "An unsupported probe silently disables the worktree pass"
+    assert_contains "$output" "refreshed good.link" \
+        "The superproject's own repair must survive a failed worktree probe"
+}
+
+test_worktree_list_failure_is_a_silent_noop() {
+    # BEHAVIOR PIN, not a fail-safe proof — and the distinction is the point of
+    # this issue, so it is recorded rather than glossed.
+    #
+    # The other four tests in this section are demonstrably red/green: strip the
+    # matching `|| return 0` and each one fails (verified during #886). This one
+    # cannot be, because the enumeration has no removable guard to strip — a
+    # failed `worktree list` yields an empty pipe, so the `while read` body
+    # simply never executes. There is no code path here that could be deleted to
+    # turn it red.
+    #
+    # It is kept because the property is still worth pinning: if the enumeration
+    # is ever restructured (a `set -o pipefail` added, the pipe replaced by a
+    # temp file, the awk filter given a fallback), a failure could start
+    # producing entries or a non-zero exit, and this test would catch that.
+    # Labeled honestly so nobody later reads it as evidence the fail-safe chain
+    # is covered here — that evidence is in the four tests above.
+    local wt
+    wt=$(add_worktree ".worktrees/issue-886")
+    stub_stat "0 7"
+    stub_git_failing "worktree"
+
+    local output status=0
+    output=$(run_fs_health_stderr sensitive) || status=$?
+
+    assert_equals "0" "$status" \
+        "A failed worktree enumeration must never make the run fail"
+    assert_not_contains "$output" ".worktrees/issue-886" \
+        "A failed worktree enumeration must repair nothing"
+}
+
+# ============================================================================
+# Out-of-tree reach (issue #886, AC3)
+# ============================================================================
+
+test_outside_worktree_is_announced() {
+    # DECISION (AC3): warn, keep repairing. `git worktree add` accepts any
+    # writable path and this pass follows every registered entry at each boot
+    # and hourly from cron. An allowlist would silently stop repairing a
+    # legitimate other-volume worktree — reintroducing the #882 symptom for the
+    # user who most needs the fix — so the reach is intended and only its
+    # invisibility was the defect.
+    local outside="$TEST_TEMP_DIR/outside-wt"
+    seed_outside_worktree "$outside"
+    stub_stat "0 7"
+
+    local output
+    output=$(run_fs_health_stderr sensitive)
+
+    assert_contains "$output" "is outside the project root" \
+        "Repairing a worktree outside the project root must be announced"
+    assert_contains "$output" "refreshed ${outside}/AGENTS.md" \
+        "The out-of-tree worktree must still be repaired after the warning"
+}
+
+test_in_tree_worktree_is_not_announced() {
+    # The warning must DISTINGUISH — an in-tree worktree is the ordinary case
+    # and stays quiet, so the line means something when it appears.
+    add_worktree ".worktrees/issue-886" >/dev/null
+    stub_stat "0 7"
+
+    local output
+    output=$(run_fs_health_stderr sensitive)
+
+    assert_not_contains "$output" "is outside the project root" \
+        "An in-tree worktree must not be announced as out-of-tree"
+}
+
+test_outside_worktree_announced_under_skip_fix() {
+    # Report-only mode is exactly when an operator is reading the output, so the
+    # reach notice must survive SKIP_CASE_FIX rather than be gated on repairing.
+    local outside="$TEST_TEMP_DIR/outside-wt"
+    seed_outside_worktree "$outside"
+    stub_stat "0 7"
+    export SKIP_CASE_FIX=true
+
+    local output
+    output=$(run_fs_health_stderr sensitive)
+
+    assert_contains "$output" "is outside the project root" \
+        "SKIP_CASE_FIX must still announce an out-of-tree worktree"
+    assert_not_contains "$output" "refreshed ${outside}/AGENTS.md" \
+        "SKIP_CASE_FIX must not actually repair it"
+}
+
+# ============================================================================
 # Degenerate entries
 # ============================================================================
 
@@ -504,6 +794,17 @@ run_test_with_setup test_worktree_outside_project_root_uses_absolute_label "Work
 run_test_with_setup test_outside_worktree_does_not_write_shared_config "Out-of-tree worktree does not claim a case verdict"
 run_test_with_setup test_outside_worktree_never_flips_shared_config "Out-of-tree worktree never writes shared core.ignorecase"
 run_test_with_setup test_run_from_worktree_does_not_enumerate_siblings "Running from a worktree does not enumerate siblings"
+run_test_with_setup test_git_dir_leak_does_not_defeat_the_gate "Leaked GIT_DIR/GIT_WORK_TREE does not defeat the main-worktree gate"
+run_test_with_setup test_git_common_dir_leak_does_not_defeat_the_gate "Leaked GIT_COMMON_DIR does not defeat the main-worktree gate"
+run_test_with_setup test_git_index_file_leak_does_not_hide_symlinks "Leaked GIT_INDEX_FILE does not hide tracked symlinks"
+run_test_with_setup test_git_dir_probe_failure_is_a_silent_noop "Failed --git-dir probe is a silent no-op"
+run_test_with_setup test_git_common_dir_probe_failure_is_a_silent_noop "Failed --git-common-dir probe is a silent no-op"
+run_test_with_setup test_show_toplevel_probe_failure_is_a_silent_noop "Failed --show-toplevel probe is a silent no-op"
+run_test_with_setup test_unsupported_flag_noops_without_killing_the_superproject_repair "Unsupported probe no-ops the pass but spares the superproject repair"
+run_test_with_setup test_worktree_list_failure_is_a_silent_noop "Failed worktree enumeration is a silent no-op"
+run_test_with_setup test_outside_worktree_is_announced "Out-of-tree worktree repair is announced"
+run_test_with_setup test_in_tree_worktree_is_not_announced "In-tree worktree is not announced as out-of-tree"
+run_test_with_setup test_outside_worktree_announced_under_skip_fix "SKIP_CASE_FIX still announces an out-of-tree worktree"
 run_test_with_setup test_deleted_worktree_dir_is_silent "Pruned-but-registered worktree is silent and non-fatal"
 run_test_with_setup test_deleted_worktree_dropped_without_disturbing_siblings "Deleted worktree dropped without disturbing siblings"
 run_test_with_setup test_no_worktrees_is_silent "Project with no linked worktrees is silent"
