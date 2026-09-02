@@ -155,6 +155,22 @@ pub fn digests_equal(a: &str, b: &str) -> bool {
     diff == 0
 }
 
+/// `true` when `s` is a non-empty string of hex digits.
+///
+/// Deliberately does not check length against a specific algorithm: the
+/// catalog's `algorithm` may name a digest whose width this build does not
+/// hard-code. The check that matters is that the value is *a digest at all*
+/// rather than an empty string or an error message that leaked into the slot.
+///
+/// Both tiers that lack a fetched reference document need this, for opposite
+/// reasons — tier 4 screens the digest it computed (there is nothing else to
+/// check it against), tier 2 screens the checksum a human pinned by hand — so
+/// it lives here, beside [`digests_equal`], rather than in either tier.
+#[must_use]
+pub fn is_hex_digest(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
