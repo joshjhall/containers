@@ -63,7 +63,7 @@ setup() {
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
         GIT_OBJECT_DIRECTORY GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM \
         GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 \
-        GIT_CONFIG_VALUE_0 GIT_CONFIG_PARAMETERS 2>/dev/null || true
+        GIT_CONFIG_VALUE_0 GIT_CONFIG_PARAMETERS GIT_CONFIG 2>/dev/null || true
 }
 
 teardown() {
@@ -76,7 +76,7 @@ teardown() {
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
         GIT_OBJECT_DIRECTORY GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM \
         GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 \
-        GIT_CONFIG_VALUE_0 GIT_CONFIG_PARAMETERS 2>/dev/null || true
+        GIT_CONFIG_VALUE_0 GIT_CONFIG_PARAMETERS GIT_CONFIG 2>/dev/null || true
 }
 
 # Run the script with the filesystem verdict forced via FS_CASE_STATE, so the
@@ -133,6 +133,31 @@ run_fs_health_with_global_config() {
     ) >/dev/null 2>&1
 }
 
+# Run the script with a substituted legacy GIT_CONFIG, returning stderr (#894).
+#
+# Same `env`-not-inline reason as run_fs_health_with_global_config: the worktree
+# guard refuses a command that sets a config-redirect var inline.
+#
+# Returns stderr because this vector's failure mode is a FALSE SUCCESS — the
+# script reports a repair it did not make — so the test has to inspect what was
+# reported, not only what was written.
+#
+# Args: $1 = path to the config file to inject, $2 = fs state
+run_fs_health_with_legacy_config() {
+    local injected="$1"
+    local state="$2"
+    (
+        export PROJECT_ROOT
+        export FS_CASE_STATE="$state"
+        export SKIP_CASE_CHECK="${SKIP_CASE_CHECK:-false}"
+        export SKIP_CASE_FIX="${SKIP_CASE_FIX:-false}"
+        export FS_HEALTH_ENV_FILE
+        export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
+        export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
+        { command env "GIT_CONFIG=$injected" bash "$FS_HEALTH_SCRIPT" >/dev/null; } 2>&1
+    )
+}
+
 # Report what ONE environment variable holds inside the script, after its unset
 # block has run (issue #894).
 #
@@ -145,9 +170,15 @@ run_fs_health_with_global_config() {
 # a non-repo directory, which terminates the sourcing subshell before it can
 # report anything (measured: the probe printed nothing at all). Instead the
 # script is EXECUTED normally against a real fixture repo, with FS_HEALTH_GIT
-# pointed at a stub that records its own environment the first time the script
-# calls git — which is after the unset block by construction, since the unset
-# sits in the Configuration section above every git call.
+# pointed at a stub that records its own environment.
+#
+# PRECISELY: the stub sees the first call routed through the FS_HEALTH_GIT seam,
+# which only repair_linked_worktrees uses — NOT the script's literal first git
+# call, which is check_symlinks' bare `git -C ... ls-files -s` and bypasses the
+# seam entirely. The observed value is the same either way, because the unset
+# runs once, unconditionally, in the Configuration section above every git call
+# of either kind. Stated exactly so a future maintainer who widens the seam or
+# moves the unset does not rely on a guarantee this helper never made.
 #
 # Args: $1 = variable name to report. Echoes its value, or "" if unset.
 run_fs_health_probe_env() {

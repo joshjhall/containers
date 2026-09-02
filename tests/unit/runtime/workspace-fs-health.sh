@@ -178,6 +178,30 @@ test_config_parameters_injection_does_not_suppress_repair() {
         "The repair must still report, not vanish silently"
 }
 
+test_legacy_git_config_does_not_divert_the_write() {
+    # The legacy singular GIT_CONFIG affects only the `git config` subcommand —
+    # exactly what check_ignorecase uses, twice, with no --file — and it diverts
+    # the WRITE as well as the read.
+    #
+    # This is the only vector in the set whose failure is not silent: measured
+    # end-to-end, the script reported "set core.ignorecase=true" while the
+    # repo-local value stayed `false`. A FALSE SUCCESS is worse than a silent
+    # no-op, because the log actively tells an operator the repair landed.
+    #
+    # So this test seeds core.ignorecase=false and asserts BOTH halves: the
+    # repo-local value is really corrected, AND the reported outcome is true.
+    git -C "$PROJECT_ROOT" config --local core.ignorecase false
+    command printf '[core]\n\tignorecase = false\n' >"$TEST_TEMP_DIR/decoy-gitconfig"
+
+    local output
+    output=$(run_fs_health_with_legacy_config "$TEST_TEMP_DIR/decoy-gitconfig" insensitive)
+
+    assert_equals "true" "$(get_local_ignorecase)" \
+        "A leaked GIT_CONFIG must not divert the repair away from the repo-local config"
+    assert_contains "$output" "set core.ignorecase=true" \
+        "The run should report the repair it actually made"
+}
+
 test_nosystem_optout_is_preserved() {
     # GIT_CONFIG_NOSYSTEM is deliberately NOT cleared: it is an opt-OUT (git
     # reads /etc/gitconfig by default; NOSYSTEM disables that), so unsetting it
@@ -752,6 +776,7 @@ run_test_with_setup test_skip_fix_reports_without_writing "SKIP_CASE_FIX reports
 run_test_with_setup test_config_count_injection_does_not_suppress_repair "Injected GIT_CONFIG_COUNT does not suppress the ignorecase repair"
 run_test_with_setup test_config_global_injection_does_not_suppress_repair "Substituted GIT_CONFIG_GLOBAL does not suppress the ignorecase repair"
 run_test_with_setup test_config_parameters_injection_does_not_suppress_repair "Injected GIT_CONFIG_PARAMETERS does not mask a wrong local value"
+run_test_with_setup test_legacy_git_config_does_not_divert_the_write "Leaked legacy GIT_CONFIG does not divert the repair write"
 run_test_with_setup test_nosystem_optout_is_preserved "GIT_CONFIG_NOSYSTEM opt-out survives the unset"
 run_test_with_setup test_silent_when_healthy "Silent when filesystem is healthy"
 run_test_with_setup test_reports_when_repairing "Reports the setting it changed"

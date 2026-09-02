@@ -153,6 +153,7 @@ LOG_PREFIX="[fs-health]"
 # more concrete reason than the identity vars above — and NOT the reason #886
 # first gave for leaving them out.
 #
+#   GIT_CONFIG (the legacy singular form)
 #   GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM
 #   GIT_CONFIG_COUNT (+ its GIT_CONFIG_KEY_<n> / GIT_CONFIG_VALUE_<n> pairs)
 #   GIT_CONFIG_PARAMETERS
@@ -193,6 +194,21 @@ LOG_PREFIX="[fs-health]"
 # the state check_ignorecase exists to correct. Caught by the #894 review, not
 # by the original sweep.
 #
+# GIT_CONFIG (singular, legacy) is the WORST of the set, and the only one whose
+# failure is not silent. It affects just the `git config` subcommand — which is
+# exactly what check_ignorecase uses, twice, with no --file — and it diverts the
+# WRITE as well as the read. Measured end-to-end against this script, on a repo
+# whose local core.ignorecase is `false`:
+#
+#   [fs-health] git core.ignorecase is 'false' (incorrect for this mount)
+#   [fs-health] set core.ignorecase=true          <- reported as repaired
+#   repo-local core.ignorecase afterwards: false  <- but never written
+#
+# So this one produces a FALSE SUCCESS: the operator is told the repair landed,
+# the log says so, and the setting that `git clean -fd` actually consults is
+# untouched. Every other variable here can only make the repair vanish quietly;
+# this one makes it lie. Caught in the second #894 review cycle.
+#
 # NOT cleared: GIT_CONFIG_NOSYSTEM, despite belonging to the same name family.
 # It is an opt-OUT, not a redirect: git reads /etc/gitconfig by default, and
 # NOSYSTEM is how a caller DISABLES that. Unsetting it would not restore a
@@ -215,7 +231,19 @@ LOG_PREFIX="[fs-health]"
 #
 # THE RULE, for anyone extending this list: a variable belongs here when it
 # demonstrably bends a probe THIS script makes — verified by measurement, not by
-# category. That is the boundary #894 settled.
+# category. That is the boundary #894 settled. Both #894 review cycles found a
+# variable the previous sweep had missed (GIT_CONFIG_PARAMETERS, then the legacy
+# GIT_CONFIG), and in each case reasoning by name family is what missed it —
+# measure the specific variable against the specific probe instead.
+#
+# WHY ONLY THIS SCRIPT. As of #894 this is the only script under lib/runtime/
+# that runs git against a repository, so the rule needs no cross-script rollout:
+# 60-setup-git.sh delegates to the setup-git command, check-installed-versions.sh
+# only runs `git --version`, and workspace-fs-health-cron.sh / -run.sh merely
+# invoke this file. If another runtime script starts shelling out to git — in
+# particular anything that reads or writes config — this same neutralization
+# belongs there too, and it should be hoisted into a shared helper rather than
+# copied.
 #
 # Unset ONCE here rather than wrapping each call in `env -u`: there are nine
 # `git -C` call sites across four functions, so per-call wrapping is nine
@@ -228,7 +256,8 @@ LOG_PREFIX="[fs-health]"
 # This repo has hit the leak class before: GIT_DIR leaking into the pre-push
 # hook failed 6/9 temp-repo tests (.claude/memory/git-env-leak-breaks-worktree-tests.md).
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
-    GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
+    GIT_CONFIG GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT \
+    GIT_CONFIG_PARAMETERS
 
 # Injection seam for the RESOLUTION PROBES in repair_linked_worktrees (#886).
 #
