@@ -156,6 +156,42 @@ test_config_global_injection_does_not_suppress_repair() {
         "A substituted GIT_CONFIG_GLOBAL must not suppress the repo-local repair"
 }
 
+test_config_parameters_injection_does_not_suppress_repair() {
+    # The likeliest vector, and the strongest: git populates
+    # GIT_CONFIG_PARAMETERS itself for every `git -c key=value`, exporting it to
+    # child processes. So an ancestor `git -c` — a hook, an alias, a wrapper, a
+    # CI step — reaches this script with nobody having deliberately exported a
+    # GIT_* var.
+    #
+    # It is also the only one that outranks the repo-LOCAL file, so this test
+    # seeds core.ignorecase=false first: that is the state check_ignorecase
+    # exists to correct, and the injection must not be able to mask it.
+    git -C "$PROJECT_ROOT" config --local core.ignorecase false
+
+    local output
+    output=$(GIT_CONFIG_PARAMETERS="'core.ignorecase'='true'" \
+        run_fs_health_stderr insensitive)
+
+    assert_equals "true" "$(get_local_ignorecase)" \
+        "An injected GIT_CONFIG_PARAMETERS must not mask an explicitly wrong local value"
+    assert_contains "$output" "case-insensitive" \
+        "The repair must still report, not vanish silently"
+}
+
+test_nosystem_optout_is_preserved() {
+    # GIT_CONFIG_NOSYSTEM is deliberately NOT cleared: it is an opt-OUT (git
+    # reads /etc/gitconfig by default; NOSYSTEM disables that), so unsetting it
+    # would re-enable a config source a caller turned off — the opposite of what
+    # this block is for. Pin that it survives, so a future "tidy up the family"
+    # edit that adds it to the unset fails here instead of silently widening the
+    # script's config surface.
+    local seen
+    seen=$(GIT_CONFIG_NOSYSTEM=1 run_fs_health_probe_env GIT_CONFIG_NOSYSTEM)
+
+    assert_equals "1" "$seen" \
+        "GIT_CONFIG_NOSYSTEM must survive the unset — it is an opt-out, not a redirect"
+}
+
 # ============================================================================
 # Reporting Tests
 # ============================================================================
@@ -715,6 +751,8 @@ run_test_with_setup test_idempotent_when_already_true "Idempotent when core.igno
 run_test_with_setup test_skip_fix_reports_without_writing "SKIP_CASE_FIX reports without writing"
 run_test_with_setup test_config_count_injection_does_not_suppress_repair "Injected GIT_CONFIG_COUNT does not suppress the ignorecase repair"
 run_test_with_setup test_config_global_injection_does_not_suppress_repair "Substituted GIT_CONFIG_GLOBAL does not suppress the ignorecase repair"
+run_test_with_setup test_config_parameters_injection_does_not_suppress_repair "Injected GIT_CONFIG_PARAMETERS does not mask a wrong local value"
+run_test_with_setup test_nosystem_optout_is_preserved "GIT_CONFIG_NOSYSTEM opt-out survives the unset"
 run_test_with_setup test_silent_when_healthy "Silent when filesystem is healthy"
 run_test_with_setup test_reports_when_repairing "Reports the setting it changed"
 run_test_with_setup test_healthy_symlink_untouched "Healthy symlink left untouched"

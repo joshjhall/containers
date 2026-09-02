@@ -153,8 +153,9 @@ LOG_PREFIX="[fs-health]"
 # more concrete reason than the identity vars above — and NOT the reason #886
 # first gave for leaving them out.
 #
-#   GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM / GIT_CONFIG_NOSYSTEM
+#   GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM
 #   GIT_CONFIG_COUNT (+ its GIT_CONFIG_KEY_<n> / GIT_CONFIG_VALUE_<n> pairs)
+#   GIT_CONFIG_PARAMETERS
 #
 # #886 argued these bought "no security boundary" — anyone able to set them
 # could run git directly — and left them alone. That framing was wrong, because
@@ -176,6 +177,30 @@ LOG_PREFIX="[fs-health]"
 # Clearing GIT_CONFIG_COUNT alone neutralizes the indexed pairs — git ignores
 # GIT_CONFIG_KEY_<n>/VALUE_<n> without a count — so no unbounded enumeration of
 # _<n> names is needed.
+#
+# GIT_CONFIG_PARAMETERS is the MOST LIKELY of these to be set by accident, and
+# the most dangerous. Git populates it ITSELF: any `git -c key=value ...`
+# exports it to every child process, so an ancestor `git -c` anywhere — a hook,
+# an alias, a wrapper, a CI step — reaches this script without anyone having
+# deliberately exported a GIT_* variable. Measured:
+#
+#   GIT_CONFIG_PARAMETERS="'core.ignorecase'='true'"  -> read returns 'true'
+#   git -c core.ignorecase=true <alias running a child git> -> child reads 'true'
+#
+# And unlike the file-redirect vars, `-c` values sit at the TOP of git's config
+# precedence — above the repo-local file. So this one suppresses the repair even
+# on a repo whose local core.ignorecase is explicitly `false`, which is exactly
+# the state check_ignorecase exists to correct. Caught by the #894 review, not
+# by the original sweep.
+#
+# NOT cleared: GIT_CONFIG_NOSYSTEM, despite belonging to the same name family.
+# It is an opt-OUT, not a redirect: git reads /etc/gitconfig by default, and
+# NOSYSTEM is how a caller DISABLES that. Unsetting it would not restore a
+# default — it would re-enable a config source someone deliberately turned off,
+# which is the opposite of this block's purpose and could itself pull in a
+# system-level core.ignorecase. (This image does ship an /etc/gitconfig; it sets
+# pager/diff options and no core.ignorecase today, but that is a fact about
+# today's image, not a guarantee.) Dropped from the list after review.
 #
 # Safe to clear: nothing in this repo (script, test, wrapper, CI job, Dockerfile)
 # supplies git config through the environment, and a normal config read is
@@ -203,7 +228,7 @@ LOG_PREFIX="[fs-health]"
 # This repo has hit the leak class before: GIT_DIR leaking into the pre-push
 # hook failed 6/9 temp-repo tests (.claude/memory/git-env-leak-breaks-worktree-tests.md).
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
-    GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT
+    GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 
 # Injection seam for the RESOLUTION PROBES in repair_linked_worktrees (#886).
 #

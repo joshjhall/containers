@@ -63,7 +63,7 @@ setup() {
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
         GIT_OBJECT_DIRECTORY GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM \
         GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 \
-        GIT_CONFIG_VALUE_0 2>/dev/null || true
+        GIT_CONFIG_VALUE_0 GIT_CONFIG_PARAMETERS 2>/dev/null || true
 }
 
 teardown() {
@@ -76,7 +76,7 @@ teardown() {
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
         GIT_OBJECT_DIRECTORY GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM \
         GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 \
-        GIT_CONFIG_VALUE_0 2>/dev/null || true
+        GIT_CONFIG_VALUE_0 GIT_CONFIG_PARAMETERS 2>/dev/null || true
 }
 
 # Run the script with the filesystem verdict forced via FS_CASE_STATE, so the
@@ -131,6 +131,59 @@ run_fs_health_with_global_config() {
         export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
         command env "GIT_CONFIG_GLOBAL=$injected" bash "$FS_HEALTH_SCRIPT"
     ) >/dev/null 2>&1
+}
+
+# Report what ONE environment variable holds inside the script, after its unset
+# block has run (issue #894).
+#
+# This is what lets a test pin a variable as deliberately NOT cleared — a
+# property no amount of observing repair behavior can show, because an opt-out
+# that gets wrongly cleared changes nothing visible until the day it does.
+#
+# HOW, and why not the obvious way: sourcing the script to inspect the
+# environment afterwards does NOT work. The project-root guard runs `exit 0` on
+# a non-repo directory, which terminates the sourcing subshell before it can
+# report anything (measured: the probe printed nothing at all). Instead the
+# script is EXECUTED normally against a real fixture repo, with FS_HEALTH_GIT
+# pointed at a stub that records its own environment the first time the script
+# calls git — which is after the unset block by construction, since the unset
+# sits in the Configuration section above every git call.
+#
+# Args: $1 = variable name to report. Echoes its value, or "" if unset.
+run_fs_health_probe_env() {
+    local var="$1"
+    local stub="$TEST_TEMP_DIR/env-probe-git"
+    local out="$TEST_TEMP_DIR/env-probe-out"
+
+    command rm -f "$out"
+
+    local real_git
+    real_git=$(command -v git)
+
+    command cat >"$stub" <<PROBE_STUB_EOF
+#!/bin/bash
+# Record the probed variable once, then behave exactly like git so the run
+# proceeds normally and nothing else is perturbed.
+if [ ! -e "$out" ]; then
+    command printf '%s' "\${$var-}" >"$out"
+fi
+exec "$real_git" "\$@"
+PROBE_STUB_EOF
+    command chmod +x "$stub"
+
+    (
+        export PROJECT_ROOT
+        export FS_CASE_STATE=sensitive
+        export SKIP_CASE_CHECK=false
+        export SKIP_CASE_FIX=false
+        export FS_HEALTH_ENV_FILE
+        export FS_HEALTH_UPDATE_ENV=false
+        export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
+        export FS_HEALTH_GIT="$stub"
+        bash "$FS_HEALTH_SCRIPT"
+    ) >/dev/null 2>&1
+
+    [ -e "$out" ] && command cat "$out"
 }
 
 # Current core.ignorecase, or the literal "unset"
