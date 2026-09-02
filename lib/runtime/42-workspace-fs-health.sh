@@ -119,6 +119,78 @@ PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
 CASE_DETECT_SCRIPT="${CASE_DETECT_SCRIPT:-/usr/local/bin/detect-case-sensitivity.sh}"
 LOG_PREFIX="[fs-health]"
 
+# Neutralize an inherited git environment before ANY git runs (issue #886).
+#
+# `git -C <dir>` does NOT win against these variables — git reads the
+# environment first and `-C` only changes the working directory it starts from.
+# So a caller that exported any of them redirects every probe below at a
+# DIFFERENT repository, while the code still reads as if it were scoped to
+# PROJECT_ROOT:
+#
+#   GIT_DIR / GIT_WORK_TREE  — repoint --git-dir and --show-toplevel, which can
+#                              make repair_linked_worktrees' "am I the main
+#                              worktree?" gate compare two paths that say
+#                              nothing about PROJECT_ROOT. The gate is what
+#                              keeps the walk loop-free, so a skewed answer
+#                              either disables the #882 repair or enumerates
+#                              some other repo's worktrees.
+#   GIT_COMMON_DIR           — repoints the OTHER half of that same equality.
+#   GIT_INDEX_FILE           — makes `ls-files` enumerate a foreign index, which
+#                              is what check_symlinks and the submodule walk
+#                              iterate. This one reaches past the worktree pass
+#                              into the two original repairs.
+#   GIT_OBJECT_DIRECTORY     — defense-in-depth ONLY, and deliberately untested.
+#                              Measured against every probe this script makes
+#                              (ls-files, rev-parse --git-dir/--show-toplevel,
+#                              worktree list): a leak bends none of them, because
+#                              they all read refs and the index, never object
+#                              content. There is no observable behavior to
+#                              regression-test, so unlike its four siblings it
+#                              gets no immunity test — an absence to leave alone,
+#                              not an oversight to fill.
+#
+# SCOPE — these five are the repo-IDENTITY variables (which repository am I
+# operating on), which is the leak class #886 is about. Deliberately NOT a
+# general git-environment sanitizer: GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM /
+# GIT_CONFIG_COUNT and GIT_CEILING_DIRECTORIES can also steer git, and are left
+# alone here. Anyone who can set those in this process's environment can equally
+# run git directly, so unsetting them buys no security boundary — while removing
+# them would break the legitimate case of a caller who set them on purpose.
+#
+# Unset ONCE here rather than wrapping each call in `env -u`: there are nine
+# `git -C` call sites across four functions, so per-call wrapping is nine
+# chances to miss one and leaves every future git line inheriting the bug by
+# default. This is safe precisely because the script is EXEC'd, never sourced —
+# the Dockerfile installs it to /etc/container/startup/ and both
+# workspace-fs-health-cron.sh and workspace-fs-health-run.sh invoke it by path —
+# so nothing but this process sees the cleared environment.
+#
+# This repo has hit the leak class before: GIT_DIR leaking into the pre-push
+# hook failed 6/9 temp-repo tests (.claude/memory/git-env-leak-breaks-worktree-tests.md).
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+
+# Injection seam for the RESOLUTION PROBES in repair_linked_worktrees (#886).
+#
+# SCOPE, stated precisely because the name reads broader than the wiring: this
+# substitutes the four git calls in repair_linked_worktrees (the three
+# `rev-parse` probes and the `worktree list` enumeration) — NOT every git call
+# in the file. check_ignorecase and check_symlinks keep calling `git` directly,
+# because their failure modes are already observable through the config and the
+# index, so they need no seam to be testable. Widen this only if a specific test
+# needs it; a seam nothing drives is dead weight.
+#
+# WHY THOSE FOUR. They are guarded by `|| return 0` by design — this script must
+# never be why a container fails to start — which makes their failure path
+# invisible: exactly how the git-2.31 `--path-format=absolute` regression
+# no-opped the whole #882 feature on Debian 11 (git 2.30.2) with no diagnostic.
+# Substituting the binary is the only way to drive such a failure on demand.
+#
+# A PATH-shadowed stub does NOT work here: /etc/bash_env rebuilds PATH for
+# non-interactive bash, so the stub is silently ignored inside this script's own
+# bash invocation (.claude/memory/bash-env-breaks-path-stubs.md). Hence a seam,
+# matching CASE_DETECT_SCRIPT / FS_HEALTH_STAT / FS_HEALTH_SU.
+FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
+
 # Injection seam for the symlink staleness probe. Neither nlink=0 nor size=0 can
 # be produced on demand — they are filesystem cache artifacts — so the only way
 # to exercise the repair (rather than just its inaction) is to substitute the
@@ -419,8 +491,8 @@ repair_linked_worktrees() {
     #      symlinked path component (exactly the environment this script exists
     #      for) cannot produce a false mismatch between the two forms.
     local git_dir common_dir
-    git_dir=$(git -C "$PROJECT_ROOT" rev-parse --git-dir 2>/dev/null) || return 0
-    common_dir=$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null) || return 0
+    git_dir=$("$FS_HEALTH_GIT" -C "$PROJECT_ROOT" rev-parse --git-dir 2>/dev/null) || return 0
+    common_dir=$("$FS_HEALTH_GIT" -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null) || return 0
 
     # Relative outputs are relative to PROJECT_ROOT, so resolve from there.
     git_dir=$(cd "$PROJECT_ROOT" 2>/dev/null && cd "$git_dir" 2>/dev/null && pwd -P) || return 0
@@ -437,7 +509,7 @@ repair_linked_worktrees() {
     # the main root would simply be walked a second time, mislabeled with an
     # absolute path — but it is a confusing duplicate diagnostic for the very
     # root the run already covered, so both sides are resolved the same way.
-    main_toplevel=$(git -C "$PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null) || return 0
+    main_toplevel=$("$FS_HEALTH_GIT" -C "$PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null) || return 0
     main_toplevel=$(cd "$main_toplevel" 2>/dev/null && pwd -P) || return 0
 
     # `worktree list --porcelain` emits stanzas whose first line is
@@ -503,12 +575,38 @@ repair_linked_worktrees() {
         if [ "$rel" != "$wt" ]; then
             repair_repo_tree "$wt" "$label" 0
         else
+            # ANNOUNCE the out-of-tree root before repairing it (issue #886).
+            #
+            # `git worktree add` accepts any path the caller can write to, and
+            # this pass follows every registered entry — running `ln -sfn`
+            # against it at every container start and hourly from cron. The
+            # blast radius is bounded (the script runs as the container user,
+            # and registering a worktree already requires equivalent write
+            # access), so this is NOT a privilege-escalation path. What it is,
+            # is an unattended repair whose reach silently extends outside the
+            # project — worth one line an operator can notice or grep for.
+            #
+            # Rejected: an allowlist restricting repairs to PROJECT_ROOT. That
+            # would silently stop repairing a legitimate
+            # `git worktree add /other/volume/wt`, reintroducing the very #882
+            # symptom this pass exists to fix, for the one user who most needs
+            # it. The reach is intended; only its invisibility was the defect.
+            #
+            # Emitted unconditionally, not gated on FIX_ENABLED: under
+            # SKIP_CASE_FIX the run is report-only, and "there is an out-of-tree
+            # worktree here" is precisely the kind of thing a report should say.
+            # `label` carries a TRAILING SLASH (it is built for prefixing a
+            # relative path, as "${label_prefix}${rel}"), so it is trimmed here
+            # rather than interpolated raw: "${wt}/is outside" reads as a path
+            # component named "is" and breaks a grep for the worktree path.
+            command echo "$LOG_PREFIX ${label%/} is outside the project root — repairing symlinks there (case verdict not applied)" >&2
+
             saved_state="$FS_CASE_STATE"
             FS_CASE_STATE=unknown
             repair_repo_tree "$wt" "$label" 0
             FS_CASE_STATE="$saved_state"
         fi
-    done < <(git -C "$PROJECT_ROOT" worktree list --porcelain 2>/dev/null |
+    done < <("$FS_HEALTH_GIT" -C "$PROJECT_ROOT" worktree list --porcelain 2>/dev/null |
         /usr/bin/awk '/^worktree / { print substr($0, 10) }')
 
     return 0

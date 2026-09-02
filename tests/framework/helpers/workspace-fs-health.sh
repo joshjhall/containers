@@ -52,7 +52,13 @@ setup() {
     export FS_HEALTH_ENV_FILE="$TEST_TEMP_DIR/fs-health.env"
 
     unset SKIP_CASE_CHECK SKIP_CASE_FIX FS_HEALTH_UPDATE_ENV FS_HEALTH_STAT \
-        FS_HEALTH_MAX_DEPTH 2>/dev/null || true
+        FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT 2>/dev/null || true
+
+    # Clear any inherited git environment so a leak in the HARNESS cannot be
+    # mistaken for the leak-immunity the script now provides (issue #886). The
+    # AC1 test sets GIT_DIR deliberately; every other test must start clean.
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
+        GIT_OBJECT_DIRECTORY 2>/dev/null || true
 }
 
 teardown() {
@@ -61,7 +67,9 @@ teardown() {
     fi
     unset PROJECT_ROOT TEST_TEMP_DIR SKIP_CASE_CHECK SKIP_CASE_FIX \
         FS_HEALTH_ENV_FILE FS_HEALTH_UPDATE_ENV FS_HEALTH_STAT \
-        FS_HEALTH_MAX_DEPTH 2>/dev/null || true
+        FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT 2>/dev/null || true
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
+        GIT_OBJECT_DIRECTORY 2>/dev/null || true
 }
 
 # Run the script with the filesystem verdict forced via FS_CASE_STATE, so the
@@ -75,6 +83,7 @@ run_fs_health() {
         export SKIP_CASE_FIX="${SKIP_CASE_FIX:-false}"
         export FS_HEALTH_ENV_FILE
         export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
+        export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
         bash "$FS_HEALTH_SCRIPT"
     ) 2>/dev/null
 }
@@ -88,6 +97,7 @@ run_fs_health_stderr() {
         export SKIP_CASE_FIX="${SKIP_CASE_FIX:-false}"
         export FS_HEALTH_ENV_FILE
         export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
+        export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
         { bash "$FS_HEALTH_SCRIPT" >/dev/null; } 2>&1
     )
 }
