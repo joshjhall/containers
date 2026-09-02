@@ -571,7 +571,11 @@ repair_linked_worktrees() {
             # Emitted unconditionally, not gated on FIX_ENABLED: under
             # SKIP_CASE_FIX the run is report-only, and "there is an out-of-tree
             # worktree here" is precisely the kind of thing a report should say.
-            command echo "$LOG_PREFIX ${label}is outside the project root — repairing symlinks there (case verdict not applied)" >&2
+            # `label` carries a TRAILING SLASH (it is built for prefixing a
+            # relative path, as "${label_prefix}${rel}"), so it is trimmed here
+            # rather than interpolated raw: "${wt}/is outside" reads as a path
+            # component named "is" and breaks a grep for the worktree path.
+            command echo "$LOG_PREFIX ${label%/} is outside the project root — repairing symlinks there (case verdict not applied)" >&2
 
             saved_state="$FS_CASE_STATE"
             FS_CASE_STATE=unknown

@@ -629,8 +629,17 @@ test_outside_worktree_is_announced() {
     local output
     output=$(run_fs_health_stderr sensitive)
 
-    assert_contains "$output" "is outside the project root" \
-        "Repairing a worktree outside the project root must be announced"
+    # Assert the WHOLE line, path included — not just the sentence fragment.
+    # A fragment-only assertion passed while the line actually rendered as
+    # "${outside}/is outside the project root": label carries a trailing slash,
+    # so the path ran into the word "is" and a grep for the worktree path found
+    # a component named "is" instead. Pinning the path and the space together is
+    # what makes that a test failure rather than a cosmetic surprise in a log
+    # nobody reads until they need it.
+    assert_contains "$output" "${outside} is outside the project root" \
+        "The announcement must name the worktree path, separated from the sentence"
+    assert_not_contains "$output" "${outside}/is outside" \
+        "The label's trailing slash must not run into the sentence"
     assert_contains "$output" "refreshed ${outside}/AGENTS.md" \
         "The out-of-tree worktree must still be repaired after the warning"
 }
@@ -659,8 +668,8 @@ test_outside_worktree_announced_under_skip_fix() {
     local output
     output=$(run_fs_health_stderr sensitive)
 
-    assert_contains "$output" "is outside the project root" \
-        "SKIP_CASE_FIX must still announce an out-of-tree worktree"
+    assert_contains "$output" "${outside} is outside the project root" \
+        "SKIP_CASE_FIX must still announce an out-of-tree worktree, path intact"
     assert_not_contains "$output" "refreshed ${outside}/AGENTS.md" \
         "SKIP_CASE_FIX must not actually repair it"
 }
