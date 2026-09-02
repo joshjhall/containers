@@ -105,6 +105,58 @@ test_skip_fix_reports_without_writing() {
 }
 
 # ============================================================================
+# Config-injection immunity (issue #894)
+# ============================================================================
+#
+# check_ignorecase reads core.ignorecase and returns early — SILENTLY — when the
+# value is already "true". Git resolves config from the environment ahead of
+# `-C`, so an inherited GIT_CONFIG_COUNT or GIT_CONFIG_GLOBAL supplying that
+# value makes the repair no-op with no diagnostic at all: the same silent-failure
+# class #886 was filed to close, reached through the config family rather than
+# the repo-identity one.
+#
+# The stakes are in the script's own header: on a case-insensitive mount, an
+# unrepaired core.ignorecase lets `git clean -fd` unlink the shared inode and
+# destroy tracked source.
+#
+# These assertions read the repo-LOCAL value deliberately — plain
+# `get_ignorecase` resolves the injected value too, so it would report "true"
+# for a repair that never happened and the test would pass while the bug was
+# live.
+
+# The repo-local core.ignorecase, ignoring any injected/global value.
+get_local_ignorecase() {
+    git -C "$PROJECT_ROOT" config --local --get core.ignorecase 2>/dev/null ||
+        command echo "unset"
+}
+
+test_config_count_injection_does_not_suppress_repair() {
+    # The indexed-pair mechanism. Clearing GIT_CONFIG_COUNT is what neutralizes
+    # it — git ignores GIT_CONFIG_KEY_<n>/VALUE_<n> without a count — so no
+    # unbounded enumeration of _<n> names is required.
+    local output
+    output=$(GIT_CONFIG_COUNT=1 \
+        GIT_CONFIG_KEY_0=core.ignorecase \
+        GIT_CONFIG_VALUE_0=true \
+        run_fs_health_stderr insensitive)
+
+    assert_equals "true" "$(get_local_ignorecase)" \
+        "An injected core.ignorecase must not suppress the repo-local repair"
+    assert_contains "$output" "case-insensitive" \
+        "The repair must still report, not vanish silently"
+}
+
+test_config_global_injection_does_not_suppress_repair() {
+    # The other spelling of the same hijack: a substituted global config file.
+    command printf '[core]\n\tignorecase = true\n' >"$TEST_TEMP_DIR/injected-gitconfig"
+
+    run_fs_health_with_global_config "$TEST_TEMP_DIR/injected-gitconfig" insensitive
+
+    assert_equals "true" "$(get_local_ignorecase)" \
+        "A substituted GIT_CONFIG_GLOBAL must not suppress the repo-local repair"
+}
+
+# ============================================================================
 # Reporting Tests
 # ============================================================================
 
@@ -661,6 +713,8 @@ run_test_with_setup test_no_change_when_detection_unknown "No change when detect
 run_test_with_setup test_corrects_explicit_false "Corrects an explicit core.ignorecase=false"
 run_test_with_setup test_idempotent_when_already_true "Idempotent when core.ignorecase already true"
 run_test_with_setup test_skip_fix_reports_without_writing "SKIP_CASE_FIX reports without writing"
+run_test_with_setup test_config_count_injection_does_not_suppress_repair "Injected GIT_CONFIG_COUNT does not suppress the ignorecase repair"
+run_test_with_setup test_config_global_injection_does_not_suppress_repair "Substituted GIT_CONFIG_GLOBAL does not suppress the ignorecase repair"
 run_test_with_setup test_silent_when_healthy "Silent when filesystem is healthy"
 run_test_with_setup test_reports_when_repairing "Reports the setting it changed"
 run_test_with_setup test_healthy_symlink_untouched "Healthy symlink left untouched"

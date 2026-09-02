@@ -149,13 +149,48 @@ LOG_PREFIX="[fs-health]"
 #                              gets no immunity test — an absence to leave alone,
 #                              not an oversight to fill.
 #
-# SCOPE — these five are the repo-IDENTITY variables (which repository am I
-# operating on), which is the leak class #886 is about. Deliberately NOT a
-# general git-environment sanitizer: GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM /
-# GIT_CONFIG_COUNT and GIT_CEILING_DIRECTORIES can also steer git, and are left
-# alone here. Anyone who can set those in this process's environment can equally
-# run git directly, so unsetting them buys no security boundary — while removing
-# them would break the legitimate case of a caller who set them on purpose.
+# The CONFIG-REDIRECT family is cleared too (issue #894), for a different and
+# more concrete reason than the identity vars above — and NOT the reason #886
+# first gave for leaving them out.
+#
+#   GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM / GIT_CONFIG_NOSYSTEM
+#   GIT_CONFIG_COUNT (+ its GIT_CONFIG_KEY_<n> / GIT_CONFIG_VALUE_<n> pairs)
+#
+# #886 argued these bought "no security boundary" — anyone able to set them
+# could run git directly — and left them alone. That framing was wrong, because
+# the risk here is not an attacker. It is a SILENT NO-OP, the same class #886
+# exists to fix. Measured end-to-end against this script:
+#
+#   clean run     -> "set core.ignorecase=true", repo-local value written
+#   GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.ignorecase GIT_CONFIG_VALUE_0=true
+#                 -> repo-local value NEVER written, and NOTHING printed
+#
+# check_ignorecase reads core.ignorecase, sees the injected `true`, and takes its
+# "already correct — say nothing" early return. An inherited value from anywhere
+# — a wrapper, a CI job, a developer's shell — therefore disables the repair
+# with no diagnostic. What that repair prevents is in this file's own header: on
+# a case-insensitive mount, `git clean -fd` unlinks the shared inode and destroys
+# tracked source. `-C` does not protect the read; git resolves config from the
+# environment first.
+#
+# Clearing GIT_CONFIG_COUNT alone neutralizes the indexed pairs — git ignores
+# GIT_CONFIG_KEY_<n>/VALUE_<n> without a count — so no unbounded enumeration of
+# _<n> names is needed.
+#
+# Safe to clear: nothing in this repo (script, test, wrapper, CI job, Dockerfile)
+# supplies git config through the environment, and a normal config read is
+# unaffected by the unset. Both verified by repo-wide grep in #894.
+#
+# NOT cleared: GIT_CEILING_DIRECTORIES. Measured inert against all three
+# rev-parse probes here (--git-dir, --git-common-dir, --show-toplevel are
+# unchanged under it) because `-C` supplies an absolute starting point, so no
+# discovery walk crosses the ceiling. Reviewers listed it alongside the config
+# family; measurement says it does not belong. Recorded rather than silently
+# omitted, the same treatment GIT_OBJECT_DIRECTORY gets above.
+#
+# THE RULE, for anyone extending this list: a variable belongs here when it
+# demonstrably bends a probe THIS script makes — verified by measurement, not by
+# category. That is the boundary #894 settled.
 #
 # Unset ONCE here rather than wrapping each call in `env -u`: there are nine
 # `git -C` call sites across four functions, so per-call wrapping is nine
@@ -167,7 +202,8 @@ LOG_PREFIX="[fs-health]"
 #
 # This repo has hit the leak class before: GIT_DIR leaking into the pre-push
 # hook failed 6/9 temp-repo tests (.claude/memory/git-env-leak-breaks-worktree-tests.md).
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+    GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT
 
 # Injection seam for the RESOLUTION PROBES in repair_linked_worktrees (#886).
 #

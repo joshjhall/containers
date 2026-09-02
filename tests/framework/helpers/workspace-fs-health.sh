@@ -55,10 +55,15 @@ setup() {
         FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT 2>/dev/null || true
 
     # Clear any inherited git environment so a leak in the HARNESS cannot be
-    # mistaken for the leak-immunity the script now provides (issue #886). The
-    # AC1 test sets GIT_DIR deliberately; every other test must start clean.
+    # mistaken for the leak-immunity the script now provides (issue #886, widened
+    # to the config-redirect family in #894). The immunity tests set these
+    # deliberately; every other test must start clean — a stray GIT_CONFIG_COUNT
+    # in the developer's or CI's environment would otherwise suppress the
+    # ignorecase repair under test and read as a mysterious assertion failure.
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
-        GIT_OBJECT_DIRECTORY 2>/dev/null || true
+        GIT_OBJECT_DIRECTORY GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM \
+        GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 \
+        GIT_CONFIG_VALUE_0 2>/dev/null || true
 }
 
 teardown() {
@@ -69,7 +74,9 @@ teardown() {
         FS_HEALTH_ENV_FILE FS_HEALTH_UPDATE_ENV FS_HEALTH_STAT \
         FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT 2>/dev/null || true
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
-        GIT_OBJECT_DIRECTORY 2>/dev/null || true
+        GIT_OBJECT_DIRECTORY GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM \
+        GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 \
+        GIT_CONFIG_VALUE_0 2>/dev/null || true
 }
 
 # Run the script with the filesystem verdict forced via FS_CASE_STATE, so the
@@ -100,6 +107,30 @@ run_fs_health_stderr() {
         export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
         { bash "$FS_HEALTH_SCRIPT" >/dev/null; } 2>&1
     )
+}
+
+# Run the script with a substituted GIT_CONFIG_GLOBAL (issue #894).
+#
+# Separate from run_fs_health because the assignment is built inside `env`
+# rather than as an inline VAR=... prefix: the Claude Code worktree guard
+# refuses a command that sets GIT_CONFIG_GLOBAL inline, since it cannot verify
+# where the redirected config would send a write. Routing it through `env` in a
+# committed helper keeps the immunity test runnable.
+#
+# Args: $1 = path to the config file to inject, $2 = fs state
+run_fs_health_with_global_config() {
+    local injected="$1"
+    local state="$2"
+    (
+        export PROJECT_ROOT
+        export FS_CASE_STATE="$state"
+        export SKIP_CASE_CHECK="${SKIP_CASE_CHECK:-false}"
+        export SKIP_CASE_FIX="${SKIP_CASE_FIX:-false}"
+        export FS_HEALTH_ENV_FILE
+        export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
+        export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
+        command env "GIT_CONFIG_GLOBAL=$injected" bash "$FS_HEALTH_SCRIPT"
+    ) >/dev/null 2>&1
 }
 
 # Current core.ignorecase, or the literal "unset"
