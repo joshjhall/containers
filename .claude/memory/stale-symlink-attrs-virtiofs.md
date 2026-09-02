@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 1d2ee9f2-91fb-4c3e-86fa-a0de57fbb891
-  modified: 2026-08-31T19:00:38.977Z
+  modified: 2026-09-02T17:03:50.442Z
 ---
 
 Long-lived symlinks on a virtiofs bind mount can end up with cached attributes
@@ -40,9 +40,15 @@ golem run, not occasionally.
 
 `42-workspace-fs-health.sh` scans `PROJECT_ROOT` plus its submodules; a linked
 worktree is neither, and #828's proposed fix caps discovery at depth 1 of
-`/workspace` while worktrees sit at depth 3. Filed as #882.
+`/workspace` while worktrees sit at depth 3. Filed as #882 — **FIXED** in
+PR #884 (merged 2026-09-02): the script now also walks every linked worktree,
+enumerated from `git worktree list --porcelain` and gated to the main worktree
+(that list is repo-global, so enumerating from inside a worktree would re-list
+the whole set including the caller). Worktrees created after boot are picked up
+by the hourly cron leg. Follow-up hardening tracked in #886.
 
-**How to apply:** run `git diff --stat` before staging in a new worktree, and
-treat symlink deletions you did not make as this bug, not as your change.
-`git checkout -- <paths>` restores them. Worth catching early: left unnoticed
-they ride along into the commit as spurious symlink removals.
+**How to apply:** on a container built before that fix, run `git diff --stat`
+before staging in a new worktree and treat symlink deletions you did not make as
+this bug, not as your change — `git checkout -- <paths>` restores them, or
+`workspace-fs-health` repairs them. Left unnoticed they ride along into the
+commit as spurious symlink removals.
