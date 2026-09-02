@@ -139,8 +139,23 @@ LOG_PREFIX="[fs-health]"
 #                              is what check_symlinks and the submodule walk
 #                              iterate. This one reaches past the worktree pass
 #                              into the two original repairs.
-#   GIT_OBJECT_DIRECTORY     — same class; unset for completeness rather than
-#                              because a specific probe here is known to bend.
+#   GIT_OBJECT_DIRECTORY     — defense-in-depth ONLY, and deliberately untested.
+#                              Measured against every probe this script makes
+#                              (ls-files, rev-parse --git-dir/--show-toplevel,
+#                              worktree list): a leak bends none of them, because
+#                              they all read refs and the index, never object
+#                              content. There is no observable behavior to
+#                              regression-test, so unlike its four siblings it
+#                              gets no immunity test — an absence to leave alone,
+#                              not an oversight to fill.
+#
+# SCOPE — these five are the repo-IDENTITY variables (which repository am I
+# operating on), which is the leak class #886 is about. Deliberately NOT a
+# general git-environment sanitizer: GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM /
+# GIT_CONFIG_COUNT and GIT_CEILING_DIRECTORIES can also steer git, and are left
+# alone here. Anyone who can set those in this process's environment can equally
+# run git directly, so unsetting them buys no security boundary — while removing
+# them would break the legitimate case of a caller who set them on purpose.
 #
 # Unset ONCE here rather than wrapping each call in `env -u`: there are nine
 # `git -C` call sites across four functions, so per-call wrapping is nine
@@ -154,12 +169,21 @@ LOG_PREFIX="[fs-health]"
 # hook failed 6/9 temp-repo tests (.claude/memory/git-env-leak-breaks-worktree-tests.md).
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
 
-# Injection seam for the git binary itself (issue #886). The four resolution
-# fallbacks in repair_linked_worktrees are `|| return 0` by design — this script
-# must never be why a container fails to start — which makes their failure path
+# Injection seam for the RESOLUTION PROBES in repair_linked_worktrees (#886).
+#
+# SCOPE, stated precisely because the name reads broader than the wiring: this
+# substitutes the four git calls in repair_linked_worktrees (the three
+# `rev-parse` probes and the `worktree list` enumeration) — NOT every git call
+# in the file. check_ignorecase and check_symlinks keep calling `git` directly,
+# because their failure modes are already observable through the config and the
+# index, so they need no seam to be testable. Widen this only if a specific test
+# needs it; a seam nothing drives is dead weight.
+#
+# WHY THOSE FOUR. They are guarded by `|| return 0` by design — this script must
+# never be why a container fails to start — which makes their failure path
 # invisible: exactly how the git-2.31 `--path-format=absolute` regression
 # no-opped the whole #882 feature on Debian 11 (git 2.30.2) with no diagnostic.
-# Substituting the binary is the only way to drive a probe failure on demand.
+# Substituting the binary is the only way to drive such a failure on demand.
 #
 # A PATH-shadowed stub does NOT work here: /etc/bash_env rebuilds PATH for
 # non-interactive bash, so the stub is silently ignored inside this script's own

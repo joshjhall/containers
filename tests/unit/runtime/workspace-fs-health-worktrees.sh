@@ -670,6 +670,8 @@ test_outside_worktree_announced_under_skip_fix() {
 
     assert_contains "$output" "${outside} is outside the project root" \
         "SKIP_CASE_FIX must still announce an out-of-tree worktree, path intact"
+    assert_not_contains "$output" "${outside}/is outside" \
+        "The label's trailing slash must not run into the sentence here either"
     assert_not_contains "$output" "refreshed ${outside}/AGENTS.md" \
         "SKIP_CASE_FIX must not actually repair it"
 }
