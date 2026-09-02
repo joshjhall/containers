@@ -236,6 +236,31 @@ LOG_PREFIX="[fs-health]"
 # GIT_CONFIG), and in each case reasoning by name family is what missed it —
 # measure the specific variable against the specific probe instead.
 #
+# THE SPACE IS CLOSED, as of #894. Rather than keep discovering these one review
+# cycle at a time, every git environment variable documented as touching config
+# resolution, repo discovery, the index, or pathspecs was swept against this
+# script's three probe shapes (`config --get`, `rev-parse --show-toplevel`,
+# `ls-files -s`). Exactly five move any of them, and all five are cleared above:
+#
+#   bends the config read:   GIT_CONFIG, GIT_CONFIG_COUNT, GIT_CONFIG_PARAMETERS
+#   bends discovery/index:   GIT_WORK_TREE, GIT_INDEX_FILE
+#
+# Measured INERT against all three: GIT_CONFIG_NOSYSTEM, GIT_CEILING_DIRECTORIES,
+# GIT_DISCOVERY_ACROSS_FILESYSTEM, GIT_ATTR_NOSYSTEM, GIT_NAMESPACE,
+# GIT_ALTERNATE_OBJECT_DIRECTORIES, and the three *_PATHSPECS variables.
+#
+# PRECEDENCE matters as much as membership, and splits these into three tiers:
+#
+#   GIT_CONFIG                          beats the repo-LOCAL value
+#   GIT_CONFIG_PARAMETERS (`git -c`)    beats the repo-LOCAL value
+#   GIT_CONFIG_GLOBAL / _SYSTEM         lose to it — they can only fill a gap
+#
+# The first two are the dangerous tier: they mask an explicitly wrong
+# core.ignorecase=false, which is precisely the state check_ignorecase exists to
+# correct. The third can only suppress the repair on a repo that has no local
+# value yet. Both tiers are worth clearing; only the first can hide a repo that
+# is actively broken.
+#
 # WHY ONLY THIS SCRIPT. As of #894 this is the only script under lib/runtime/
 # that runs git against a repository, so the rule needs no cross-script rollout:
 # 60-setup-git.sh delegates to the setup-git command, check-installed-versions.sh

@@ -148,6 +148,12 @@ test_config_count_injection_does_not_suppress_repair() {
 
 test_config_global_injection_does_not_suppress_repair() {
     # The other spelling of the same hijack: a substituted global config file.
+    #
+    # Weaker than the GIT_CONFIG / GIT_CONFIG_PARAMETERS vectors, and the
+    # fixture's shape is what makes it fire: global config LOSES to a repo-local
+    # value, so it can only suppress the repair on a repo that has no local
+    # core.ignorecase yet — which is exactly this fixture (setup() unsets it).
+    # Seeding a local value here would make the test pass for the wrong reason.
     command printf '[core]\n\tignorecase = true\n' >"$TEST_TEMP_DIR/injected-gitconfig"
 
     run_fs_health_with_global_config "$TEST_TEMP_DIR/injected-gitconfig" insensitive
