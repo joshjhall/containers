@@ -186,6 +186,18 @@ run_fs_health_probe_env() {
     local stub="$TEST_TEMP_DIR/env-probe-git"
     local out="$TEST_TEMP_DIR/env-probe-out"
 
+    # $var is interpolated into the generated stub's source, so constrain it to
+    # a shell identifier. Every caller passes a literal today, which is why this
+    # is a guard rather than a fix — but the constraint was implicit, and an
+    # implicit constraint on generated shell text is worth making explicit
+    # before someone passes a computed name.
+    case "$var" in
+        '' | *[!A-Za-z0-9_]* | [0-9]*)
+            command echo "run_fs_health_probe_env: not a shell identifier: $var" >&2
+            return 1
+            ;;
+    esac
+
     command rm -f "$out"
 
     local real_git

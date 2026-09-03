@@ -236,30 +236,57 @@ LOG_PREFIX="[fs-health]"
 # GIT_CONFIG), and in each case reasoning by name family is what missed it —
 # measure the specific variable against the specific probe instead.
 #
-# THE SPACE IS CLOSED, as of #894. Rather than keep discovering these one review
-# cycle at a time, every git environment variable documented as touching config
-# resolution, repo discovery, the index, or pathspecs was swept against this
-# script's three probe shapes (`config --get`, `rev-parse --show-toplevel`,
-# `ls-files -s`). Exactly five move any of them, and all five are cleared above:
+# THE SPACE IS CLOSED, as of #894 — this list is complete, not a running tally.
+# Rather than keep discovering these one review cycle at a time, every git
+# environment variable documented as touching config resolution, repo discovery,
+# the index, or pathspecs was swept against ALL SIX call shapes this script
+# makes: `config --get`, `config <k> <v>` (the write), `rev-parse --git-dir`,
+# `rev-parse --git-common-dir`, `rev-parse --show-toplevel`,
+# `worktree list --porcelain`, and `ls-files -s`.
 #
-#   bends the config read:   GIT_CONFIG, GIT_CONFIG_COUNT, GIT_CONFIG_PARAMETERS
-#   bends discovery/index:   GIT_WORK_TREE, GIT_INDEX_FILE
+# EIGHT variables move at least one probe. All eight are cleared above — the
+# first five by #886, the last three by #894:
 #
-# Measured INERT against all three: GIT_CONFIG_NOSYSTEM, GIT_CEILING_DIRECTORIES,
-# GIT_DISCOVERY_ACROSS_FILESYSTEM, GIT_ATTR_NOSYSTEM, GIT_NAMESPACE,
-# GIT_ALTERNATE_OBJECT_DIRECTORIES, and the three *_PATHSPECS variables.
+#   GIT_DIR                 --git-dir, --git-common-dir
+#   GIT_COMMON_DIR          --git-common-dir
+#   GIT_WORK_TREE           --show-toplevel, --git-dir, --git-common-dir
+#   GIT_INDEX_FILE          ls-files
+#   GIT_CONFIG              config read AND WRITE  (beats repo-local)
+#   GIT_CONFIG_PARAMETERS   config read            (beats repo-local)
+#   GIT_CONFIG_COUNT        config read            (beats repo-local)
+#   GIT_CONFIG_GLOBAL       config read            (fills a gap only)
+#   GIT_CONFIG_SYSTEM       config read            (fills a gap only)
 #
-# PRECEDENCE matters as much as membership, and splits these into three tiers:
+# (Nine rows, eight variables: GIT_CONFIG_GLOBAL and _SYSTEM are one mechanism.)
 #
-#   GIT_CONFIG                          beats the repo-LOCAL value
-#   GIT_CONFIG_PARAMETERS (`git -c`)    beats the repo-LOCAL value
-#   GIT_CONFIG_GLOBAL / _SYSTEM         lose to it — they can only fill a gap
+# Measured INERT against all six shapes, and listed by name so a future reader
+# can see they were checked rather than overlooked: GIT_CONFIG_NOSYSTEM,
+# GIT_OBJECT_DIRECTORY, GIT_CEILING_DIRECTORIES, GIT_DISCOVERY_ACROSS_FILESYSTEM,
+# GIT_ATTR_NOSYSTEM, GIT_NAMESPACE, GIT_ALTERNATE_OBJECT_DIRECTORIES, and all
+# four pathspec toggles (GIT_GLOB_PATHSPECS, GIT_NOGLOB_PATHSPECS,
+# GIT_LITERAL_PATHSPECS, GIT_ICASE_PATHSPECS).
 #
-# The first two are the dangerous tier: they mask an explicitly wrong
-# core.ignorecase=false, which is precisely the state check_ignorecase exists to
-# correct. The third can only suppress the repair on a repo that has no local
-# value yet. Both tiers are worth clearing; only the first can hide a repo that
-# is actively broken.
+# TWO SWEEP ARTIFACTS worth recording, because both produced a wrong answer the
+# first time and would mislead anyone repeating this:
+#
+#   - Point GIT_OBJECT_DIRECTORY at a NONEXISTENT directory and every probe
+#     appears to move — but that is git failing outright ("fatal: not a git
+#     repository"), not a bent probe. Against a real directory it bends nothing,
+#     which is what #886 measured and why it has no immunity test.
+#   - Sweep the config probes on a fixture that ALREADY has a repo-local
+#     core.ignorecase and the gap-filling movers vanish, because local wins.
+#     A single fixture state cannot see the whole space; probe both.
+#
+# PRECEDENCE matters as much as membership, and splits the config movers in two:
+#
+#   GIT_CONFIG / GIT_CONFIG_PARAMETERS / GIT_CONFIG_COUNT   beat the local value
+#   GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM                   lose to it
+#
+# The first tier is the dangerous one: it masks an explicitly wrong
+# core.ignorecase=false, precisely the state check_ignorecase exists to correct.
+# The second can only suppress the repair on a repo with no local value yet.
+# Both are worth clearing; only the first can hide a repo that is actively
+# broken, and only GIT_CONFIG also diverts the WRITE.
 #
 # WHY ONLY THIS SCRIPT. As of #894 this is the only script under lib/runtime/
 # that runs git against a repository, so the rule needs no cross-script rollout:
