@@ -222,6 +222,20 @@ test_probe_helper_rejects_non_identifiers() {
     assert_equals "1" "$status" \
         "An empty variable name must be rejected"
 
+    # The third arm — and the one that needs care to test, because exit status
+    # alone CANNOT distinguish it. Every character in "9FOO" is a legal
+    # identifier character, so only the leading-digit pattern rejects it; but
+    # with that pattern removed the name is accepted, interpolated, and the
+    # generated stub then dies on `${9FOO-}: bad substitution`, which is also
+    # non-zero. An exit-code assertion therefore passes either way (measured —
+    # this test did exactly that before being rewritten).
+    #
+    # So assert on the guard's own DIAGNOSTIC, which only the guard emits.
+    local err
+    err=$(run_fs_health_probe_env '9FOO' 2>&1 >/dev/null)
+    assert_contains "$err" "not a shell identifier" \
+        "A digit-leading name must be rejected BY THE GUARD, not by a later bad substitution"
+
     # And the accepting arm still works, so the guard is not simply refusing
     # everything.
     local seen
