@@ -239,25 +239,35 @@ LOG_PREFIX="[fs-health]"
 # THE SPACE IS CLOSED, as of #894 — this list is complete, not a running tally.
 # Rather than keep discovering these one review cycle at a time, every git
 # environment variable documented as touching config resolution, repo discovery,
-# the index, or pathspecs was swept against ALL SIX call shapes this script
-# makes: `config --get`, `config <k> <v>` (the write), `rev-parse --git-dir`,
+# the index, or pathspecs was swept against every call shape this script makes:
+# `config --get`, `config <k> <v>` (the write), `rev-parse --git-dir`,
 # `rev-parse --git-common-dir`, `rev-parse --show-toplevel`,
 # `worktree list --porcelain`, and `ls-files -s`.
 #
-# EIGHT variables move at least one probe. All eight are cleared above — the
-# first five by #886, the last three by #894:
+# These are the variables that move at least one probe. Every one is cleared by
+# the unset below; the last column says which pass added it, so the table needs
+# no summary count to be checked against — read the rows.
 #
-#   GIT_DIR                 --git-dir, --git-common-dir
-#   GIT_COMMON_DIR          --git-common-dir
-#   GIT_WORK_TREE           --show-toplevel, --git-dir, --git-common-dir
-#   GIT_INDEX_FILE          ls-files
-#   GIT_CONFIG              config read AND WRITE  (beats repo-local)
-#   GIT_CONFIG_PARAMETERS   config read            (beats repo-local)
-#   GIT_CONFIG_COUNT        config read            (beats repo-local)
-#   GIT_CONFIG_GLOBAL       config read            (fills a gap only)
-#   GIT_CONFIG_SYSTEM       config read            (fills a gap only)
+#   GIT_DIR                 --git-dir, --git-common-dir                   #886
+#   GIT_COMMON_DIR          --git-common-dir                              #886
+#   GIT_WORK_TREE           --show-toplevel, --git-dir, --git-common-dir  #886
+#   GIT_INDEX_FILE          ls-files                                      #886
+#   GIT_CONFIG              config read AND WRITE  (beats repo-local)     #894
+#   GIT_CONFIG_PARAMETERS   config read            (beats repo-local)     #894
+#   GIT_CONFIG_COUNT        config read            (beats repo-local)     #894
+#   GIT_CONFIG_GLOBAL       config read            (fills a gap only)     #894
+#   GIT_CONFIG_SYSTEM       config read            (fills a gap only)     #894
 #
-# (Nine rows, eight variables: GIT_CONFIG_GLOBAL and _SYSTEM are one mechanism.)
+# Deliberately NO total is stated here. Three separate review cycles caught a
+# summary count in this comment drifting from the rows beneath it — first "five
+# movers" (which silently omitted the gap-filling ones), then a "5 by #886 / 3
+# by #894" split that matched neither the table nor the unset. A count is a
+# second copy of the data that no test checks and every edit can falsify; the
+# per-row annotation cannot drift, because it IS the data.
+#
+# Note #886 cleared five variables but only four appear here: GIT_OBJECT_DIRECTORY
+# is inert against every probe (see its entry above) and was cleared for
+# completeness, so it is not a mover.
 #
 # Measured INERT against all six shapes, and listed by name so a future reader
 # can see they were checked rather than overlooked: GIT_CONFIG_NOSYSTEM,
@@ -297,10 +307,12 @@ LOG_PREFIX="[fs-health]"
 # belongs there too, and it should be hoisted into a shared helper rather than
 # copied.
 #
-# Unset ONCE here rather than wrapping each call in `env -u`: there are nine
-# `git -C` call sites across four functions, so per-call wrapping is nine
-# chances to miss one and leaves every future git line inheriting the bug by
-# default. This is safe precisely because the script is EXEC'd, never sourced —
+# Unset ONCE here rather than wrapping each call in `env -u`: git is invoked
+# from several functions, so per-call wrapping is one chance to miss per call
+# site and leaves every future git line inheriting the bug by default. (#886
+# said "nine call sites"; the real number was eight, and it has since changed
+# again — which is the argument for the unset, not against it, and the reason
+# this no longer quotes a number.) This is safe precisely because the script is EXEC'd, never sourced —
 # the Dockerfile installs it to /etc/container/startup/ and both
 # workspace-fs-health-cron.sh and workspace-fs-health-run.sh invoke it by path —
 # so nothing but this process sees the cleared environment.

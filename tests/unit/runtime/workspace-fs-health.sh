@@ -208,6 +208,28 @@ test_legacy_git_config_does_not_divert_the_write() {
         "The run should report the repair it actually made"
 }
 
+test_probe_helper_rejects_non_identifiers() {
+    # The guard on run_fs_health_probe_env's argument, which is interpolated
+    # into generated shell text. Untested guards are how a guard quietly stops
+    # guarding, so exercise both arms.
+    local status=0
+    run_fs_health_probe_env 'x; rm -rf /' >/dev/null 2>&1 || status=$?
+    assert_equals "1" "$status" \
+        "A non-identifier variable name must be rejected, not interpolated"
+
+    status=0
+    run_fs_health_probe_env '' >/dev/null 2>&1 || status=$?
+    assert_equals "1" "$status" \
+        "An empty variable name must be rejected"
+
+    # And the accepting arm still works, so the guard is not simply refusing
+    # everything.
+    local seen
+    seen=$(GIT_CONFIG_NOSYSTEM=1 run_fs_health_probe_env GIT_CONFIG_NOSYSTEM)
+    assert_equals "1" "$seen" \
+        "A valid identifier must still be probed"
+}
+
 test_nosystem_optout_is_preserved() {
     # GIT_CONFIG_NOSYSTEM is deliberately NOT cleared: it is an opt-OUT (git
     # reads /etc/gitconfig by default; NOSYSTEM disables that), so unsetting it
@@ -783,6 +805,7 @@ run_test_with_setup test_config_count_injection_does_not_suppress_repair "Inject
 run_test_with_setup test_config_global_injection_does_not_suppress_repair "Substituted GIT_CONFIG_GLOBAL does not suppress the ignorecase repair"
 run_test_with_setup test_config_parameters_injection_does_not_suppress_repair "Injected GIT_CONFIG_PARAMETERS does not mask a wrong local value"
 run_test_with_setup test_legacy_git_config_does_not_divert_the_write "Leaked legacy GIT_CONFIG does not divert the repair write"
+run_test_with_setup test_probe_helper_rejects_non_identifiers "Probe helper rejects non-identifier variable names"
 run_test_with_setup test_nosystem_optout_is_preserved "GIT_CONFIG_NOSYSTEM opt-out survives the unset"
 run_test_with_setup test_silent_when_healthy "Silent when filesystem is healthy"
 run_test_with_setup test_reports_when_repairing "Reports the setting it changed"
