@@ -1317,6 +1317,54 @@ test_code_count_fails_when_assignment_absent() {
         "a missing DEFAULT_PLUGINS line returns non-zero and prints nothing"
 }
 
+# Run _doc_drift_case_setup against a stand-in claude-setup carrying $1 as its
+# DEFAULT_PLUGINS line, printing "rc=<code> out=<fail_test message>".
+#
+# Subshell + stubbed fail_test, so the real verdict functions never see these
+# deliberate failures and the shared TEST_STATUS is left alone.
+_run_case_setup_with_setup_line() {
+    local setup_line="$1"
+    local tmpdir stub
+    tmpdir=$(command mktemp -d "$TEST_SCRATCH_BASE/setup-reject-XXXXXX") || return 1
+    stub="$tmpdir/claude-setup"
+
+    printf '#!/bin/bash\n%s\n' "$setup_line" >"$stub"
+
+    local out rc=0
+    out=$(
+        fail_test() { printf '%s' "$1"; }
+        CLAUDE_SETUP="$stub" _doc_drift_case_setup
+    ) || rc=$?
+    command rm -rf "$tmpdir"
+
+    printf 'rc=%s out=%s' "$rc" "$out"
+}
+
+# _doc_drift_case_setup's own `< 2` rejection. Its four callers all run against
+# the real claude-setup, which parses well above 2, so nothing else drives this
+# branch — the undriven-branch shape this whole chain (#900 -> #903 -> #907)
+# keeps rediscovering one level further down.
+#
+# Two inputs, because one does not pin the boundary: a leading comma parses to
+# 0, which is also `< 1`, so it passes a guard weakened to `-lt 1` and cannot
+# tell that regression from the correct code. A single-plugin value parses to
+# exactly 1 — rejected by `< 2`, accepted by `< 1` — so it is the case that
+# actually holds the threshold in place. Measured: with the guard at `-lt 1`,
+# the 0 case still passes and only this one fails.
+test_doc_drift_setup_rejects_unparsable_count() {
+    local zero_case one_case
+
+    zero_case=$(_run_case_setup_with_setup_line 'DEFAULT_PLUGINS=",dev-core,workflow"')
+    assert_equals "rc=1 out=DEFAULT_PLUGINS parsed to 0 entries — the assignment is empty or unparsable" \
+        "$zero_case" \
+        "an empty first entry stops setup, naming the parsed count and the cause"
+
+    one_case=$(_run_case_setup_with_setup_line 'DEFAULT_PLUGINS="dev-core"')
+    assert_equals "rc=1 out=DEFAULT_PLUGINS parsed to 1 entries — the assignment is empty or unparsable" \
+        "$one_case" \
+        "a lone entry is still below the threshold — this is what pins < 2 rather than < 1"
+}
+
 # ============================================================================
 # Lock Acquisition Branch Tests (issue #787)
 # ============================================================================
@@ -2633,6 +2681,7 @@ run_test test_doc_drift_detects_missing_doc "Doc drift: a missing doc is reporte
 run_test test_code_count_reports_zero_for_empty_first_entry "Doc drift: an empty first entry counts as 0 (#907)"
 run_test test_guard_rejects_unparsable_default_plugins "Doc drift: the guard rejects an unparsable DEFAULT_PLUGINS (#907)"
 run_test test_code_count_fails_when_assignment_absent "Doc drift: a missing DEFAULT_PLUGINS line returns non-zero (#907)"
+run_test test_doc_drift_setup_rejects_unparsable_count "Doc drift: case setup rejects an unparsable count (#907)"
 
 run_test test_lock_timeout_exits_nonzero "Lock: flock timeout exits 1, never proceeds unlocked"
 run_test test_lock_acquired_continues "Lock: a successful acquire continues setup"
