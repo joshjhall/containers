@@ -223,6 +223,16 @@ mod tests {
         assert_eq!(w.algorithm.as_deref(), Some("sha256"));
         assert_eq!(w.digest, "deadbeef");
         assert!(w.message.contains("TIER 4 TOFU"), "{}", w.message);
+
+        // The warning must land in the structured field INSTEAD of `notes`,
+        // not in addition to it. Asserting this only on a warning-free row
+        // would be vacuous — the old prose join also produced `None` there —
+        // so the guard belongs here, where warnings actually exist.
+        assert!(
+            entry.notes.is_none(),
+            "a populated warning must not also be joined back into notes: {:?}",
+            entry.notes
+        );
     }
 
     /// The query this field exists to serve — "which rows accepted something
