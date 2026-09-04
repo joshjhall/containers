@@ -103,3 +103,4 @@
 - [git-env neutralization boundary](git-env-neutralization-boundary.md) — fs-health clears 8 git vars by measurement not name family; legacy GIT_CONFIG diverts the WRITE, NOSYSTEM must stay (#894)
 - [Fixture state hides vectors](fixture-state-hides-vectors.md) — an exhaustive sweep in one fixture state missed two of its own members; sweep every state that could change the answer
 - [Assertions must discriminate](assertions-must-discriminate.md) — exit codes and substring fragments pass for the wrong reason; delete the guarded line and confirm THAT test fails
+- [Zero checks is not green](zero-checks-is-not-green.md) — check-runs can't tell "never fired" from "delayed"; query actions/runs?branch=; zero effective checks (total minus skipping) past grace = failing (#854)
