@@ -999,32 +999,47 @@ test_default_plugins_still_populated() {
 # spelled out above test_default_plugins_still_populated: pass_test/fail_test
 # overwrite the shared TEST_STATUS, so a per-file verdict would let a later
 # matching doc mask an earlier mismatch.
-test_default_plugins_count_matches_docs() {
-    local default_line value code_count
-    default_line=$(command grep -E '^[[:space:]]*DEFAULT_PLUGINS=' "$CLAUDE_SETUP")
+# Docs that must carry the plugin count, as paths relative to a doc root.
+PLUGIN_COUNT_DOCS=(README.md CLAUDE.md docs/claude-code/plugins-and-mcps.md examples/env/dev-tools.env)
 
-    if [ -z "$default_line" ]; then
-        fail_test "DEFAULT_PLUGINS assignment not found — renamed or reformatted"
-        return
-    fi
+# Parse DEFAULT_PLUGINS out of claude-setup and print the entry count.
+# Returns 1 (printing nothing) when the assignment line is absent — renamed or
+# reformatted. Prints 0 when the first entry is empty, so a leading-comma or
+# otherwise unparsable value trips the caller's `< 2` guard rather than being
+# compared vacuously against the docs.
+_default_plugins_code_count() {
+    local default_line value
+    default_line=$(command grep -E '^[[:space:]]*DEFAULT_PLUGINS=' "$CLAUDE_SETUP") || return 1
+    [ -n "$default_line" ] || return 1
 
     # Strip `[indent]DEFAULT_PLUGINS="` and the trailing quote.
     value=$(printf '%s\n' "$default_line" | command sed -E 's/^[^=]*="?//; s/"[[:space:]]*$//')
 
     local plugins=()
     IFS=',' read -ra plugins <<<"$value"
-    code_count=${#plugins[@]}
 
-    # Without this the doc comparison could pass vacuously against an empty or
-    # unparsable assignment.
-    if [ "$code_count" -lt 2 ] || [ -z "${plugins[0]}" ]; then
-        fail_test "DEFAULT_PLUGINS parsed to $code_count entries — the assignment is empty or unparsable"
-        return
+    if [ -z "${plugins[0]}" ]; then
+        printf '0'
+    else
+        printf '%s' "${#plugins[@]}"
     fi
+}
 
+# Scan a doc root for documented plugin counts and print the drift report —
+# empty when every doc agrees with $code_count, otherwise a space-separated
+# list of ` <doc>:<what-drifted>` entries.
+#
+# Parameterized on the doc root (#903) so the three drift branches — a
+# mismatched count, a doc whose prose no longer matches the regex
+# (`no-count-found`), and a missing file — can be driven from a fixture. Run
+# only against $PROJECT_ROOT they are dead paths: the real docs agree, so the
+# guard passing is indistinguishable from the guard being blind.
+_scan_docs_for_plugin_count() {
+    local doc_root="$1" code_count="$2"
     local doc drifted="" found_any
-    for doc in README.md CLAUDE.md docs/claude-code/plugins-and-mcps.md examples/env/dev-tools.env; do
-        local doc_path="$PROJECT_ROOT/$doc"
+
+    for doc in "${PLUGIN_COUNT_DOCS[@]}"; do
+        local doc_path="$doc_root/$doc"
 
         if [ ! -f "$doc_path" ]; then
             drifted="$drifted $doc:missing"
@@ -1047,11 +1062,122 @@ test_default_plugins_count_matches_docs() {
         fi
     done
 
+    printf '%s' "$drifted"
+}
+
+test_default_plugins_count_matches_docs() {
+    local code_count
+    if ! code_count=$(_default_plugins_code_count); then
+        fail_test "DEFAULT_PLUGINS assignment not found — renamed or reformatted"
+        return
+    fi
+
+    # Without this the doc comparison could pass vacuously against an empty or
+    # unparsable assignment.
+    if [ "$code_count" -lt 2 ]; then
+        fail_test "DEFAULT_PLUGINS parsed to $code_count entries — the assignment is empty or unparsable"
+        return
+    fi
+
+    local drifted
+    drifted=$(_scan_docs_for_plugin_count "$PROJECT_ROOT" "$code_count")
+
     if [ -z "$drifted" ]; then
         pass_test "DEFAULT_PLUGINS count ($code_count) matches every documented plugin count (#900)"
     else
         fail_test "DEFAULT_PLUGINS has $code_count plugins but docs say:$drifted — update the count literal in each doc, or the plugin list in claude-setup (no-count-found means the prose was reworded past this guard's regex)"
     fi
+}
+
+# ============================================================================
+# Doc-Drift Guard Failure Branches (issue #903)
+# ============================================================================
+# The guard above only ever runs against the real in-repo docs, which agree, so
+# all three of its drift branches are dead paths as far as the suite is
+# concerned. These tests copy the real docs into a scratch fixture, corrupt one
+# doc per branch, and assert the scan reports that specific drift.
+#
+# The fixture lives under $TEST_SCRATCH_BASE, never tests/results/ — that path
+# is on an incoherent FUSE mount where write-then-read loses coherency (#821).
+
+# Copy the real docs into a fresh fixture root, so the baseline is genuinely
+# drift-free and any reported drift is attributable to the caller's mutation.
+_make_plugin_doc_fixture() {
+    local fixture="$TEST_SCRATCH_BASE/plugin-doc-fixture-$$-${RANDOM}"
+    local doc
+    for doc in "${PLUGIN_COUNT_DOCS[@]}"; do
+        command mkdir -p "$fixture/$(command dirname "$doc")"
+        command cp "$PROJECT_ROOT/$doc" "$fixture/$doc"
+    done
+    printf '%s' "$fixture"
+}
+
+# Control: an unmutated copy must report no drift. Without this, a fixture that
+# was broken by the copy itself would make all three tests below pass for the
+# wrong reason.
+test_doc_drift_fixture_baseline_is_clean() {
+    local code_count fixture drifted
+    code_count=$(_default_plugins_code_count)
+    fixture=$(_make_plugin_doc_fixture)
+
+    drifted=$(_scan_docs_for_plugin_count "$fixture" "$code_count")
+    command rm -rf "$fixture"
+
+    assert_empty "$drifted" \
+        "an unmutated doc fixture reports no drift (control for the branches below)"
+}
+
+# Branch 1 — a doc reporting a count that disagrees with the code.
+test_doc_drift_detects_mismatched_count() {
+    local code_count fixture drifted
+    code_count=$(_default_plugins_code_count)
+    fixture=$(_make_plugin_doc_fixture)
+
+    command sed -i -E 's/[0-9]+ core plugins/99 core plugins/I' "$fixture/README.md"
+
+    drifted=$(_scan_docs_for_plugin_count "$fixture" "$code_count")
+    command rm -rf "$fixture"
+
+    assert_contains "$drifted" "README.md:99" \
+        "a doc whose count disagrees with the code is reported with the doc's count"
+    assert_not_contains "$drifted" "CLAUDE.md" \
+        "the untouched docs are not reported as drifted"
+}
+
+# Branch 2 — prose reworded past the guard's regex, so no count is found at all.
+# This is the branch that would otherwise let a silent rewording disable the
+# guard for that doc without anything failing.
+test_doc_drift_detects_no_count_found() {
+    local code_count fixture drifted
+    code_count=$(_default_plugins_code_count)
+    fixture=$(_make_plugin_doc_fixture)
+
+    command sed -i -E 's/[0-9]+ core plugins/several core plugins/I' "$fixture/CLAUDE.md"
+
+    drifted=$(_scan_docs_for_plugin_count "$fixture" "$code_count")
+    command rm -rf "$fixture"
+
+    assert_contains "$drifted" "CLAUDE.md:no-count-found" \
+        "a doc with no matchable count is reported as no-count-found"
+    assert_not_contains "$drifted" "README.md" \
+        "the untouched docs are not reported as drifted"
+}
+
+# Branch 3 — a doc the guard expects is gone (moved or deleted).
+test_doc_drift_detects_missing_doc() {
+    local code_count fixture drifted
+    code_count=$(_default_plugins_code_count)
+    fixture=$(_make_plugin_doc_fixture)
+
+    command rm -f "$fixture/examples/env/dev-tools.env"
+
+    drifted=$(_scan_docs_for_plugin_count "$fixture" "$code_count")
+    command rm -rf "$fixture"
+
+    assert_contains "$drifted" "examples/env/dev-tools.env:missing" \
+        "a doc that no longer exists is reported as missing"
+    assert_not_contains "$drifted" "README.md" \
+        "the untouched docs are not reported as drifted"
 }
 
 # ============================================================================
@@ -2363,6 +2489,10 @@ run_test test_deny_list_supports_file_variant "Deny-list: resolves via the _FILE
 run_test test_default_plugins_excludes_hookify "Defaults: hookify is not a default plugin (#897)"
 run_test test_default_plugins_still_populated "Defaults: DEFAULT_PLUGINS still carries the retained core set"
 run_test test_default_plugins_count_matches_docs "Defaults: DEFAULT_PLUGINS count matches the documented count (#900)"
+run_test test_doc_drift_fixture_baseline_is_clean "Doc drift: an unmutated fixture reports no drift (#903)"
+run_test test_doc_drift_detects_mismatched_count "Doc drift: a mismatched doc count is reported (#903)"
+run_test test_doc_drift_detects_no_count_found "Doc drift: prose past the regex is no-count-found (#903)"
+run_test test_doc_drift_detects_missing_doc "Doc drift: a missing doc is reported (#903)"
 
 run_test test_lock_timeout_exits_nonzero "Lock: flock timeout exits 1, never proceeds unlocked"
 run_test test_lock_acquired_continues "Lock: a successful acquire continues setup"
