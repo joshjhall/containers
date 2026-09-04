@@ -237,7 +237,7 @@ Rust→`rust-analyzer`, Kotlin→`kotlin-language-server`+`jdtls`, Java/Android�
 
 ### Plugins & MCP Servers
 
-11 core plugins and language-specific LSP plugins are auto-installed on first
+10 core plugins and language-specific LSP plugins are auto-installed on first
 startup. Override defaults via `CLAUDE_PLUGINS` (replaces core set) or add
 extras via `CLAUDE_EXTRA_PLUGINS`. MCPs configurable via `CLAUDE_MCPS`
 (replaces defaults) or `CLAUDE_EXTRA_MCPS`. See

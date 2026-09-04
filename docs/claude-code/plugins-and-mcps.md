@@ -33,16 +33,37 @@ These are upstream Anthropic-marketplace plugins, unrelated to `librarian`:
 - `claude-md-management` - CLAUDE.md file management
 - `pr-review-toolkit` - Comprehensive PR review tools
 - `code-review` - Code review assistance
-- `hookify` - Hook creation helpers
 - `claude-code-setup` - Project setup assistance
 - `feature-dev` - Feature development workflow
+
+#### Why `hookify` is not a default (#897)
+
+`hookify` was a core plugin through v4.19.x. It is now **opt-in** — list it in
+`CLAUDE_PLUGINS` or `CLAUDE_EXTRA_PLUGINS` if you want it.
+
+With no `hookify.*.local.md` rule file present, it still fires four hooks
+(`PreToolUse`, `PostToolUse`, `Stop`, `UserPromptSubmit`), each printing `{}`.
+Every fire becomes a hook record in the session transcript that is re-read on
+every subsequent turn, so a plugin contributing nothing accrues context cost for
+the whole session — in *every* container built from this image, including ones
+whose operator had already disabled it host-side.
+
+**Existing containers are unaffected by this change.** `claude-setup` never
+disables an already-enabled plugin (see the kill-switch section below — it runs
+on every boot and must not acquire a destructive action), so the new default only
+applies to a fresh `~/.claude` volume. To apply it to a container that already
+has `hookify` enabled, run once:
+
+```bash
+claude plugin disable hookify
+```
 
 ### Overriding Core Plugins
 
 Use `CLAUDE_PLUGINS` to replace the default plugin set entirely:
 
 ```bash
-# Install only specific core plugins (replaces all 11 defaults)
+# Install only specific core plugins (replaces all 10 defaults)
 docker build --build-arg CLAUDE_PLUGINS="commit-commands,context7,code-review" ...
 
 # Install no core plugins (LSP and extra plugins still work)
@@ -54,7 +75,7 @@ docker run -e CLAUDE_PLUGINS="commit-commands,context7" ...
 
 | `CLAUDE_PLUGINS` | Behavior                      |
 | ---------------- | ----------------------------- |
-| Unset (default)  | All 11 core plugins installed |
+| Unset (default)  | All 10 core plugins installed |
 | Set to list      | Only listed plugins installed |
 | Set to `""`      | No core plugins installed     |
 
@@ -134,7 +155,7 @@ same shape as the other plugin variables, checked **before** any install or
 re-enable decision.
 
 ```bash
-docker run -e CLAUDE_DISABLED_PLUGINS="hookify" ...
+docker run -e CLAUDE_DISABLED_PLUGINS="code-simplifier" ...
 ```
 
 The deny-list **wins over** `CLAUDE_PLUGINS`, `CLAUDE_EXTRA_PLUGINS`, and
@@ -150,8 +171,8 @@ Every outcome is logged, so a denied plugin is visible in startup output rather
 than silently missing:
 
 ```text
-  ⊘ hookify (disabled via CLAUDE_DISABLED_PLUGINS — leaving disabled)
-  ⊘ hookify (disabled via CLAUDE_DISABLED_PLUGINS — not installing)
+  ⊘ code-simplifier (disabled via CLAUDE_DISABLED_PLUGINS — leaving disabled)
+  ⊘ code-simplifier (disabled via CLAUDE_DISABLED_PLUGINS — not installing)
 ```
 
 **It does not disable an already-enabled plugin.** `claude-setup` runs on every
@@ -159,8 +180,8 @@ boot and never acquires a destructive action; it only stops *re*-enabling. If th
 plugin is currently enabled you get a warning instead:
 
 ```text
-  ⚠ hookify listed in CLAUDE_DISABLED_PLUGINS but currently enabled
-    run 'claude plugin disable hookify' to apply it
+  ⚠ code-simplifier listed in CLAUDE_DISABLED_PLUGINS but currently enabled
+    run 'claude plugin disable code-simplifier' to apply it
 ```
 
 Run that `claude plugin disable` once — the deny-list is what makes it survive
