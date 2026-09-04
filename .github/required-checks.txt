@@ -1,0 +1,31 @@
+# Required status checks on `main` (issue #904).
+#
+# This file is the single source of truth for the branch-protection
+# required-context list. It is meant to mirror the live setting:
+#
+#   gh api repos/joshjhall/containers/branches/main/protection \
+#     --jq '.required_status_checks.contexts'
+#
+# It is guarded by tests/unit/required-checks.sh, which asserts every name here
+# still matches a job that reports on EVERY pull request to `main`.
+#
+# STATUS: not yet applied — `main` is still unprotected. Applying needs a token
+# with the repo "Administration: Read and write" permission. See
+# docs/troubleshooting/ci-cd-issues.md for the exact PUT payload.
+#
+# Why a manifest instead of inlining the names in the test: branch protection
+# lives in repo settings, invisible to any diff. This file is the only in-repo
+# trace of the intended setting, and it keeps the test and the applied settings
+# from drifting apart independently.
+#
+# Adding a context here does NOT apply it — update the live setting too. And
+# only add checks that report on every PR regardless of what changed: a
+# required context that never reports blocks `main` indefinitely (the mirror
+# image of #854, which this protection exists to fix). A job that RUNS and
+# concludes `SKIPPED` does satisfy a required context; a job that is never
+# scheduled at all reports nothing and blocks forever.
+#
+# Format: one context name per line. `#` comments and blank lines ignored.
+
+Run Tests
+PR Tier

@@ -206,7 +206,22 @@ In the workflow file, adjust priority levels:
 1. Check the workflow run logs
 1. Verify all CI jobs passed
 1. Check repository permissions for GitHub Actions
-1. Ensure no branch protection rules block auto-merge
+1. Check branch protection on `main`. Protection is **decided but not yet
+   applied** (#904); once it is, `main` will require the `Run Tests` and
+   `PR Tier` contexts. `gh pr merge --auto` is designed to work with this: it
+   waits for the required contexts, then merges. A patch PR that sits unmerged
+   is normally waiting on a context, not blocked by protection —
+   `just check-pr-checks <N>` says which.
+
+   The agreed settings deliberately **do not** break this flow:
+   `enforce_admins` is `false`, so `post-merge`'s direct `git push origin
+   HEAD:main` (compatibility matrix) and its `v*` tag push still land; and no
+   review is required, so the bot's own PR is not waiting on a human approver.
+   Whoever applies protection should watch the next scheduled release run to
+   confirm, and re-verify this flow first if either setting is tightened later.
+   See
+   [ci-cd-issues.md](../troubleshooting/ci-cd-issues.md) § *GitHub Actions: PR
+   shows zero checks* for the applied settings and the recovery command.
 
 ### Version Check Not Running
 
