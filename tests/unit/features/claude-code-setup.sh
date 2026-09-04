@@ -947,18 +947,29 @@ test_default_plugins_excludes_hookify() {
 # plugin set. Assert a couple of retained defaults so a reformat that splits or
 # empties the assignment fails loudly instead of making the hookify check pass
 # vacuously.
+#
+# Verdicts are accumulated and reported ONCE after the loop, not per iteration:
+# pass_test/fail_test both overwrite the shared TEST_STATUS, and run_test only
+# reads its final value — so a per-iteration call would let a later passing
+# plugin overwrite an earlier failure and report PASS for a real regression
+# (and double-count the totals). Same counter shape as
+# test_valid_channels_accepted below.
 test_default_plugins_still_populated() {
     local default_line
     default_line=$(command grep -E '^[[:space:]]*DEFAULT_PLUGINS=' "$CLAUDE_SETUP")
 
-    local plugin
+    local plugin missing=""
     for plugin in commit-commands pr-review-toolkit feature-dev; do
-        if command grep -q "$plugin" <<<"$default_line"; then
-            pass_test "DEFAULT_PLUGINS still contains $plugin"
-        else
-            fail_test "DEFAULT_PLUGINS lost $plugin — the hookify guard may now be vacuous"
+        if ! command grep -q "$plugin" <<<"$default_line"; then
+            missing="$missing $plugin"
         fi
     done
+
+    if [ -z "$missing" ]; then
+        pass_test "DEFAULT_PLUGINS still carries the retained core set"
+    else
+        fail_test "DEFAULT_PLUGINS lost:$missing — the hookify guard may now be vacuous"
+    fi
 }
 
 # ============================================================================
