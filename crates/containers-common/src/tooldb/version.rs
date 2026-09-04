@@ -128,6 +128,19 @@ pub struct TestEntry {
     /// base-image toolchain bump. Omitted when nothing was captured.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<Vec<InstalledDependency>>,
+    /// Verifications that succeeded on weaker grounds than the tier name alone
+    /// suggests — currently only tier-4 TOFU acceptances.
+    ///
+    /// This is what makes a TOFU acceptance *queryable*: without it, an
+    /// evidence row for an artifact installed with no authenticity check is
+    /// indistinguishable from one for a properly verified install unless an
+    /// auditor substring-matches prose. Empty on the ordinary verified install,
+    /// which is what keeps it a signal rather than noise in every row.
+    ///
+    /// `skip_serializing_if` keeps a warning-free row byte-identical to the
+    /// pre-#850 shape, so existing evidence rows are unaffected.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verification_warnings: Vec<VerificationWarning>,
     /// Free-form notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
@@ -152,6 +165,45 @@ pub struct InstalledDependency {
     /// Resolved version string from the host package manager.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+}
+
+/// A verification that succeeded, but on weaker grounds than a caller should
+/// assume without being told.
+///
+/// Currently only tier 4 (TOFU) produces one. It is carried on both
+/// `luggage::InstallReport::warnings` and [`TestEntry::verification_warnings`]
+/// so the acceptance survives past the console into the JSON report and the
+/// evidence row — a TOFU artifact that was only ever mentioned in build output
+/// is one nobody finds later.
+///
+/// The fields are structured rather than a prose sentence so an audit can ask
+/// "which shipped images installed something with no authenticity check?" as a
+/// field query. [`Self::message`] is kept for readability, but a query that
+/// substring-matches it breaks the moment the wording changes — key off the
+/// structured fields instead.
+///
+/// Lives here rather than in luggage because [`TestEntry`] carries it and
+/// `containers-common` cannot depend on `luggage` (the dependency runs the
+/// other way). Mirrors [`InstalledDependency`], which is shared for the same
+/// reason. `luggage` re-exports it so its own public API is unchanged.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationWarning {
+    /// Verification tier that produced the warning (`4` for TOFU).
+    pub tier: u8,
+    /// Tool id.
+    pub tool: String,
+    /// Tool version.
+    pub version: String,
+    /// Digest algorithm used, when the catalog named one. `None` means the
+    /// build's default was used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub algorithm: Option<String>,
+    /// The hex digest recorded for the artifact.
+    pub digest: String,
+    /// Human-readable explanation of what the verification did and did not
+    /// establish, and what to do about it.
+    pub message: String,
 }
 
 /// Outcome of a CI run row.
@@ -286,6 +338,80 @@ mod tests {
         let reparsed: TestEntry = serde_json::from_str(&serialized).unwrap();
         assert_eq!(reparsed.image_ref, entry.image_ref);
         assert_eq!(reparsed.duration_seconds, entry.duration_seconds);
+
+        // A row with no warnings must not grow the key — this is what keeps
+        // every pre-#850 evidence row in containers-db byte-identical.
+        assert!(entry.verification_warnings.is_empty());
+        assert!(
+            !serialized.contains("verification_warnings"),
+            "warning-free rows must not gain a key: {serialized}"
+        );
+    }
+
+    /// A `tested[]` row carrying a tier-4 TOFU acceptance must parse into the
+    /// structured field, with `algorithm` optional on each warning. Keeps this
+    /// crate's coverage of its own type self-sufficient rather than relying on
+    /// the downstream `record-evidence` tests.
+    #[test]
+    fn test_entry_round_trips_verification_warnings() {
+        let json = r#"{
+            "os": "debian",
+            "os_version": "12",
+            "arch": "amd64",
+            "tested_at": "2026-05-16T12:00:00Z",
+            "result": "pass",
+            "verification_warnings": [
+                {
+                    "tier": 4,
+                    "tool": "sample_tofu",
+                    "version": "0.1.0",
+                    "algorithm": "sha256",
+                    "digest": "deadbeef",
+                    "message": "TIER 4 TOFU: accepted on trust-on-first-use"
+                },
+                {
+                    "tier": 4,
+                    "tool": "other",
+                    "version": "1.0",
+                    "digest": "cafe",
+                    "message": "no algorithm named"
+                }
+            ]
+        }"#;
+        let entry: TestEntry = serde_json::from_str(json).expect("parse TOFU row");
+
+        assert_eq!(entry.verification_warnings.len(), 2);
+        assert_eq!(entry.verification_warnings[0].tier, 4);
+        assert_eq!(entry.verification_warnings[0].tool, "sample_tofu");
+        assert_eq!(entry.verification_warnings[0].algorithm.as_deref(), Some("sha256"));
+        assert_eq!(entry.verification_warnings[0].digest, "deadbeef");
+        assert!(
+            entry.verification_warnings[1].algorithm.is_none(),
+            "algorithm is optional per warning"
+        );
+
+        let serialized = serde_json::to_string(&entry).unwrap();
+        let reparsed: TestEntry = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(reparsed.verification_warnings, entry.verification_warnings);
+    }
+
+    /// `deny_unknown_fields` is the strictness guard that mirrors the
+    /// containers-db schema's `additionalProperties: false`. Without it a
+    /// typo'd or dropped field would parse silently.
+    #[test]
+    fn verification_warning_rejects_unknown_fields() {
+        let json = r#"{
+            "tier": 4,
+            "tool": "sample_tofu",
+            "version": "0.1.0",
+            "digest": "deadbeef",
+            "message": "m",
+            "bogus": "x"
+        }"#;
+        assert!(
+            serde_json::from_str::<VerificationWarning>(json).is_err(),
+            "an unknown field must not parse"
+        );
     }
 
     #[test]

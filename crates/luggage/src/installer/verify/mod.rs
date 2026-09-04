@@ -34,7 +34,6 @@ pub mod tier3;
 pub mod tier4;
 
 use containers_common::tooldb::Verification;
-use serde::{Deserialize, Serialize};
 
 use crate::error::{LuggageError, Result};
 use crate::installer::download::HttpClient;
@@ -47,24 +46,12 @@ use crate::installer::template::Substitutions;
 /// [`crate::InstallReport::warnings`] so the acceptance survives past the
 /// console into the JSON report and the evidence row — a TOFU artifact that
 /// was only ever mentioned in build output is one nobody finds later.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VerificationWarning {
-    /// Verification tier that produced the warning (`4` for TOFU).
-    pub tier: u8,
-    /// Tool id.
-    pub tool: String,
-    /// Tool version.
-    pub version: String,
-    /// Digest algorithm used, when the catalog named one. `None` means the
-    /// build's default ([`sha::DEFAULT_ALGORITHM`]) was used.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub algorithm: Option<String>,
-    /// The hex digest recorded for the artifact.
-    pub digest: String,
-    /// Human-readable explanation of what the verification did and did not
-    /// establish, and what to do about it.
-    pub message: String,
-}
+///
+/// Defined in `containers-common` because
+/// [`containers_common::tooldb::TestEntry`] carries it too and that crate
+/// cannot depend on `luggage`; re-exported here (and from the crate root) so
+/// luggage's public API is unchanged.
+pub use containers_common::tooldb::VerificationWarning;
 
 /// Fail fast when `verification.tier` is one this build will not satisfy.
 ///

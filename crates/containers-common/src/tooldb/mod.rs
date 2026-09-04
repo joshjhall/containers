@@ -40,5 +40,5 @@ pub use tool::{
 };
 pub use version::{
     ErrorClass, InstalledDependency, SupportEntry, SupportStatus, TestEntry, TestResult,
-    ToolVersion, Uninstall, VersionMetadata,
+    ToolVersion, Uninstall, VerificationWarning, VersionMetadata,
 };

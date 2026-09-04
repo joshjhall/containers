@@ -111,28 +111,25 @@ pub fn build_test_entry(inputs: RecorderInputs) -> Result<TestEntry, RecorderErr
         // enforce the "pass rows only" invariant here rather than relying on
         // the producer always leaving them `None` on skip/fail paths.
         dependencies: if result == TestResult::Pass { report.dependencies.clone() } else { None },
-        notes: verification_notes(report),
+        // Carried structurally rather than joined into `notes` (#850): a
+        // tier-4 TOFU acceptance means the artifact was installed with nothing
+        // establishing its authenticity, and an audit has to be able to *query*
+        // for that. The luggage-side type is the same one `TestEntry` carries,
+        // so this is a straight clone with no lossy flattening.
+        //
+        // Deliberately NOT gated on `result == Pass`, unlike `dependencies`
+        // above. Verification runs before the install-method, post-install, and
+        // validate stages, so a row can carry a genuine TOFU acceptance *and*
+        // then fail later — and "we accepted an unauthenticated artifact, then
+        // the install broke" is precisely the correlation an audit wants. The
+        // asymmetry is the point: `dependencies` describes a successful
+        // install, while a warning describes what was trusted to attempt one.
+        verification_warnings: report.warnings.clone(),
+        // `notes` stays the carrier for free-form context (flake reason for a
+        // `fail`, why a `skip`) per the containers-db schema; it is no longer
+        // where verification warnings land.
+        notes: None,
     })
-}
-
-/// Carry any [`InstallReport::warnings`] into the evidence row's `notes`.
-///
-/// A tier-4 TOFU acceptance means the artifact was installed with nothing
-/// establishing its authenticity. That fact reaches the JSON report, and this
-/// is what stops it dying there: without it, an evidence row for a TOFU
-/// install is indistinguishable from one for a properly verified install, and
-/// a later audit of the evidence database could not tell them apart.
-///
-/// `notes` is the right carrier because `TestEntry` has no warning-shaped
-/// field and this needs no schema change to containers-db — the tradeoff being
-/// that it is prose, so an audit greps it rather than querying it. If TOFU
-/// tracking ever needs to be queryable, that is a `TestEntry` schema change
-/// and a follow-up.
-fn verification_notes(report: &InstallReport) -> Option<String> {
-    if report.warnings.is_empty() {
-        return None;
-    }
-    Some(report.warnings.iter().map(|w| w.message.as_str()).collect::<Vec<_>>().join(" | "))
 }
 
 const fn derive_result(report: &InstallReport) -> TestResult {
@@ -201,6 +198,10 @@ mod tests {
     /// evidence row. If it stops at the JSON file, an audit of the evidence
     /// database cannot tell a TOFU install from a verified one — which is the
     /// blind spot the warning exists to close.
+    ///
+    /// Asserts on the *structured* fields, not on prose: that is the whole
+    /// point of #850. A test that substring-matched `message` would keep
+    /// passing after the schema regressed to a free-form string.
     #[test]
     fn a_tofu_warning_reaches_the_evidence_row() {
         let mut inputs = base_inputs();
@@ -213,9 +214,56 @@ mod tests {
             message: "TIER 4 TOFU: accepted python@3.13.0 on trust-on-first-use".into(),
         }];
         let entry = build_test_entry(inputs).unwrap();
-        let notes = entry.notes.expect("a TOFU acceptance must be recorded in the row");
-        assert!(notes.contains("TIER 4 TOFU"), "{notes}");
-        assert!(notes.contains("python@3.13.0"), "{notes}");
+
+        assert_eq!(entry.verification_warnings.len(), 1);
+        let w = &entry.verification_warnings[0];
+        assert_eq!(w.tier, 4);
+        assert_eq!(w.tool, "python");
+        assert_eq!(w.version, "3.13.0");
+        assert_eq!(w.algorithm.as_deref(), Some("sha256"));
+        assert_eq!(w.digest, "deadbeef");
+        assert!(w.message.contains("TIER 4 TOFU"), "{}", w.message);
+
+        // The warning must land in the structured field INSTEAD of `notes`,
+        // not in addition to it. Asserting this only on a warning-free row
+        // would be vacuous — the old prose join also produced `None` there —
+        // so the guard belongs here, where warnings actually exist.
+        assert!(
+            entry.notes.is_none(),
+            "a populated warning must not also be joined back into notes: {:?}",
+            entry.notes
+        );
+    }
+
+    /// The query this field exists to serve — "which rows accepted something
+    /// with no authenticity check?" — must be answerable by filtering on
+    /// `tier`, with no substring matching anywhere in it.
+    #[test]
+    fn tofu_acceptances_are_findable_by_field_query() {
+        let mut inputs = base_inputs();
+        inputs.luggage_report.warnings = vec![
+            luggage::VerificationWarning {
+                tier: 4,
+                tool: "python".into(),
+                version: "3.13.0".into(),
+                algorithm: None,
+                digest: "abc".into(),
+                message: "wording that a query must not depend on".into(),
+            },
+            luggage::VerificationWarning {
+                tier: 3,
+                tool: "rust".into(),
+                version: "1.95.0".into(),
+                algorithm: Some("sha256".into()),
+                digest: "def".into(),
+                message: "different wording entirely".into(),
+            },
+        ];
+        let entry = build_test_entry(inputs).unwrap();
+
+        let tofu: Vec<_> = entry.verification_warnings.iter().filter(|w| w.tier == 4).collect();
+        assert_eq!(tofu.len(), 1, "exactly one tier-4 acceptance");
+        assert_eq!(tofu[0].tool, "python");
     }
 
     #[test]
@@ -230,18 +278,64 @@ mod tests {
         };
         let mut inputs = base_inputs();
         inputs.luggage_report.warnings = vec![warning("python"), warning("pip")];
-        let notes = build_test_entry(inputs).unwrap().notes.unwrap();
-        assert!(notes.contains("TOFU: python"), "{notes}");
-        assert!(notes.contains("TOFU: pip"), "{notes}");
+        let entry = build_test_entry(inputs).unwrap();
+
+        let tools: Vec<&str> =
+            entry.verification_warnings.iter().map(|w| w.tool.as_str()).collect();
+        assert_eq!(tools, vec!["python", "pip"], "order is preserved");
     }
 
-    /// The ordinary verified install must not start carrying a notes string —
-    /// that would be noise in every row and would blunt the signal the TOFU
-    /// note is meant to be.
+    /// The ordinary verified install must not start carrying warnings — that
+    /// would be noise in every row and would blunt the signal a TOFU
+    /// acceptance is meant to be.
     #[test]
-    fn a_row_with_no_warnings_has_no_notes() {
+    fn a_row_with_no_warnings_has_none_recorded() {
         let entry = build_test_entry(base_inputs()).unwrap();
+        assert!(entry.verification_warnings.is_empty());
         assert!(entry.notes.is_none());
+    }
+
+    /// A warning-free row must serialize byte-identically to the pre-#850
+    /// shape, or adding this field silently rewrites every existing evidence
+    /// row in containers-db. `skip_serializing_if` is what guarantees it, and
+    /// an absent key is a stronger assertion than an empty array.
+    #[test]
+    fn an_empty_warning_list_serializes_to_no_key() {
+        let entry = build_test_entry(base_inputs()).unwrap();
+        let json = serde_json::to_value(&entry).unwrap();
+        assert!(
+            json.get("verification_warnings").is_none(),
+            "warning-free rows must not gain a key: {json}"
+        );
+    }
+
+    /// The populated case must round-trip through the wire shape the
+    /// containers-db schema validates, including the optional `algorithm`.
+    #[test]
+    fn warnings_round_trip_through_json() {
+        let mut inputs = base_inputs();
+        inputs.luggage_report.warnings = vec![luggage::VerificationWarning {
+            tier: 4,
+            tool: "python".into(),
+            version: "3.13.0".into(),
+            algorithm: None,
+            digest: "deadbeef".into(),
+            message: "TOFU".into(),
+        }];
+        let entry = build_test_entry(inputs).unwrap();
+
+        let json = serde_json::to_string(&entry).unwrap();
+        let back: containers_common::tooldb::TestEntry = serde_json::from_str(&json).unwrap();
+
+        // Assert against the expected value, not against `entry` — comparing
+        // the round-trip to its own source passes even if the field was never
+        // populated, which is the bug this test would otherwise miss.
+        assert_eq!(back.verification_warnings.len(), 1);
+        assert_eq!(back.verification_warnings[0].tier, 4);
+        assert_eq!(back.verification_warnings[0].tool, "python");
+        assert_eq!(back.verification_warnings[0].digest, "deadbeef");
+        assert_eq!(back.verification_warnings, entry.verification_warnings);
+        assert!(!json.contains("\"algorithm\""), "an absent algorithm must not serialize: {json}");
     }
 
     #[test]
@@ -319,6 +413,65 @@ mod tests {
         let entry = build_test_entry(inputs).unwrap();
         assert_eq!(entry.result, TestResult::Fail);
         assert!(entry.dependencies.is_none(), "non-pass row must drop dependencies");
+    }
+
+    /// The counterpart to `dependencies_dropped_on_non_pass_row`, pinning the
+    /// deliberate asymmetry between the two fields.
+    ///
+    /// Verification runs before the install-method, post-install, and validate
+    /// stages, so an artifact can be accepted on trust-on-first-use and the
+    /// install fail afterwards. Dropping the warning there would erase exactly
+    /// the correlation an audit wants — "we trusted an unauthenticated
+    /// artifact, and then it broke" — so warnings survive a non-pass row even
+    /// though dependency evidence does not.
+    #[test]
+    fn warnings_survive_a_non_pass_row() {
+        let mut inputs = base_inputs();
+        inputs.luggage_report.error_class = Some(LuggageErrorClass::Validate);
+        inputs.luggage_report.warnings = vec![luggage::VerificationWarning {
+            tier: 4,
+            tool: "python".into(),
+            version: "3.13.0".into(),
+            algorithm: None,
+            digest: "deadbeef".into(),
+            message: "TIER 4 TOFU".into(),
+        }];
+        let entry = build_test_entry(inputs).unwrap();
+
+        assert_eq!(entry.result, TestResult::Fail);
+        assert_eq!(
+            entry.verification_warnings.len(),
+            1,
+            "a TOFU acceptance is evidence regardless of how the install ended"
+        );
+        assert_eq!(entry.verification_warnings[0].tier, 4);
+    }
+
+    /// A skip row carries the report's warnings verbatim — the Skip branch
+    /// must not filter them any more than the Fail branch does.
+    ///
+    /// Populating `warnings` is what gives this test teeth: asserting an
+    /// already-empty vec is still empty would hold even if `build_test_entry`
+    /// cleared warnings on the Skip path, which is the regression this exists
+    /// to catch.
+    #[test]
+    fn skip_row_carries_report_warnings_verbatim() {
+        let mut inputs = base_inputs();
+        inputs.luggage_report.already_installed = true;
+        inputs.luggage_report.warnings = vec![luggage::VerificationWarning {
+            tier: 4,
+            tool: "python".into(),
+            version: "3.13.0".into(),
+            algorithm: None,
+            digest: "deadbeef".into(),
+            message: "TIER 4 TOFU".into(),
+        }];
+        let entry = build_test_entry(inputs).unwrap();
+
+        assert_eq!(entry.result, TestResult::Skip);
+        assert_eq!(entry.verification_warnings.len(), 1, "a skip row must not drop warnings");
+        assert_eq!(entry.verification_warnings[0].tier, 4);
+        assert_eq!(entry.verification_warnings[0].tool, "python");
     }
 
     #[test]
