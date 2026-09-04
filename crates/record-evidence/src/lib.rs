@@ -437,16 +437,31 @@ mod tests {
         assert_eq!(entry.verification_warnings[0].tier, 4);
     }
 
-    /// A skipped install (already present) reports no fresh verification, so
-    /// the row carries whatever the report did — normally nothing.
+    /// A skip row carries the report's warnings verbatim — the Skip branch
+    /// must not filter them any more than the Fail branch does.
+    ///
+    /// Populating `warnings` is what gives this test teeth: asserting an
+    /// already-empty vec is still empty would hold even if `build_test_entry`
+    /// cleared warnings on the Skip path, which is the regression this exists
+    /// to catch.
     #[test]
     fn skip_row_carries_report_warnings_verbatim() {
         let mut inputs = base_inputs();
         inputs.luggage_report.already_installed = true;
+        inputs.luggage_report.warnings = vec![luggage::VerificationWarning {
+            tier: 4,
+            tool: "python".into(),
+            version: "3.13.0".into(),
+            algorithm: None,
+            digest: "deadbeef".into(),
+            message: "TIER 4 TOFU".into(),
+        }];
         let entry = build_test_entry(inputs).unwrap();
 
         assert_eq!(entry.result, TestResult::Skip);
-        assert!(entry.verification_warnings.is_empty());
+        assert_eq!(entry.verification_warnings.len(), 1, "a skip row must not drop warnings");
+        assert_eq!(entry.verification_warnings[0].tier, 4);
+        assert_eq!(entry.verification_warnings[0].tool, "python");
     }
 
     #[test]
