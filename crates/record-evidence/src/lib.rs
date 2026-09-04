@@ -116,6 +116,14 @@ pub fn build_test_entry(inputs: RecorderInputs) -> Result<TestEntry, RecorderErr
         // establishing its authenticity, and an audit has to be able to *query*
         // for that. The luggage-side type is the same one `TestEntry` carries,
         // so this is a straight clone with no lossy flattening.
+        //
+        // Deliberately NOT gated on `result == Pass`, unlike `dependencies`
+        // above. Verification runs before the install-method, post-install, and
+        // validate stages, so a row can carry a genuine TOFU acceptance *and*
+        // then fail later — and "we accepted an unauthenticated artifact, then
+        // the install broke" is precisely the correlation an audit wants. The
+        // asymmetry is the point: `dependencies` describes a successful
+        // install, while a warning describes what was trusted to attempt one.
         verification_warnings: report.warnings.clone(),
         // `notes` stays the carrier for free-form context (flake reason for a
         // `fail`, why a `skip`) per the containers-db schema; it is no longer
@@ -395,6 +403,50 @@ mod tests {
         let entry = build_test_entry(inputs).unwrap();
         assert_eq!(entry.result, TestResult::Fail);
         assert!(entry.dependencies.is_none(), "non-pass row must drop dependencies");
+    }
+
+    /// The counterpart to `dependencies_dropped_on_non_pass_row`, pinning the
+    /// deliberate asymmetry between the two fields.
+    ///
+    /// Verification runs before the install-method, post-install, and validate
+    /// stages, so an artifact can be accepted on trust-on-first-use and the
+    /// install fail afterwards. Dropping the warning there would erase exactly
+    /// the correlation an audit wants — "we trusted an unauthenticated
+    /// artifact, and then it broke" — so warnings survive a non-pass row even
+    /// though dependency evidence does not.
+    #[test]
+    fn warnings_survive_a_non_pass_row() {
+        let mut inputs = base_inputs();
+        inputs.luggage_report.error_class = Some(LuggageErrorClass::Validate);
+        inputs.luggage_report.warnings = vec![luggage::VerificationWarning {
+            tier: 4,
+            tool: "python".into(),
+            version: "3.13.0".into(),
+            algorithm: None,
+            digest: "deadbeef".into(),
+            message: "TIER 4 TOFU".into(),
+        }];
+        let entry = build_test_entry(inputs).unwrap();
+
+        assert_eq!(entry.result, TestResult::Fail);
+        assert_eq!(
+            entry.verification_warnings.len(),
+            1,
+            "a TOFU acceptance is evidence regardless of how the install ended"
+        );
+        assert_eq!(entry.verification_warnings[0].tier, 4);
+    }
+
+    /// A skipped install (already present) reports no fresh verification, so
+    /// the row carries whatever the report did — normally nothing.
+    #[test]
+    fn skip_row_carries_report_warnings_verbatim() {
+        let mut inputs = base_inputs();
+        inputs.luggage_report.already_installed = true;
+        let entry = build_test_entry(inputs).unwrap();
+
+        assert_eq!(entry.result, TestResult::Skip);
+        assert!(entry.verification_warnings.is_empty());
     }
 
     #[test]
