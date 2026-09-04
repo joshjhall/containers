@@ -105,6 +105,160 @@ test_skip_fix_reports_without_writing() {
 }
 
 # ============================================================================
+# Config-injection immunity (issue #894)
+# ============================================================================
+#
+# check_ignorecase reads core.ignorecase and returns early — SILENTLY — when the
+# value is already "true". Git resolves config from the environment ahead of
+# `-C`, so an inherited GIT_CONFIG_COUNT or GIT_CONFIG_GLOBAL supplying that
+# value makes the repair no-op with no diagnostic at all: the same silent-failure
+# class #886 was filed to close, reached through the config family rather than
+# the repo-identity one.
+#
+# The stakes are in the script's own header: on a case-insensitive mount, an
+# unrepaired core.ignorecase lets `git clean -fd` unlink the shared inode and
+# destroy tracked source.
+#
+# These assertions read the repo-LOCAL value deliberately — plain
+# `get_ignorecase` resolves the injected value too, so it would report "true"
+# for a repair that never happened and the test would pass while the bug was
+# live.
+
+# The repo-local core.ignorecase, ignoring any injected/global value.
+get_local_ignorecase() {
+    git -C "$PROJECT_ROOT" config --local --get core.ignorecase 2>/dev/null ||
+        command echo "unset"
+}
+
+test_config_count_injection_does_not_suppress_repair() {
+    # The indexed-pair mechanism. Clearing GIT_CONFIG_COUNT is what neutralizes
+    # it — git ignores GIT_CONFIG_KEY_<n>/VALUE_<n> without a count — so no
+    # unbounded enumeration of _<n> names is required.
+    local output
+    output=$(GIT_CONFIG_COUNT=1 \
+        GIT_CONFIG_KEY_0=core.ignorecase \
+        GIT_CONFIG_VALUE_0=true \
+        run_fs_health_stderr insensitive)
+
+    assert_equals "true" "$(get_local_ignorecase)" \
+        "An injected core.ignorecase must not suppress the repo-local repair"
+    assert_contains "$output" "case-insensitive" \
+        "The repair must still report, not vanish silently"
+}
+
+test_config_global_injection_does_not_suppress_repair() {
+    # The other spelling of the same hijack: a substituted global config file.
+    #
+    # Weaker than the GIT_CONFIG / GIT_CONFIG_PARAMETERS vectors, and the
+    # fixture's shape is what makes it fire: global config LOSES to a repo-local
+    # value, so it can only suppress the repair on a repo that has no local
+    # core.ignorecase yet — which is exactly this fixture (setup() unsets it).
+    # Seeding a local value here would make the test pass for the wrong reason.
+    command printf '[core]\n\tignorecase = true\n' >"$TEST_TEMP_DIR/injected-gitconfig"
+
+    run_fs_health_with_global_config "$TEST_TEMP_DIR/injected-gitconfig" insensitive
+
+    assert_equals "true" "$(get_local_ignorecase)" \
+        "A substituted GIT_CONFIG_GLOBAL must not suppress the repo-local repair"
+}
+
+test_config_parameters_injection_does_not_suppress_repair() {
+    # The likeliest vector, and the strongest: git populates
+    # GIT_CONFIG_PARAMETERS itself for every `git -c key=value`, exporting it to
+    # child processes. So an ancestor `git -c` — a hook, an alias, a wrapper, a
+    # CI step — reaches this script with nobody having deliberately exported a
+    # GIT_* var.
+    #
+    # It is also the only one that outranks the repo-LOCAL file, so this test
+    # seeds core.ignorecase=false first: that is the state check_ignorecase
+    # exists to correct, and the injection must not be able to mask it.
+    git -C "$PROJECT_ROOT" config --local core.ignorecase false
+
+    local output
+    output=$(GIT_CONFIG_PARAMETERS="'core.ignorecase'='true'" \
+        run_fs_health_stderr insensitive)
+
+    assert_equals "true" "$(get_local_ignorecase)" \
+        "An injected GIT_CONFIG_PARAMETERS must not mask an explicitly wrong local value"
+    assert_contains "$output" "case-insensitive" \
+        "The repair must still report, not vanish silently"
+}
+
+test_legacy_git_config_does_not_divert_the_write() {
+    # The legacy singular GIT_CONFIG affects only the `git config` subcommand —
+    # exactly what check_ignorecase uses, twice, with no --file — and it diverts
+    # the WRITE as well as the read.
+    #
+    # This is the only vector in the set whose failure is not silent: measured
+    # end-to-end, the script reported "set core.ignorecase=true" while the
+    # repo-local value stayed `false`. A FALSE SUCCESS is worse than a silent
+    # no-op, because the log actively tells an operator the repair landed.
+    #
+    # So this test seeds core.ignorecase=false and asserts BOTH halves: the
+    # repo-local value is really corrected, AND the reported outcome is true.
+    git -C "$PROJECT_ROOT" config --local core.ignorecase false
+    command printf '[core]\n\tignorecase = false\n' >"$TEST_TEMP_DIR/decoy-gitconfig"
+
+    local output
+    output=$(run_fs_health_with_legacy_config "$TEST_TEMP_DIR/decoy-gitconfig" insensitive)
+
+    assert_equals "true" "$(get_local_ignorecase)" \
+        "A leaked GIT_CONFIG must not divert the repair away from the repo-local config"
+    assert_contains "$output" "set core.ignorecase=true" \
+        "The run should report the repair it actually made"
+}
+
+test_probe_helper_rejects_non_identifiers() {
+    # The guard on run_fs_health_probe_env's argument, which is interpolated
+    # into generated shell text. Untested guards are how a guard quietly stops
+    # guarding, so exercise both arms.
+    local status=0
+    run_fs_health_probe_env 'x; rm -rf /' >/dev/null 2>&1 || status=$?
+    assert_equals "1" "$status" \
+        "A non-identifier variable name must be rejected, not interpolated"
+
+    status=0
+    run_fs_health_probe_env '' >/dev/null 2>&1 || status=$?
+    assert_equals "1" "$status" \
+        "An empty variable name must be rejected"
+
+    # The third arm — and the one that needs care to test, because exit status
+    # alone CANNOT distinguish it. Every character in "9FOO" is a legal
+    # identifier character, so only the leading-digit pattern rejects it; but
+    # with that pattern removed the name is accepted, interpolated, and the
+    # generated stub then dies on `${9FOO-}: bad substitution`, which is also
+    # non-zero. An exit-code assertion therefore passes either way (measured —
+    # this test did exactly that before being rewritten).
+    #
+    # So assert on the guard's own DIAGNOSTIC, which only the guard emits.
+    local err
+    err=$(run_fs_health_probe_env '9FOO' 2>&1 >/dev/null)
+    assert_contains "$err" "not a shell identifier" \
+        "A digit-leading name must be rejected BY THE GUARD, not by a later bad substitution"
+
+    # And the accepting arm still works, so the guard is not simply refusing
+    # everything.
+    local seen
+    seen=$(GIT_CONFIG_NOSYSTEM=1 run_fs_health_probe_env GIT_CONFIG_NOSYSTEM)
+    assert_equals "1" "$seen" \
+        "A valid identifier must still be probed"
+}
+
+test_nosystem_optout_is_preserved() {
+    # GIT_CONFIG_NOSYSTEM is deliberately NOT cleared: it is an opt-OUT (git
+    # reads /etc/gitconfig by default; NOSYSTEM disables that), so unsetting it
+    # would re-enable a config source a caller turned off — the opposite of what
+    # this block is for. Pin that it survives, so a future "tidy up the family"
+    # edit that adds it to the unset fails here instead of silently widening the
+    # script's config surface.
+    local seen
+    seen=$(GIT_CONFIG_NOSYSTEM=1 run_fs_health_probe_env GIT_CONFIG_NOSYSTEM)
+
+    assert_equals "1" "$seen" \
+        "GIT_CONFIG_NOSYSTEM must survive the unset — it is an opt-out, not a redirect"
+}
+
+# ============================================================================
 # Reporting Tests
 # ============================================================================
 
@@ -661,6 +815,12 @@ run_test_with_setup test_no_change_when_detection_unknown "No change when detect
 run_test_with_setup test_corrects_explicit_false "Corrects an explicit core.ignorecase=false"
 run_test_with_setup test_idempotent_when_already_true "Idempotent when core.ignorecase already true"
 run_test_with_setup test_skip_fix_reports_without_writing "SKIP_CASE_FIX reports without writing"
+run_test_with_setup test_config_count_injection_does_not_suppress_repair "Injected GIT_CONFIG_COUNT does not suppress the ignorecase repair"
+run_test_with_setup test_config_global_injection_does_not_suppress_repair "Substituted GIT_CONFIG_GLOBAL does not suppress the ignorecase repair"
+run_test_with_setup test_config_parameters_injection_does_not_suppress_repair "Injected GIT_CONFIG_PARAMETERS does not mask a wrong local value"
+run_test_with_setup test_legacy_git_config_does_not_divert_the_write "Leaked legacy GIT_CONFIG does not divert the repair write"
+run_test_with_setup test_probe_helper_rejects_non_identifiers "Probe helper rejects non-identifier variable names"
+run_test_with_setup test_nosystem_optout_is_preserved "GIT_CONFIG_NOSYSTEM opt-out survives the unset"
 run_test_with_setup test_silent_when_healthy "Silent when filesystem is healthy"
 run_test_with_setup test_reports_when_repairing "Reports the setting it changed"
 run_test_with_setup test_healthy_symlink_untouched "Healthy symlink left untouched"

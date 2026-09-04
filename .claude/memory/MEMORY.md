@@ -100,3 +100,6 @@
 - [Rebase before blaming your own change](rebase-before-blaming-your-change.md) — a CI failure in files your branch never touched usually means main moved; check origin/main first
 - [FUSE scratch breaks write-then-read](fuse-scratch-breaks-write-then-read.md) — test scratch on the FUSE-mounted repo loses coherency ~0.75%/op; use TEST_SCRATCH_BASE, not RESULTS_DIR (#821)
 - [clap `env` attr breaks bool flags](clap-env-attr-breaks-bool-flags.md) — `#[arg(env=...)]` on a bool makes it value-taking; bare switch fails and a set-but-empty var kills every invocation (#810)
+- [git-env neutralization boundary](git-env-neutralization-boundary.md) — fs-health clears 8 git vars by measurement not name family; legacy GIT_CONFIG diverts the WRITE, NOSYSTEM must stay (#894)
+- [Fixture state hides vectors](fixture-state-hides-vectors.md) — an exhaustive sweep in one fixture state missed two of its own members; sweep every state that could change the answer
+- [Assertions must discriminate](assertions-must-discriminate.md) — exit codes and substring fragments pass for the wrong reason; delete the guarded line and confirm THAT test fails

@@ -149,25 +149,179 @@ LOG_PREFIX="[fs-health]"
 #                              gets no immunity test — an absence to leave alone,
 #                              not an oversight to fill.
 #
-# SCOPE — these five are the repo-IDENTITY variables (which repository am I
-# operating on), which is the leak class #886 is about. Deliberately NOT a
-# general git-environment sanitizer: GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM /
-# GIT_CONFIG_COUNT and GIT_CEILING_DIRECTORIES can also steer git, and are left
-# alone here. Anyone who can set those in this process's environment can equally
-# run git directly, so unsetting them buys no security boundary — while removing
-# them would break the legitimate case of a caller who set them on purpose.
+# The CONFIG-REDIRECT family is cleared too (issue #894), for a different and
+# more concrete reason than the identity vars above — and NOT the reason #886
+# first gave for leaving them out.
 #
-# Unset ONCE here rather than wrapping each call in `env -u`: there are nine
-# `git -C` call sites across four functions, so per-call wrapping is nine
-# chances to miss one and leaves every future git line inheriting the bug by
-# default. This is safe precisely because the script is EXEC'd, never sourced —
+#   GIT_CONFIG (the legacy singular form)
+#   GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM
+#   GIT_CONFIG_COUNT (+ its GIT_CONFIG_KEY_<n> / GIT_CONFIG_VALUE_<n> pairs)
+#   GIT_CONFIG_PARAMETERS
+#
+# #886 argued these bought "no security boundary" — anyone able to set them
+# could run git directly — and left them alone. That framing was wrong, because
+# the risk here is not an attacker. It is a SILENT NO-OP, the same class #886
+# exists to fix. Measured end-to-end against this script:
+#
+#   clean run     -> "set core.ignorecase=true", repo-local value written
+#   GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.ignorecase GIT_CONFIG_VALUE_0=true
+#                 -> repo-local value NEVER written, and NOTHING printed
+#
+# check_ignorecase reads core.ignorecase, sees the injected `true`, and takes its
+# "already correct — say nothing" early return. An inherited value from anywhere
+# — a wrapper, a CI job, a developer's shell — therefore disables the repair
+# with no diagnostic. What that repair prevents is in this file's own header: on
+# a case-insensitive mount, `git clean -fd` unlinks the shared inode and destroys
+# tracked source. `-C` does not protect the read; git resolves config from the
+# environment first.
+#
+# Clearing GIT_CONFIG_COUNT alone neutralizes the indexed pairs — git ignores
+# GIT_CONFIG_KEY_<n>/VALUE_<n> without a count — so no unbounded enumeration of
+# _<n> names is needed.
+#
+# GIT_CONFIG_PARAMETERS is the MOST LIKELY of these to be set by accident, and
+# the most dangerous. Git populates it ITSELF: any `git -c key=value ...`
+# exports it to every child process, so an ancestor `git -c` anywhere — a hook,
+# an alias, a wrapper, a CI step — reaches this script without anyone having
+# deliberately exported a GIT_* variable. Measured:
+#
+#   GIT_CONFIG_PARAMETERS="'core.ignorecase'='true'"  -> read returns 'true'
+#   git -c core.ignorecase=true <alias running a child git> -> child reads 'true'
+#
+# And unlike the file-redirect vars, `-c` values sit at the TOP of git's config
+# precedence — above the repo-local file. So this one suppresses the repair even
+# on a repo whose local core.ignorecase is explicitly `false`, which is exactly
+# the state check_ignorecase exists to correct. Caught by the #894 review, not
+# by the original sweep.
+#
+# GIT_CONFIG (singular, legacy) is the WORST of the set, and the only one whose
+# failure is not silent. It affects just the `git config` subcommand — which is
+# exactly what check_ignorecase uses, twice, with no --file — and it diverts the
+# WRITE as well as the read. Measured end-to-end against this script, on a repo
+# whose local core.ignorecase is `false`:
+#
+#   [fs-health] git core.ignorecase is 'false' (incorrect for this mount)
+#   [fs-health] set core.ignorecase=true          <- reported as repaired
+#   repo-local core.ignorecase afterwards: false  <- but never written
+#
+# So this one produces a FALSE SUCCESS: the operator is told the repair landed,
+# the log says so, and the setting that `git clean -fd` actually consults is
+# untouched. Every other variable here can only make the repair vanish quietly;
+# this one makes it lie. Caught in the second #894 review cycle.
+#
+# NOT cleared: GIT_CONFIG_NOSYSTEM, despite belonging to the same name family.
+# It is an opt-OUT, not a redirect: git reads /etc/gitconfig by default, and
+# NOSYSTEM is how a caller DISABLES that. Unsetting it would not restore a
+# default — it would re-enable a config source someone deliberately turned off,
+# which is the opposite of this block's purpose and could itself pull in a
+# system-level core.ignorecase. (This image does ship an /etc/gitconfig; it sets
+# pager/diff options and no core.ignorecase today, but that is a fact about
+# today's image, not a guarantee.) Dropped from the list after review.
+#
+# Safe to clear: nothing in this repo (script, test, wrapper, CI job, Dockerfile)
+# supplies git config through the environment, and a normal config read is
+# unaffected by the unset. Both verified by repo-wide grep in #894.
+#
+# NOT cleared: GIT_CEILING_DIRECTORIES. Measured inert against all three
+# rev-parse probes here (--git-dir, --git-common-dir, --show-toplevel are
+# unchanged under it) because `-C` supplies an absolute starting point, so no
+# discovery walk crosses the ceiling. Reviewers listed it alongside the config
+# family; measurement says it does not belong. Recorded rather than silently
+# omitted, the same treatment GIT_OBJECT_DIRECTORY gets above.
+#
+# THE RULE, for anyone extending this list: a variable belongs here when it
+# demonstrably bends a probe THIS script makes — verified by measurement, not by
+# category. That is the boundary #894 settled. Both #894 review cycles found a
+# variable the previous sweep had missed (GIT_CONFIG_PARAMETERS, then the legacy
+# GIT_CONFIG), and in each case reasoning by name family is what missed it —
+# measure the specific variable against the specific probe instead.
+#
+# THE SPACE IS CLOSED, as of #894 — this list is complete, not a running tally.
+# Rather than keep discovering these one review cycle at a time, every git
+# environment variable documented as touching config resolution, repo discovery,
+# the index, or pathspecs was swept against every call shape this script makes:
+# `config --get`, `config <k> <v>` (the write), `rev-parse --git-dir`,
+# `rev-parse --git-common-dir`, `rev-parse --show-toplevel`,
+# `worktree list --porcelain`, and `ls-files -s`.
+#
+# These are the variables that move at least one probe. Every one is cleared by
+# the unset below; the last column says which pass added it, so the table needs
+# no summary count to be checked against — read the rows.
+#
+#   GIT_DIR                 --git-dir, --git-common-dir                   #886
+#   GIT_COMMON_DIR          --git-common-dir                              #886
+#   GIT_WORK_TREE           --show-toplevel, --git-dir, --git-common-dir  #886
+#   GIT_INDEX_FILE          ls-files                                      #886
+#   GIT_CONFIG              config read AND WRITE  (beats repo-local)     #894
+#   GIT_CONFIG_PARAMETERS   config read            (beats repo-local)     #894
+#   GIT_CONFIG_COUNT        config read            (beats repo-local)     #894
+#   GIT_CONFIG_GLOBAL       config read            (fills a gap only)     #894
+#   GIT_CONFIG_SYSTEM       config read            (fills a gap only)     #894
+#
+# Deliberately NO total is stated here. Three separate review cycles caught a
+# summary count in this comment drifting from the rows beneath it — first "five
+# movers" (which silently omitted the gap-filling ones), then a "5 by #886 / 3
+# by #894" split that matched neither the table nor the unset. A count is a
+# second copy of the data that no test checks and every edit can falsify; the
+# per-row annotation cannot drift, because it IS the data.
+#
+# Note #886 cleared five variables but only four appear here: GIT_OBJECT_DIRECTORY
+# is inert against every probe (see its entry above) and was cleared for
+# completeness, so it is not a mover.
+#
+# Measured INERT against all six shapes, and listed by name so a future reader
+# can see they were checked rather than overlooked: GIT_CONFIG_NOSYSTEM,
+# GIT_OBJECT_DIRECTORY, GIT_CEILING_DIRECTORIES, GIT_DISCOVERY_ACROSS_FILESYSTEM,
+# GIT_ATTR_NOSYSTEM, GIT_NAMESPACE, GIT_ALTERNATE_OBJECT_DIRECTORIES, and all
+# four pathspec toggles (GIT_GLOB_PATHSPECS, GIT_NOGLOB_PATHSPECS,
+# GIT_LITERAL_PATHSPECS, GIT_ICASE_PATHSPECS).
+#
+# TWO SWEEP ARTIFACTS worth recording, because both produced a wrong answer the
+# first time and would mislead anyone repeating this:
+#
+#   - Point GIT_OBJECT_DIRECTORY at a NONEXISTENT directory and every probe
+#     appears to move — but that is git failing outright ("fatal: not a git
+#     repository"), not a bent probe. Against a real directory it bends nothing,
+#     which is what #886 measured and why it has no immunity test.
+#   - Sweep the config probes on a fixture that ALREADY has a repo-local
+#     core.ignorecase and the gap-filling movers vanish, because local wins.
+#     A single fixture state cannot see the whole space; probe both.
+#
+# PRECEDENCE matters as much as membership, and splits the config movers in two:
+#
+#   GIT_CONFIG / GIT_CONFIG_PARAMETERS / GIT_CONFIG_COUNT   beat the local value
+#   GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM                   lose to it
+#
+# The first tier is the dangerous one: it masks an explicitly wrong
+# core.ignorecase=false, precisely the state check_ignorecase exists to correct.
+# The second can only suppress the repair on a repo with no local value yet.
+# Both are worth clearing; only the first can hide a repo that is actively
+# broken, and only GIT_CONFIG also diverts the WRITE.
+#
+# WHY ONLY THIS SCRIPT. As of #894 this is the only script under lib/runtime/
+# that runs git against a repository, so the rule needs no cross-script rollout:
+# 60-setup-git.sh delegates to the setup-git command, check-installed-versions.sh
+# only runs `git --version`, and workspace-fs-health-cron.sh / -run.sh merely
+# invoke this file. If another runtime script starts shelling out to git — in
+# particular anything that reads or writes config — this same neutralization
+# belongs there too, and it should be hoisted into a shared helper rather than
+# copied.
+#
+# Unset ONCE here rather than wrapping each call in `env -u`: git is invoked
+# from several functions, so per-call wrapping is one chance to miss per call
+# site and leaves every future git line inheriting the bug by default. (#886
+# said "nine call sites"; the real number was eight, and it has since changed
+# again — which is the argument for the unset, not against it, and the reason
+# this no longer quotes a number.) This is safe precisely because the script is EXEC'd, never sourced —
 # the Dockerfile installs it to /etc/container/startup/ and both
 # workspace-fs-health-cron.sh and workspace-fs-health-run.sh invoke it by path —
 # so nothing but this process sees the cleared environment.
 #
 # This repo has hit the leak class before: GIT_DIR leaking into the pre-push
 # hook failed 6/9 temp-repo tests (.claude/memory/git-env-leak-breaks-worktree-tests.md).
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+    GIT_CONFIG GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT \
+    GIT_CONFIG_PARAMETERS
 
 # Injection seam for the RESOLUTION PROBES in repair_linked_worktrees (#886).
 #
