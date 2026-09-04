@@ -375,6 +375,19 @@ update-versions *ARGS:
 check-env:
     ./bin/check-env-drift.sh
 
+# Decide whether a PR's checks permit a merge (zero checks = NOT passing, #854)
+check-pr-checks PR:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    # See worktree-new for why PR is quoted before validation (just interpolates
+    # textually; quote() prevents eager $(...)/quote-break injection).
+    _pr={{ quote(PR) }}
+    [[ "$_pr" =~ ^[0-9]+$ ]] || { command echo "check-pr-checks: PR must be a PR number, got '$_pr'" >&2; exit 2; }
+    # No `set -e`: the script's non-zero verdicts (1 fail, 3 absent, 4 pending)
+    # are its output, not errors, and must reach the caller as-is.
+    gh pr view "$_pr" --json createdAt,statusCheckRollup \
+        | "{{ justfile_directory() }}/bin/check-pr-checks.sh" verdict --rollup-json -
+
 # Refresh checksums after version bumps
 update-checksums:
     ./bin/update-checksums.sh
