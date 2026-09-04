@@ -1145,6 +1145,15 @@ _doc_drift_case_setup() {
         return 1
     fi
 
+    # `0` is the helper's signal for an empty/unparsable first entry, and it is
+    # not an empty string — so the check above lets it through. Mirror the
+    # caller's `< 2` rejection here, or the four branch tests would scan with a
+    # count of 0 and report per-doc drift instead of naming the real cause.
+    if [ "$DOC_DRIFT_COUNT" -lt 2 ]; then
+        fail_test "DEFAULT_PLUGINS parsed to $DOC_DRIFT_COUNT entries — the assignment is empty or unparsable"
+        return 1
+    fi
+
     if ! DOC_DRIFT_FIXTURE=$(_make_plugin_doc_fixture) || [ -z "$DOC_DRIFT_FIXTURE" ]; then
         fail_test "could not build the doc fixture under \$TEST_SCRATCH_BASE — mktemp or cp failed"
         return 1
@@ -1274,7 +1283,11 @@ test_code_count_reports_zero_for_empty_first_entry() {
 # a subshell so the real verdict functions never touch the shared TEST_STATUS.
 test_guard_rejects_unparsable_default_plugins() {
     local tmpdir stub out
-    tmpdir=$(command mktemp -d "$TEST_SCRATCH_BASE/guard-reject-XXXXXX")
+    if ! tmpdir=$(command mktemp -d "$TEST_SCRATCH_BASE/guard-reject-XXXXXX"); then
+        fail_test "could not create a scratch dir under \$TEST_SCRATCH_BASE — mktemp failed"
+        return
+    fi
+
     stub="$tmpdir/claude-setup"
     printf '#!/bin/bash\nDEFAULT_PLUGINS=",dev-core,workflow"\n' >"$stub"
 
