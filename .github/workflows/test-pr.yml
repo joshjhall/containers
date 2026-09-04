@@ -325,6 +325,16 @@ jobs:
   # =====================================
   # Single status check for branch protection. Always runs; succeeds when
   # all build-feature cells succeeded OR when there was nothing to build.
+  #
+  # Because this is a REQUIRED context on `main` (#904), it has two properties
+  # that pull against each other and must both hold:
+  #   - it must always REPORT (hence `if: always()`) — a required context that
+  #     never reports blocks `main` forever;
+  #   - it must report FAILURE whenever the tier did not actually certify this
+  #     PR. Reporting green on no evidence is the #854 class this protection
+  #     exists to close, relocated one hop upstream.
+  # Behavior is verified offline by tests/unit/required-checks.sh, which
+  # extracts this run block and executes it across the states below.
   # =====================================
   pr-tier:
     name: PR Tier
@@ -336,18 +346,35 @@ jobs:
         env:
           MODE: ${{ needs.detect-changes.outputs.mode }}
           BUILD_RESULT: ${{ needs.build-feature.result }}
+          DETECT_RESULT: ${{ needs.detect-changes.result }}
         run: |
           set -euo pipefail
+          echo "Detect result: ${DETECT_RESULT}"
           echo "Detect mode: ${MODE}"
           echo "Build result: ${BUILD_RESULT}"
+
+          # Gate on the UPSTREAM job's result first (#909). When detect-changes
+          # fails, its compute step never writes outputs, so MODE is empty
+          # rather than `skip` — and build-feature is `skipped` by needs-failure
+          # propagation rather than `failure`. Both checks below would then read
+          # as healthy and this job would exit 0 having built and smoke-tested
+          # nothing. `skipped` means two different things (nothing needed
+          # building vs. the job that decides never ran) and only
+          # `needs.detect-changes.result` tells them apart.
+          if [ "${DETECT_RESULT}" != "success" ]; then
+            echo "::error::detect-changes did not succeed (${DETECT_RESULT}) — cannot certify this PR."
+            exit 1
+          fi
+
           case "${MODE}" in
             skip)
               echo "::notice::PR tier skipped — no container-affecting changes."
               exit 0
               ;;
           esac
-          # `success` (all matrix cells passed) or `skipped` (detect emitted
-          # nothing — already handled above) are both acceptable.
+          # Reached only when detect-changes SUCCEEDED and emitted a non-skip
+          # mode, so `skipped` here can only mean the matrix was empty —
+          # genuinely nothing to build. `success` means every cell passed.
           if [ "${BUILD_RESULT}" = "success" ] || [ "${BUILD_RESULT}" = "skipped" ]; then
             exit 0
           fi
