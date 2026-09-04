@@ -972,6 +972,88 @@ test_default_plugins_still_populated() {
     fi
 }
 
+# The plugin count lives in code exactly once (the DEFAULT_PLUGINS assignment)
+# but is mirrored as a hardcoded literal in four docs. Nothing used to assert
+# the two agree, so an add/remove silently staled the docs — #899 changed the
+# count 11 -> 10 and had to fix every call site by hand (#900).
+#
+# The count is DERIVED from the same DEFAULT_PLUGINS line the two guards above
+# grep, so all three fail together if that line is renamed or reformatted; the
+# docs are only ever compared against it, never treated as a second source of
+# truth.
+#
+# Splitting is done with `IFS=',' read -ra` — the same way claude-setup itself
+# splits the list into CORE_PLUGINS. Note `tr ',' '\n' | wc -l` undercounts by
+# one here (no trailing newline on the last field).
+#
+# The doc regex is deliberately narrow. examples/env/dev-tools.env carries
+# "replaces all 13 static skills" and "replaces all 11 default agents" within
+# ten lines of the plugin literal, so a looser pattern (a bare `all [0-9]+`)
+# would match those and fail against an unrelated, correct number.
+#
+# A doc that yields NO match fails too: the prose was reworded, this guard has
+# gone blind, and that is the same undetected-drift class the test exists to
+# catch.
+#
+# Verdicts accumulate and are reported ONCE after the loop, for the reason
+# spelled out above test_default_plugins_still_populated: pass_test/fail_test
+# overwrite the shared TEST_STATUS, so a per-file verdict would let a later
+# matching doc mask an earlier mismatch.
+test_default_plugins_count_matches_docs() {
+    local default_line value code_count
+    default_line=$(command grep -E '^[[:space:]]*DEFAULT_PLUGINS=' "$CLAUDE_SETUP")
+
+    if [ -z "$default_line" ]; then
+        fail_test "DEFAULT_PLUGINS assignment not found — renamed or reformatted"
+        return
+    fi
+
+    # Strip `[indent]DEFAULT_PLUGINS="` and the trailing quote.
+    value=$(printf '%s\n' "$default_line" | command sed -E 's/^[^=]*="?//; s/"[[:space:]]*$//')
+
+    local plugins=()
+    IFS=',' read -ra plugins <<<"$value"
+    code_count=${#plugins[@]}
+
+    # Without this the doc comparison could pass vacuously against an empty or
+    # unparsable assignment.
+    if [ "$code_count" -lt 2 ] || [ -z "${plugins[0]}" ]; then
+        fail_test "DEFAULT_PLUGINS parsed to $code_count entries — the assignment is empty or unparsable"
+        return
+    fi
+
+    local doc drifted="" found_any
+    for doc in README.md CLAUDE.md docs/claude-code/plugins-and-mcps.md examples/env/dev-tools.env; do
+        local doc_path="$PROJECT_ROOT/$doc"
+
+        if [ ! -f "$doc_path" ]; then
+            drifted="$drifted $doc:missing"
+            continue
+        fi
+
+        found_any=""
+        local match doc_count
+        while IFS= read -r match; do
+            [ -n "$match" ] || continue
+            found_any=yes
+            doc_count=$(printf '%s\n' "$match" | command grep -oE '[0-9]+')
+            if [ "$doc_count" != "$code_count" ]; then
+                drifted="$drifted $doc:$doc_count"
+            fi
+        done < <(command grep -oiE '(all )?[0-9]+ core plugins|all [0-9]+ defaults' "$doc_path")
+
+        if [ -z "$found_any" ]; then
+            drifted="$drifted $doc:no-count-found"
+        fi
+    done
+
+    if [ -z "$drifted" ]; then
+        pass_test "DEFAULT_PLUGINS count ($code_count) matches every documented plugin count (#900)"
+    else
+        fail_test "DEFAULT_PLUGINS has $code_count plugins but docs say:$drifted — update the count literal in each doc, or the plugin list in claude-setup (no-count-found means the prose was reworded past this guard's regex)"
+    fi
+}
+
 # ============================================================================
 # Lock Acquisition Branch Tests (issue #787)
 # ============================================================================
@@ -2280,6 +2362,7 @@ run_test test_deny_list_supports_file_variant "Deny-list: resolves via the _FILE
 
 run_test test_default_plugins_excludes_hookify "Defaults: hookify is not a default plugin (#897)"
 run_test test_default_plugins_still_populated "Defaults: DEFAULT_PLUGINS still carries the retained core set"
+run_test test_default_plugins_count_matches_docs "Defaults: DEFAULT_PLUGINS count matches the documented count (#900)"
 
 run_test test_lock_timeout_exits_nonzero "Lock: flock timeout exits 1, never proceeds unlocked"
 run_test test_lock_acquired_continues "Lock: a successful acquire continues setup"
