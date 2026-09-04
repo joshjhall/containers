@@ -913,6 +913,55 @@ test_deny_list_supports_file_variant() {
 }
 
 # ============================================================================
+# DEFAULT_PLUGINS Composition Tests (issue #897)
+# ============================================================================
+
+# hookify must stay OUT of the defaults. With no hookify.*.local.md rule file it
+# still fires four hooks, each printing `{}` — hook records that land in the
+# session transcript and are re-read on every subsequent turn, so a plugin
+# contributing nothing accrues context cost for the whole session. As a DEFAULT
+# it does that in every container built from this image, including ones whose
+# operator already disabled it host-side. It stays available opt-in via
+# CLAUDE_PLUGINS / CLAUDE_EXTRA_PLUGINS.
+#
+# The assertion keys on the DEFAULT_PLUGINS line specifically, not on "hookify
+# absent from the file" — the latter would pass for the wrong reason the moment
+# a comment or a deny-list example mentions the name.
+test_default_plugins_excludes_hookify() {
+    local default_line
+    default_line=$(command grep -E '^[[:space:]]*DEFAULT_PLUGINS=' "$CLAUDE_SETUP")
+
+    if [ -z "$default_line" ]; then
+        fail_test "DEFAULT_PLUGINS assignment not found — renamed or reformatted"
+        return
+    fi
+
+    if command grep -q 'hookify' <<<"$default_line"; then
+        fail_test "hookify is back in DEFAULT_PLUGINS (#897) — it re-enables empty-payload hooks in every container"
+    else
+        pass_test "DEFAULT_PLUGINS excludes hookify (#897)"
+    fi
+}
+
+# The guard above is only meaningful if the line it greps still holds the real
+# plugin set. Assert a couple of retained defaults so a reformat that splits or
+# empties the assignment fails loudly instead of making the hookify check pass
+# vacuously.
+test_default_plugins_still_populated() {
+    local default_line
+    default_line=$(command grep -E '^[[:space:]]*DEFAULT_PLUGINS=' "$CLAUDE_SETUP")
+
+    local plugin
+    for plugin in commit-commands pr-review-toolkit feature-dev; do
+        if command grep -q "$plugin" <<<"$default_line"; then
+            pass_test "DEFAULT_PLUGINS still contains $plugin"
+        else
+            fail_test "DEFAULT_PLUGINS lost $plugin — the hookify guard may now be vacuous"
+        fi
+    done
+}
+
+# ============================================================================
 # Lock Acquisition Branch Tests (issue #787)
 # ============================================================================
 # The timeout branch is deliberately fail-loud: proceeding unlocked would
@@ -2217,6 +2266,9 @@ run_test test_empty_deny_list_is_inert "Deny-list: empty list does not regress t
 run_test test_deny_list_is_exact_match "Deny-list: exact match only, no substring denial"
 run_test test_deny_list_applied_in_librarian_loop "Deny-list: also guards the librarian install loop"
 run_test test_deny_list_supports_file_variant "Deny-list: resolves via the _FILE-aware helper"
+
+run_test test_default_plugins_excludes_hookify "Defaults: hookify is not a default plugin (#897)"
+run_test test_default_plugins_still_populated "Defaults: DEFAULT_PLUGINS still carries the retained core set"
 
 run_test test_lock_timeout_exits_nonzero "Lock: flock timeout exits 1, never proceeds unlocked"
 run_test test_lock_acquired_continues "Lock: a successful acquire continues setup"

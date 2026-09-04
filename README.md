@@ -211,7 +211,7 @@ a curated baseline of plugins, MCP servers, skills, and agents.
   VS Code and Zed get the same language tooling without per-editor setup.
 - **MCP servers** — Filesystem, GitHub/GitLab, Context7, Playwright, and
   others. Override with `CLAUDE_MCPS` or extend with `CLAUDE_EXTRA_MCPS`.
-- **Plugins** — 11 core plugins plus language-specific LSP plugins.
+- **Plugins** — 10 core plugins plus language-specific LSP plugins.
   Override with `CLAUDE_PLUGINS` / `CLAUDE_EXTRA_PLUGINS`.
 - **Skills and agents** — general-purpose skills and agents (including
   `/codebase-audit`, `/next-issue`, and `/next-issue-ship`) ship in the
