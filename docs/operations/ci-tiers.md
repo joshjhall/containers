@@ -65,7 +65,13 @@ the full multi-variant merge-tier cost.
      the merge-tier cluster on this PR
 3. `build-feature` matrix builds each feature image with buildx + GHA cache.
 4. `pr-tier` summary job rolls up matrix results into a single status check
-   for branch protection.
+   for branch protection. That rollup is the designated required context on
+   `main` (#904), alongside `Run Tests` — see
+   [`.github/required-checks.txt`](../../.github/required-checks.txt). Because
+   it is required, `pr-tier` must keep reporting on **every** PR: it runs
+   `if: always()` and exits 0 when detect-changes returns `skip`, so a docs-only
+   PR reports success rather than reporting nothing. Preserve that property when
+   editing this job — a required context that never reports blocks `main`.
 
 ### Cache strategy
 

@@ -128,18 +128,93 @@ it covers:
   logic lives outside this repo, so this script is the piece a reviewer or an
   automation wrapper can call — `just check-pr-checks <N>` before merging, and
   treat any non-zero exit as *do not merge*.
-- Making it **binding** rather than advisory needs branch protection, below.
+- What makes the gate **binding** rather than advisory is branch protection —
+  below.
 
-**Recommended follow-up — branch protection.** The script is advisory. `main`
-currently has no protection (`gh api repos/OWNER/REPO/branches/main/protection`
-→ 404), so nothing at the platform level stops a zero-check merge. Required
-status checks anchored on the stable rollup job names — `Run Tests`
-(`ci.yml`) and `PR Tier` (`test-pr.yml`, which
-[`ci-tiers.md`](../operations/ci-tiers.md) notes exists precisely "for branch
-protection") — would make `gh pr merge --auto` genuinely safe, since GitHub
-holds the merge until those contexts report. The trade-off worth weighing
-first: a renamed workflow job then silently blocks every PR until the
-required-contexts list is updated.
+**Branch protection on `main` (#904).** Requiring status checks makes GitHub
+itself hold a merge until real evidence reports — that is what closes the
+zero-check window on the PR path. The script above stays useful either way,
+because it explains *why* a PR is unmergeable (`absent` vs `pending` vs `fail`),
+which a greyed-out merge button does not.
+
+> **Status: decided, not yet applied.** The settings below are agreed and
+> guarded in-repo, but the live `main` branch is still unprotected — applying
+> them needs a token with the repo **Administration: Read and write**
+> permission, which the fine-grained PAT in this environment does not carry
+> (`gh api -X PUT …/protection` → `403 Resource not accessible by personal
+> access token`; the read endpoint still returns `404 Branch not protected`).
+> Apply with the command below from a session whose token has that permission,
+> or via **Settings → Branches → Add rule** in the web UI, then flip this note.
+
+Settings to apply:
+
+| Setting | Value |
+| --- | --- |
+| Required contexts | `Run Tests` (`ci.yml`), `PR Tier` (`test-pr.yml`) |
+| `strict` (branch must be up to date) | `false` |
+| `enforce_admins` | `false` |
+| Required reviews | none |
+
+The context list lives in [`.github/required-checks.txt`](../../.github/required-checks.txt)
+— the manifest is the only in-repo trace of a setting that otherwise lives
+invisibly in repo settings. Apply it, then read the live values back:
+
+```bash
+gh api -X PUT repos/OWNER/REPO/branches/main/protection --input - <<'JSON'
+{
+  "required_status_checks": {"strict": false, "contexts": ["Run Tests", "PR Tier"]},
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+JSON
+
+gh api repos/OWNER/REPO/branches/main/protection \
+  --jq '{contexts: .required_status_checks.contexts,
+         strict: .required_status_checks.strict,
+         admins: .enforce_admins.enabled}'
+```
+
+Why the two permissive settings are deliberate, not oversights:
+
+- **`enforce_admins: false`** — `auto-patch.yml`'s `post-merge` job pushes
+  **directly** to `main` (`git push origin HEAD:main` for the compatibility
+  matrix) and pushes a `v*` tag. Admin enforcement would break the release bot.
+  The cost is that an admin can still direct-push; the goal here is the
+  zero-check *merge* window on the PR path.
+- **No required reviews** — a required approval would block solo PRs from
+  self-merging and would deadlock the auto-patch bot's `gh pr merge --auto`,
+  since no second reviewer exists.
+- **`strict: false`** — `strict: true` forces every PR to rebase whenever `main`
+  moves, which with a bot pushing to `main` on a schedule means near-constant
+  rebasing for no added safety.
+
+**The failure mode this creates, and its guard.** A required context that never
+reports blocks `main` **indefinitely** — the mirror image of #854: instead of
+merging when it shouldn't, nothing can merge at all. Two cases behave
+differently, and the difference is easy to get backwards:
+
+- A job that **runs** and concludes `SKIPPED` **does** satisfy a required
+  context. That is the healthy steady state here — most checks on a typical PR
+  legitimately sit in the skipping bucket.
+- A job that is **never scheduled** (its whole workflow filtered out by a
+  `paths:` filter, a narrowed `branches:` list, or a rename) reports nothing,
+  and blocks forever.
+
+`tests/unit/required-checks.sh` guards this offline: every name in the manifest
+must map to exactly one job, in a workflow triggered on every PR to `main`, with
+no `paths:`/`paths-ignore:` filter on that trigger and no `${{ }}` in the job
+name. **Add a context to the manifest only if it reports on every PR regardless
+of what changed** — and update the live setting too; the manifest does not apply
+itself.
+
+**Recovery — `main` is stuck and nothing can merge.** If a required context
+stops reporting, an admin can lift protection, fix the workflow (or the
+manifest), and re-apply:
+
+```bash
+gh api -X DELETE repos/OWNER/REPO/branches/main/protection
+```
 
 ## GitHub Actions: Rate limit exceeded
 
