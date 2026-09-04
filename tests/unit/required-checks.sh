@@ -338,18 +338,27 @@ test_pr_tier_verdict_matrix() {
     # Each row is: detect-changes result | mode | build-feature result | expected exit.
     #
     # The first two rows are the #909 bug (both exited 0 before the fix). The
-    # last three are what keeps the assertion honest: a guard that simply
-    # failed everything would pass rows 1-2 while breaking every real PR, so
-    # the passing rows are as load-bearing as the failing ones.
+    # rest are what keeps the assertion honest: a guard that simply failed
+    # everything would pass rows 1-2 while breaking every real PR, so the
+    # passing rows are as load-bearing as the failing ones.
     #
     # MODE is empty on the failure rows on purpose — that is the real shape,
     # since detect-changes' compute step never reaches its `echo mode=...`.
+    #
+    # The LAST row is the one that is easy to leave out and costly to miss: a
+    # non-`skip` mode whose matrix came out empty, so BUILD_RESULT is `skipped`
+    # on a path that does NOT short-circuit in the `case` above. It is the only
+    # row that reaches the BUILD_RESULT check with `skipped`, and therefore the
+    # only one covering the branch the job's comment describes. Without it,
+    # tightening that check to accept `success` alone would break real PRs
+    # while this test still passed.
     local -a cases=(
         "failure||skipped|1|a failed detect-changes fails the rollup"
         "cancelled||skipped|1|a cancelled detect-changes fails the rollup"
         "success|skip|skipped|0|a genuine skip (docs-only PR) still passes"
         "success|changed|success|0|all matrix cells passing still passes"
         "success|changed|failure|1|a real build failure still fails"
+        "success|changed|skipped|0|a non-skip mode with an empty matrix still passes"
     )
 
     local row detect mode build expected desc rc violations=0
