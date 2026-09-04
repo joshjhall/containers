@@ -250,6 +250,7 @@ mod tests {
             version_output: None,
             error_class: None,
             dependencies: None,
+            verification_warnings: Vec::new(),
             notes: None,
         }
     }
