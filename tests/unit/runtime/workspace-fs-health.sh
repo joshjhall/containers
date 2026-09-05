@@ -662,6 +662,26 @@ test_workspace_root_home_is_refused() {
         "WORKSPACE_ROOT=/home must be refused, not just /"
 }
 
+test_workspace_root_every_system_dir_is_refused() {
+    # Sweep the WHOLE denylist, not one representative. A `case` pattern is a
+    # single line of alternations, so a dropped `|`, a typo (/media -> /medai), or
+    # a deleted arm breaks exactly one entry and nothing else — invisible to a
+    # spot check on /home. The list is duplicated here on purpose: a test that
+    # derived it from the script would pass no matter what the script said.
+    local dir failures=""
+    for dir in /home /root /etc /usr /var /opt /srv /tmp /boot /dev /proc /sys \
+        /run /bin /sbin /lib /lib32 /lib64 /mnt /media \
+        /usr/bin /usr/sbin /usr/lib /usr/local; do
+        case "$(run_fs_health_workspace "$dir" sensitive)" in
+            *"system directory"*) ;;
+            *) failures="${failures} ${dir}" ;;
+        esac
+    done
+
+    assert_equals "" "$failures" \
+        "Every denylisted system directory should be refused (unrefused:${failures})"
+}
+
 test_workspace_root_system_dir_spelling_variants_refused() {
     # Matched on the RESOLVED path, so the spelling tricks the root check
     # collapses cannot walk past this one either.
@@ -893,6 +913,15 @@ test_workspace_scan_does_not_double_scan_submodule() {
         "A submodule at depth 1 of a repo workspace root should be repaired exactly once"
     assert_contains "$output" "sub/AGENTS.md" \
         "The submodule repair should keep its submodule label, not be re-reported bare"
+
+    # A submodule is seen by BOTH walks: the gitlink walk that repairs it, and
+    # depth-1 discovery. Discovery runs in a process-substitution subshell with
+    # no view of the scanned-roots ledger, so without an explicit gitlink check
+    # it announced "not repairing" for a directory being repaired a few lines
+    # later — a false alarm in an unattended log. Asserting only the repair count
+    # (above) is what let that ship: the misleading line changes no count.
+    assert_not_contains "$output" "not repairing" \
+        "A submodule must not be announced as refused when the gitlink walk repairs it"
 }
 
 test_workspace_scan_dedups_sibling_worktree_either_order() {
@@ -1593,6 +1622,7 @@ run_test_with_setup test_workspace_root_double_slash_is_refused "WORKSPACE_ROOT=
 run_test_with_setup test_workspace_root_dot_form_is_refused "A path-equivalent root form is refused"
 run_test_with_setup test_git_dir_registered_to_another_entry_is_refused "A git dir registered to another entry is refused"
 run_test_with_setup test_workspace_root_home_is_refused "WORKSPACE_ROOT=/home is refused"
+run_test_with_setup test_workspace_root_every_system_dir_is_refused "Every denylisted system directory is refused"
 run_test_with_setup test_workspace_root_system_dir_spelling_variants_refused "A system-dir spelling variant is refused"
 run_test_with_setup test_workspace_root_under_home_is_allowed "A workspace below a system dir is still scanned"
 run_test_with_setup test_workspace_root_slash_is_refused "WORKSPACE_ROOT=/ is refused"

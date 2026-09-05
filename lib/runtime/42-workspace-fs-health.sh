@@ -250,16 +250,35 @@ if [ "$FS_HEALTH_ROOT_REJECTED" != "true" ]; then
     #
     # Matched on the RESOLVED path, so the same spelling tricks the root check
     # collapses (/home/, //home, /home/x/..) cannot walk past this either.
-    case "$FS_HEALTH_ROOT_RESOLVED" in
-        '/')
-            command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — it resolves to the filesystem root" >&2
-            FS_HEALTH_ROOT_REJECTED=true
-            ;;
-        /home | /root | /etc | /usr | /var | /opt | /srv | /tmp | /boot | /dev | /proc | /sys | /run | /bin | /sbin | /lib | /lib32 | /lib64 | /mnt | /media)
-            command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — '${FS_HEALTH_ROOT_RESOLVED}' is a system directory, not a workspace" >&2
-            FS_HEALTH_ROOT_REJECTED=true
-            ;;
-    esac
+    # Test BOTH the resolved path and the literal one. Neither alone is enough,
+    # and a sweep over the whole list is what showed it — a single spot check on
+    # /home passed while six entries went unrefused:
+    #
+    #   /bin /sbin /lib   resolve to /usr/bin, /usr/sbin, /usr/lib on a
+    #                     merged-/usr distro, so the RESOLVED path is not in the
+    #                     list even though the literal one is
+    #   /root /lib32 /lib64
+    #                     are not `cd`-able as the container user, so resolution
+    #                     yields "" and a resolved-only check skipped them
+    #                     entirely — the arm that most needed to fire
+    #
+    # Matching the literal too closes both, and costs nothing: a path spelled
+    # exactly as a system root is refused whether or not it can be resolved.
+    for FS_HEALTH_ROOT_CANDIDATE in "$FS_HEALTH_ROOT_RESOLVED" "${WORKSPACE_ROOT%/}"; do
+        [ -n "$FS_HEALTH_ROOT_CANDIDATE" ] || continue
+        case "$FS_HEALTH_ROOT_CANDIDATE" in
+            '/')
+                command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — it resolves to the filesystem root" >&2
+                FS_HEALTH_ROOT_REJECTED=true
+                break
+                ;;
+            /home | /root | /etc | /usr | /var | /opt | /srv | /tmp | /boot | /dev | /proc | /sys | /run | /bin | /sbin | /lib | /lib32 | /lib64 | /mnt | /media | /usr/bin | /usr/sbin | /usr/lib | /usr/lib32 | /usr/lib64 | /usr/local)
+                command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — '${FS_HEALTH_ROOT_CANDIDATE}' is a system directory, not a workspace" >&2
+                FS_HEALTH_ROOT_REJECTED=true
+                break
+                ;;
+        esac
+    done
 fi
 
 # Neutralize an inherited git environment before ANY git runs (issue #886).
@@ -1070,9 +1089,43 @@ scan_root() {
 # `rev-parse --git-common-dir` was also considered and REJECTED: it returns the
 # same value (/elsewhere/.git) for both rows, so it cannot tell them apart.
 #
-# So: accept the entry's own .git (an ordinary repo, including a submodule whose
-# gitlink resolves into its parent), or a git dir whose back-pointer resolves to
-# this entry (a registered worktree, wherever its owner lives). Reject the rest.
+# So: accept the entry's own .git (an ordinary repo), or a git dir whose
+# back-pointer resolves to this entry (a registered worktree, wherever its owner
+# lives). Reject the rest.
+#
+# A SUBMODULE matches neither, and that is correct rather than an oversight: its
+# git dir is <parent>/.git/modules/<name>, and `git submodule add` writes no
+# back-pointer (that mechanism is worktree-only). It needs no acceptance here,
+# because discovery is not how a submodule gets repaired — repair_repo_tree's
+# gitlink walk reaches it from the parent that owns it, with the label prefix
+# that makes its output readable.
+#
+# What it must NOT do is announce a refusal for one. A submodule sitting at
+# depth 1 of a repo workspace root is seen by BOTH walks, and discover_repos
+# runs as a process-substitution subshell that cannot see the FS_HEALTH_SCANNED
+# ledger the other walk maintains — so it would print "not repairing" for a
+# directory that IS being repaired a few lines later. Wrong, and alarming in an
+# unattended log. entry_is_gitlink_of_parent detects that case and skips it
+# silently.
+# True when this entry is a gitlink (mode 160000) in its own parent's index —
+# i.e. an initialized submodule of the directory it sits in.
+#
+# Such an entry is repaired by repair_repo_tree's gitlink walk from that parent,
+# so discovery must skip it WITHOUT the "not repairing" refusal that would
+# otherwise be printed for something that is, in fact, repaired.
+#
+# Args: $1 = the entry. Returns 0 when it is a gitlink of its parent.
+entry_is_gitlink_of_parent() {
+    local entry="$1"
+    local parent="${entry%/*}" name="${entry##*/}"
+
+    [ -n "$parent" ] && [ "$parent" != "$entry" ] || return 1
+    [ -e "${parent}/.git" ] || return 1
+
+    "$FS_HEALTH_GIT" -C "$parent" ls-files -s -- "$name" 2>/dev/null |
+        /usr/bin/awk -F'\t' '$1 ~ /^160000 / { found = 1 } END { exit !found }'
+}
+
 entry_git_dir_is_trusted() {
     local entry="$1"
     local git_dir back_pointer entry_resolved back_resolved
@@ -1135,6 +1188,15 @@ entry_git_dir_is_trusted() {
     # than the filesystem offering it. That is the right trade for an unattended
     # job that writes: an unrecognized pointer is refused loudly and a human can
     # still act, whereas accepting it silently hands an attacker the write.
+    # A submodule of this entry's own parent is repaired by the gitlink walk, so
+    # skip it silently rather than announcing a refusal for something that IS
+    # repaired. Checked HERE, last, rather than at the top of the function: the
+    # two accept branches above are cheaper and far more common, and this probe
+    # spawns a `git ls-files` per entry that reaches it.
+    if entry_is_gitlink_of_parent "$entry"; then
+        return 1
+    fi
+
     command echo "$LOG_PREFIX ${entry}: git dir '$git_dir' is neither this entry's own .git nor a worktree registered to it — not repairing (scan it directly with 'workspace-fs-health ${entry}' if this is intentional)" >&2
     return 1
 }
