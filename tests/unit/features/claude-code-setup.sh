@@ -980,20 +980,16 @@ test_default_plugins_still_populated() {
 # The count is DERIVED from the same DEFAULT_PLUGINS line the two guards above
 # grep, so all three fail together if that line is renamed or reformatted; the
 # docs are only ever compared against it, never treated as a second source of
-# truth.
-#
-# Splitting is done with `IFS=',' read -ra` — the same way claude-setup itself
-# splits the list into CORE_PLUGINS. Note `tr ',' '\n' | wc -l` undercounts by
-# one here (no trailing newline on the last field).
+# truth. Splitting uses `IFS=',' read -ra`, as claude-setup itself does — note
+# `tr ',' '\n' | wc -l` undercounts by one (no trailing newline on the last
+# field).
 #
 # The doc regex is deliberately narrow. examples/env/dev-tools.env carries
 # "replaces all 13 static skills" and "replaces all 11 default agents" within
 # ten lines of the plugin literal, so a looser pattern (a bare `all [0-9]+`)
-# would match those and fail against an unrelated, correct number.
-#
-# A doc that yields NO match fails too: the prose was reworded, this guard has
-# gone blind, and that is the same undetected-drift class the test exists to
-# catch.
+# would match those and fail against an unrelated, correct number. A doc
+# yielding NO match fails too — the prose was reworded and this guard has gone
+# blind, the same undetected-drift class the test exists to catch.
 #
 # Verdicts accumulate and are reported ONCE after the loop, for the reason
 # spelled out above test_default_plugins_still_populated: pass_test/fail_test
@@ -1097,29 +1093,25 @@ test_default_plugins_count_matches_docs() {
 # concerned. These tests point the scan at committed fixture doc roots — one
 # per branch — and assert it reports that specific drift.
 #
-# DEPTH LIMIT — the stopping rule for this cluster (#913).
-#
-# Discriminating assertions are owed to the BEHAVIOR UNDER TEST, not to test
-# scaffolding. Scaffolding gets `set -e` and a fail-loud helper; it does not get
-# its own test suite. Without that rule stated, this cluster has no fixed point,
-# and each reviewer who reopens it is right: #900 added three undriven drift
-# branches, #903 drove them and created two in the helper it extracted, #907
-# drove those and created three in the setup helper it extracted. Test code
-# needs guards, guards are branches, branches want tests. The subject here is
-# ONE line; at its peak this cluster carried ~406 lines watching it.
-#
-# #913 broke the loop by DELETING that machinery instead of driving one more
-# layer. The fixtures below are committed and read-only — no mktemp, cp, rm -rf
-# or mkdir -p, hence no failure mode for a guard to cover. So a NEW guard branch
-# here is a signal to delete machinery, not to add a test; a change that
-# reintroduces mutable scratch fixtures is itself the finding.
+# DEPTH LIMIT — the stopping rule for this cluster (#913). Discriminating
+# assertions are owed to the BEHAVIOR UNDER TEST, not to test scaffolding;
+# scaffolding gets `set -e` and a fail-loud helper, not its own test suite.
+# Unstated, this cluster has no fixed point, and each reviewer who reopens it is
+# right: #900 added three undriven drift branches, #903 drove them and created
+# two in the helper it extracted, #907 drove those and created three in the
+# setup helper it extracted — test code needs guards, guards are branches,
+# branches want tests. The subject here is ONE line; at its peak this cluster
+# carried ~406 lines watching it. So a NEW guard branch here is a signal to
+# delete machinery, not to add a test, and a change reintroducing mutable
+# scratch fixtures is itself the finding.
 
 # Fixture doc roots, one per drift branch. A fixture doc is one line of prose —
 # the scan reads nothing else — so these don't copy the real docs and aren't
 # sensitive to real-doc edits. They claim a synthetic count, deliberately
 # unequal to the real one, which lets these tests pass a literal expected count
-# rather than deriving one: with no derived input, there is no input to guard,
-# which is what deletes the entire _doc_drift_case_setup layer.
+# rather than deriving one: with no derived input there is no input to guard,
+# which is what deleted the _doc_drift_case_setup layer (and with it every
+# mktemp/cp/rm -rf/mkdir -p, hence every failure mode a guard would cover).
 PLUGIN_DOC_FIXTURES="$PROJECT_ROOT/tests/fixtures/plugin-count-docs"
 PLUGIN_DOC_FIXTURE_COUNT=7
 
@@ -1134,12 +1126,11 @@ test_doc_drift_fixture_baseline_is_clean() {
         "the clean doc fixture reports no drift (control for the branches below)"
 }
 
-# The three branch tests assert the drift report EQUALS the one expected entry,
-# not merely contains it. Each fixture root holds all four docs, so equality
-# also proves the three untouched siblings were NOT reported — a false positive
-# on any of them fails the test, which a contains-plus-one-negative pair would
-# miss for the two docs it does not name. The leading space is part of the
-# value: _scan_docs_for_plugin_count builds " <doc>:<what>" per entry.
+# The three branch tests assert the report EQUALS its one expected entry, not
+# merely contains it: each fixture root holds all four docs, so equality also
+# proves the untouched siblings were NOT reported — a false positive a
+# contains-plus-one-negative pair would miss for the docs it does not name. The
+# leading space is part of the value (the scan builds " <doc>:<what>" per entry).
 
 # Branch 1 — a doc reporting a count that disagrees with the code.
 test_doc_drift_detects_mismatched_count() {
@@ -1171,9 +1162,8 @@ test_doc_drift_detects_missing_doc() {
 
 # _default_plugins_code_count's own branches (#907) — return 1 when the
 # assignment line is absent, print 0 when the first entry is empty. Driven
-# against committed stand-in claude-setup stubs selected by name (#913), so
-# there is nothing to generate and no mktemp/rm -rf failure mode to guard.
-# CLAUDE_SETUP is overridden for the subshell only.
+# against committed stand-in claude-setup stubs selected by name; CLAUDE_SETUP
+# is overridden for the subshell only.
 #
 # stderr is folded into `out` deliberately (#907): the helper must FAIL CLEANLY,
 # and rc=1 with empty stdout is also what a crash produces — a `set -u` death on
