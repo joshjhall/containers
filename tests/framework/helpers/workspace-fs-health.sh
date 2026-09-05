@@ -253,6 +253,32 @@ make_repo() {
     git -C "$root" config --unset core.ignorecase 2>/dev/null || true
 }
 
+# Build a stat stub that reports ONE basename as stale, and echo its path.
+#
+# nlink=0 / size=0 are filesystem cache artifacts that cannot be produced on
+# demand, so substituting the stat call is the only way to exercise the repair
+# itself rather than just its inaction — the same reason the FS_HEALTH_STAT seam
+# exists. Keyed on basename so every repo in a workspace scan reports its own
+# copy of that file as stale, which is exactly the multi-repo case under test.
+#
+# Args: $1 = basename to report stale. Echoes the stub's path.
+stale_stat_stub() {
+    local name="$1"
+    local stub="$TEST_TEMP_DIR/stale-stat-stub"
+
+    command cat >"$stub" <<STALE_STUB_EOF
+#!/bin/bash
+# The script calls: stat -c '%h %s' <path>
+case "\${3##*/}" in
+    ${name}) command echo "0 0" ;;
+    *) exec /usr/bin/stat "\$@" ;;
+esac
+STALE_STUB_EOF
+    command chmod +x "$stub"
+
+    command printf '%s' "$stub"
+}
+
 # Run the script in WORKSPACE scope (issue #828): PROJECT_ROOT deliberately
 # UNSET, so the script discovers repos under WORKSPACE_ROOT itself.
 #

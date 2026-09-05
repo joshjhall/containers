@@ -666,6 +666,12 @@ repair_repo_tree() {
         # pointing into the superproject's .git/modules, so test -e, not -d.
         [ -e "${sub_root}/.git" ] || continue
 
+        # Claim it, so depth-1 discovery does not later emit this same directory
+        # as an independent top-level project (issue #828). An initialized
+        # submodule's .git is a FILE, which is exactly the shape discovery
+        # accepts.
+        fs_health_mark_scanned "$(fs_health_resolve "$sub_root")"
+
         repair_repo_tree "$sub_root" "${label_prefix}${rel}/" "$((depth + 1))"
     done < <(git -C "$root" ls-files -s 2>/dev/null |
         /usr/bin/awk -F'\t' '$1 ~ /^160000 / { print $2 }')
@@ -698,6 +704,7 @@ repair_repo_tree() {
 # is read inside the same shared FIX_ENABLED the other roots use.
 repair_linked_worktrees() {
     local project_root="$1"
+    local root_prefix="${2:-}"
     local main_toplevel wt wt_listed rel label saved_state
 
     # ONLY enumerate from the main worktree. `git worktree list` is repo-GLOBAL:
@@ -776,12 +783,26 @@ repair_linked_worktrees() {
         # (".worktrees/issue-882/"), so a finding is unambiguous once worktrees
         # and submodules are both in play. A worktree living outside the project
         # root has no useful relative form, so it keeps its absolute path.
+        # An IN-tree worktree takes the owning repo's prefix so the line names
+        # which repo it belongs to under a workspace scan (issue #828) — the
+        # prefix is empty in single scope, which keeps the original
+        # ".worktrees/issue-882/AGENTS.md" form. An OUT-of-tree worktree already
+        # carries its own absolute path, so prefixing it would name two
+        # unrelated roots on one line.
         rel="${wt#"$main_toplevel"/}"
         if [ "$rel" = "$wt" ]; then
             label="${wt}/"
         else
-            label="${rel}/"
+            label="${root_prefix}${rel}/"
         fi
+
+        # Claim it before repairing, so depth-1 discovery does not later emit
+        # this same directory as an independent top-level project (issue #828).
+        # A linked worktree living beside its own project root — `git worktree
+        # add /workspace/wt` when /workspace is the repo — is at depth 1 and has
+        # a .git FILE, so discovery would otherwise re-scan it unlabeled. $wt is
+        # already `pwd -P`-resolved above.
+        fs_health_mark_scanned "$wt"
 
         # A worktree INSIDE the project root is on the project's mount by
         # construction, exactly like a submodule, so the verdict detected once at
@@ -850,16 +871,71 @@ repair_linked_worktrees() {
 # Repo discovery
 # ============================================================================
 
+# Roots already covered this run, newline-delimited and resolved with `pwd -P`.
+# Consulted by scan_root to make a second visit to the same directory a no-op.
+FS_HEALTH_SCANNED=""
+
+# Resolve a path the way the ledger stores it. Falls back to the literal path
+# when it cannot be entered, which keeps an unreadable root comparable to itself.
+fs_health_resolve() {
+    (cd "$1" 2>/dev/null && pwd -P) || command printf '%s' "$1"
+}
+
+# True when this root has already been covered this run.
+fs_health_seen() {
+    case "
+${FS_HEALTH_SCANNED}" in
+        *"
+$1
+"*) return 0 ;;
+    esac
+    return 1
+}
+
+# Record a root as covered. Called by the two in-repo walks as well as by
+# scan_root: a submodule or linked worktree repaired from the root that OWNS it
+# must be marked, or depth-1 discovery would later emit that same directory as
+# an independent project and scan it a second time — the walks run first, so
+# marking there is what makes the ledger win.
+fs_health_mark_scanned() {
+    FS_HEALTH_SCANNED="${FS_HEALTH_SCANNED}$1
+"
+}
+
 # Scan one repo root: detect its case-sensitivity, run both repairs across it
 # and its submodules, then walk its linked worktrees.
 #
-# Args: $1 = repo root
+# Args: $1 = repo root, $2 = display prefix for log lines ("" for a top-level
+#       root; a submodule/worktree prefix is supplied by the walks themselves)
+#
+# SKIPS a root already covered earlier in this run. Depth-1 discovery and the
+# two in-repo walks can legitimately name the same directory: when WORKSPACE_ROOT
+# is itself a repo, an initialized submodule or a linked worktree sitting beside
+# it at depth 1 has a `.git` FILE — exactly the shape discovery accepts — so it
+# is reached once from the root that owns it (correctly labeled) and once again
+# as if it were its own project.
+#
+# The duplicate is not merely noisy. The second pass reports the same path with
+# NO label prefix, so `wt/AGENTS.md` and a bare `AGENTS.md` name one file while
+# reading as two, and it re-probes case-sensitivity against a root the owning
+# repo deliberately does not re-detect (see detect_case_state's per-repo rule and
+# check_ignorecase's submodule note: a submodule shares its parent's mount, and
+# core.ignorecase is not per-worktree at all).
+#
+# Resolved with `pwd -P` on both sides so a symlinked path component cannot make
+# the same directory look like two — the same normalization, for the same
+# reason, that repair_linked_worktrees applies to its own comparisons.
 scan_root() {
-    local root="$1"
+    local root="$1" label_prefix="${2:-}"
+    local resolved
+
+    resolved=$(fs_health_resolve "$root")
+    fs_health_seen "$resolved" && return 0
+    fs_health_mark_scanned "$resolved"
 
     detect_case_state "$root"
-    repair_repo_tree "$root" "" 0
-    repair_linked_worktrees "$root"
+    repair_repo_tree "$root" "$label_prefix" 0
+    repair_linked_worktrees "$root" "$label_prefix"
 
     return 0
 }
@@ -925,7 +1001,20 @@ else
     while IFS= read -r fs_health_repo; do
         [ -n "$fs_health_repo" ] || continue
         FS_HEALTH_REPO_COUNT=$((FS_HEALTH_REPO_COUNT + 1))
-        scan_root "$fs_health_repo"
+
+        # Label every line with the repo it came from (issue #828). The symlink
+        # repair reports a path RELATIVE to its repo, which was unambiguous when
+        # only one repo was ever scanned — but across a workspace the same
+        # relative path usually exists in several repos at once (`AGENTS.md`,
+        # `.codegraph`; the very files in the issue's own repro), so the bare
+        # form names one file while reading as any of them.
+        #
+        # check_ignorecase already prints an absolute root, so this closes the
+        # gap for the OTHER repair. The prefix carries a trailing slash because
+        # it is interpolated as "${label_prefix}${rel}", and it composes with the
+        # submodule/worktree prefixes appended beneath it —
+        # "/workspace/app/.worktrees/issue-1/AGENTS.md".
+        scan_root "$fs_health_repo" "${fs_health_repo%/}/"
     done < <(discover_repos)
 
     if [ "$FS_HEALTH_REPO_COUNT" -eq 0 ]; then

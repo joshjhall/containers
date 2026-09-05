@@ -532,6 +532,107 @@ DETECT_EOF
     unseed_workspace
 }
 
+test_workspace_scan_does_not_double_scan_nested_worktree() {
+    # Depth-1 discovery and the in-repo worktree walk can name the SAME
+    # directory: when the workspace root is itself a repo, a linked worktree
+    # beside it at depth 1 has a .git FILE — exactly the shape discovery accepts.
+    # It must be repaired once, by the root that owns it.
+    #
+    # The duplicate was not merely noisy: the second pass reported the path with
+    # no label prefix, so one file produced two lines that read as two files.
+    local ws="$TEST_TEMP_DIR/ws-nested"
+    make_repo "$ws"
+    echo "content" >"$ws/target.txt"
+    command ln -s target.txt "$ws/AGENTS.md"
+    git -C "$ws" add -A >/dev/null 2>&1
+    git -C "$ws" commit -qm "seed" >/dev/null 2>&1
+    git -C "$ws" worktree add -q "$ws/wt" -b wt-branch >/dev/null 2>&1
+
+    local output
+    output=$(FS_HEALTH_STAT="$(stale_stat_stub AGENTS.md)" \
+        run_fs_health_workspace "$ws" sensitive)
+
+    # Once from the owning repo, once from its worktree — two files, two repairs.
+    assert_equals "2" "$(command printf '%s\n' "$output" | /usr/bin/grep -c 'refreshed')" \
+        "A worktree at depth 1 of a repo workspace root should be repaired exactly once"
+}
+
+test_workspace_scan_does_not_double_scan_submodule() {
+    # Same shape as the worktree case, via the other walk: an initialized
+    # submodule's .git is also a FILE, so depth-1 discovery would re-emit it.
+    local ws="$TEST_TEMP_DIR/ws-sub"
+    local upstream="$TEST_TEMP_DIR/upstream"
+    make_repo "$upstream"
+    echo "content" >"$upstream/target.txt"
+    command ln -s target.txt "$upstream/AGENTS.md"
+    git -C "$upstream" add -A >/dev/null 2>&1
+    git -C "$upstream" commit -qm "seed" >/dev/null 2>&1
+
+    make_repo "$ws"
+    echo "root" >"$ws/root.txt"
+    git -C "$ws" add -A >/dev/null 2>&1
+    git -C "$ws" commit -qm "seed" >/dev/null 2>&1
+    git -C "$ws" -c protocol.file.allow=always submodule add -q "$upstream" sub >/dev/null 2>&1
+    git -C "$ws" commit -qm "add sub" >/dev/null 2>&1
+
+    local output
+    output=$(FS_HEALTH_STAT="$(stale_stat_stub AGENTS.md)" \
+        run_fs_health_workspace "$ws" sensitive)
+
+    assert_equals "1" "$(command printf '%s\n' "$output" | /usr/bin/grep -c 'refreshed')" \
+        "A submodule at depth 1 of a repo workspace root should be repaired exactly once"
+    assert_contains "$output" "sub/AGENTS.md" \
+        "The submodule repair should keep its submodule label, not be re-reported bare"
+}
+
+test_workspace_symlink_report_names_the_repo() {
+    # ACCEPTANCE CRITERION: "a repo whose stale symlinks are repaired is reported
+    # per-repo, with the repo path in the log line."
+    #
+    # check_ignorecase already prints an absolute root, so this pins the OTHER
+    # repair. Both repos get a symlink at the SAME relative path — the realistic
+    # case (every repo has an AGENTS.md), and the one where a bare relative path
+    # names one file while reading as either.
+    seed_workspace
+    local repo
+    for repo in "$WS_ROOT/repo-a" "$WS_ROOT/repo-b"; do
+        echo "content" >"$repo/target.txt"
+        command ln -s target.txt "$repo/AGENTS.md"
+        git -C "$repo" add -A >/dev/null 2>&1
+        git -C "$repo" commit -qm "seed" >/dev/null 2>&1
+    done
+
+    local output
+    output=$(FS_HEALTH_STAT="$(stale_stat_stub AGENTS.md)" \
+        run_fs_health_workspace "$WS_ROOT" sensitive)
+
+    assert_contains "$output" "$WS_ROOT/repo-a/AGENTS.md" \
+        "A stale-symlink repair should name the repo it happened in"
+    assert_contains "$output" "$WS_ROOT/repo-b/AGENTS.md" \
+        "Two repos sharing a relative path must be distinguishable in the log"
+    unseed_workspace
+}
+
+test_single_scope_symlink_report_stays_relative() {
+    # The per-repo prefix is a WORKSPACE-scope concern. With one repo named
+    # explicitly there is nothing to disambiguate, and the established output is
+    # the repo-relative path — prefixing it would churn the on-demand command's
+    # output for no gain.
+    seed_symlinks
+    command ln -s realfile.txt "$PROJECT_ROOT/AGENTS.md"
+    git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
+    git -C "$PROJECT_ROOT" commit -qm "agents link" >/dev/null 2>&1
+
+    local output
+    output=$(FS_HEALTH_STAT="$(stale_stat_stub AGENTS.md)" \
+        run_fs_health_stderr sensitive)
+
+    assert_contains "$output" "refreshed AGENTS.md" \
+        "Single scope should keep the repo-relative form"
+    assert_not_contains "$output" "refreshed $PROJECT_ROOT/AGENTS.md" \
+        "Single scope should not gain a redundant absolute prefix"
+}
+
 test_workspace_skip_case_check_removes_snapshot() {
     # The opt-out must still disable BOTH legs under the new default scope.
     local ws="$TEST_TEMP_DIR/ws-optout"
@@ -1116,6 +1217,10 @@ run_test_with_setup test_zero_repos_still_writes_snapshot "Zero repos still arms
 run_test_with_setup test_workspace_snapshot_records_empty_project_root "Workspace scope records an empty PROJECT_ROOT"
 run_test_with_setup test_explicit_project_root_restricts_scan "Explicit PROJECT_ROOT restricts the scan to one repo"
 run_test_with_setup test_case_detection_runs_per_repo "Case detection runs per repo"
+run_test_with_setup test_workspace_scan_does_not_double_scan_nested_worktree "A nested worktree is scanned once, not twice"
+run_test_with_setup test_workspace_scan_does_not_double_scan_submodule "A nested submodule is scanned once, not twice"
+run_test_with_setup test_workspace_symlink_report_names_the_repo "Symlink repairs name their repo in workspace scope"
+run_test_with_setup test_single_scope_symlink_report_stays_relative "Single scope keeps the repo-relative symlink form"
 run_test_with_setup test_workspace_skip_case_check_removes_snapshot "SKIP_CASE_CHECK removes the snapshot in workspace scope"
 run_test_with_setup test_cron_wrapper_rediscovers_from_workspace_root "Cron leg re-discovers a repo mounted after boot"
 run_test_with_setup test_cron_wrapper_honors_single_scope_snapshot "Cron leg honors a legacy PROJECT_ROOT-only snapshot"
