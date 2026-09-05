@@ -234,10 +234,32 @@ if [ "$FS_HEALTH_ROOT_REJECTED" != "true" ]; then
         FS_HEALTH_ROOT_RESOLVED="${FS_HEALTH_ROOT_RESOLVED#/}"
     done
 
-    if [ "$FS_HEALTH_ROOT_RESOLVED" = "/" ]; then
-        command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — it resolves to the filesystem root" >&2
-        FS_HEALTH_ROOT_REJECTED=true
-    fi
+    # Refuse the filesystem root AND the well-known system trees, which #916
+    # names in the same breath: "a typo naming `/` or `/home` turns into a wide
+    # unattended write sweep". `/home` is the more likely typo of the two and the
+    # worse outcome — one directory per user account, each a plausible repo
+    # holder, all written to by a job nobody is watching.
+    #
+    # A DENYLIST, not an allowlist, is the right shape here. An allowlist (say,
+    # "must be under /workspace") would refuse the legitimate operator who mounts
+    # a workspace at /srv/code or /data — a real configuration this script has no
+    # business vetoing. The denylist only has to name the handful of trees that
+    # are never a workspace, and being wrong about one of those is a refusal an
+    # operator sees and can override by choosing a different root, not a silent
+    # write into somewhere they did not name.
+    #
+    # Matched on the RESOLVED path, so the same spelling tricks the root check
+    # collapses (/home/, //home, /home/x/..) cannot walk past this either.
+    case "$FS_HEALTH_ROOT_RESOLVED" in
+        '/')
+            command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — it resolves to the filesystem root" >&2
+            FS_HEALTH_ROOT_REJECTED=true
+            ;;
+        /home | /root | /etc | /usr | /var | /opt | /srv | /tmp | /boot | /dev | /proc | /sys | /run | /bin | /sbin | /lib | /lib32 | /lib64 | /mnt | /media)
+            command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — '${FS_HEALTH_ROOT_RESOLVED}' is a system directory, not a workspace" >&2
+            FS_HEALTH_ROOT_REJECTED=true
+            ;;
+    esac
 fi
 
 # Neutralize an inherited git environment before ANY git runs (issue #886).

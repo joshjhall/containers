@@ -627,6 +627,68 @@ test_workspace_root_dot_form_is_refused() {
         "A path-equivalent form resolving to / must be refused"
 }
 
+test_git_dir_registered_to_another_entry_is_refused() {
+    # The third outcome of the trust gate, which had its own message and no test:
+    # a back-pointer that EXISTS but names a different entry. Reached by making a
+    # real worktree, then pointing a second directory at that worktree's git dir —
+    # the registration record is genuine, it just is not for this entry.
+    local ws="$TEST_TEMP_DIR/ws-misregistered"
+    make_repo "$ws/repo"
+    echo "x" >"$ws/repo/f.txt"
+    git -C "$ws/repo" add -A >/dev/null 2>&1
+    git -C "$ws/repo" commit -qm "seed" >/dev/null 2>&1
+    git -C "$ws/repo" worktree add -q "$ws/real-wt" -b mis-branch >/dev/null 2>&1
+
+    local wt_gitdir
+    wt_gitdir=$(git -C "$ws/real-wt" rev-parse --absolute-git-dir 2>/dev/null)
+    plant_git_pointer "$ws/impostor" "$wt_gitdir"
+
+    local output
+    output=$(run_fs_health_workspace "$ws" sensitive)
+
+    assert_contains "$output" "is registered to" \
+        "A git dir whose back-pointer names a different entry gets its own refusal"
+}
+
+test_workspace_root_home_is_refused() {
+    # #916 names this case in the same sentence as '/': "a typo naming `/` or
+    # `/home` turns into a wide unattended write sweep". /home is the likelier
+    # typo and the worse outcome — one directory per user account, each a
+    # plausible repo holder, all written to by a job nobody watches.
+    local output
+    output=$(run_fs_health_workspace "/home" sensitive)
+
+    assert_contains "$output" "system directory" \
+        "WORKSPACE_ROOT=/home must be refused, not just /"
+}
+
+test_workspace_root_system_dir_spelling_variants_refused() {
+    # Matched on the RESOLVED path, so the spelling tricks the root check
+    # collapses cannot walk past this one either.
+    local output
+    output=$(run_fs_health_workspace "/usr/../home" sensitive)
+
+    assert_contains "$output" "system directory" \
+        "A path-equivalent spelling of a system directory must also be refused"
+}
+
+test_workspace_root_under_home_is_allowed() {
+    # The denylist names TREE ROOTS, not their contents. A workspace mounted at
+    # /home/<user>/code is an ordinary setup and must not be swept up by the
+    # guard — the failure mode of over-refusing is a repair that silently stops
+    # happening, which is what this module exists to prevent.
+    local ws="$TEST_TEMP_DIR/ws-under"
+    make_repo "$ws/repo"
+
+    local output
+    output=$(run_fs_health_workspace "$ws" insensitive)
+
+    assert_not_contains "$output" "system directory" \
+        "A workspace below a system directory must still be scanned"
+    assert_equals "true" "$(get_ignorecase_at "$ws/repo")" \
+        "A repo under such a workspace must still be repaired"
+}
+
 test_workspace_root_slash_is_refused() {
     local output
     output=$(run_fs_health_workspace "/" sensitive)
@@ -1529,6 +1591,10 @@ run_test_with_setup test_planted_pointer_at_workspace_root_is_refused "A planted
 run_test_with_setup test_ordinary_repo_at_workspace_root_still_repaired "An ordinary repo at the workspace root is still repaired"
 run_test_with_setup test_workspace_root_double_slash_is_refused "WORKSPACE_ROOT=// is refused"
 run_test_with_setup test_workspace_root_dot_form_is_refused "A path-equivalent root form is refused"
+run_test_with_setup test_git_dir_registered_to_another_entry_is_refused "A git dir registered to another entry is refused"
+run_test_with_setup test_workspace_root_home_is_refused "WORKSPACE_ROOT=/home is refused"
+run_test_with_setup test_workspace_root_system_dir_spelling_variants_refused "A system-dir spelling variant is refused"
+run_test_with_setup test_workspace_root_under_home_is_allowed "A workspace below a system dir is still scanned"
 run_test_with_setup test_workspace_root_slash_is_refused "WORKSPACE_ROOT=/ is refused"
 run_test_with_setup test_workspace_root_relative_is_refused "A relative WORKSPACE_ROOT is refused"
 run_test_with_setup test_workspace_scan_skips_non_repos "Workspace scan skips non-repo and unreadable dirs"

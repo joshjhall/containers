@@ -245,9 +245,18 @@ Refusals are reported rather than skipped quietly: a repo that is present but
 deliberately not repaired looks identical to a healthy one otherwise, which is
 the invisible non-repair this whole module exists to prevent.
 
-`WORKSPACE_ROOT` itself must be an absolute path other than `/`. A root that is
-refused is reported and nothing is scanned — and the hourly leg is *not* armed
-with it, so a bad value cannot quietly persist for the life of the container.
+`WORKSPACE_ROOT` itself must be an absolute path, and must not name `/` or a
+system tree root — `/home`, `/root`, `/etc`, `/usr`, `/var`, and the rest are
+refused, since a typo naming one of them turns an unattended hourly job into a
+wide write sweep (`/home` in particular is one directory per user account).
+Comparison happens on the *resolved* path, so `//`, `/.`, and `/usr/../home`
+are caught too.
+
+Only the tree roots are refused, not their contents: a workspace mounted at
+`/home/<user>/code`, or anywhere else of your choosing, is scanned normally.
+A refused root is reported and nothing is scanned — and the hourly leg is *not*
+armed with it, so a bad value cannot quietly persist for the life of the
+container.
 
 Case-sensitivity is detected **per repo**, not once per run — separate mounts
 can genuinely differ, so a verdict sampled from one repo is not evidence about
