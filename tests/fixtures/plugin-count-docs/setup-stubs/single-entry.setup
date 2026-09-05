@@ -1,0 +1,5 @@
+#!/bin/bash
+# Stand-in claude-setup with exactly one plugin. Parses to 1 — rejected by the
+# guard's `< 2` threshold, accepted by a weakened `< 1`, so this is the input
+# that pins the threshold.
+DEFAULT_PLUGINS="dev-core"

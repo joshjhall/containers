@@ -1,0 +1,4 @@
+#!/bin/bash
+# Stand-in claude-setup with no DEFAULT_PLUGINS assignment at all — the
+# renamed-or-reformatted case _default_plugins_code_count returns 1 for.
+# DEFAULT_PLUGINS was renamed

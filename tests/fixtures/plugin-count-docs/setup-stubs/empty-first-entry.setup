@@ -1,0 +1,4 @@
+#!/bin/bash
+# Stand-in claude-setup: a leading comma makes the first entry empty, so
+# _default_plugins_code_count must print 0 rather than the array length 3.
+DEFAULT_PLUGINS=",dev-core,workflow"
