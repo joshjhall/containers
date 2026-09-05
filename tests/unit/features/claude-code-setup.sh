@@ -1134,15 +1134,20 @@ test_doc_drift_fixture_baseline_is_clean() {
         "the clean doc fixture reports no drift (control for the branches below)"
 }
 
+# The three branch tests assert the drift report EQUALS the one expected entry,
+# not merely contains it. Each fixture root holds all four docs, so equality
+# also proves the three untouched siblings were NOT reported — a false positive
+# on any of them fails the test, which a contains-plus-one-negative pair would
+# miss for the two docs it does not name. The leading space is part of the
+# value: _scan_docs_for_plugin_count builds " <doc>:<what>" per entry.
+
 # Branch 1 — a doc reporting a count that disagrees with the code.
 test_doc_drift_detects_mismatched_count() {
     local drifted
     drifted=$(_scan_docs_for_plugin_count "$PLUGIN_DOC_FIXTURES/mismatched" "$PLUGIN_DOC_FIXTURE_COUNT")
 
-    assert_contains "$drifted" "README.md:99" \
-        "a doc whose count disagrees with the code is reported with the doc's count"
-    assert_not_contains "$drifted" "CLAUDE.md" \
-        "the agreeing docs are not reported as drifted"
+    assert_equals " README.md:99" "$drifted" \
+        "only the disagreeing doc is reported, with the doc's own count"
 }
 
 # Branch 2 — prose reworded past the regex, so no count is found at all. This is
@@ -1151,10 +1156,8 @@ test_doc_drift_detects_no_count_found() {
     local drifted
     drifted=$(_scan_docs_for_plugin_count "$PLUGIN_DOC_FIXTURES/no-count" "$PLUGIN_DOC_FIXTURE_COUNT")
 
-    assert_contains "$drifted" "CLAUDE.md:no-count-found" \
-        "a doc with no matchable count is reported as no-count-found"
-    assert_not_contains "$drifted" "README.md" \
-        "the agreeing docs are not reported as drifted"
+    assert_equals " CLAUDE.md:no-count-found" "$drifted" \
+        "only the unmatchable doc is reported, as no-count-found"
 }
 
 # Branch 3 — a doc the guard expects is gone (moved or deleted).
@@ -1162,10 +1165,8 @@ test_doc_drift_detects_missing_doc() {
     local drifted
     drifted=$(_scan_docs_for_plugin_count "$PLUGIN_DOC_FIXTURES/missing" "$PLUGIN_DOC_FIXTURE_COUNT")
 
-    assert_contains "$drifted" "examples/env/dev-tools.env:missing" \
-        "a doc that no longer exists is reported as missing"
-    assert_not_contains "$drifted" "README.md" \
-        "the present docs are not reported as drifted"
+    assert_equals " examples/env/dev-tools.env:missing" "$drifted" \
+        "only the absent doc is reported, as missing"
 }
 
 # _default_plugins_code_count's own branches (#907) — return 1 when the
