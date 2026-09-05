@@ -1090,279 +1090,160 @@ test_default_plugins_count_matches_docs() {
 }
 
 # ============================================================================
-# Doc-Drift Guard Failure Branches (issue #903)
+# Doc-Drift Guard Failure Branches (issues #903, #907, #913)
 # ============================================================================
 # The guard above only ever runs against the real in-repo docs, which agree, so
 # all three of its drift branches are dead paths as far as the suite is
-# concerned. These tests copy the real docs into a scratch fixture, corrupt one
-# doc per branch, and assert the scan reports that specific drift.
+# concerned. These tests point the scan at committed fixture doc roots — one
+# per branch — and assert it reports that specific drift.
 #
-# The fixture lives under $TEST_SCRATCH_BASE, never tests/results/ — that path
-# is on an incoherent FUSE mount where write-then-read loses coherency (#821).
-
-# Copy the real docs into a fresh fixture root, so the baseline is genuinely
-# drift-free and any reported drift is attributable to the caller's mutation.
+# DEPTH LIMIT — the stopping rule for this cluster (#913).
 #
-# mktemp -d, not a "$$-$RANDOM" path (#907): the PID is predictable and bash
-# $RANDOM is a weak 15-bit PRNG, so a constructed name is guessable — and every
-# caller ends with `rm -rf "$fixture"`, which would follow a symlink pre-planted
-# at the guessed path. mktemp creates the directory atomically under a name that
-# cannot be raced.
+# Discriminating assertions are owed to the BEHAVIOR UNDER TEST, not to test
+# scaffolding. Scaffolding gets `set -e` and a fail-loud helper; it does not get
+# its own test suite. Without that rule stated, this cluster has no fixed point,
+# and each reviewer who reopens it is right: #900 added three undriven drift
+# branches, #903 drove them and created two in the helper it extracted, #907
+# drove those and created three in the setup helper it extracted. Test code
+# needs guards, guards are branches, branches want tests. The subject here is
+# ONE line; at its peak this cluster carried ~406 lines watching it.
 #
-# Returns non-zero (printing nothing) if the temp dir or any copy fails, so a
-# caller cannot proceed against a half-built fixture and misreport the result as
-# drift.
-_make_plugin_doc_fixture() {
-    local fixture doc
-    fixture=$(command mktemp -d "$TEST_SCRATCH_BASE/plugin-doc-fixture-XXXXXX") || return 1
+# #913 broke the loop by DELETING that machinery instead of driving one more
+# layer. The fixtures below are committed and read-only — no mktemp, cp, rm -rf
+# or mkdir -p, hence no failure mode for a guard to cover. So a NEW guard branch
+# here is a signal to delete machinery, not to add a test; a change that
+# reintroduces mutable scratch fixtures is itself the finding.
 
-    for doc in "${PLUGIN_COUNT_DOCS[@]}"; do
-        command mkdir -p "$fixture/$(command dirname "$doc")" || return 1
-        command cp "$PROJECT_ROOT/$doc" "$fixture/$doc" || return 1
-    done
+# Fixture doc roots, one per drift branch. A fixture doc is one line of prose —
+# the scan reads nothing else — so these don't copy the real docs and aren't
+# sensitive to real-doc edits. They claim a synthetic count, deliberately
+# unequal to the real one, which lets these tests pass a literal expected count
+# rather than deriving one: with no derived input, there is no input to guard,
+# which is what deletes the entire _doc_drift_case_setup layer.
+PLUGIN_DOC_FIXTURES="$PROJECT_ROOT/tests/fixtures/plugin-count-docs"
+PLUGIN_DOC_FIXTURE_COUNT=7
 
-    printf '%s' "$fixture"
-}
-
-# Guarded setup shared by the four branch tests below (#907).
-#
-# Both inputs can legitimately fail — _default_plugins_code_count returns 1 when
-# the DEFAULT_PLUGINS line is absent (the very drift the #900 guard detects), and
-# _make_plugin_doc_fixture returns 1 on a failed mktemp/cp. Unguarded, either
-# would leave the caller comparing against an empty count or scanning an empty
-# path, surfacing as a baffling assertion failure — or an `rm -rf ""` no-op —
-# instead of naming the real cause. Failing here reports the cause once, in the
-# one place both are produced.
-#
-# Sets DOC_DRIFT_COUNT and DOC_DRIFT_FIXTURE and returns 0; on failure calls
-# fail_test and returns 1, so callers can `_doc_drift_case_setup || return`.
-_doc_drift_case_setup() {
-    DOC_DRIFT_COUNT=""
-    DOC_DRIFT_FIXTURE=""
-
-    if ! DOC_DRIFT_COUNT=$(_default_plugins_code_count) || [ -z "$DOC_DRIFT_COUNT" ]; then
-        fail_test "could not parse DEFAULT_PLUGINS — the assignment was renamed or reformatted"
-        return 1
-    fi
-
-    # `0` is the helper's signal for an empty/unparsable first entry, and it is
-    # not an empty string — so the check above lets it through. Mirror the
-    # caller's `< 2` rejection here, or the four branch tests would scan with a
-    # count of 0 and report per-doc drift instead of naming the real cause.
-    if [ "$DOC_DRIFT_COUNT" -lt 2 ]; then
-        fail_test "DEFAULT_PLUGINS parsed to $DOC_DRIFT_COUNT entries — the assignment is empty or unparsable"
-        return 1
-    fi
-
-    if ! DOC_DRIFT_FIXTURE=$(_make_plugin_doc_fixture) || [ -z "$DOC_DRIFT_FIXTURE" ]; then
-        fail_test "could not build the doc fixture under \$TEST_SCRATCH_BASE — mktemp or cp failed"
-        return 1
-    fi
-
-    return 0
-}
-
-# Control: an unmutated copy must report no drift. Without this, a fixture that
-# was broken by the copy itself would make all three tests below pass for the
-# wrong reason.
+# Control: the clean fixture must report no drift, or a fixture tree broken at
+# authoring time would make all three branch tests below pass for the wrong
+# reason.
 test_doc_drift_fixture_baseline_is_clean() {
-    local code_count fixture drifted
-    _doc_drift_case_setup || return
-    code_count="$DOC_DRIFT_COUNT" fixture="$DOC_DRIFT_FIXTURE"
-
-    drifted=$(_scan_docs_for_plugin_count "$fixture" "$code_count")
-    command rm -rf "$fixture"
+    local drifted
+    drifted=$(_scan_docs_for_plugin_count "$PLUGIN_DOC_FIXTURES/clean" "$PLUGIN_DOC_FIXTURE_COUNT")
 
     assert_empty "$drifted" \
-        "an unmutated doc fixture reports no drift (control for the branches below)"
+        "the clean doc fixture reports no drift (control for the branches below)"
 }
+
+# The three branch tests assert the drift report EQUALS the one expected entry,
+# not merely contains it. Each fixture root holds all four docs, so equality
+# also proves the three untouched siblings were NOT reported — a false positive
+# on any of them fails the test, which a contains-plus-one-negative pair would
+# miss for the two docs it does not name. The leading space is part of the
+# value: _scan_docs_for_plugin_count builds " <doc>:<what>" per entry.
 
 # Branch 1 — a doc reporting a count that disagrees with the code.
 test_doc_drift_detects_mismatched_count() {
-    local code_count fixture drifted
-    _doc_drift_case_setup || return
-    code_count="$DOC_DRIFT_COUNT" fixture="$DOC_DRIFT_FIXTURE"
+    local drifted
+    drifted=$(_scan_docs_for_plugin_count "$PLUGIN_DOC_FIXTURES/mismatched" "$PLUGIN_DOC_FIXTURE_COUNT")
 
-    command sed -i -E 's/[0-9]+ core plugins/99 core plugins/I' "$fixture/README.md"
-
-    drifted=$(_scan_docs_for_plugin_count "$fixture" "$code_count")
-    command rm -rf "$fixture"
-
-    assert_contains "$drifted" "README.md:99" \
-        "a doc whose count disagrees with the code is reported with the doc's count"
-    assert_not_contains "$drifted" "CLAUDE.md" \
-        "the untouched docs are not reported as drifted"
+    assert_equals " README.md:99" "$drifted" \
+        "only the disagreeing doc is reported, with the doc's own count"
 }
 
-# Branch 2 — prose reworded past the guard's regex, so no count is found at all.
-# This is the branch that would otherwise let a silent rewording disable the
-# guard for that doc without anything failing.
+# Branch 2 — prose reworded past the regex, so no count is found at all. This is
+# the branch that would otherwise let a rewording silently blind the guard.
 test_doc_drift_detects_no_count_found() {
-    local code_count fixture drifted
-    _doc_drift_case_setup || return
-    code_count="$DOC_DRIFT_COUNT" fixture="$DOC_DRIFT_FIXTURE"
+    local drifted
+    drifted=$(_scan_docs_for_plugin_count "$PLUGIN_DOC_FIXTURES/no-count" "$PLUGIN_DOC_FIXTURE_COUNT")
 
-    command sed -i -E 's/[0-9]+ core plugins/several core plugins/I' "$fixture/CLAUDE.md"
-
-    drifted=$(_scan_docs_for_plugin_count "$fixture" "$code_count")
-    command rm -rf "$fixture"
-
-    assert_contains "$drifted" "CLAUDE.md:no-count-found" \
-        "a doc with no matchable count is reported as no-count-found"
-    assert_not_contains "$drifted" "README.md" \
-        "the untouched docs are not reported as drifted"
+    assert_equals " CLAUDE.md:no-count-found" "$drifted" \
+        "only the unmatchable doc is reported, as no-count-found"
 }
 
 # Branch 3 — a doc the guard expects is gone (moved or deleted).
 test_doc_drift_detects_missing_doc() {
-    local code_count fixture drifted
-    _doc_drift_case_setup || return
-    code_count="$DOC_DRIFT_COUNT" fixture="$DOC_DRIFT_FIXTURE"
+    local drifted
+    drifted=$(_scan_docs_for_plugin_count "$PLUGIN_DOC_FIXTURES/missing" "$PLUGIN_DOC_FIXTURE_COUNT")
 
-    command rm -f "$fixture/examples/env/dev-tools.env"
-
-    drifted=$(_scan_docs_for_plugin_count "$fixture" "$code_count")
-    command rm -rf "$fixture"
-
-    assert_contains "$drifted" "examples/env/dev-tools.env:missing" \
-        "a doc that no longer exists is reported as missing"
-    assert_not_contains "$drifted" "README.md" \
-        "the untouched docs are not reported as drifted"
+    assert_equals " examples/env/dev-tools.env:missing" "$drifted" \
+        "only the absent doc is reported, as missing"
 }
 
-# ---------------------------------------------------------------------------
-# _default_plugins_code_count's own branches (#907)
-# ---------------------------------------------------------------------------
-# The helper documents two non-happy outcomes — return 1 when the assignment
-# line is absent, and print 0 when the first entry is empty so the caller's
-# `< 2` guard rejects it rather than comparing vacuously against the docs.
-# Neither was driven by anything: the same vacuity #903 fixed for the doc scan,
-# one level down in the helper #903 extracted.
-
-# Run _default_plugins_code_count against a stand-in claude-setup carrying
-# $1 as its DEFAULT_PLUGINS line, printing "rc=<code> out=<stdout+stderr>".
-#
-# CLAUDE_SETUP is overridden for the subshell only, so the real path the rest of
-# the suite reads is untouched.
+# _default_plugins_code_count's own branches (#907) — return 1 when the
+# assignment line is absent, print 0 when the first entry is empty. Driven
+# against committed stand-in claude-setup stubs selected by name (#913), so
+# there is nothing to generate and no mktemp/rm -rf failure mode to guard.
+# CLAUDE_SETUP is overridden for the subshell only.
 #
 # stderr is folded into `out` deliberately (#907): the helper must FAIL CLEANLY,
-# and `rc=1` with empty stdout is also what a crash produces — a `set -u`
-# unbound-variable death on `${plugins[0]}` scores rc=1 and prints nothing to
-# stdout. Measured: with the absent-line guard removed, that is exactly what
-# happens, so an assertion reading stdout alone passes for the wrong reason.
-# Merging stderr makes the crash visible in the compared value and keeps the
-# assertion discriminating.
-_run_code_count_with_setup_line() {
-    local setup_line="$1"
-    local tmpdir stub
-    tmpdir=$(command mktemp -d "$TEST_SCRATCH_BASE/code-count-XXXXXX") || return 1
-    stub="$tmpdir/claude-setup"
-
-    printf '#!/bin/bash\n%s\n' "$setup_line" >"$stub"
+# and rc=1 with empty stdout is also what a crash produces — a `set -u` death on
+# ${plugins[0]} scores rc=1 and prints nothing to stdout. Measured: with the
+# absent-line guard removed that is exactly what happens, so an assertion
+# reading stdout alone would pass for the wrong reason.
+_run_code_count_against_stub() {
+    local stub="$PLUGIN_DOC_FIXTURES/setup-stubs/$1.setup"
 
     local out rc=0
     out=$(CLAUDE_SETUP="$stub" _default_plugins_code_count 2>&1) || rc=$?
-    command rm -rf "$tmpdir"
 
     printf 'rc=%s out=%s' "$rc" "$out"
 }
 
 # A leading comma makes the first entry empty. Counting the array would give a
-# plausible-looking 3 and sail past the caller's guard, so the helper prints 0
-# instead — the value that cannot be mistaken for a real plugin count.
+# plausible-looking 3 and sail past the caller's guard, so print 0 instead — the
+# value that cannot be mistaken for a real plugin count.
 test_code_count_reports_zero_for_empty_first_entry() {
     local result
-    result=$(_run_code_count_with_setup_line 'DEFAULT_PLUGINS=",dev-core,workflow"')
+    result=$(_run_code_count_against_stub empty-first-entry)
 
     assert_equals "rc=0 out=0" "$result" \
         "an empty first entry prints 0 (not the array length) so the caller's < 2 guard rejects it"
 }
 
-# The guard's own rejection of that 0 — asserted end-to-end, since a helper that
-# returns 0 is only useful if the caller acts on it. Stub pass_test/fail_test in
-# a subshell so the real verdict functions never touch the shared TEST_STATUS.
-test_guard_rejects_unparsable_default_plugins() {
-    local tmpdir stub out
-    if ! tmpdir=$(command mktemp -d "$TEST_SCRATCH_BASE/guard-reject-XXXXXX"); then
-        fail_test "could not create a scratch dir under \$TEST_SCRATCH_BASE — mktemp failed"
-        return
-    fi
-
-    stub="$tmpdir/claude-setup"
-    printf '#!/bin/bash\nDEFAULT_PLUGINS=",dev-core,workflow"\n' >"$stub"
-
-    out=$(
-        pass_test() { printf 'PASSED: %s\n' "$1"; }
-        fail_test() { printf 'FAILED: %s\n' "$1"; }
-        CLAUDE_SETUP="$stub" test_default_plugins_count_matches_docs
-    )
-    command rm -rf "$tmpdir"
-
-    assert_contains "$out" "FAILED:" \
-        "an unparsable DEFAULT_PLUGINS fails the guard instead of being compared to the docs"
-    assert_contains "$out" "empty or unparsable" \
-        "the failure names the actual cause"
-    assert_not_contains "$out" "PASSED:" \
-        "the guard does NOT pass vacuously on an unparsable assignment"
-}
-
-# The other documented outcome: no assignment line at all (renamed or
-# reformatted) returns non-zero and prints nothing, which is what lets the
-# caller distinguish "absent" from a parsed count of 0.
+# The other outcome: no assignment line at all returns non-zero and prints
+# nothing, which is what lets the caller distinguish "absent" from a count of 0.
 test_code_count_fails_when_assignment_absent() {
     local result
-    result=$(_run_code_count_with_setup_line '# DEFAULT_PLUGINS was renamed')
+    result=$(_run_code_count_against_stub absent-assignment)
 
     assert_equals "rc=1 out=" "$result" \
         "a missing DEFAULT_PLUGINS line returns non-zero and prints nothing"
 }
 
-# Run _doc_drift_case_setup against a stand-in claude-setup carrying $1 as its
-# DEFAULT_PLUGINS line, printing "rc=<code> out=<fail_test message>".
-#
-# Subshell + stubbed fail_test, so the real verdict functions never see these
-# deliberate failures and the shared TEST_STATUS is left alone.
-_run_case_setup_with_setup_line() {
-    local setup_line="$1"
-    local tmpdir stub
-    tmpdir=$(command mktemp -d "$TEST_SCRATCH_BASE/setup-reject-XXXXXX") || return 1
-    stub="$tmpdir/claude-setup"
-
-    printf '#!/bin/bash\n%s\n' "$setup_line" >"$stub"
-
-    local out rc=0
-    out=$(
-        fail_test() { printf '%s' "$1"; }
-        CLAUDE_SETUP="$stub" _doc_drift_case_setup
-    ) || rc=$?
-    command rm -rf "$tmpdir"
-
-    printf 'rc=%s out=%s' "$rc" "$out"
+# Run the guard end-to-end against a stub, with pass_test/fail_test stubbed in a
+# subshell so the real verdict functions never touch the shared TEST_STATUS. A
+# helper returning 0 is only useful if the caller acts on it.
+_run_guard_against_stub() {
+    (
+        pass_test() { printf 'PASSED: %s\n' "$1"; }
+        fail_test() { printf 'FAILED: %s\n' "$1"; }
+        CLAUDE_SETUP="$PLUGIN_DOC_FIXTURES/setup-stubs/$1.setup" \
+            test_default_plugins_count_matches_docs
+    )
 }
 
-# _doc_drift_case_setup's own `< 2` rejection. Its four callers all run against
-# the real claude-setup, which parses well above 2, so nothing else drives this
-# branch — the undriven-branch shape this whole chain (#900 -> #903 -> #907)
-# keeps rediscovering one level further down.
-#
-# Two inputs, because one does not pin the boundary: a leading comma parses to
-# 0, which is also `< 1`, so it passes a guard weakened to `-lt 1` and cannot
-# tell that regression from the correct code. A single-plugin value parses to
-# exactly 1 — rejected by `< 2`, accepted by `< 1` — so it is the case that
-# actually holds the threshold in place. Measured: with the guard at `-lt 1`,
-# the 0 case still passes and only this one fails.
-test_doc_drift_setup_rejects_unparsable_count() {
-    local zero_case one_case
+test_guard_rejects_unparsable_default_plugins() {
+    local out
+    out=$(_run_guard_against_stub empty-first-entry)
 
-    zero_case=$(_run_case_setup_with_setup_line 'DEFAULT_PLUGINS=",dev-core,workflow"')
-    assert_equals "rc=1 out=DEFAULT_PLUGINS parsed to 0 entries — the assignment is empty or unparsable" \
-        "$zero_case" \
-        "an empty first entry stops setup, naming the parsed count and the cause"
+    assert_contains "$out" "empty or unparsable" \
+        "an unparsable DEFAULT_PLUGINS fails the guard by name, not by doc comparison"
+    assert_not_contains "$out" "PASSED:" \
+        "the guard does NOT pass vacuously on an unparsable assignment"
+}
 
-    one_case=$(_run_case_setup_with_setup_line 'DEFAULT_PLUGINS="dev-core"')
-    assert_equals "rc=1 out=DEFAULT_PLUGINS parsed to 1 entries — the assignment is empty or unparsable" \
-        "$one_case" \
-        "a lone entry is still below the threshold — this is what pins < 2 rather than < 1"
+# A lone entry parses to exactly 1 — rejected by `< 2`, accepted by a weakened
+# `< 1`. The 0 case above is also `< 1`, so it cannot tell that regression from
+# correct code; measured, this is the only case that fails when the threshold
+# is weakened, which is what pins it at 2.
+test_guard_rejects_single_entry_default_plugins() {
+    local out
+    out=$(_run_guard_against_stub single-entry)
+
+    assert_contains "$out" "parsed to 1 entries" \
+        "a lone entry is rejected by name — this is what pins < 2 rather than < 1"
+    assert_not_contains "$out" "PASSED:" \
+        "a single-plugin assignment does NOT pass the guard vacuously"
 }
 
 # ============================================================================
@@ -2674,14 +2555,14 @@ run_test test_deny_list_supports_file_variant "Deny-list: resolves via the _FILE
 run_test test_default_plugins_excludes_hookify "Defaults: hookify is not a default plugin (#897)"
 run_test test_default_plugins_still_populated "Defaults: DEFAULT_PLUGINS still carries the retained core set"
 run_test test_default_plugins_count_matches_docs "Defaults: DEFAULT_PLUGINS count matches the documented count (#900)"
-run_test test_doc_drift_fixture_baseline_is_clean "Doc drift: an unmutated fixture reports no drift (#903)"
+run_test test_doc_drift_fixture_baseline_is_clean "Doc drift: the clean fixture reports no drift (#903)"
 run_test test_doc_drift_detects_mismatched_count "Doc drift: a mismatched doc count is reported (#903)"
 run_test test_doc_drift_detects_no_count_found "Doc drift: prose past the regex is no-count-found (#903)"
 run_test test_doc_drift_detects_missing_doc "Doc drift: a missing doc is reported (#903)"
 run_test test_code_count_reports_zero_for_empty_first_entry "Doc drift: an empty first entry counts as 0 (#907)"
 run_test test_guard_rejects_unparsable_default_plugins "Doc drift: the guard rejects an unparsable DEFAULT_PLUGINS (#907)"
 run_test test_code_count_fails_when_assignment_absent "Doc drift: a missing DEFAULT_PLUGINS line returns non-zero (#907)"
-run_test test_doc_drift_setup_rejects_unparsable_count "Doc drift: case setup rejects an unparsable count (#907)"
+run_test test_guard_rejects_single_entry_default_plugins "Doc drift: the guard rejects a single-entry DEFAULT_PLUGINS (#913)"
 
 run_test test_lock_timeout_exits_nonzero "Lock: flock timeout exits 1, never proceeds unlocked"
 run_test test_lock_acquired_continues "Lock: a successful acquire continues setup"
