@@ -1,8 +1,4 @@
-# Plugin count fixture — plugins-and-mcps.md
-
-Synthetic stand-in. Carries TWO matching lines, mirroring the real doc, so
-the scan's inner per-match loop is exercised rather than only its first
-iteration.
+# Fixture plugins-and-mcps.md (mismatched)
 
 Setting `CLAUDE_PLUGINS` replaces all 7 defaults.
 

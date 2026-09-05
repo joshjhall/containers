@@ -1,6 +1,3 @@
-# Plugin count fixture — CLAUDE.md
+# Fixture CLAUDE.md (clean)
 
-Synthetic stand-in for the repo CLAUDE.md.
-
-All 7 core plugins and language-specific LSP plugins are auto-installed on first
-startup.
+All 7 core plugins and language-specific LSP plugins are auto-installed on first startup.
