@@ -664,14 +664,14 @@ test_workspace_root_home_is_refused() {
 
 test_workspace_root_every_system_dir_is_refused() {
     # Sweep the WHOLE denylist, not one representative. A `case` pattern is a
-    # single line of alternations, so a dropped `|`, a typo (/media -> /medai), or
+    # single line of alternations, so a dropped `|`, a misspelled entry, or
     # a deleted arm breaks exactly one entry and nothing else — invisible to a
     # spot check on /home. The list is duplicated here on purpose: a test that
     # derived it from the script would pass no matter what the script said.
     local dir failures=""
     for dir in /home /root /etc /usr /var /opt /srv /tmp /boot /dev /proc /sys \
         /run /bin /sbin /lib /lib32 /lib64 /mnt /media \
-        /usr/bin /usr/sbin /usr/lib /usr/local; do
+        /usr/bin /usr/sbin /usr/lib /usr/lib32 /usr/lib64 /usr/local; do
         case "$(run_fs_health_workspace "$dir" sensitive)" in
             *"system directory"*) ;;
             *) failures="${failures} ${dir}" ;;
@@ -680,6 +680,45 @@ test_workspace_root_every_system_dir_is_refused() {
 
     assert_equals "" "$failures" \
         "Every denylisted system directory should be refused (unrefused:${failures})"
+}
+
+test_denylist_sweep_covers_every_script_entry() {
+    # The sweep above duplicates the script's list on purpose — a test deriving
+    # it from the script would pass no matter what the script said. But a
+    # duplicated list drifts: the first version of that sweep silently omitted
+    # /usr/lib32 and /usr/lib64, so a dropped alternation in those two arms would
+    # have gone uncaught by the very test written to catch exactly that.
+    #
+    # So compare the two lists directly. This does not replace the sweep (it
+    # proves nothing about behavior); it only pins that the sweep is complete.
+    local script_entries test_entries
+    script_entries=$(/usr/bin/awk -F'[|)]' '
+        /^ *\/home \| \/root \| \/etc/ {
+            for (i = 1; i <= NF; i++) {
+                gsub(/^[ \t]+|[ \t]+$/, "", $i)
+                if ($i ~ /^\//) print $i
+            }
+            exit
+        }' "$FS_HEALTH_SCRIPT" | command sort)
+
+    # Collect from the `for dir in ...` header only. The loop body is skipped
+    # entirely: an earlier version of this extraction kept reading past `; do`
+    # and swallowed every absolute path in the rest of the file (/etc/bash_env,
+    # /usr/bin/grep, …), which made the comparison fail for reasons that had
+    # nothing to do with the denylist.
+    test_entries=$(/usr/bin/awk '
+        /for dir in \/home/ { collecting = 1 }
+        collecting {
+            line = $0
+            done_here = (line ~ /; do$/)
+            gsub(/for dir in|; do$|\\$/, "", line)
+            n = split(line, parts, /[ \t]+/)
+            for (i = 1; i <= n; i++) if (parts[i] ~ /^\//) print parts[i]
+            if (done_here) exit
+        }' "${BASH_SOURCE[0]}" | command sort)
+
+    assert_equals "$script_entries" "$test_entries" \
+        "The sweep's list must match the script's denylist exactly"
 }
 
 test_workspace_root_system_dir_spelling_variants_refused() {
@@ -1623,6 +1662,7 @@ run_test_with_setup test_workspace_root_dot_form_is_refused "A path-equivalent r
 run_test_with_setup test_git_dir_registered_to_another_entry_is_refused "A git dir registered to another entry is refused"
 run_test_with_setup test_workspace_root_home_is_refused "WORKSPACE_ROOT=/home is refused"
 run_test_with_setup test_workspace_root_every_system_dir_is_refused "Every denylisted system directory is refused"
+run_test_with_setup test_denylist_sweep_covers_every_script_entry "The sweep's list matches the script's denylist"
 run_test_with_setup test_workspace_root_system_dir_spelling_variants_refused "A system-dir spelling variant is refused"
 run_test_with_setup test_workspace_root_under_home_is_allowed "A workspace below a system dir is still scanned"
 run_test_with_setup test_workspace_root_slash_is_refused "WORKSPACE_ROOT=/ is refused"
