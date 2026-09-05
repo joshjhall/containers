@@ -279,6 +279,19 @@ STALE_STUB_EOF
     command printf '%s' "$stub"
 }
 
+# Plant a directory whose `.git` FILE points at a repo elsewhere (issue #916).
+#
+# This is the attack shape: a `.git` file is a `gitdir: <path>` pointer, and git
+# follows it without requiring the target to stay near the workspace. Nothing
+# registers the entry on the other end, which is exactly what tells it apart
+# from a legitimate linked worktree.
+#
+# Args: $1 = directory to create, $2 = git dir to point at
+plant_git_pointer() {
+    command mkdir -p "$1"
+    command printf 'gitdir: %s\n' "$2" >"$1/.git"
+}
+
 # Run the script in WORKSPACE scope (issue #828): PROJECT_ROOT deliberately
 # UNSET, so the script discovers repos under WORKSPACE_ROOT itself.
 #

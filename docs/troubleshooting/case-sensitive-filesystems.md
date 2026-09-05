@@ -196,6 +196,37 @@ further would rediscover a repo's own submodules and linked worktrees as if they
 were separate projects, and both are already reached from the root that owns
 them, with the labeling described above.
 
+#### What discovery will not follow
+
+The scan writes (`git config`, `ln -sfn`) without supervision, at every boot and
+hourly, so it is deliberate about which discovered entries it trusts. Two shapes
+are refused, each with its own reported reason:
+
+```text
+[fs-health] /workspace/link-out is a symlink — not following it
+[fs-health] /workspace/odd: git dir '/elsewhere/.git' is not this entry's own and is not a registered worktree of it — not repairing
+```
+
+A **symlink** at depth 1 is not dereferenced. A **`.git` file** is a
+`gitdir: <path>` pointer that git resolves without caring where it lands, so an
+entry is accepted only when its git dir is either its own `.git` or is a
+worktree **registered** to that entry — git records a registered worktree with a
+back-pointer at `<gitdir>/gitdir`, and a planted pointer has none.
+
+Registration rather than containment is load-bearing: a linked worktree's git dir
+lives in the repo that owns it, and `git worktree add` accepts any path, so a
+worktree mounted under `/workspace` may legitimately be owned by a repo outside
+it. Requiring the git dir to sit under the entry — or even under the workspace —
+would silently stop repairing exactly those worktrees.
+
+Refusals are reported rather than skipped quietly: a repo that is present but
+deliberately not repaired looks identical to a healthy one otherwise, which is
+the invisible non-repair this whole module exists to prevent.
+
+`WORKSPACE_ROOT` itself must be an absolute path other than `/`. A root that is
+refused is reported and nothing is scanned — and the hourly leg is *not* armed
+with it, so a bad value cannot quietly persist for the life of the container.
+
 Case-sensitivity is detected **per repo**, not once per run — separate mounts
 can genuinely differ, so a verdict sampled from one repo is not evidence about
 its neighbor.
