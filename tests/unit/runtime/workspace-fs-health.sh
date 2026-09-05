@@ -500,6 +500,84 @@ test_worktree_with_owner_outside_workspace_still_repaired() {
         "A registered worktree owned by a repo outside the workspace must still be repaired"
 }
 
+test_separate_git_dir_repo_is_repaired() {
+    # `git init --separate-git-dir=<elsewhere>` is a documented, ordinary way to
+    # move .git off a slow or shared mount. It produces a .git FILE and writes NO
+    # registration record — so a back-pointer-ONLY rule refuses it exactly like a
+    # planted pointer, silently dropping a repo the pre-#916 code repaired fine.
+    #
+    # What separates the two is whether the target is already some other
+    # checkout's canonical .git: a planted pointer aims at /elsewhere/.git (owned
+    # by the working tree /elsewhere), while a --separate-git-dir target is
+    # standalone with no working tree beside it.
+    local ws="$TEST_TEMP_DIR/ws-sgd"
+    local gitdir="$TEST_TEMP_DIR/gitdirs/repo.git"
+    command mkdir -p "$ws/repo" "$TEST_TEMP_DIR/gitdirs"
+    git init -q --separate-git-dir="$gitdir" "$ws/repo" >/dev/null 2>&1
+    git -C "$ws/repo" config user.email "test@example.com"
+    git -C "$ws/repo" config user.name "Test User"
+    git -C "$ws/repo" config --unset core.ignorecase 2>/dev/null || true
+
+    run_fs_health_workspace "$ws" insensitive >/dev/null
+
+    assert_equals "true" "$(get_ignorecase_at "$ws/repo")" \
+        "A --separate-git-dir repo is legitimate and must still be repaired"
+}
+
+test_planted_pointer_at_workspace_root_is_refused() {
+    # The workspace-root branch emits WORKSPACE_ROOT directly, so it needs the
+    # SAME gate as a depth-1 entry — it is the identical shape, and a workspace on
+    # a shared mount is exactly where a planted .git can appear, root included.
+    local ws="$TEST_TEMP_DIR/ws-root-planted"
+    seed_outside_repo
+    command mkdir -p "$ws"
+    command printf 'gitdir: %s\n' "$OUTSIDE_REPO/.git" >"$ws/.git"
+
+    local output
+    output=$(run_fs_health_workspace "$ws" insensitive)
+
+    assert_equals "unset" "$(get_ignorecase_at "$OUTSIDE_REPO")" \
+        "A planted pointer AT the workspace root must not redirect repairs either"
+    assert_contains "$output" "not repairing" \
+        "The root-level refusal should be reported too"
+}
+
+test_ordinary_repo_at_workspace_root_still_repaired() {
+    # Guard the other side of that gate: the root being a plain repo is the
+    # single-mount layout #828 deliberately kept working.
+    local ws="$TEST_TEMP_DIR/ws-root-ok"
+    make_repo "$ws"
+
+    run_fs_health_workspace "$ws" insensitive >/dev/null
+
+    assert_equals "true" "$(get_ignorecase_at "$ws")" \
+        "An ordinary repo AT the workspace root must still be repaired"
+}
+
+test_workspace_root_double_slash_is_refused() {
+    # A string match on '/' alone is bypassed by any path-equivalent spelling.
+    # `pwd -P` does NOT normalize this one: POSIX lets an implementation treat a
+    # leading '//' as distinct, and this one does — measured, `cd // && pwd -P`
+    # prints '//', so the guard needs an explicit collapse.
+    #
+    # Not purely adversarial either: "${BASE}/${SUB}" produces a doubled slash
+    # whenever either half is already slashed.
+    local output
+    output=$(run_fs_health_workspace "//" sensitive)
+
+    assert_contains "$output" "refusing to scan" \
+        "WORKSPACE_ROOT='//' must be refused — it walks the real filesystem root"
+}
+
+test_workspace_root_dot_form_is_refused() {
+    # /. and /workspace/.. both resolve to the filesystem root.
+    local output
+    output=$(run_fs_health_workspace "/." sensitive)
+
+    assert_contains "$output" "refusing to scan" \
+        "A path-equivalent form resolving to / must be refused"
+}
+
 test_workspace_root_slash_is_refused() {
     local output
     output=$(run_fs_health_workspace "/" sensitive)
@@ -1395,6 +1473,11 @@ run_test_with_setup test_symlinked_entry_is_not_followed "A depth-1 symlink is n
 run_test_with_setup test_ordinary_repo_still_repaired "An ordinary repo is still repaired"
 run_test_with_setup test_worktree_with_owner_inside_workspace_still_repaired "A worktree owned from inside the workspace is still repaired"
 run_test_with_setup test_worktree_with_owner_outside_workspace_still_repaired "A worktree owned from OUTSIDE the workspace is still repaired"
+run_test_with_setup test_separate_git_dir_repo_is_repaired "A --separate-git-dir repo is still repaired"
+run_test_with_setup test_planted_pointer_at_workspace_root_is_refused "A planted pointer at the workspace root is refused"
+run_test_with_setup test_ordinary_repo_at_workspace_root_still_repaired "An ordinary repo at the workspace root is still repaired"
+run_test_with_setup test_workspace_root_double_slash_is_refused "WORKSPACE_ROOT=// is refused"
+run_test_with_setup test_workspace_root_dot_form_is_refused "A path-equivalent root form is refused"
 run_test_with_setup test_workspace_root_slash_is_refused "WORKSPACE_ROOT=/ is refused"
 run_test_with_setup test_workspace_root_relative_is_refused "A relative WORKSPACE_ROOT is refused"
 run_test_with_setup test_workspace_scan_skips_non_repos "Workspace scan skips non-repo and unreadable dirs"

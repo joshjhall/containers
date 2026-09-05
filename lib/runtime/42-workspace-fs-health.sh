@@ -200,10 +200,6 @@ LOG_PREFIX="[fs-health]"
 # not inherit a root the boot run refused.
 FS_HEALTH_ROOT_REJECTED=false
 case "$WORKSPACE_ROOT" in
-    '/')
-        command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='/' — it must name a directory below the filesystem root" >&2
-        FS_HEALTH_ROOT_REJECTED=true
-        ;;
     /*) ;;
     *)
         # A relative root resolves against whatever cwd the caller happened to
@@ -212,6 +208,37 @@ case "$WORKSPACE_ROOT" in
         FS_HEALTH_ROOT_REJECTED=true
         ;;
 esac
+
+# Compare the RESOLVED root against /, not the literal string. A string match on
+# '/' alone is trivially bypassed by any path-equivalent spelling — `//` (POSIX
+# collapses a leading double slash), `/.`, or a concatenation that produced
+# `/workspace/..` — each of which `find` then walks as the real filesystem root,
+# reproducing exactly the sweep this guard exists to prevent. Measured: `//`
+# enumerated //sbin, //lib, //bin … before this check was added.
+#
+# A doubled slash is not only an adversarial input; it is what "${BASE}/${SUB}"
+# produces when either half is already slashed, so this is reachable by ordinary
+# misconfiguration.
+#
+# An unresolvable root is left to the existing "does not exist" report below
+# rather than rejected here, so a simple typo keeps its clearer diagnostic.
+if [ "$FS_HEALTH_ROOT_REJECTED" != "true" ]; then
+    FS_HEALTH_ROOT_RESOLVED=$(cd "$WORKSPACE_ROOT" 2>/dev/null && pwd -P) || FS_HEALTH_ROOT_RESOLVED=""
+
+    # Collapse repeated leading slashes before comparing. `pwd -P` does NOT do
+    # this for the two-slash case: POSIX explicitly permits an implementation to
+    # treat a leading `//` as distinct, and this one does — measured, `cd // &&
+    # pwd -P` prints `//`, so a bare `= "/"` comparison still let `//` through
+    # and the sweep proceeded.
+    while [ "$FS_HEALTH_ROOT_RESOLVED" != "${FS_HEALTH_ROOT_RESOLVED#//}" ]; do
+        FS_HEALTH_ROOT_RESOLVED="${FS_HEALTH_ROOT_RESOLVED#/}"
+    done
+
+    if [ "$FS_HEALTH_ROOT_RESOLVED" = "/" ]; then
+        command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — it resolves to the filesystem root" >&2
+        FS_HEALTH_ROOT_REJECTED=true
+    fi
+fi
 
 # Neutralize an inherited git environment before ANY git runs (issue #886).
 #
@@ -1051,14 +1078,36 @@ entry_git_dir_is_trusted() {
         if [ "$back_resolved" = "${entry_resolved}/.git" ]; then
             return 0
         fi
+        # A back-pointer naming a DIFFERENT entry is the clearest rejection
+        # there is: this git dir is already spoken for by another worktree.
+        command echo "$LOG_PREFIX ${entry}: git dir '$git_dir' is registered to '${back_resolved}', not to this entry — not repairing" >&2
+        return 1
     fi
 
-    # REPORT rather than skip silently. A repo that is present but deliberately
-    # not repaired is precisely the invisible non-repair this module exists to
-    # prevent (#828) — an operator seeing dirty symlinks needs to know the scan
-    # declined this root, and why.
-    command echo "$LOG_PREFIX ${entry}: git dir '$git_dir' is not this entry's own and is not a registered worktree of it — not repairing" >&2
-    return 1
+    # No back-pointer at all. This is NOT sufficient to reject: `git init
+    # --separate-git-dir=<elsewhere>` is a documented, ordinary way to move .git
+    # off a slow or shared mount, and it writes no registration record — its
+    # entry looks exactly like a planted pointer under a back-pointer-only rule.
+    # Measured: <gitdir>/gitdir is absent for --separate-git-dir, and both shapes
+    # report the entry itself as `rev-parse --show-toplevel`, so neither the
+    # back-pointer nor the toplevel separates them.
+    #
+    # What DOES separate them is whether the target is ALREADY some other
+    # checkout's canonical .git. A planted pointer's whole purpose is to aim at a
+    # real repository that someone else owns — /elsewhere/.git, whose sibling
+    # working tree is /elsewhere. A --separate-git-dir target is a standalone
+    # git directory with no working tree of its own beside it.
+    #
+    # So: reject when the git dir is the `.git` of a directory that is not this
+    # entry (someone else's repo), accept otherwise.
+    if [ "$git_dir" = "${git_dir%/*}/.git" ]; then
+        command echo "$LOG_PREFIX ${entry}: git dir '$git_dir' belongs to '${git_dir%/*}', not to this entry — not repairing" >&2
+        return 1
+    fi
+
+    # A standalone git dir (--separate-git-dir and friends). Accept it: nothing
+    # else claims it, so repairing this entry cannot reach into another project.
+    return 0
 }
 
 # Emit every git repo to scan, one per line, for a workspace-scope run.
@@ -1084,7 +1133,16 @@ discover_repos() {
 
     [ -d "$WORKSPACE_ROOT" ] || return 0
 
-    if [ -e "${WORKSPACE_ROOT}/.git" ]; then
+    # The root gets the SAME trust gate as a depth-1 entry (issue #916). It is
+    # the identical shape — a `.git` that may be a pointer — and exempting it
+    # would leave the fix half-applied against the very threat model it names:
+    # a workspace on a shared mount is exactly where an untrusted `.git` can be
+    # planted, root included.
+    #
+    # No symlink check here, deliberately: WORKSPACE_ROOT is the operator's own
+    # input, so a symlinked workspace root is a configuration they chose, not a
+    # link discovered inside a directory this scan was pointed at.
+    if [ -e "${WORKSPACE_ROOT}/.git" ] && entry_git_dir_is_trusted "$WORKSPACE_ROOT"; then
         command printf '%s\n' "$WORKSPACE_ROOT"
     fi
 
