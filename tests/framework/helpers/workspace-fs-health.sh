@@ -52,7 +52,7 @@ setup() {
     export FS_HEALTH_ENV_FILE="$TEST_TEMP_DIR/fs-health.env"
 
     unset SKIP_CASE_CHECK SKIP_CASE_FIX FS_HEALTH_UPDATE_ENV FS_HEALTH_STAT \
-        FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT 2>/dev/null || true
+        FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT WORKSPACE_ROOT 2>/dev/null || true
 
     # Clear any inherited git environment so a leak in the HARNESS cannot be
     # mistaken for the leak-immunity the script now provides (issue #886, widened
@@ -72,7 +72,7 @@ teardown() {
     fi
     unset PROJECT_ROOT TEST_TEMP_DIR SKIP_CASE_CHECK SKIP_CASE_FIX \
         FS_HEALTH_ENV_FILE FS_HEALTH_UPDATE_ENV FS_HEALTH_STAT \
-        FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT 2>/dev/null || true
+        FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT WORKSPACE_ROOT 2>/dev/null || true
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
         GIT_OBJECT_DIRECTORY GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM \
         GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 \
@@ -232,6 +232,50 @@ PROBE_STUB_EOF
 # Current core.ignorecase, or the literal "unset"
 get_ignorecase() {
     git -C "$PROJECT_ROOT" config --get core.ignorecase 2>/dev/null || echo "unset"
+}
+
+# Same, for any repo root (issue #828 — a workspace run touches several).
+# Args: $1 = repo root
+get_ignorecase_at() {
+    git -C "$1" config --get core.ignorecase 2>/dev/null || echo "unset"
+}
+
+# Create a git repo at a path, with identity set and core.ignorecase cleared —
+# the same known-unset starting state setup() establishes for PROJECT_ROOT, so a
+# case-insensitive host cannot mask the behavior under test.
+# Args: $1 = path to create
+make_repo() {
+    local root="$1"
+    command mkdir -p "$root"
+    git -C "$root" init -q .
+    git -C "$root" config user.email "test@example.com"
+    git -C "$root" config user.name "Test User"
+    git -C "$root" config --unset core.ignorecase 2>/dev/null || true
+}
+
+# Run the script in WORKSPACE scope (issue #828): PROJECT_ROOT deliberately
+# UNSET, so the script discovers repos under WORKSPACE_ROOT itself.
+#
+# Unsetting PROJECT_ROOT is the whole point and is why this cannot reuse
+# run_fs_health — the script distinguishes the two scopes by whether that
+# variable is SET, so exporting it (even empty) would pin single scope and the
+# test would silently exercise the wrong path.
+#
+# Args: $1 = workspace root, $2 = fs state. Returns stderr.
+run_fs_health_workspace() {
+    local workspace_root="$1"
+    local state="$2"
+    (
+        unset PROJECT_ROOT 2>/dev/null || true
+        export WORKSPACE_ROOT="$workspace_root"
+        export FS_CASE_STATE="$state"
+        export SKIP_CASE_CHECK="${SKIP_CASE_CHECK:-false}"
+        export SKIP_CASE_FIX="${SKIP_CASE_FIX:-false}"
+        export FS_HEALTH_ENV_FILE
+        export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
+        export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
+        { bash "$FS_HEALTH_SCRIPT" >/dev/null; } 2>&1
+    )
 }
 
 # Create tracked symlinks of each shape in the fixture repo.

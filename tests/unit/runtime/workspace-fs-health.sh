@@ -342,6 +342,283 @@ test_regular_files_untouched() {
 }
 
 # ============================================================================
+# Workspace-wide discovery tests (issue #828)
+# ============================================================================
+# The script used to inspect exactly one root resolved from $PWD (the build-time
+# WORKING_DIR), and to treat "not a repo there" as a reason to remove the cron
+# snapshot and exit 0 — killing both legs for the life of the container while
+# every other repo under /workspace went unscanned. These cover the two scopes
+# and the reporting that makes an empty workspace distinguishable from a healthy
+# one.
+
+# A workspace holding two repos plus two directories that are not repos, so
+# every assertion below distinguishes "found the repos" from "walked everything".
+# Returns the workspace root via the WS_ROOT global.
+seed_workspace() {
+    WS_ROOT="$TEST_TEMP_DIR/ws"
+    command mkdir -p "$WS_ROOT/plain-dir"
+    make_repo "$WS_ROOT/repo-a"
+    make_repo "$WS_ROOT/repo-b"
+
+    # A directory that cannot be read at all. Discovery must skip it silently
+    # rather than erroring — the run is unattended and must never be fatal.
+    command mkdir -p "$WS_ROOT/unreadable"
+    command chmod 000 "$WS_ROOT/unreadable"
+}
+
+# chmod the unreadable fixture back so teardown's rm -rf can remove it.
+unseed_workspace() {
+    [ -n "${WS_ROOT:-}" ] || return 0
+    command chmod 755 "$WS_ROOT/unreadable" 2>/dev/null || true
+}
+
+test_workspace_scan_repairs_every_repo() {
+    # THE ISSUE: with WORKING_DIR naming a non-repo, sibling repos that were
+    # mounted, decayed, and never looked at.
+    seed_workspace
+    run_fs_health_workspace "$WS_ROOT" insensitive >/dev/null
+
+    assert_equals "true" "$(get_ignorecase_at "$WS_ROOT/repo-a")" \
+        "Workspace scan should repair the first discovered repo"
+    assert_equals "true" "$(get_ignorecase_at "$WS_ROOT/repo-b")" \
+        "Workspace scan should repair every discovered repo, not just one"
+    unseed_workspace
+}
+
+test_workspace_scan_reports_repo_paths() {
+    # Per-repo reporting: with several roots in play, a finding is only
+    # actionable if the line names which repo it came from.
+    seed_workspace
+    local output
+    output=$(run_fs_health_workspace "$WS_ROOT" insensitive)
+
+    assert_contains "$output" "$WS_ROOT/repo-a" \
+        "Report should name the repo each finding came from"
+    assert_contains "$output" "$WS_ROOT/repo-b" \
+        "Report should name every repaired repo"
+    unseed_workspace
+}
+
+test_workspace_scan_skips_non_repos() {
+    # A workspace legitimately holds non-repo directories and unreadable ones.
+    # Neither is an error, and neither should produce output.
+    seed_workspace
+    local output
+    output=$(run_fs_health_workspace "$WS_ROOT" insensitive)
+
+    assert_not_contains "$output" "plain-dir" \
+        "A non-repo directory should be skipped without comment"
+    assert_not_contains "$output" "unreadable" \
+        "An unreadable directory should be skipped without error"
+    unseed_workspace
+}
+
+test_workspace_root_itself_scanned_when_a_repo() {
+    # A single repo mounted directly AT the workspace root. Skipping it would
+    # regress against the old $PWD behavior instead of fixing it.
+    local ws="$TEST_TEMP_DIR/ws-is-repo"
+    make_repo "$ws"
+
+    run_fs_health_workspace "$ws" insensitive >/dev/null
+
+    assert_equals "true" "$(get_ignorecase_at "$ws")" \
+        "A repo mounted at the workspace root itself should be scanned"
+}
+
+test_workspace_scan_reports_zero_repos() {
+    # The silent-exit defect itself: "nothing to inspect" and "everything is
+    # healthy" were the same observable, which is how a container repaired
+    # nothing for its whole life without anyone noticing.
+    local ws="$TEST_TEMP_DIR/empty-ws"
+    command mkdir -p "$ws"
+
+    local output
+    output=$(run_fs_health_workspace "$ws" insensitive)
+
+    assert_contains "$output" "no git repositories found" \
+        "An empty workspace should be reported, not silently skipped"
+}
+
+test_workspace_scan_reports_missing_root() {
+    local output
+    output=$(run_fs_health_workspace "$TEST_TEMP_DIR/no-such-workspace" insensitive)
+
+    assert_contains "$output" "does not exist" \
+        "A missing workspace root should be reported distinctly from an empty one"
+}
+
+test_zero_repos_still_writes_snapshot() {
+    # THE COMPOUNDING HALF of the bug. Removing the snapshot here is what
+    # disabled the hourly leg permanently; keeping it is what lets a repo
+    # mounted an hour later still get repaired.
+    local ws="$TEST_TEMP_DIR/empty-ws-snap"
+    command mkdir -p "$ws"
+
+    run_fs_health_workspace "$ws" insensitive >/dev/null
+
+    assert_file_exists "$FS_HEALTH_ENV_FILE" \
+        "A workspace with zero repos should still arm the hourly leg"
+    assert_equals "$ws" "$(get_snapshot_value WORKSPACE_ROOT)" \
+        "Snapshot should record the workspace root to re-discover under"
+}
+
+test_workspace_snapshot_records_empty_project_root() {
+    # The empty PROJECT_ROOT is meaningful, not missing: it is what tells the
+    # cron leg to re-discover rather than repair one fixed path.
+    seed_workspace
+    run_fs_health_workspace "$WS_ROOT" sensitive >/dev/null
+
+    assert_equals "" "$(get_snapshot_value PROJECT_ROOT)" \
+        "A workspace-scope run should record an empty PROJECT_ROOT"
+    assert_equals "$WS_ROOT" "$(get_snapshot_value WORKSPACE_ROOT)" \
+        "A workspace-scope run should record the workspace root"
+    unseed_workspace
+}
+
+test_explicit_project_root_restricts_scan() {
+    # The on-demand contract: naming a root must inspect THAT repo only, even
+    # though a sibling repo sits right beside it under the same workspace root.
+    seed_workspace
+
+    (
+        export PROJECT_ROOT="$WS_ROOT/repo-a"
+        export WORKSPACE_ROOT="$WS_ROOT"
+        export FS_CASE_STATE=insensitive
+        export FS_HEALTH_ENV_FILE
+        bash "$FS_HEALTH_SCRIPT"
+    ) >/dev/null 2>&1
+
+    assert_equals "true" "$(get_ignorecase_at "$WS_ROOT/repo-a")" \
+        "An explicit PROJECT_ROOT should still repair the repo it names"
+    assert_equals "unset" "$(get_ignorecase_at "$WS_ROOT/repo-b")" \
+        "An explicit PROJECT_ROOT must NOT widen into a workspace-wide scan"
+    unseed_workspace
+}
+
+test_case_detection_runs_per_repo() {
+    # Different mounts can genuinely differ in case-sensitivity, so the verdict
+    # must be sampled per repo rather than once for the whole workspace.
+    #
+    # Drives it through a STUB detector that answers "insensitive" for repo-a
+    # and "sensitive" for repo-b: a single shared verdict cannot produce this
+    # split, so the assertion pair fails if detection is hoisted back out of the
+    # loop. FS_CASE_STATE is left unset here on purpose — forcing it is what
+    # every other test does, and it bypasses detection entirely.
+    seed_workspace
+
+    local detector="$TEST_TEMP_DIR/detect-case.sh"
+    command cat >"$detector" <<'DETECT_EOF'
+#!/bin/bash
+# Exit 1 (insensitive) for repo-a, 0 (sensitive) for anything else.
+case "$1" in
+    *repo-a*) exit 1 ;;
+    *) exit 0 ;;
+esac
+DETECT_EOF
+    command chmod +x "$detector"
+
+    (
+        unset PROJECT_ROOT FS_CASE_STATE 2>/dev/null || true
+        export WORKSPACE_ROOT="$WS_ROOT"
+        export CASE_DETECT_SCRIPT="$detector"
+        export FS_HEALTH_ENV_FILE
+        bash "$FS_HEALTH_SCRIPT"
+    ) >/dev/null 2>&1
+
+    assert_equals "true" "$(get_ignorecase_at "$WS_ROOT/repo-a")" \
+        "The repo the detector called insensitive should be repaired"
+    assert_equals "unset" "$(get_ignorecase_at "$WS_ROOT/repo-b")" \
+        "A repo the detector called sensitive must not inherit a sibling's verdict"
+    unseed_workspace
+}
+
+test_workspace_skip_case_check_removes_snapshot() {
+    # The opt-out must still disable BOTH legs under the new default scope.
+    local ws="$TEST_TEMP_DIR/ws-optout"
+    make_repo "$ws/repo-a"
+
+    run_fs_health_workspace "$ws" sensitive >/dev/null
+    assert_file_exists "$FS_HEALTH_ENV_FILE" "Precondition: snapshot exists"
+
+    export SKIP_CASE_CHECK=true
+    run_fs_health_workspace "$ws" sensitive >/dev/null
+
+    assert_file_not_exists "$FS_HEALTH_ENV_FILE" \
+        "SKIP_CASE_CHECK=true should still remove the snapshot in workspace scope"
+}
+
+test_cron_wrapper_rediscovers_from_workspace_root() {
+    # The payoff of recording the ROOT rather than the discovered repo list: a
+    # repo mounted into a running container is repaired by the next hourly pass,
+    # without waiting for a restart.
+    local ws="$TEST_TEMP_DIR/ws-late"
+    command mkdir -p "$ws"
+
+    # Boot run against an empty workspace — arms the leg, repairs nothing.
+    run_fs_health_workspace "$ws" sensitive >/dev/null
+    assert_file_exists "$FS_HEALTH_ENV_FILE" "Precondition: snapshot armed"
+
+    # A repo appears afterwards.
+    make_repo "$ws/repo-late"
+
+    run_cron_wrapper insensitive >/dev/null
+
+    assert_equals "true" "$(get_ignorecase_at "$ws/repo-late")" \
+        "The cron leg should re-discover and repair a repo mounted after boot"
+}
+
+test_cron_wrapper_honors_single_scope_snapshot() {
+    # Back-compat: a snapshot written by an OLDER image carries only a non-empty
+    # PROJECT_ROOT and no WORKSPACE_ROOT line. The cron leg must keep honoring
+    # it as single scope, so an upgrade-in-place does not break the hourly leg
+    # until the next boot rewrites the snapshot.
+    command printf "%s\n" \
+        "PROJECT_ROOT='$PROJECT_ROOT'" \
+        "SKIP_CASE_FIX='false'" \
+        >"$FS_HEALTH_ENV_FILE"
+
+    run_cron_wrapper insensitive >/dev/null
+
+    assert_equals "true" "$(get_ignorecase)" \
+        "A legacy PROJECT_ROOT-only snapshot should still drive a single-repo repair"
+}
+
+test_cron_wrapper_noop_on_snapshot_with_neither_root() {
+    # Malformed is now "names NEITHER root" — still never a fallback to cron's
+    # $PWD, which is the user's home.
+    command printf "%s\n" "SKIP_CASE_FIX='false'" >"$FS_HEALTH_ENV_FILE"
+
+    local output
+    output=$(run_cron_wrapper insensitive)
+    assert_empty "$output" \
+        "Cron wrapper should no-op on a snapshot naming neither root"
+}
+
+test_ondemand_no_arg_stays_single_scope() {
+    # `workspace-fs-health` with no argument documents "the current directory's
+    # project". The script's default scope is now the whole workspace, so the
+    # wrapper has to pin $PWD explicitly — without that this silently becomes a
+    # workspace-wide scan.
+    seed_workspace
+
+    (
+        cd "$WS_ROOT/repo-a" || exit 1
+        unset PROJECT_ROOT 2>/dev/null || true
+        export WORKSPACE_ROOT="$WS_ROOT"
+        export FS_HEALTH_SCRIPT="$FS_HEALTH_SCRIPT"
+        export FS_HEALTH_ENV_FILE
+        export FS_CASE_STATE=insensitive
+        bash "$ONDEMAND_WRAPPER"
+    ) >/dev/null 2>&1
+
+    assert_equals "true" "$(get_ignorecase_at "$WS_ROOT/repo-a")" \
+        "A bare on-demand run should repair the current directory's project"
+    assert_equals "unset" "$(get_ignorecase_at "$WS_ROOT/repo-b")" \
+        "A bare on-demand run must not widen into a workspace-wide scan"
+    unseed_workspace
+}
+
+# ============================================================================
 # Periodic Re-Run Tests (issue #794)
 # ============================================================================
 # The repair is time-driven, so it also runs hourly from cron. Cron inherits
@@ -829,6 +1106,21 @@ run_test_with_setup test_directory_symlink_not_polluted "Directory symlink not p
 run_test_with_setup test_symlinks_leave_repo_clean "Repo stays clean after symlink pass"
 run_test_with_setup test_silent_with_healthy_symlinks_present "Silent when all symlinks are healthy"
 run_test_with_setup test_regular_files_untouched "Regular files untouched"
+run_test_with_setup test_workspace_scan_repairs_every_repo "Workspace scan repairs every discovered repo"
+run_test_with_setup test_workspace_scan_reports_repo_paths "Workspace scan names each repo it repairs"
+run_test_with_setup test_workspace_scan_skips_non_repos "Workspace scan skips non-repo and unreadable dirs"
+run_test_with_setup test_workspace_root_itself_scanned_when_a_repo "Workspace root itself is scanned when it is a repo"
+run_test_with_setup test_workspace_scan_reports_zero_repos "Zero repos under the workspace is reported"
+run_test_with_setup test_workspace_scan_reports_missing_root "A missing workspace root is reported distinctly"
+run_test_with_setup test_zero_repos_still_writes_snapshot "Zero repos still arms the hourly leg"
+run_test_with_setup test_workspace_snapshot_records_empty_project_root "Workspace scope records an empty PROJECT_ROOT"
+run_test_with_setup test_explicit_project_root_restricts_scan "Explicit PROJECT_ROOT restricts the scan to one repo"
+run_test_with_setup test_case_detection_runs_per_repo "Case detection runs per repo"
+run_test_with_setup test_workspace_skip_case_check_removes_snapshot "SKIP_CASE_CHECK removes the snapshot in workspace scope"
+run_test_with_setup test_cron_wrapper_rediscovers_from_workspace_root "Cron leg re-discovers a repo mounted after boot"
+run_test_with_setup test_cron_wrapper_honors_single_scope_snapshot "Cron leg honors a legacy PROJECT_ROOT-only snapshot"
+run_test_with_setup test_cron_wrapper_noop_on_snapshot_with_neither_root "Cron leg no-ops on a snapshot naming neither root"
+run_test_with_setup test_ondemand_no_arg_stays_single_scope "Bare on-demand run stays single-scope"
 run_test_with_setup test_writes_env_snapshot "Writes the cron env snapshot"
 run_test_with_setup test_snapshot_records_skip_case_fix "Snapshot records SKIP_CASE_FIX"
 run_test_with_setup test_skip_case_check_removes_snapshot "SKIP_CASE_CHECK removes a stale snapshot"

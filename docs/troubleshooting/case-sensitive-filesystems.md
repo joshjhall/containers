@@ -90,9 +90,9 @@ On macOS: Import succeeds (case-insensitive) On Linux: Import fails (can't find
 ### Automatic Detection and Repair (Built-in)
 
 On every container start — and then hourly for as long as the container runs —
-`42-workspace-fs-health.sh` probes the **project mount** and repairs two things
-it can fix safely. It prints nothing when the workspace is healthy, so any
-output means it acted:
+`42-workspace-fs-health.sh` probes **every git repo mounted under the workspace
+root** and repairs two things it can fix safely. It prints nothing when the
+workspace is healthy, so any output means it acted:
 
 ```text
 [fs-health] /workspace/myproject is on a case-insensitive mount
@@ -167,14 +167,49 @@ sibling, so the project's own mount stays the sole authority. The symlink
 repair, which really is per-worktree, still runs.
 
 A worktree created hours into container uptime is picked up by the **hourly
-cron leg** below, which re-runs the same scan against the same project root.
+cron leg** below, which re-runs the same scan against the same workspace root.
 
-Both repairs are idempotent and leave file contents untouched. Two opt-outs:
+#### Which repos get scanned
 
-| Variable           | Effect                                          |
-| ------------------ | ----------------------------------------------- |
-| `SKIP_CASE_FIX`    | Detect and report, but never write              |
-| `SKIP_CASE_CHECK`  | Disable the check entirely                      |
+The scan covers **every git repo at depth 1 under `WORKSPACE_ROOT`** (default
+`/workspace`), plus the workspace root itself when that is a repo. A multi-repo
+workspace is the normal case, and each mount is inspected on its own.
+
+Earlier versions inspected exactly one directory, resolved from the container's
+`WORKING_DIR` build arg. That arg has no obligation to name a repo at run time,
+and in a multi-repo workspace it routinely does not — so the boot run inspected
+nothing while the repos mounted beside it decayed. Worse, "no repo there" also
+*removed the cron snapshot*, which disabled the hourly leg for the life of the
+container. Both symptoms were silent: exit 0, no output.
+
+Discovery re-runs on **every** invocation rather than being fixed at boot, so a
+repo mounted into an already-running container is picked up by the next hourly
+pass. A workspace holding no repos yet is reported once and still leaves the
+hourly leg armed, for exactly that reason:
+
+```text
+[fs-health] no git repositories found under /workspace — nothing to inspect
+```
+
+Depth 1 is deliberate. `/workspace` is where mounts are attached; descending
+further would rediscover a repo's own submodules and linked worktrees as if they
+were separate projects, and both are already reached from the root that owns
+them, with the labeling described above.
+
+Case-sensitivity is detected **per repo**, not once per run — separate mounts
+can genuinely differ, so a verdict sampled from one repo is not evidence about
+its neighbor.
+
+Both repairs are idempotent and leave file contents untouched. Three variables:
+
+| Variable           | Effect                                                     |
+| ------------------ | ---------------------------------------------------------- |
+| `WORKSPACE_ROOT`   | Directory to discover repos under (default `/workspace`)    |
+| `SKIP_CASE_FIX`    | Detect and report, but never write                         |
+| `SKIP_CASE_CHECK`  | Disable the check entirely                                 |
+
+Setting `PROJECT_ROOT` explicitly restricts a run to that single repo instead of
+discovering any — which is what the on-demand command below does.
 
 #### Why it also runs hourly
 
@@ -232,6 +267,16 @@ before a commit:
 ```bash
 workspace-fs-health              # inspect the current directory's project
 workspace-fs-health /workspace/myproject
+```
+
+Unlike the boot and hourly runs, this command is **single-scope**: it inspects
+one repo — the current directory's, or the one you name — rather than the whole
+workspace. To sweep everything by hand, run the boot script directly with no
+`PROJECT_ROOT` set:
+
+```bash
+PROJECT_ROOT= bash /etc/container/startup/42-workspace-fs-health.sh   # wrong: pins single scope
+env -u PROJECT_ROOT bash /etc/container/startup/42-workspace-fs-health.sh   # workspace-wide
 ```
 
 Silent when healthy, and it honors the same `SKIP_CASE_FIX` /

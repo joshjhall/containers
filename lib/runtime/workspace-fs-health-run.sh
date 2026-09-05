@@ -6,8 +6,10 @@
 # showing as modified in `git status` right before a commit, or a repo just
 # opened on a case-insensitive mount.
 #
-# Inspects the current directory's project by default (PROJECT_ROOT falls back
-# to $PWD inside the script); pass a path to inspect a different one.
+# Inspects the current directory's project by default; pass a path to inspect a
+# different one. Either way this command is SINGLE-SCOPE: it restricts the run
+# to one repo, unlike the boot and cron legs, which scan every repo under the
+# workspace root (issue #828).
 #
 # Silent when the workspace is healthy — any output means it repaired
 # something. Honors SKIP_CASE_FIX=true (report only) and SKIP_CASE_CHECK=true
@@ -30,14 +32,24 @@ case "${1:-}" in
         echo "  - align git core.ignorecase on case-insensitive mounts"
         echo "  - refresh symlinks with stale attributes (nlink=0)"
         echo ""
-        echo "Defaults to the current directory. Silent when healthy."
+        echo "Inspects the current directory's project. Pass a path to inspect a"
+        echo "different one; either way the run is restricted to that single repo,"
+        echo "not the whole workspace. Silent when healthy."
         echo ""
         echo "Environment:"
         echo "  SKIP_CASE_FIX=true    detect and report, but never write"
         echo "  SKIP_CASE_CHECK=true  do nothing"
         exit 0
         ;;
-    "") ;;
+    "")
+        # Pin the current directory EXPLICITLY (issue #828). The repair script's
+        # default scope is now the whole workspace, and it distinguishes the two
+        # by whether PROJECT_ROOT is set — so leaving it unset here would
+        # silently turn a bare `workspace-fs-health` into a workspace-wide scan
+        # rather than the "current directory's project" this command documents.
+        PROJECT_ROOT="$PWD"
+        export PROJECT_ROOT
+        ;;
     *)
         if [ ! -d "$1" ]; then
             echo "workspace-fs-health: not a directory: $1" >&2

@@ -30,6 +30,33 @@
 # Every freshly created golem worktree therefore arrived with its tracked
 # symlinks already reading as modified.
 #
+# WHICH REPOS get scanned is a separate question from what is repaired within
+# one, and the answer is the whole WORKSPACE, not one project (issue #828).
+#
+# This script used to resolve a single PROJECT_ROOT from $PWD — the Dockerfile's
+# WORKDIR ${WORKING_DIR} — and exit 0 when that path was not a repo. WORKING_DIR
+# is a BUILD ARG; it has no obligation to name a repo at run time. In a
+# multi-repo workspace it routinely does not: with three mounts under /workspace
+# and WORKING_DIR=/workspace/librarian pointing at an empty directory, the boot
+# run inspected nothing, the two genuinely-decayed repos beside it were never
+# looked at — and because that bail-out ALSO removed the cron env snapshot, the
+# hourly leg was disabled for the life of the container. Both legs dead, no
+# output, exit 0.
+#
+# So there are two scopes:
+#
+#   single    — PROJECT_ROOT supplied in the environment. Exactly one repo, and
+#               a non-repo there clears the snapshot. This is what the on-demand
+#               `workspace-fs-health <path>` command uses.
+#   workspace — the default. Every git repo at depth 1 under WORKSPACE_ROOT
+#               (default /workspace), plus WORKSPACE_ROOT itself when it is a
+#               repo. Discovery re-runs on every invocation, so a repo mounted
+#               after boot is picked up by the next hourly pass.
+#
+# WORKSPACE_ROOT itself is included on purpose: a single repo mounted directly
+# at /workspace with WORKING_DIR=/workspace would otherwise be skipped, which
+# would be a regression against the old $PWD behavior rather than a fix.
+#
 # Skip everything with:   SKIP_CASE_CHECK=true
 # Detect and report, but never write:  SKIP_CASE_FIX=true
 #
@@ -39,15 +66,20 @@
 # hourly from cron via /usr/local/bin/workspace-fs-health-cron, and on demand
 # as /usr/local/bin/workspace-fs-health.
 #
-# Cron sees none of the container environment, so the BOOT run records the two
-# values the cron leg cannot re-derive — PROJECT_ROOT and SKIP_CASE_FIX — into
-# an env snapshot. Its ABSENCE is what disables the cron leg, which is why the
-# skip gate removes it rather than leaving a stale copy behind.
+# Cron sees none of the container environment, so the BOOT run records what the
+# cron leg cannot re-derive — the SCOPE (an explicit PROJECT_ROOT, or the
+# WORKSPACE_ROOT to re-discover under) and SKIP_CASE_FIX — into an env snapshot.
+# Its ABSENCE is what disables the cron leg, which is why the skip gate removes
+# it rather than leaving a stale copy behind.
+#
+# The snapshot records the workspace ROOT, never the discovered repo list: the
+# cron leg re-runs discovery on every pass, so a repo mounted after boot is
+# repaired without waiting for a restart (issue #828).
 #
 # Only the boot run maintains that snapshot. The cron and on-demand legs pass
 # FS_HEALTH_UPDATE_ENV=false, because both run with an environment that would
 # poison it: an on-demand run's PROJECT_ROOT is whatever directory the user
-# happened to be in, and a run in a non-repo directory exits before it could
+# happened to be in, and a run against a named non-repo exits before it could
 # record anything useful.
 
 # ============================================================================
@@ -78,7 +110,14 @@ write_env_snapshot() {
     # quoting early and turn the rest of the line into shell syntax rather than
     # data — the reader parses these values, so unescaped input there is a code
     # path, not just a wrong string.
-    local escaped_root="${PROJECT_ROOT//\'/\'\\\'\'}"
+    # PROJECT_ROOT is written EMPTY in workspace scope, and that empty value is
+    # meaningful rather than missing: it is what tells the cron leg to
+    # re-discover repos under WORKSPACE_ROOT instead of repairing one fixed
+    # path. A snapshot from an older image carries only a non-empty
+    # PROJECT_ROOT, which the reader still honors as single scope, so an
+    # upgrade-in-place keeps working until the next boot rewrites it.
+    local escaped_root="${SNAPSHOT_PROJECT_ROOT//\'/\'\\\'\'}"
+    local escaped_workspace="${WORKSPACE_ROOT//\'/\'\\\'\'}"
     local escaped_skip="${SKIP_CASE_FIX:-false}"
     escaped_skip="${escaped_skip//\'/\'\\\'\'}"
 
@@ -89,6 +128,7 @@ write_env_snapshot() {
     local tmp="${FS_HEALTH_ENV_FILE}.tmp.$$"
     {
         command echo "PROJECT_ROOT='${escaped_root}'"
+        command echo "WORKSPACE_ROOT='${escaped_workspace}'"
         command echo "SKIP_CASE_FIX='${escaped_skip}'"
     } >"$tmp" 2>/dev/null || {
         /usr/bin/rm -f "$tmp" 2>/dev/null || true
@@ -115,7 +155,30 @@ fi
 # Configuration
 # ============================================================================
 
-PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
+# Scope resolution (issue #828).
+#
+# The DISTINCTION is whether PROJECT_ROOT was supplied, not what it contains —
+# so an explicitly-named root that turns out not to be a repo still reports and
+# clears the snapshot the way it always did, rather than silently widening to a
+# workspace scan the caller did not ask for.
+#
+# `${PROJECT_ROOT+x}` (set, including empty) rather than `${PROJECT_ROOT:-}`:
+# an exported-but-empty PROJECT_ROOT is a caller mistake, and treating it as
+# "single scope on the empty path" surfaces that, where treating it as unset
+# would quietly scan the whole workspace instead.
+if [ -n "${PROJECT_ROOT+x}" ]; then
+    FS_HEALTH_SCOPE=single
+else
+    FS_HEALTH_SCOPE=workspace
+    PROJECT_ROOT=""
+fi
+
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-/workspace}"
+
+# What the snapshot records for PROJECT_ROOT: the single root in single scope,
+# empty in workspace scope (see write_env_snapshot).
+SNAPSHOT_PROJECT_ROOT="$PROJECT_ROOT"
+
 CASE_DETECT_SCRIPT="${CASE_DETECT_SCRIPT:-/usr/local/bin/detect-case-sensitivity.sh}"
 LOG_PREFIX="[fs-health]"
 
@@ -371,20 +434,10 @@ if [ "${SKIP_CASE_FIX:-false}" = "true" ]; then
 fi
 
 # ============================================================================
-# Project root validation
+# git availability
 # ============================================================================
 
-# A worktree's .git is a *file* pointing at the real git dir, not a directory,
-# so accept either shape.
-#
-# Both bail-outs clear the snapshot: there is nothing here for the cron leg to
-# repair, and a snapshot left from an earlier boot would point it at a project
-# that is no longer mounted.
-if [ ! -e "${PROJECT_ROOT}/.git" ]; then
-    remove_env_snapshot
-    exit 0
-fi
-
+# Nothing below can run without git, in either scope.
 if ! command -v git >/dev/null 2>&1; then
     remove_env_snapshot
     exit 0
@@ -393,24 +446,44 @@ fi
 # ============================================================================
 # Filesystem case-sensitivity detection
 # ============================================================================
-# Exposed as an override so tests can force a verdict without needing a real
-# case-insensitive filesystem. Values: sensitive | insensitive | unknown.
-#
 # detect-case-sensitivity.sh exit codes: 0=case-sensitive, 1=case-insensitive,
 # 2=error (missing path, not writable). An error is NOT evidence of either
 # state, so it must not trigger a repair.
+#
+# Detected PER REPO rather than once for the whole run (issue #828). Under a
+# workspace scan the roots are separate mounts by construction — that is what
+# makes them separate entries under /workspace — and two mounts can genuinely
+# differ in case-sensitivity. A single verdict sampled from whichever repo
+# happened to be first would then be applied to the others as if it described
+# them.
+#
+# FS_CASE_STATE remains an override so tests can force a verdict without a real
+# case-insensitive filesystem: when it is already set in the environment,
+# detection is skipped entirely and every root uses the forced value. Values:
+# sensitive | insensitive | unknown.
+FS_CASE_STATE_FORCED=false
+if [ -n "${FS_CASE_STATE+x}" ]; then
+    FS_CASE_STATE_FORCED=true
+fi
 
-if [ -z "${FS_CASE_STATE+x}" ]; then
+# Args: $1 = repo root. Sets the global FS_CASE_STATE for that root.
+detect_case_state() {
+    local root="$1"
+
+    [ "$FS_CASE_STATE_FORCED" = "true" ] && return 0
+
     FS_CASE_STATE=unknown
-    if [ -x "$CASE_DETECT_SCRIPT" ] && [ -w "$PROJECT_ROOT" ]; then
-        QUIET=true "$CASE_DETECT_SCRIPT" "$PROJECT_ROOT" >/dev/null 2>&1
+    if [ -x "$CASE_DETECT_SCRIPT" ] && [ -w "$root" ]; then
+        QUIET=true "$CASE_DETECT_SCRIPT" "$root" >/dev/null 2>&1
         case "$?" in
             0) FS_CASE_STATE=sensitive ;;
             1) FS_CASE_STATE=insensitive ;;
             *) FS_CASE_STATE=unknown ;;
         esac
     fi
-fi
+
+    return 0
+}
 
 # ============================================================================
 # Repair 1: align git core.ignorecase with the actual filesystem
@@ -604,7 +677,13 @@ repair_repo_tree() {
 # Linked worktrees
 # ============================================================================
 
-# Repair every linked worktree of $PROJECT_ROOT (issue #882).
+# Repair every linked worktree of one repo root (issue #882).
+#
+# Args: $1 = repo root to enumerate worktrees from.
+#
+# Takes the root as an argument rather than reading a global (issue #828): under
+# a workspace scan this is called once per discovered repo, so a global would
+# make every call after the first enumerate the wrong repository's worktrees.
 #
 # A linked worktree is invisible to both enumerations above: it is not in the
 # superproject's index at all (so `ls-files` never names it), and it is not a
@@ -618,6 +697,7 @@ repair_repo_tree() {
 # new branches: SKIP_CASE_CHECK exited long before this point, and SKIP_CASE_FIX
 # is read inside the same shared FIX_ENABLED the other roots use.
 repair_linked_worktrees() {
+    local project_root="$1"
     local main_toplevel wt wt_listed rel label saved_state
 
     # ONLY enumerate from the main worktree. `git worktree list` is repo-GLOBAL:
@@ -645,12 +725,12 @@ repair_linked_worktrees() {
     #      symlinked path component (exactly the environment this script exists
     #      for) cannot produce a false mismatch between the two forms.
     local git_dir common_dir
-    git_dir=$("$FS_HEALTH_GIT" -C "$PROJECT_ROOT" rev-parse --git-dir 2>/dev/null) || return 0
-    common_dir=$("$FS_HEALTH_GIT" -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null) || return 0
+    git_dir=$("$FS_HEALTH_GIT" -C "$project_root" rev-parse --git-dir 2>/dev/null) || return 0
+    common_dir=$("$FS_HEALTH_GIT" -C "$project_root" rev-parse --git-common-dir 2>/dev/null) || return 0
 
-    # Relative outputs are relative to PROJECT_ROOT, so resolve from there.
-    git_dir=$(cd "$PROJECT_ROOT" 2>/dev/null && cd "$git_dir" 2>/dev/null && pwd -P) || return 0
-    common_dir=$(cd "$PROJECT_ROOT" 2>/dev/null && cd "$common_dir" 2>/dev/null && pwd -P) || return 0
+    # Relative outputs are relative to the repo root, so resolve from there.
+    git_dir=$(cd "$project_root" 2>/dev/null && cd "$git_dir" 2>/dev/null && pwd -P) || return 0
+    common_dir=$(cd "$project_root" 2>/dev/null && cd "$common_dir" 2>/dev/null && pwd -P) || return 0
     [ "$git_dir" = "$common_dir" ] || return 0
 
     # Resolve the main worktree's own path so its entry can be skipped below.
@@ -663,7 +743,7 @@ repair_linked_worktrees() {
     # the main root would simply be walked a second time, mislabeled with an
     # absolute path — but it is a confusing duplicate diagnostic for the very
     # root the run already covered, so both sides are resolved the same way.
-    main_toplevel=$("$FS_HEALTH_GIT" -C "$PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null) || return 0
+    main_toplevel=$("$FS_HEALTH_GIT" -C "$project_root" rev-parse --show-toplevel 2>/dev/null) || return 0
     main_toplevel=$(cd "$main_toplevel" 2>/dev/null && pwd -P) || return 0
 
     # `worktree list --porcelain` emits stanzas whose first line is
@@ -760,8 +840,62 @@ repair_linked_worktrees() {
             repair_repo_tree "$wt" "$label" 0
             FS_CASE_STATE="$saved_state"
         fi
-    done < <("$FS_HEALTH_GIT" -C "$PROJECT_ROOT" worktree list --porcelain 2>/dev/null |
+    done < <("$FS_HEALTH_GIT" -C "$project_root" worktree list --porcelain 2>/dev/null |
         /usr/bin/awk '/^worktree / { print substr($0, 10) }')
+
+    return 0
+}
+
+# ============================================================================
+# Repo discovery
+# ============================================================================
+
+# Scan one repo root: detect its case-sensitivity, run both repairs across it
+# and its submodules, then walk its linked worktrees.
+#
+# Args: $1 = repo root
+scan_root() {
+    local root="$1"
+
+    detect_case_state "$root"
+    repair_repo_tree "$root" "" 0
+    repair_linked_worktrees "$root"
+
+    return 0
+}
+
+# Emit every git repo to scan, one per line, for a workspace-scope run.
+#
+# The workspace root itself comes first when it is a repo, then each depth-1
+# subdirectory that is one. Depth 1 deliberately, not a recursive walk:
+# /workspace is where mounts are attached, and descending further would
+# rediscover this repo's own submodules and linked worktrees as if they were
+# separate projects — repair_repo_tree and repair_linked_worktrees already reach
+# both, from the root that owns them and with the labeling that makes their
+# output readable.
+#
+# A worktree's .git is a FILE pointing at the real git dir, so -e, not -d.
+# Entries that are not repos, and directories that cannot be read, are simply
+# not emitted — a workspace legitimately holds non-repo directories, and neither
+# is an error.
+discover_repos() {
+    local entry
+
+    [ -d "$WORKSPACE_ROOT" ] || return 0
+
+    if [ -e "${WORKSPACE_ROOT}/.git" ]; then
+        command printf '%s\n' "$WORKSPACE_ROOT"
+    fi
+
+    # `find -mindepth 1 -maxdepth 1` rather than a `for entry in "$ROOT"/*`
+    # glob: the glob yields the unexpanded pattern itself when the directory is
+    # empty, and silently skips a dotted mount. -print0 keeps paths containing
+    # spaces or newlines intact.
+    while IFS= read -r -d '' entry; do
+        [ -d "$entry" ] || continue
+        [ -e "${entry}/.git" ] || continue
+        command printf '%s\n' "$entry"
+    done < <(/usr/bin/find "$WORKSPACE_ROOT" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
 
     return 0
 }
@@ -770,10 +904,49 @@ repair_linked_worktrees() {
 # Run
 # ============================================================================
 
-repair_repo_tree "$PROJECT_ROOT" "" 0
-repair_linked_worktrees
+if [ "$FS_HEALTH_SCOPE" = "single" ]; then
+    # A worktree's .git is a *file* pointing at the real git dir, not a
+    # directory, so accept either shape.
+    #
+    # The bail-out clears the snapshot: there is nothing here for the cron leg
+    # to repair, and a snapshot left from an earlier boot would point it at a
+    # project that is no longer mounted. This is the ONE path that still does
+    # so — a workspace-scope run that finds no repos writes the snapshot instead
+    # (see below), because "no repos under the workspace right now" is not the
+    # same claim as "the single root you named is gone".
+    if [ ! -e "${PROJECT_ROOT}/.git" ]; then
+        remove_env_snapshot
+        exit 0
+    fi
+
+    scan_root "$PROJECT_ROOT"
+else
+    FS_HEALTH_REPO_COUNT=0
+    while IFS= read -r fs_health_repo; do
+        [ -n "$fs_health_repo" ] || continue
+        FS_HEALTH_REPO_COUNT=$((FS_HEALTH_REPO_COUNT + 1))
+        scan_root "$fs_health_repo"
+    done < <(discover_repos)
+
+    if [ "$FS_HEALTH_REPO_COUNT" -eq 0 ]; then
+        # REPORT rather than exit silently (issue #828). "Nothing to inspect"
+        # and "everything is healthy" were previously the same observable —
+        # exit 0, no output — which is exactly how a container spent its entire
+        # life repairing nothing without anyone noticing.
+        if [ -d "$WORKSPACE_ROOT" ]; then
+            command echo "$LOG_PREFIX no git repositories found under $WORKSPACE_ROOT — nothing to inspect" >&2
+        else
+            command echo "$LOG_PREFIX workspace root $WORKSPACE_ROOT does not exist — nothing to inspect" >&2
+        fi
+    fi
+fi
 
 # Record the resolved environment so the hourly cron leg can re-run this same
-# script against the same project with the same opt-out. Written last, so the
-# snapshot only ever describes a run that actually reached a healthy repo.
+# script with the same scope and the same opt-out. Written last, so the snapshot
+# only ever describes a run that actually completed.
+#
+# Written even when a workspace scan found ZERO repos, which is the point of the
+# #828 fix: discovery re-runs on every invocation, so an empty workspace today
+# must still leave the hourly leg armed for a repo mounted an hour from now.
+# Removing the snapshot there is what made the old bail-out permanent.
 write_env_snapshot
