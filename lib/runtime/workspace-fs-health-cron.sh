@@ -16,12 +16,18 @@
 # and the runtime user is not knowable then (issue #800). See the re-exec stage
 # below.
 #
-# Cron jobs inherit none of the container environment, so the two values that
-# cannot be re-derived here — which project to inspect, and whether the user
-# opted out of writes — are read from the snapshot the boot run recorded.
-# No snapshot means "do not run": either SKIP_CASE_CHECK=true was set, no repo
-# was mounted, or the boot script never ran. All three should be silent no-ops
-# rather than a guess at PROJECT_ROOT (under cron, $PWD is the user's home).
+# Cron jobs inherit none of the container environment, so the values that cannot
+# be re-derived here — which scope to inspect, and whether the user opted out of
+# writes — are read from the snapshot the boot run recorded. No snapshot means
+# "do not run": either SKIP_CASE_CHECK=true was set or the boot script never
+# ran. Both should be silent no-ops rather than a guess at a root (under cron,
+# $PWD is the user's home).
+#
+# "No repo was mounted" is deliberately NOT in that list any more (issue #828).
+# The boot run now writes the snapshot even when the workspace holds zero repos,
+# precisely so this leg keeps running and picks up a repo mounted later. It used
+# to remove the snapshot in that case, which disabled the hourly repair for the
+# life of the container.
 #
 # The snapshot is PARSED, never sourced. Sourcing it would make every byte in
 # the file executable shell, so a project path containing a quote plus shell
@@ -151,15 +157,33 @@ snapshot_value() {
 }
 
 PROJECT_ROOT=$(snapshot_value PROJECT_ROOT)
+WORKSPACE_ROOT=$(snapshot_value WORKSPACE_ROOT)
 SKIP_CASE_FIX=$(snapshot_value SKIP_CASE_FIX)
 
-# A snapshot without a project root is malformed — treat it like no snapshot
-# rather than falling back to cron's $PWD.
-if [ -z "${PROJECT_ROOT:-}" ]; then
+# A snapshot naming NEITHER root is malformed — treat it like no snapshot rather
+# than falling back to cron's $PWD (the user's home).
+if [ -z "${PROJECT_ROOT:-}" ] && [ -z "${WORKSPACE_ROOT:-}" ]; then
     exit 0
 fi
 
-export PROJECT_ROOT
+# Which root is exported decides the scope the repair script resolves, and the
+# script keys on whether PROJECT_ROOT is SET at all — so exporting it empty
+# would pin single scope on the empty path. Export exactly one (issue #828).
+#
+# A non-empty PROJECT_ROOT wins. That is the on-demand/single case, and it is
+# also what a snapshot written by an OLDER image looks like: it has no
+# WORKSPACE_ROOT line at all, so honoring PROJECT_ROOT keeps the hourly leg
+# working across an upgrade until the next boot rewrites the snapshot.
+#
+# Otherwise the boot run was workspace-scoped, and this leg re-discovers repos
+# under WORKSPACE_ROOT on every pass rather than repairing a list fixed at boot.
+# That is what picks up a repo mounted into a running container.
+if [ -n "${PROJECT_ROOT:-}" ]; then
+    export PROJECT_ROOT
+else
+    export WORKSPACE_ROOT
+fi
+
 export SKIP_CASE_FIX="${SKIP_CASE_FIX:-false}"
 
 # The snapshot is the boot run's to maintain. This leg reads it and must not

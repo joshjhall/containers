@@ -164,6 +164,53 @@ test_entry_guarded_on_cron_installed() {
         "Cron entry is only written when the cron feature is installed"
 }
 
+# ============================================================================
+# Test: snapshot shape agrees between writer and reader (issue #828)
+# ============================================================================
+# The snapshot is the ONLY channel between the boot run and the hourly leg, and
+# the two ends live in different files. A key added to the writer but not read
+# back — or read under a different name — fails exactly the way #828 failed: the
+# hourly leg quietly repairs the wrong scope, or nothing, and exits 0. These are
+# static assertions over both scripts, so they stay in the no-Docker unit tier
+# alongside the Dockerfile checks above.
+
+FS_HEALTH_SRC="$PROJECT_ROOT/lib/runtime/42-workspace-fs-health.sh"
+CRON_SRC="$PROJECT_ROOT/lib/runtime/workspace-fs-health-cron.sh"
+
+test_snapshot_keys_written() {
+    assert_file_contains "$FS_HEALTH_SRC" "PROJECT_ROOT='\${escaped_root}'" \
+        "Boot run writes the PROJECT_ROOT key"
+    assert_file_contains "$FS_HEALTH_SRC" "WORKSPACE_ROOT='\${escaped_workspace}'" \
+        "Boot run writes the WORKSPACE_ROOT key (issue #828)"
+    assert_file_contains "$FS_HEALTH_SRC" "SKIP_CASE_FIX='\${escaped_skip}'" \
+        "Boot run writes the SKIP_CASE_FIX key"
+}
+
+test_snapshot_keys_read_back() {
+    assert_file_contains "$CRON_SRC" "snapshot_value PROJECT_ROOT" \
+        "Cron leg reads the PROJECT_ROOT key"
+    assert_file_contains "$CRON_SRC" "snapshot_value WORKSPACE_ROOT" \
+        "Cron leg reads the WORKSPACE_ROOT key — a written-but-unread key is #828 again"
+    assert_file_contains "$CRON_SRC" "snapshot_value SKIP_CASE_FIX" \
+        "Cron leg reads the SKIP_CASE_FIX key"
+}
+
+test_cron_leg_exports_one_root() {
+    # The repair script keys on whether PROJECT_ROOT is SET, so exporting both
+    # would pin single scope and silently disable workspace re-discovery.
+    local block
+    block=$(/usr/bin/awk '/^if \[ -n "\$\{PROJECT_ROOT:-\}" \]; then/ { found=1 }
+         found { print }
+         found && /^fi$/ { exit }' "$CRON_SRC")
+
+    assert_not_empty "$block" \
+        "Cron leg branches on which root the snapshot named"
+    assert_contains "$block" "export PROJECT_ROOT" \
+        "Cron leg exports PROJECT_ROOT for a single-scope snapshot"
+    assert_contains "$block" "export WORKSPACE_ROOT" \
+        "Cron leg exports WORKSPACE_ROOT for a workspace-scope snapshot"
+}
+
 # Run tests
 run_test test_cron_entry_written "Cron entry is written with an hourly schedule"
 run_test test_user_column_is_root "User column is root"
@@ -175,6 +222,9 @@ run_test test_output_not_piped_to_logger "Output is not piped to logger"
 run_test test_log_file_is_created "Log file is created at build time"
 run_test test_entry_mode_is_644 "Entry is installed mode 644"
 run_test test_entry_guarded_on_cron_installed "Entry is guarded on cron being installed"
+run_test test_snapshot_keys_written "Snapshot writer emits all three keys (issue #828)"
+run_test test_snapshot_keys_read_back "Snapshot reader consumes all three keys (issue #828)"
+run_test test_cron_leg_exports_one_root "Cron leg exports exactly one root (issue #828)"
 
 # Generate test report
 generate_report

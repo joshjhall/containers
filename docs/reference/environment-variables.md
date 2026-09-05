@@ -450,6 +450,8 @@ These variables can be set when running containers (via `docker run -e`):
 
 | Variable               | Default | Description                                        |
 | ---------------------- | ------- | -------------------------------------------------- |
+| `WORKSPACE_ROOT`       | `/workspace` | Directory the filesystem health check discovers git repos under. Every repo at depth 1, plus the root itself when it is a repo |
+| `PROJECT_ROOT`         | _(unset)_ | Set explicitly to restrict the health check to that single repo instead of discovering any. Unset means a workspace-wide scan |
 | `SKIP_CASE_CHECK`      | `false` | Disable the workspace filesystem health check entirely |
 | `SKIP_CASE_FIX`        | `false` | Detect and report filesystem problems, but never repair them |
 | `FS_HEALTH_MAX_DEPTH`  | `8`     | Submodule recursion depth cap for the health check. A non-numeric value falls back to the default |
