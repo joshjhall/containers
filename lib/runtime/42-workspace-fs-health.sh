@@ -647,7 +647,7 @@ check_symlinks() {
 # keeps every failure path a local `continue`.
 repair_repo_tree() {
     local root="$1" label_prefix="$2" depth="$3"
-    local rel sub_root
+    local rel sub_root sub_resolved
 
     check_ignorecase "$root"
     check_symlinks "$root" "$label_prefix"
@@ -666,11 +666,15 @@ repair_repo_tree() {
         # pointing into the superproject's .git/modules, so test -e, not -d.
         [ -e "${sub_root}/.git" ] || continue
 
-        # Claim it, so depth-1 discovery does not later emit this same directory
-        # as an independent top-level project (issue #828). An initialized
-        # submodule's .git is a FILE, which is exactly the shape discovery
-        # accepts.
-        fs_health_mark_scanned "$(fs_health_resolve "$sub_root")"
+        # Dedup is BIDIRECTIONAL (issue #828). Claiming the path stops depth-1
+        # discovery from later emitting it as an independent top-level project;
+        # the seen-check stops the reverse, where discovery got there first and
+        # this walk would repair it a second time. Which of the two runs first
+        # is decided by readdir order, so only checking one direction leaves the
+        # duplicate to chance.
+        sub_resolved=$(fs_health_resolve "$sub_root")
+        fs_health_seen "$sub_resolved" && continue
+        fs_health_mark_scanned "$sub_resolved"
 
         repair_repo_tree "$sub_root" "${label_prefix}${rel}/" "$((depth + 1))"
     done < <(git -C "$root" ls-files -s 2>/dev/null |
@@ -796,12 +800,19 @@ repair_linked_worktrees() {
             label="${root_prefix}${rel}/"
         fi
 
-        # Claim it before repairing, so depth-1 discovery does not later emit
-        # this same directory as an independent top-level project (issue #828).
-        # A linked worktree living beside its own project root — `git worktree
-        # add /workspace/wt` when /workspace is the repo — is at depth 1 and has
-        # a .git FILE, so discovery would otherwise re-scan it unlabeled. $wt is
-        # already `pwd -P`-resolved above.
+        # Dedup is BIDIRECTIONAL (issue #828). $wt is already `pwd -P`-resolved
+        # above, so it compares directly against the ledger.
+        #
+        # Claiming it stops depth-1 discovery from later emitting this same
+        # directory as an independent top-level project. The seen-check stops
+        # the REVERSE, and that direction is the one readdir decides: a worktree
+        # that is a SIBLING of its owning repo under the workspace root —
+        # `git worktree add /workspace/repo-wt` when the repo is
+        # /workspace/repo — is a depth-1 entry in its own right, so discovery
+        # can reach it BEFORE the repo that owns it. It was then repaired once
+        # bare and once labeled, which is the duplicate-and-mislabel symptom the
+        # ledger exists to prevent, arriving by the other route.
+        fs_health_seen "$wt" && continue
         fs_health_mark_scanned "$wt"
 
         # A worktree INSIDE the project root is on the project's mount by

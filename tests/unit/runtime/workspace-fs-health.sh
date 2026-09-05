@@ -585,6 +585,38 @@ test_workspace_scan_does_not_double_scan_submodule() {
         "The submodule repair should keep its submodule label, not be re-reported bare"
 }
 
+test_workspace_scan_dedups_sibling_worktree_either_order() {
+    # A worktree that is a SIBLING of its owning repo — `git worktree add
+    # /workspace/repo-wt` when the repo is /workspace/repo — is a depth-1 entry
+    # in its own right, so discovery can reach it BEFORE the repo that owns it.
+    #
+    # That order is decided by readdir, not by anything the script controls, so
+    # a one-directional ledger (claim-only, no seen-check in the walks) left the
+    # duplicate to chance: the worktree was repaired once bare as an independent
+    # root, then again labeled by its owner. Build the dirent order that exposes
+    # it — worktree created in the workspace first, owning repo added after.
+    local ws="$TEST_TEMP_DIR/ws-sibling"
+    local src="$TEST_TEMP_DIR/sibling-src"
+    make_repo "$src"
+    echo "content" >"$src/target.txt"
+    command ln -s target.txt "$src/AGENTS.md"
+    git -C "$src" add -A >/dev/null 2>&1
+    git -C "$src" commit -qm "seed" >/dev/null 2>&1
+
+    command mkdir -p "$ws"
+    git -C "$src" worktree add -q "$ws/wt" -b sibling-branch >/dev/null 2>&1
+    # Copy (not move) the owning repo in AFTER the worktree's dirent exists, so
+    # it is enumerated second while still owning that worktree.
+    command cp -a "$src" "$ws/repo"
+
+    local output
+    output=$(FS_HEALTH_STAT="$(stale_stat_stub AGENTS.md)" \
+        run_fs_health_workspace "$ws" sensitive)
+
+    assert_equals "1" "$(command printf '%s\n' "$output" | /usr/bin/grep -c 'refreshed .*/wt/AGENTS.md')" \
+        "A sibling worktree must be repaired once even when discovery reaches it before its owner"
+}
+
 test_workspace_symlink_report_names_the_repo() {
     # ACCEPTANCE CRITERION: "a repo whose stale symlinks are repaired is reported
     # per-repo, with the repo path in the log line."
@@ -1248,6 +1280,7 @@ run_test_with_setup test_case_detection_runs_per_repo "Case detection runs per r
 run_test_with_setup test_exported_empty_project_root_stays_single_scope "Exported-but-empty PROJECT_ROOT stays single-scope"
 run_test_with_setup test_workspace_scan_does_not_double_scan_nested_worktree "A nested worktree is scanned once, not twice"
 run_test_with_setup test_workspace_scan_does_not_double_scan_submodule "A nested submodule is scanned once, not twice"
+run_test_with_setup test_workspace_scan_dedups_sibling_worktree_either_order "A sibling worktree is deduped regardless of discovery order"
 run_test_with_setup test_workspace_symlink_report_names_the_repo "Symlink repairs name their repo in workspace scope"
 run_test_with_setup test_single_scope_symlink_report_stays_relative "Single scope keeps the repo-relative symlink form"
 run_test_with_setup test_workspace_skip_case_check_removes_snapshot "SKIP_CASE_CHECK removes the snapshot in workspace scope"
