@@ -208,25 +208,35 @@ are refused, each with its own reported reason:
 ```
 
 A **symlink** at depth 1 is not dereferenced. A **`.git` file** is a
-`gitdir: <path>` pointer that git resolves without caring where it lands, so the
-scan asks whether anything *else* already owns the git dir it names. An entry is
-accepted when its git dir is its own `.git`, when a back-pointer at
-`<gitdir>/gitdir` registers that git dir to this entry (a linked worktree), or
-when the git dir is standalone — belonging to no other checkout. It is refused
-when the git dir is registered to a **different** entry, or is already some
-other working tree's canonical `.git`.
+`gitdir: <path>` pointer that git resolves without caring where it lands, so
+automatic discovery follows one only when it can *attribute* the git dir to the
+entry. Two shapes qualify: the git dir is the entry's own `.git`, or a
+back-pointer at `<gitdir>/gitdir` registers it to this entry (a linked
+worktree). Anything else is refused.
 
-Ownership rather than containment is load-bearing here. A linked worktree's git
-dir lives in the repo that owns it, and `git worktree add` accepts any path, so
-a worktree mounted under `/workspace` may legitimately be owned by a repo
-outside it. Requiring the git dir to sit under the entry — or even under the
-workspace — would silently stop repairing exactly those worktrees.
+Attribution rather than containment is load-bearing. A linked worktree's git dir
+lives in the repo that owns it, and `git worktree add` accepts any path, so a
+worktree mounted under `/workspace` may legitimately be owned by a repo outside
+it. Requiring the git dir to sit under the entry — or even under the workspace —
+would silently stop repairing exactly those worktrees.
 
-Equally, a bare "must carry a registration record" rule would be too strict:
-`git init --separate-git-dir=<elsewhere>` is an ordinary way to move `.git` off
-a slow or shared mount, and it writes no such record. Such a repo is accepted
-because its git dir is standalone; a planted pointer is refused because its
-target is a repository someone else already owns.
+The rule is **deny-by-default** for everything else, and that costs a real case:
+a repo created with `git init --separate-git-dir=<elsewhere>` writes no
+registration record, so automatic discovery will not follow it. That is
+deliberate. Such a repo and a planted pointer aimed at one are indistinguishable
+from the git dir side — neither carries a back-pointer, both report the entry
+itself as `rev-parse --show-toplevel`, and neither records `core.worktree` — so
+accepting the shape would hand an attacker exactly the redirection this gate
+exists to stop.
+
+Nothing becomes unrepairable. Naming the repo scans it normally:
+
+```bash
+workspace-fs-health /workspace/that-repo
+```
+
+The refusal message says so. The distinction is that the operator names the
+target, rather than the filesystem offering it to an unattended job.
 
 The same gate applies to the workspace root itself, which is the identical shape
 and equally plantable on a shared mount.

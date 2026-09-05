@@ -1084,30 +1084,37 @@ entry_git_dir_is_trusted() {
         return 1
     fi
 
-    # No back-pointer at all. This is NOT sufficient to reject: `git init
-    # --separate-git-dir=<elsewhere>` is a documented, ordinary way to move .git
-    # off a slow or shared mount, and it writes no registration record — its
-    # entry looks exactly like a planted pointer under a back-pointer-only rule.
-    # Measured: <gitdir>/gitdir is absent for --separate-git-dir, and both shapes
-    # report the entry itself as `rev-parse --show-toplevel`, so neither the
-    # back-pointer nor the toplevel separates them.
+    # No back-pointer, and not the entry's own .git. DENY.
     #
-    # What DOES separate them is whether the target is ALREADY some other
-    # checkout's canonical .git. A planted pointer's whole purpose is to aim at a
-    # real repository that someone else owns — /elsewhere/.git, whose sibling
-    # working tree is /elsewhere. A --separate-git-dir target is a standalone
-    # git directory with no working tree of its own beside it.
+    # An earlier revision accepted this case, reasoning that a git dir nothing
+    # else claims is safe — the shape `git init --separate-git-dir=<elsewhere>`
+    # produces, which writes no registration record. That reasoning was wrong,
+    # and reopened the very hole this gate closes. Measured: planting
+    # `gitdir: /victim/gitdirs/v.git` under the workspace made the unattended
+    # scan write core.ignorecase into that victim repository — the identical
+    # redirection, against a repo whose git dir simply is not named `.git`.
     #
-    # So: reject when the git dir is the `.git` of a directory that is not this
-    # entry (someone else's repo), accept otherwise.
-    if [ "$git_dir" = "${git_dir%/*}/.git" ]; then
-        command echo "$LOG_PREFIX ${entry}: git dir '$git_dir' belongs to '${git_dir%/*}', not to this entry — not repairing" >&2
-        return 1
-    fi
-
-    # A standalone git dir (--separate-git-dir and friends). Accept it: nothing
-    # else claims it, so repairing this entry cannot reach into another project.
-    return 0
+    # The two cases are genuinely indistinguishable FROM THE GIT DIR SIDE, which
+    # is what forces deny-by-default rather than a cleverer probe. Everything
+    # tried, and why each fails:
+    #
+    #   <gitdir>/gitdir back-pointer  — absent for BOTH (it is a `git worktree
+    #                                   add` mechanism; --separate-git-dir and
+    #                                   submodule module dirs have none)
+    #   rev-parse --show-toplevel     — reports the ENTRY for both, planted or not
+    #   core.worktree in the git dir  — unset for both, measured on an empty repo
+    #                                   AND on one converted after it had commits
+    #   basename = '.git'             — the previous rule; misses every git dir
+    #                                   named otherwise (v.git, .git/modules/<n>)
+    #
+    # Denying costs a --separate-git-dir repo its AUTOMATIC discovery, not its
+    # repair: `workspace-fs-health <path>` and an explicit PROJECT_ROOT still
+    # scan it in single scope, where the operator has named the target rather
+    # than the filesystem offering it. That is the right trade for an unattended
+    # job that writes: an unrecognized pointer is refused loudly and a human can
+    # still act, whereas accepting it silently hands an attacker the write.
+    command echo "$LOG_PREFIX ${entry}: git dir '$git_dir' is neither this entry's own .git nor a worktree registered to it — not repairing (scan it directly with 'workspace-fs-health ${entry}' if this is intentional)" >&2
+    return 1
 }
 
 # Emit every git repo to scan, one per line, for a workspace-scope run.

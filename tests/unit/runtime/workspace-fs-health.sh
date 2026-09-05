@@ -500,28 +500,77 @@ test_worktree_with_owner_outside_workspace_still_repaired() {
         "A registered worktree owned by a repo outside the workspace must still be repaired"
 }
 
-test_separate_git_dir_repo_is_repaired() {
-    # `git init --separate-git-dir=<elsewhere>` is a documented, ordinary way to
-    # move .git off a slow or shared mount. It produces a .git FILE and writes NO
-    # registration record — so a back-pointer-ONLY rule refuses it exactly like a
-    # planted pointer, silently dropping a repo the pre-#916 code repaired fine.
+test_separate_git_dir_is_refused_by_discovery() {
+    # DENY-BY-DEFAULT, and this test pins the trade deliberately.
     #
-    # What separates the two is whether the target is already some other
-    # checkout's canonical .git: a planted pointer aims at /elsewhere/.git (owned
-    # by the working tree /elsewhere), while a --separate-git-dir target is
-    # standalone with no working tree beside it.
+    # `git init --separate-git-dir=<elsewhere>` is a legitimate shape, and an
+    # earlier revision accepted it on the theory that a git dir nothing else
+    # claims is safe. That reopened the hole: planting a pointer at such a
+    # victim's git dir made the unattended scan write into it (measured — the
+    # victim's core.ignorecase went from unset to true).
+    #
+    # The two are indistinguishable from the git dir side — no back-pointer for
+    # either, `--show-toplevel` reports the entry for both, `core.worktree` unset
+    # for both — so automatic discovery refuses the shape rather than guessing.
+    # The repo is not unrepairable: single scope still scans it (see
+    # test_separate_git_dir_repaired_in_single_scope), which is the operator
+    # naming the target instead of the filesystem offering it.
     local ws="$TEST_TEMP_DIR/ws-sgd"
     local gitdir="$TEST_TEMP_DIR/gitdirs/repo.git"
     command mkdir -p "$ws/repo" "$TEST_TEMP_DIR/gitdirs"
     git init -q --separate-git-dir="$gitdir" "$ws/repo" >/dev/null 2>&1
-    git -C "$ws/repo" config user.email "test@example.com"
-    git -C "$ws/repo" config user.name "Test User"
     git -C "$ws/repo" config --unset core.ignorecase 2>/dev/null || true
+
+    local output
+    output=$(run_fs_health_workspace "$ws" insensitive)
+
+    assert_equals "unset" "$(get_ignorecase_at "$ws/repo")" \
+        "Automatic discovery must not follow a git dir it cannot attribute to the entry"
+    assert_contains "$output" "workspace-fs-health" \
+        "The refusal should name the single-scope command that still scans it"
+}
+
+test_separate_git_dir_repaired_in_single_scope() {
+    # The other half of that trade: naming the repo explicitly still repairs it,
+    # so deny-by-default costs discovery, not the repair itself.
+    local root="$TEST_TEMP_DIR/sgd-single"
+    local gitdir="$TEST_TEMP_DIR/gitdirs-single/repo.git"
+    command mkdir -p "$root" "$TEST_TEMP_DIR/gitdirs-single"
+    git init -q --separate-git-dir="$gitdir" "$root" >/dev/null 2>&1
+    git -C "$root" config --unset core.ignorecase 2>/dev/null || true
+
+    (
+        export PROJECT_ROOT="$root"
+        export FS_CASE_STATE=insensitive
+        export FS_HEALTH_ENV_FILE
+        bash "$FS_HEALTH_SCRIPT"
+    ) >/dev/null 2>&1
+
+    assert_equals "true" "$(get_ignorecase_at "$root")" \
+        "An explicitly named --separate-git-dir repo must still be repaired"
+}
+
+test_planted_pointer_at_separate_git_dir_victim_is_refused() {
+    # THE REGRESSION the accept-standalone rule caused. A victim repo whose git
+    # dir is not named `.git` was reachable by planting a pointer at it: the old
+    # basename check only caught `/elsewhere/.git`, so `v.git` and
+    # `.git/modules/<name>` sailed through. Measured before the fix: the
+    # victim's core.ignorecase was written.
+    local ws="$TEST_TEMP_DIR/ws-victim"
+    local victim="$TEST_TEMP_DIR/victim"
+    local victim_gitdir="$TEST_TEMP_DIR/victim-gitdirs/v.git"
+    command mkdir -p "$victim" "$TEST_TEMP_DIR/victim-gitdirs" "$ws"
+    git init -q --separate-git-dir="$victim_gitdir" "$victim" >/dev/null 2>&1
+    git --git-dir="$victim_gitdir" config --unset core.ignorecase 2>/dev/null || true
+
+    plant_git_pointer "$ws/evil" "$victim_gitdir"
 
     run_fs_health_workspace "$ws" insensitive >/dev/null
 
-    assert_equals "true" "$(get_ignorecase_at "$ws/repo")" \
-        "A --separate-git-dir repo is legitimate and must still be repaired"
+    local result
+    result=$(git --git-dir="$victim_gitdir" config --get core.ignorecase 2>/dev/null || echo "unset")
+    assert_equals "unset" "$result" \
+        "A pointer aimed at a git dir not named .git must not redirect repairs either"
 }
 
 test_planted_pointer_at_workspace_root_is_refused() {
@@ -1473,7 +1522,9 @@ run_test_with_setup test_symlinked_entry_is_not_followed "A depth-1 symlink is n
 run_test_with_setup test_ordinary_repo_still_repaired "An ordinary repo is still repaired"
 run_test_with_setup test_worktree_with_owner_inside_workspace_still_repaired "A worktree owned from inside the workspace is still repaired"
 run_test_with_setup test_worktree_with_owner_outside_workspace_still_repaired "A worktree owned from OUTSIDE the workspace is still repaired"
-run_test_with_setup test_separate_git_dir_repo_is_repaired "A --separate-git-dir repo is still repaired"
+run_test_with_setup test_separate_git_dir_is_refused_by_discovery "Discovery refuses an unattributable git dir"
+run_test_with_setup test_separate_git_dir_repaired_in_single_scope "Single scope still repairs a --separate-git-dir repo"
+run_test_with_setup test_planted_pointer_at_separate_git_dir_victim_is_refused "A pointer at a non-.git-named victim is refused"
 run_test_with_setup test_planted_pointer_at_workspace_root_is_refused "A planted pointer at the workspace root is refused"
 run_test_with_setup test_ordinary_repo_at_workspace_root_still_repaired "An ordinary repo at the workspace root is still repaired"
 run_test_with_setup test_workspace_root_double_slash_is_refused "WORKSPACE_ROOT=// is refused"
