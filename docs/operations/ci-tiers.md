@@ -73,6 +73,17 @@ the full multi-variant merge-tier cost.
    PR reports success rather than reporting nothing. Preserve that property when
    editing this job — a required context that never reports blocks `main`.
 
+   The **converse** property is equally load-bearing and easy to break while
+   preserving the first: `pr-tier` must report **failure** whenever the tier did
+   not actually certify the PR. It therefore gates on
+   `needs.detect-changes.result` before reading anything else (#909) — a failed
+   `detect-changes` leaves `mode` empty and `build-feature` `skipped`, which
+   would otherwise read as a healthy nothing-to-build and report green over an
+   empty build. Reporting green on no evidence is the #854 failure class, one
+   hop upstream. Both directions are covered offline by
+   [`tests/unit/required-checks.sh`](../../tests/unit/required-checks.sh), which
+   extracts this job's run block and executes it across the upstream states.
+
 ### Cache strategy
 
 Per-feature, per-PR scopes with main fallback:

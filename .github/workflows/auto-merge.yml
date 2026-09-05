@@ -23,7 +23,15 @@ jobs:
         uses: lewagon/wait-on-check-action@e106e5c43e8ca1edea6383a39a01c5ca495fd812 # v1.3.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          check-name: "Run Tests" # Name of the test job
+          # Must match ci.yml's `test` job `name:` EXACTLY. This is a third
+          # copy of that string (the others are ci.yml itself and
+          # .github/required-checks.txt). wait-on-check-action polls until its
+          # timeout for a name that never appears, so a rename applied
+          # everywhere but here is a SILENT STALL of version-update
+          # auto-merges, not an error (#910). tests/unit/required-checks.sh
+          # asserts every check-name literal in .github/workflows/ resolves to
+          # exactly one real job.
+          check-name: "Run Tests"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 30
 
