@@ -361,26 +361,43 @@ mod tests {
 
     // --- state root derivation ---
 
+    /// Absolute paths for these tests, spelled per-platform.
+    ///
+    /// `state_root_from` requires an absolute path, and what counts as one is
+    /// platform-specific: on Windows `/xdg` is NOT absolute (it needs a drive
+    /// prefix, `C:\xdg`), so Unix literals made every one of these tests fail
+    /// on the windows-latest CI leg while the production logic was correct.
+    #[cfg(windows)]
+    const ABS_XDG: &str = r"C:\xdg";
+    #[cfg(windows)]
+    const ABS_HOME: &str = r"C:\home\u";
+    #[cfg(not(windows))]
+    const ABS_XDG: &str = "/xdg";
+    #[cfg(not(windows))]
+    const ABS_HOME: &str = "/home/u";
+
     /// `XDG_STATE_HOME` wins when it is set to a real path.
     #[test]
     fn xdg_state_home_is_used_verbatim() {
-        let root = state_root_from(Some(OsStr::new("/xdg")), Some(OsStr::new("/home/u"))).unwrap();
-        assert_eq!(root, PathBuf::from("/xdg"));
+        let root = state_root_from(Some(OsStr::new(ABS_XDG)), Some(OsStr::new(ABS_HOME))).unwrap();
+        assert_eq!(root, PathBuf::from(ABS_XDG));
     }
 
     /// Unset `XDG_STATE_HOME` falls back to the XDG default under `$HOME`.
     #[test]
     fn home_supplies_the_xdg_default() {
-        let root = state_root_from(None, Some(OsStr::new("/home/u"))).unwrap();
-        assert_eq!(root, PathBuf::from("/home/u/.local/state"));
+        let root = state_root_from(None, Some(OsStr::new(ABS_HOME))).unwrap();
+        // Built with `join`, not a literal, so the separator matches the
+        // platform the assertion runs on.
+        assert_eq!(root, PathBuf::from(ABS_HOME).join(".local").join("state"));
     }
 
     /// An EMPTY `XDG_STATE_HOME` counts as unset, per the XDG spec. Treating
     /// `""` as a path would resolve the scripts directory relative to the cwd.
     #[test]
     fn empty_xdg_state_home_counts_as_unset() {
-        let root = state_root_from(Some(OsStr::new("")), Some(OsStr::new("/home/u"))).unwrap();
-        assert_eq!(root, PathBuf::from("/home/u/.local/state"));
+        let root = state_root_from(Some(OsStr::new("")), Some(OsStr::new(ABS_HOME))).unwrap();
+        assert_eq!(root, PathBuf::from(ABS_HOME).join(".local").join("state"));
     }
 
     /// A RELATIVE value is ignored too — the spec's actual rule, of which empty
@@ -388,9 +405,8 @@ mod tests {
     /// cwd and then hand `docker run -v` a non-absolute source.
     #[test]
     fn relative_xdg_state_home_counts_as_unset() {
-        let root =
-            state_root_from(Some(OsStr::new(".state")), Some(OsStr::new("/home/u"))).unwrap();
-        assert_eq!(root, PathBuf::from("/home/u/.local/state"));
+        let root = state_root_from(Some(OsStr::new(".state")), Some(OsStr::new(ABS_HOME))).unwrap();
+        assert_eq!(root, PathBuf::from(ABS_HOME).join(".local").join("state"));
     }
 
     /// A relative `HOME` is no better than an unset one — the fallback would
@@ -428,7 +444,12 @@ mod tests {
 
         let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
 
-        assert_eq!(dir, tmp.path().join("stibbons/agent-scripts/myproject-agent-1"));
+        // Chained joins, not a "/"-joined literal, so the expected path uses
+        // the platform's own separator (cf. #362).
+        assert_eq!(
+            dir,
+            tmp.path().join("stibbons").join("agent-scripts").join("myproject-agent-1")
+        );
     }
 
     /// AC3: a freshly created directory is exactly 0700 — and so is the shared
