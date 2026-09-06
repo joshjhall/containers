@@ -1,10 +1,16 @@
 //! Individual wizard step implementations using `inquire` prompts.
 
+use containers_common::config::{is_ident_char, is_rel_path_char};
 use containers_common::feature::{Category, Registry};
 use inquire::validator::Validation;
 use inquire::{MultiSelect, Select, Text};
 
 use super::WizardDefaults;
+
+/// Shared message for the two identifier-shaped prompts. Matches
+/// [`is_ident_char`], which `IgorConfig::validate` enforces — the wizard must
+/// not accept what the loader will later reject.
+const IDENT_HELP: &str = "Only letters, digits, '-', '_', and '.' allowed";
 
 /// Step 1: Project configuration — name, username, base image, containers dir.
 pub fn project_config(
@@ -16,12 +22,10 @@ pub fn project_config(
         .with_validator(|input: &str| {
             if input.is_empty() {
                 Ok(Validation::Invalid("Project name is required".into()))
-            } else if input.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+            } else if input.chars().all(is_ident_char) {
                 Ok(Validation::Valid)
             } else {
-                Ok(Validation::Invalid(
-                    "Only alphanumeric characters, hyphens, and underscores allowed".into(),
-                ))
+                Ok(Validation::Invalid(IDENT_HELP.into()))
             }
         })
         .prompt()?;
@@ -29,6 +33,13 @@ pub fn project_config(
     let username = Text::new("Container username:")
         .with_help_message("Non-root user inside the container")
         .with_default(&defaults.username)
+        .with_validator(|input: &str| {
+            if input.chars().all(is_ident_char) {
+                Ok(Validation::Valid)
+            } else {
+                Ok(Validation::Invalid(IDENT_HELP.into()))
+            }
+        })
         .prompt()?;
 
     let base_images = vec![
@@ -48,6 +59,15 @@ pub fn project_config(
     let containers_dir = Text::new("Containers submodule path:")
         .with_help_message("Relative path from project root to containers/")
         .with_default(&defaults.containers_dir)
+        .with_validator(|input: &str| {
+            if input.chars().all(is_rel_path_char) {
+                Ok(Validation::Valid)
+            } else {
+                Ok(Validation::Invalid(
+                    "Only letters, digits, '.', '_', '/', and '-' allowed".into(),
+                ))
+            }
+        })
         .prompt()?;
 
     Ok((project_name, username, base_image, containers_dir))

@@ -160,6 +160,15 @@ pub fn sql_ident(s: &str) -> String {
 /// Blocks until `PostgreSQL` accepts connections (via `pg_isready` inside the
 /// container), up to `timeout_secs`.
 ///
+/// `user` reaches the container through `-e PGUSER=`, as a single argv element,
+/// rather than being interpolated into the `sh -c` script (#924 QW1). It comes
+/// from `.igor.yml`'s `POSTGRES_USER`, and the old spelling embedded it inside
+/// a single-quoted nested shell command, where a `'` in the value closed the
+/// quote and the rest ran as shell syntax. `pg_isready` reads `PGUSER` from the
+/// environment, so nothing else has to change — and this file already escapes
+/// the database name via `sql_ident`/`sql_literal`, so this restores that
+/// discipline for the one value that lacked it.
+///
 /// # Errors
 ///
 /// Propagates the [`DockerError`](super::docker::DockerError) if the wait
@@ -170,10 +179,20 @@ pub fn wait_for_postgres(
     user: &str,
     timeout_secs: u32,
 ) -> Result<(), super::docker::DockerError> {
-    let check = format!(
-        "timeout {timeout_secs} sh -c 'until pg_isready -U {user} 2>/dev/null; do sleep 1; done'"
-    );
-    docker.run(&["exec", container, "sh", "-c", &check])?;
+    let pg_user = format!("PGUSER={user}");
+    let timeout = timeout_secs.to_string();
+    // The script is now a constant: every value that varies is an argv element.
+    docker.run(&[
+        "exec",
+        "-e",
+        &pg_user,
+        container,
+        "timeout",
+        &timeout,
+        "sh",
+        "-c",
+        "until pg_isready 2>/dev/null; do sleep 1; done",
+    ])?;
     Ok(())
 }
 
@@ -219,6 +238,33 @@ mod tests {
             per_agent_db: true,
             ..ServiceConfig::default()
         }
+    }
+
+    /// #924 QW1: a `POSTGRES_USER` carrying shell metacharacters reaches
+    /// `pg_isready` as one argv element via `-e PGUSER=`, never as text inside
+    /// the `sh -c` script.
+    ///
+    /// The old spelling built `sh -c 'until pg_isready -U {user} ...'`, so a
+    /// `'` in the value closed the quote and everything after it became shell
+    /// syntax. Asserting on the argv (not just on the absence of a substring)
+    /// is what distinguishes "quoted correctly" from "not interpolated at all".
+    #[test]
+    fn wait_for_postgres_passes_user_out_of_band() {
+        let docker = MockDocker::new();
+        let hostile = "bob'; touch /tmp/pwned; #";
+
+        wait_for_postgres(&docker, "myproject-postgres-1", hostile, 30).unwrap();
+
+        let calls = docker.calls.borrow();
+        let argv = calls.first().expect("one docker exec call");
+        // The value rides in its own argv element, adjacent to `-e`.
+        let e_at = argv.iter().position(|a| a == "-e").expect("-e flag");
+        assert_eq!(argv[e_at + 1], format!("PGUSER={hostile}"));
+        // ...and the script element is a constant that never mentions the user.
+        let script = argv.last().expect("script element");
+        assert!(!script.contains("bob"), "user must not reach the script: {script}");
+        assert!(!script.contains("-U"), "no -U interpolation left: {script}");
+        assert!(script.contains("pg_isready"), "still waits on pg_isready: {script}");
     }
 
     #[test]

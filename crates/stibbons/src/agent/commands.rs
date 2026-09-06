@@ -7,7 +7,6 @@
 //! and a captured buffer — no real Docker or stdout needed.
 
 use std::io::{IsTerminal, Write};
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use super::context::{
@@ -16,15 +15,25 @@ use super::context::{
 };
 use super::db::{per_agent_db_url, provision_per_agent_dbs};
 use super::docker::DockerRunner;
+use super::scripts_dir;
 
 /// Boxed error alias matching the stibbons CLI convention (`main.rs`).
 type CmdResult = Result<(), Box<dyn std::error::Error>>;
 
-/// Embedded agent scripts, written to a host directory and mounted read-only
-/// into the container at `/opt/agent-scripts`.
+/// Embedded agent scripts, written by [`scripts_dir::prepare_scripts_dir`] to a
+/// user-private host directory and mounted read-only into the container at
+/// `/opt/agent-scripts`.
 const AGENT_ENTRYPOINT_SH: &str = include_str!("scripts/agent-entrypoint.sh");
 const AGENT_INIT_SH: &str = include_str!("scripts/agent-init.sh");
 const AGENT_START_SH: &str = include_str!("scripts/agent-start.sh");
+
+/// The scripts as `prepare_scripts_dir` wants them: `(file name, contents)`.
+/// `agent-entrypoint.sh` is the container's command; it runs the other two.
+const AGENT_SCRIPTS: [(&str, &str); 3] = [
+    ("agent-entrypoint.sh", AGENT_ENTRYPOINT_SH),
+    ("agent-init.sh", AGENT_INIT_SH),
+    ("agent-start.sh", AGENT_START_SH),
+];
 
 /// `stibbons agent build` — build the agent image from feature/version args.
 ///
@@ -89,6 +98,26 @@ pub fn run_build(
     Ok(())
 }
 
+/// Best-effort probe that agent `suffix`'s first worktree exists on the host.
+///
+/// Mirrors the Go original: the result is advisory and every failure is
+/// ignored — the bind mounts assembled in [`run_start`] are authoritative.
+fn probe_first_worktree(ctx: &AgentContext, docker: &dyn DockerRunner, suffix: &str) {
+    let base = ctx.base_dir.display().to_string();
+    let first_worktree =
+        ctx.base_dir.join(format!("{}-{}", ctx.repos[0], suffix)).display().to_string();
+    let _ = docker.run(&[
+        "run",
+        "--rm",
+        "-v",
+        &format!("{base}:{base}:ro"),
+        "alpine",
+        "test",
+        "-d",
+        &first_worktree,
+    ]);
+}
+
 /// Options for [`run_start`].
 #[derive(Debug, Clone, Copy)]
 pub struct StartOptions {
@@ -138,23 +167,14 @@ pub fn run_start(
         .into());
     }
 
-    // Best-effort worktree probe (mirrors the Go original — the result is
-    // advisory and failures are ignored; the mounts below are authoritative).
-    let base = ctx.base_dir.display().to_string();
-    let first_worktree =
-        ctx.base_dir.join(format!("{}-{}", ctx.repos[0], suffix)).display().to_string();
-    let _ = docker.run(&[
-        "run",
-        "--rm",
-        "-v",
-        &format!("{base}:{base}:ro"),
-        "alpine",
-        "test",
-        "-d",
-        &first_worktree,
-    ]);
+    probe_first_worktree(ctx, docker, &suffix);
 
-    let scripts_dir = extract_agent_scripts()?;
+    // User-private 0700 directory keyed by container name, NOT a PID-named path
+    // under the shared temp dir (#924, CWE-377) — it is mounted alongside
+    // docker.sock below, so anyone able to write into it gets code execution
+    // there.
+    let scripts_dir =
+        scripts_dir::prepare_scripts_dir(ctx.state_root.as_deref(), &name, &AGENT_SCRIPTS)?;
 
     // Create the network if it doesn't already exist.
     ensure_network(docker, out, &ctx.network)?;
@@ -470,48 +490,6 @@ fn column_widths(rows: &[[String; 4]]) -> [usize; 4] {
         }
     }
     widths
-}
-
-/// Writes the embedded agent scripts to a host directory and returns its path.
-///
-/// The directory is intentionally NOT cleaned up: it is mounted into the
-/// container and must outlive this process, exactly like the Go original.
-fn extract_agent_scripts() -> std::io::Result<PathBuf> {
-    let dir = std::env::temp_dir().join(format!("stibbons-agent-scripts-{}", std::process::id()));
-    std::fs::create_dir_all(&dir)?;
-
-    for (name, body) in [
-        ("agent-entrypoint.sh", AGENT_ENTRYPOINT_SH),
-        ("agent-init.sh", AGENT_INIT_SH),
-        ("agent-start.sh", AGENT_START_SH),
-    ] {
-        let path = dir.join(name);
-        std::fs::write(&path, body)?;
-        set_executable(&path)?;
-    }
-
-    Ok(dir)
-}
-
-/// Marks a file executable (`0o755`) on Unix. A no-op on other platforms — the
-/// scripts only ever run inside the Linux agent container they're mounted into,
-/// so the host's mode bits are irrelevant off-Unix (keeps the Windows build green).
-//
-// `allow`, not `expect`: on non-Unix the body reduces to `Ok(())` and clippy's
-// `missing_const_for_fn` / `unnecessary_wraps` fire, but on Unix they do not —
-// an `#[expect]` would then be unfulfilled (itself a `-D warnings` error there).
-#[allow(clippy::missing_const_for_fn, clippy::unnecessary_wraps)]
-fn set_executable(path: &std::path::Path) -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))?;
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-    }
-    Ok(())
 }
 
 /// Polls `check` until it returns true or `deadline` passes, with a braille

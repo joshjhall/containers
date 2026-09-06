@@ -22,7 +22,13 @@ pub fn load_ctx(mut cfg: IgorConfig) -> (AgentContext, TempDir) {
     cfg.project.working_dir = Some(project_dir.to_str().unwrap().to_string());
     let cfg_path = tmp.path().join(".igor.yml");
     cfg.save(&cfg_path).unwrap();
-    let ctx = AgentContext::load(&cfg_path).unwrap();
+    let mut ctx = AgentContext::load(&cfg_path).unwrap();
+    // Redirect the agent-scripts state root (#924) into this test's own temp
+    // dir. `load` resolved it from the real `$XDG_STATE_HOME`/`$HOME`, and
+    // `run_start` writes there for real — so without this every `run_start`
+    // test would litter the developer's home directory AND collide with the
+    // other tests, which all use the same container name.
+    ctx.state_root = Some(tmp.path().join("state"));
     (ctx, tmp)
 }
 

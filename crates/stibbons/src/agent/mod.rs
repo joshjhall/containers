@@ -12,6 +12,8 @@
 //! - [`context`] — [`AgentContext`](context::AgentContext) config resolution and
 //!   container-naming/validation helpers.
 //! - [`db`] — per-agent `PostgreSQL` provisioning.
+//! - [`scripts_dir`] — the user-private host directory the agent scripts are
+//!   written to and bind-mounted from (#924).
 //! - [`commands`] — the seven subcommand bodies.
 //! - [`worktree`] — the `stibbons worktree` create/remove command group.
 //!
@@ -24,6 +26,7 @@ pub mod context;
 pub mod db;
 pub mod docker;
 pub mod git;
+pub mod scripts_dir;
 #[cfg(test)]
 pub mod test_support;
 pub mod worktree;
