@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 70fff190-ee3f-408b-b8e8-d31247eeaa88
-  modified: 2026-08-31T19:00:16.930Z
+  modified: 2026-09-04T04:06:41.627Z
 ---
 
 Post-merge teardown of a golem worktree can leave `.worktrees/issue-N/` behind
@@ -51,6 +51,29 @@ Two distinct symptoms, both cosmetic once diagnosed:
 
    Filed as a suggested improvement on #864: teardown should name the holding
    PIDs instead of leaving the operator to find them. Related: [[stale-symlink-attrs-virtiofs]].
+
+   **`lsof` clean + deletes still failing is a DIFFERENT symptom — stop, do not
+   retry** (observed 2026-09-04, PR #896). When `lsof +D` on the whole worktree
+   returns **0** and `rm -rf` still fails EBADF on ~2000 `target/debug/incremental`
+   files, there is no holder to kill: it is the FUSE incoherency of
+   [[fuse-scratch-breaks-write-then-read]] / [[results-dir-fuse-incoherent]], not
+   a held fd. The tell is that repeated `rm -rf` fails on the *identical* count
+   both times, and `du -sh` then reports **0** for a directory `find` still lists
+   1966 files in — the write side reports success while the read side disagrees.
+   Retrying does not converge.
+
+   Finish the **git-level** teardown, which is the part that matters, and leave
+   the shell: `git worktree prune` + `git branch -D feature/issue-N`. Then verify
+   the work is actually on `origin/main` — **`git fetch` FIRST**, since the local
+   ref is stale right after a merge and will not show your own squash commit; a
+   local `origin/main` that lacks it means the ref is behind, not that the merge
+   failed. The artifacts-only residue harms nothing and clears on the next
+   container restart.
+
+   Same session also hit this on `just db-validate`: `rm -rf` of a stale
+   `target/release/build/<pkg>-<hash>` dir reported success while the directory
+   persisted, so cargo kept failing `File exists (os error 17)`. Build to a target
+   dir off the FUSE mount (`CARGO_TARGET_DIR=/tmp/...`) rather than fighting it.
 
 Also note `gh pr merge --squash --delete-branch` aborts partway in a golem
 worktree: the merge succeeds server-side but the local branch-switch dies on
