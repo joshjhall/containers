@@ -2749,6 +2749,7 @@ dependencies = [
  "containers-common",
  "inquire",
  "octarine",
+ "rustix",
  "serde",
  "serde_json",
  "serde_yaml",

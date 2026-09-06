@@ -156,6 +156,13 @@ pub struct AgentContext {
     /// Empty ⇒ let the emitter apply its own default (2s). Only forwarded
     /// alongside a non-empty `golem_event_sinks`.
     pub golem_event_sink_timeout: String,
+    /// User-private XDG state root the agent scripts directory is created under
+    /// (#924). `None` when neither `XDG_STATE_HOME` nor `HOME` is set, which
+    /// `agent start` reports as an error rather than falling back to a shared
+    /// temp directory. Resolved from the environment in [`AgentContext::load`],
+    /// like `golem_event_sinks`, so `from_config` stays pure and tests can point
+    /// it somewhere harmless.
+    pub state_root: Option<PathBuf>,
 }
 
 impl AgentContext {
@@ -186,6 +193,10 @@ impl AgentContext {
         ctx.golem_event_sinks = std::env::var("GOLEM_EVENT_SINKS").unwrap_or_default();
         ctx.golem_event_sink_timeout =
             std::env::var("GOLEM_EVENT_SINK_TIMEOUT").unwrap_or_default();
+        // Same reasoning as the sinks above: environment, not project config, so
+        // it is read at this I/O boundary. `None` here is not fatal — only
+        // `agent start` needs it, and it reports the failure itself (#924).
+        ctx.state_root = super::scripts_dir::state_root().ok();
         Ok(ctx)
     }
 
@@ -266,6 +277,10 @@ impl AgentContext {
             // is pure, so it defaults to unset (file-feed-only, no HTTP fan-out).
             golem_event_sinks: String::new(),
             golem_event_sink_timeout: String::new(),
+            // Also layered on by `load`, for the same purity reason. `None` here
+            // means `agent start` would refuse rather than fall back to a shared
+            // temp directory (#924) — the safe default for a pure constructor.
+            state_root: None,
             cfg,
         }
     }

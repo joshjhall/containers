@@ -33,6 +33,10 @@ tokio = { version = "1", features = ["full"] }
 indexmap = { version = "2", features = ["serde"] }
 inquire = "0.9"
 tempfile = "3"
+# `process` only, for getuid() — the workspace forbids unsafe_code, so the
+# libc equivalent (an unsafe fn) is unavailable. rustix is already in the tree
+# via tempfile, so this is a feature union rather than a new dependency.
+rustix = { version = "1", features = ["process"] }
 sha2 = "0.11"
 semver = { version = "1", features = ["serde"] }
 thiserror = "2"
