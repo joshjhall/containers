@@ -626,6 +626,7 @@ COPY lib/runtime/commands/setup-gh /usr/local/bin/setup-gh
 COPY lib/runtime/commands/setup-glab /usr/local/bin/setup-glab
 COPY lib/runtime/commands/recover-entrypoint /usr/local/bin/recover-entrypoint
 COPY lib/runtime/commands/fix-docker-socket /usr/local/bin/fix-docker-socket
+COPY lib/runtime/commands/unwedge-worktree /usr/local/bin/unwedge-worktree
 # Fixed-purpose privileged chown wrappers for command-scoped sudo (issue #675).
 # Installed to /usr/local/sbin — they hardcode their /cache and /run targets, so
 # the scoped sudoers grant can allow them without granting a bare `chown`.
@@ -634,6 +635,7 @@ COPY lib/runtime/commands/reconcile-run-owner /usr/local/sbin/reconcile-run-owne
 RUN chmod 755 /usr/local/bin/_source-env-secrets /usr/local/bin/_wait-for-op-cache \
     /usr/local/bin/setup-git /usr/local/bin/setup-gh /usr/local/bin/setup-glab \
     /usr/local/bin/recover-entrypoint /usr/local/bin/fix-docker-socket \
+    /usr/local/bin/unwedge-worktree \
     /usr/local/sbin/reconcile-cache-owner /usr/local/sbin/reconcile-run-owner
 
 # Print TOFU download summary (if any Tier 4 fallbacks occurred during build)

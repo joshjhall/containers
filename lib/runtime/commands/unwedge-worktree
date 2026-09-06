@@ -1,0 +1,138 @@
+#!/bin/bash
+# unwedge-worktree — free a worktree path whose entries the filesystem refuses
+# to unlink, by renaming the tree aside instead of deleting it.
+#
+# THE WEDGE IS A VIRTIOFS FAULT, NOT A BINDFS ONE. This is the load-bearing
+# fact, and getting it wrong sends the next reader to refactor the wrong layer.
+# Measured on the #849/#850 remnants: unmounting the bindfs overlay in a private
+# mount namespace (`unshare -m` + `umount -l /workspace/containers`) leaves the
+# entries failing IDENTICALLY on the bare virtiofs beneath, and a freshly
+# established `mount -t virtiofs` fails the same way — so it is not a
+# container-side dentry cache either (`drop_caches` is unavailable; /proc/sys is
+# read-only). The host virtiofsd has lost the inode mapping: the name survives
+# in `readdir` while `stat`/`unlink`/`rename` on it all return EBADF. No
+# in-container call can repair that, which is why this command does not try to
+# delete the entries at all.
+#
+# WHAT STILL WORKS is the whole basis for this command: only the PRE-EXISTING
+# entries are wedged. The containing directory renames fine, and new files can
+# be created and removed inside it normally. So the tree can always be moved
+# aside, which frees the `issue-N` path for immediate reuse — the outcome a
+# caller actually needs — even though the bytes are not reclaimed here.
+#
+# NOTHING IS RECLAIMED BY THIS COMMAND, and it must not imply otherwise.
+# Summing live file sizes across both observed remnants gives 0 bytes: every
+# wedged entry is a name with no reachable inode. The multi-GB figure operators
+# see is host-side space that only a host unlink or a Docker Desktop VM restart
+# releases. This command frees a PATH, not disk.
+#
+# Usage:
+#   unwedge-worktree <path>          rename <path> aside, print the new location
+#   unwedge-worktree --list <dir>    list quarantined trees under <dir>
+#
+# Exit: 0 on success or when <path> is already absent (idempotent), 2 on usage
+# error, 1 when the rename itself fails.
+set -uo pipefail
+
+readonly QUARANTINE_PREFIX='.wedged-'
+
+usage() {
+    command echo "usage: unwedge-worktree <path>" >&2
+    command echo "       unwedge-worktree --list <dir>" >&2
+    exit 2
+}
+
+# list_quarantined <dir> — report trees this command has moved aside.
+#
+# Reports the ENTRY COUNT, never a byte total. `du` reads 0 on a wedged tree
+# (the inodes are gone), so a size column here would print "0" beside a
+# directory the operator was told is consuming gigabytes, and read as a denial
+# that the problem exists. The count is a fact this command can actually
+# establish from `readdir` alone, which is the one call that still works.
+list_quarantined() {
+    local dir="$1" entry count found=0
+
+    [ -d "$dir" ] || {
+        command echo "unwedge-worktree: no such directory: $dir" >&2
+        return 2
+    }
+
+    for entry in "$dir"/"$QUARANTINE_PREFIX"*; do
+        [ -e "$entry" ] || continue
+        found=1
+        # 2>/dev/null: a wedged subtree makes find emit EBADF noise per entry
+        # while still counting the names correctly.
+        count="$(command find "$entry" -mindepth 1 2>/dev/null | command wc -l | command tr -d '[:space:]')"
+        command echo "  $entry ($count entries)"
+    done
+
+    if [ "$found" -eq 0 ]; then
+        command echo "  no quarantined trees under $dir"
+    fi
+    return 0
+}
+
+case "${1:-}" in
+    '') usage ;;
+    --list)
+        [ "$#" -eq 2 ] || usage
+        list_quarantined "$2"
+        exit $?
+        ;;
+    -*) usage ;;
+esac
+
+[ "$#" -eq 1 ] || usage
+
+target="$1"
+
+# Already gone is SUCCESS, not an error: teardown callers run this
+# unconditionally, and a path that does not exist is the state they wanted.
+if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+    command echo "unwedge-worktree: $target does not exist — nothing to do"
+    exit 0
+fi
+
+# Refuse a symlink outright. Renaming one moves the LINK, which neither unwedges
+# anything nor is what a caller pointing at a worktree meant; and following it
+# would quarantine a tree somewhere else entirely.
+if [ -L "$target" ]; then
+    command echo "unwedge-worktree: $target is a symlink, not a wedged directory" >&2
+    exit 2
+fi
+
+if [ ! -d "$target" ]; then
+    command echo "unwedge-worktree: $target is not a directory" >&2
+    exit 2
+fi
+
+# Resolve the parent via `pwd -P` rather than string-slicing $target, so a
+# trailing slash, `.`, or `..` component cannot land the quarantine somewhere
+# unintended.
+parent="$(cd "$(command dirname "$target")" 2>/dev/null && command pwd -P)" || {
+    command echo "unwedge-worktree: cannot resolve parent of $target" >&2
+    exit 1
+}
+base="$(command basename "$target")"
+
+# A distinct destination per attempt: $$ alone collides when the same wedged
+# path is quarantined twice in one second by different runs, and a collision
+# would rename the new tree INTO the old one rather than beside it.
+dest="$parent/$QUARANTINE_PREFIX$base-$(command date +%Y%m%d%H%M%S)-$$"
+if [ -e "$dest" ]; then
+    command echo "unwedge-worktree: quarantine path $dest already exists" >&2
+    exit 1
+fi
+
+if ! command mv "$target" "$dest" 2>/dev/null; then
+    command echo "unwedge-worktree: could not move $target aside" >&2
+    command echo "  The directory itself is unwritable or its parent refuses the rename." >&2
+    exit 1
+fi
+
+command echo "unwedge-worktree: moved $target -> $dest"
+command echo "  $target is free for reuse."
+command echo "  The quarantined tree holds no reclaimable space in this container:"
+command echo "  its entries have no reachable inodes (a host-side virtiofs fault)."
+command echo "  Host disk is released by removing it on the host, or by restarting the Docker VM."
+exit 0

@@ -106,3 +106,4 @@
 - [Discriminate rule has no fixed point on scaffolding](discriminate-rule-has-no-fixed-point-on-scaffolding.md) — #900→#903→#907→#913: each round's guards became the next round's undriven branches; break it by deleting machinery (committed fixtures, literal expected values), not by driving one more layer
 - [Zero checks is not green](zero-checks-is-not-green.md) — check-runs can't tell "never fired" from "delayed"; query actions/runs?branch=; zero effective checks (total minus skipping) past grace = failing (#854)
 - [Fine-grained PAT lacks admin](fine-grained-pat-lacks-admin.md) — repo-settings writes 403 despite permissions.admin=true; that flag is the account role, not the token grant (#904)
+- [virtiofs EBADF is not bindfs](virtiofs-ebadf-not-bindfs.md) — wedged worktree entries fail on the lower virtiofs too; quarantine-by-rename works, artifacts hold 0 live bytes
