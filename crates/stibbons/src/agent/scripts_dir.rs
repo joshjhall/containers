@@ -84,9 +84,12 @@ const SCRIPT_MODE: u32 = 0o755;
 /// sets `unsafe_code = "forbid"`, which cannot be lifted locally. Passing the
 /// values in also keeps the precedence rule itself pure.
 ///
-/// An empty value counts as unset, per the XDG spec ("If `$XDG_STATE_HOME` is
-/// either not set or empty…") — treating `""` as a path would resolve the
-/// directory relative to the current working directory.
+/// An empty **or relative** value counts as unset, per the XDG spec: it says a
+/// value that "is not an absolute path… should be considered invalid and
+/// ignored", and empty is the degenerate case of that one rule. Both fail the
+/// same way if honored — `""` and `state` each resolve against the current
+/// working directory, littering the cwd and then handing `docker run -v` a
+/// non-absolute source it rejects with a confusing error.
 ///
 /// There is intentionally **no** `temp_dir()` fallback. A shared-`/tmp`
 /// fallback is exactly the CWE-377 exposure #924 fixed, and it would reappear
@@ -96,10 +99,11 @@ fn state_root_from(
     xdg_state_home: Option<&OsStr>,
     home: Option<&OsStr>,
 ) -> Result<PathBuf, ScriptsDirError> {
-    if let Some(dir) = xdg_state_home.filter(|v| !v.is_empty()) {
+    let usable = |v: &&OsStr| !v.is_empty() && Path::new(v).is_absolute();
+    if let Some(dir) = xdg_state_home.filter(usable) {
         return Ok(PathBuf::from(dir));
     }
-    if let Some(home) = home.filter(|v| !v.is_empty()) {
+    if let Some(home) = home.filter(usable) {
         return Ok(PathBuf::from(home).join(".local").join("state"));
     }
     Err(ScriptsDirError::NoStateRoot)
@@ -133,6 +137,41 @@ pub fn state_root() -> Result<PathBuf, ScriptsDirError> {
 /// Off Unix there is no uid or mode to inspect; the directory is accepted as-is
 /// (see the module note on why that is safe there).
 fn ensure_private_dir(path: &Path) -> Result<(), ScriptsDirError> {
+    ensure_owned_dir(path)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mode =
+            std::fs::symlink_metadata(path).map_err(|e| io_err(path, e))?.permissions().mode()
+                & 0o777;
+        if mode != DIR_MODE {
+            return Err(unsafe_path(
+                path,
+                format!(
+                    "has mode {mode:04o}, expected {DIR_MODE:04o} \
+                     (remove it and re-run if it is a leftover)"
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// The ownership half of [`ensure_private_dir`]: a real directory, not a
+/// symlink, owned by the current user — with no assertion about its mode.
+///
+/// Split out for the ancestors (`<root>/stibbons`, `<root>/stibbons/
+/// agent-scripts`), which are created by `create_dir_all` and so may
+/// legitimately pre-exist at whatever mode the umask gave them. They still must
+/// not be a symlink or someone else's directory: `create_dir_all` adopts a
+/// pre-existing path whatever its owner — the exact behavior this module exists
+/// to stop — and a symlink planted at an ancestor would otherwise be followed,
+/// letting an attacker relocate the whole tree even though the leaf check
+/// passes.
+fn ensure_owned_dir(path: &Path) -> Result<(), ScriptsDirError> {
     let meta = std::fs::symlink_metadata(path).map_err(|e| io_err(path, e))?;
 
     if meta.file_type().is_symlink() {
@@ -145,7 +184,6 @@ fn ensure_private_dir(path: &Path) -> Result<(), ScriptsDirError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        use std::os::unix::fs::PermissionsExt;
 
         let uid = rustix::process::getuid().as_raw();
         if meta.uid() != uid {
@@ -153,11 +191,6 @@ fn ensure_private_dir(path: &Path) -> Result<(), ScriptsDirError> {
                 path,
                 format!("owned by uid {}, not the current uid {uid}", meta.uid()),
             ));
-        }
-
-        let mode = meta.permissions().mode() & 0o777;
-        if mode != DIR_MODE {
-            return Err(unsafe_path(path, format!("has mode {mode:04o}, expected {DIR_MODE:04o}")));
         }
     }
 
@@ -262,9 +295,29 @@ pub fn prepare_scripts_dir(
             format!("container name {container_name:?} is not a single path component"),
         ));
     }
-    let parent = state_root.join("stibbons").join("agent-scripts");
-    std::fs::create_dir_all(&parent).map_err(|e| io_err(&parent, e))?;
-    // Lock down the shared parent too: it is what makes the umask window in
+    // Create the ancestors one level at a time, checking ownership at each.
+    // A single `create_dir_all` over the whole chain would adopt a pre-existing
+    // `<root>/stibbons` whatever its owner — the behavior that caused #924 —
+    // and `set_mode` follows symlinks, so a link planted at an ancestor would
+    // be chmod'd and written through even though the leaf check passes. That
+    // matters whenever the state root is shared (a CI runner pointing
+    // XDG_STATE_HOME somewhere common), which is exactly where the original
+    // vulnerability lived.
+    // The state root itself may not exist yet (a fresh `$HOME/.local/state`),
+    // and it is not ours to police — it is a standard shared location whose
+    // intermediate dirs belong to the user's environment, not to this tool.
+    // Only the two directories this module owns get the ownership check.
+    std::fs::create_dir_all(state_root).map_err(|e| io_err(state_root, e))?;
+    let mut parent = state_root.to_path_buf();
+    for segment in ["stibbons", "agent-scripts"] {
+        parent.push(segment);
+        if std::fs::symlink_metadata(&parent).is_ok() {
+            ensure_owned_dir(&parent)?;
+        } else {
+            std::fs::create_dir(&parent).map_err(|e| io_err(&parent, e))?;
+        }
+    }
+    // Lock down the shared parent: it is what makes the umask window in
     // `create_private_dir` unobservable, and it hides which agents exist.
     set_mode(&parent, DIR_MODE)?;
 
@@ -328,6 +381,24 @@ mod tests {
     fn empty_xdg_state_home_counts_as_unset() {
         let root = state_root_from(Some(OsStr::new("")), Some(OsStr::new("/home/u"))).unwrap();
         assert_eq!(root, PathBuf::from("/home/u/.local/state"));
+    }
+
+    /// A RELATIVE value is ignored too — the spec's actual rule, of which empty
+    /// is just the degenerate case. Honoring `state` would resolve against the
+    /// cwd and then hand `docker run -v` a non-absolute source.
+    #[test]
+    fn relative_xdg_state_home_counts_as_unset() {
+        let root =
+            state_root_from(Some(OsStr::new(".state")), Some(OsStr::new("/home/u"))).unwrap();
+        assert_eq!(root, PathBuf::from("/home/u/.local/state"));
+    }
+
+    /// A relative `HOME` is no better than an unset one — the fallback would
+    /// otherwise build the relative path `.local/state`.
+    #[test]
+    fn relative_home_counts_as_unset() {
+        let err = state_root_from(None, Some(OsStr::new("relative/home"))).unwrap_err();
+        assert!(matches!(err, ScriptsDirError::NoStateRoot), "{err}");
     }
 
     /// An empty `HOME` is unset too — otherwise the fallback would build the
@@ -477,6 +548,39 @@ mod tests {
             assert!(err.to_string().contains("not a single path component"), "{name:?}: {err}");
         }
         assert!(!tmp.path().join("escape-agent-1").exists(), "nothing written outside the tree");
+    }
+
+    /// An ANCESTOR symlink is refused, not followed. `create_dir_all` would
+    /// have walked through it and `set_mode` would have chmod'd its target, so
+    /// the scripts would be written into an attacker-controlled directory even
+    /// though the leaf itself checks out. Only reachable on a shared state
+    /// root, which is the setting the original CWE-377 bug lived in.
+    #[cfg(unix)]
+    #[test]
+    fn ancestor_symlink_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let elsewhere = tmp.path().join("attacker-owned");
+        std::fs::create_dir(&elsewhere).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, tmp.path().join("stibbons")).unwrap();
+
+        let err = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts())
+            .expect_err("must not follow an ancestor symlink");
+
+        assert!(err.to_string().contains("is a symlink"), "{err}");
+        assert!(!elsewhere.join("agent-scripts").exists(), "nothing created through the link");
+    }
+
+    /// An ancestor that already exists as our own directory is reused, whatever
+    /// its mode — the ordinary case, since `<root>/stibbons` is created at the
+    /// umask and shared with anything else that may live under it.
+    #[test]
+    fn preexisting_ancestor_is_reused() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("stibbons")).unwrap();
+
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+
+        assert!(dir.join("agent-entrypoint.sh").exists());
     }
 
     /// Two agents get separate directories, so starting one container never
