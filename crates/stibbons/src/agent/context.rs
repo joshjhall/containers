@@ -185,6 +185,14 @@ impl AgentContext {
         for repo in &ctx.repos {
             validate_repo_name(repo)?;
         }
+        // The project name needs the same allow-list, and needs it
+        // UNCONDITIONALLY (#924). It only lands in `ctx.repos` above when
+        // `agents.repos` is empty, so a config that sets an explicit (valid)
+        // repo list left the name unchecked — while it still flows through
+        // `container_name` into `Path::join` in `scripts_dir`, where `..` and
+        // `/` are real components. That is the traversal `validate_repo_name`'s
+        // own docstring calls out, reached by a second path.
+        validate_repo_name(&ctx.project)?;
         // Golem event-sink config is orchestrator/session topology, not committed
         // project config, so it is read from the host environment at this I/O
         // boundary rather than `.igor.yml`. `from_config` stays pure/filesystem-

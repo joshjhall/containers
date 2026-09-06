@@ -21,6 +21,8 @@ use std::path::Path;
 
 use shell_words::quote;
 
+use crate::error::LuggageError;
+
 /// Default install user when `$USERNAME` is unset. Matches the Dockerfile
 /// default and the user `lib/features/rust.sh` falls back to.
 pub const DEFAULT_USERNAME: &str = "vscode";
@@ -94,14 +96,44 @@ fn passwd_has_user(passwd: &str, user: &str) -> bool {
 /// `env` entries are emitted as `export KEY=<quoted-value>` lines before
 /// the body so the spawned shell sees them. `body` is inserted verbatim;
 /// callers must already have shell-quoted arguments inside it.
-#[must_use]
-pub fn su_command(user: &str, env: &BTreeMap<String, String>, body: &str) -> Vec<String> {
+///
+/// Values are `quote`d, but a key cannot be — `export` needs a bare identifier
+/// — so keys are validated instead (#924 QW3). They come from catalog
+/// `invoke.env` / `cache_dirs`, so a malformed row would otherwise emit a
+/// broken or injected `export` that fails obscurely inside the shell.
+///
+/// # Errors
+///
+/// [`LuggageError::Catalog`] when a key is not a POSIX identifier
+/// (`^[A-Za-z_][A-Za-z0-9_]*$`).
+pub fn su_command(
+    user: &str,
+    env: &BTreeMap<String, String>,
+    body: &str,
+) -> Result<Vec<String>, LuggageError> {
     let mut payload = String::new();
     for (k, v) in env {
+        if !is_posix_identifier(k) {
+            return Err(LuggageError::Catalog(format!(
+                "env key {k:?} is not a POSIX identifier ([A-Za-z_][A-Za-z0-9_]*)"
+            )));
+        }
         let _ = write!(payload, "export {k}={}; ", quote(v));
     }
     payload.push_str(body);
-    vec!["su".into(), "-".into(), user.into(), "-c".into(), payload]
+    Ok(vec!["su".into(), "-".into(), user.into(), "-c".into(), payload])
+}
+
+/// True when `s` is a POSIX shell identifier: a leading letter or underscore,
+/// then letters, digits, or underscores. ASCII-only on purpose — `export` in
+/// `sh` accepts nothing wider.
+fn is_posix_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// Build a `chown -R <user>:<user> <path>` argv.
@@ -144,7 +176,7 @@ mod tests {
 
     #[test]
     fn su_command_emits_user_and_payload() {
-        let argv = su_command("vscode", &BTreeMap::new(), "echo hi");
+        let argv = su_command("vscode", &BTreeMap::new(), "echo hi").unwrap();
         assert_eq!(argv, vec!["su", "-", "vscode", "-c", "echo hi"]);
     }
 
@@ -153,7 +185,7 @@ mod tests {
         let mut env = BTreeMap::new();
         env.insert("CARGO_HOME".to_owned(), "/cache/cargo".to_owned());
         env.insert("RUSTUP_HOME".to_owned(), "/cache/rustup".to_owned());
-        let argv = su_command("vscode", &env, "rustup-init -y");
+        let argv = su_command("vscode", &env, "rustup-init -y").unwrap();
         let payload = &argv[4];
         // BTreeMap iterates in sorted order — CARGO_HOME comes before RUSTUP_HOME.
         let cargo_idx = payload.find("CARGO_HOME").unwrap();
@@ -168,8 +200,50 @@ mod tests {
     fn su_command_quotes_env_values_with_spaces() {
         let mut env = BTreeMap::new();
         env.insert("WEIRD".to_owned(), "value with spaces".to_owned());
-        let argv = su_command("vscode", &env, "true");
+        let argv = su_command("vscode", &env, "true").unwrap();
         assert!(argv[4].contains("'value with spaces'"));
+    }
+
+    /// #924 QW3: a key carrying shell syntax is rejected outright. The value is
+    /// `quote`d, but `export` needs a bare identifier so the key cannot be —
+    /// meaning a bad catalog row would otherwise inject `; rm -rf /` straight
+    /// into the payload.
+    #[test]
+    fn su_command_rejects_env_key_with_shell_metacharacters() {
+        let mut env = BTreeMap::new();
+        env.insert("FOO; rm -rf /".to_owned(), "x".to_owned());
+
+        let err = su_command("vscode", &env, "true").expect_err("must reject");
+
+        assert!(matches!(err, LuggageError::Catalog(_)), "catalog-error class: {err}");
+        assert!(err.to_string().contains("POSIX identifier"), "{err}");
+    }
+
+    /// A leading digit is not a valid identifier either — `export 1FOO=x` is a
+    /// shell syntax error, so this fails loudly at the catalog instead of
+    /// obscurely inside `su`.
+    #[test]
+    fn su_command_rejects_env_key_with_leading_digit() {
+        let mut env = BTreeMap::new();
+        env.insert("1FOO".to_owned(), "x".to_owned());
+
+        let err = su_command("vscode", &env, "true").expect_err("must reject");
+
+        assert!(matches!(err, LuggageError::Catalog(_)), "{err}");
+    }
+
+    /// The guard must not reject the keys real catalog rows use, including the
+    /// underscore-leading form.
+    #[test]
+    fn su_command_accepts_ordinary_identifier_keys() {
+        let mut env = BTreeMap::new();
+        env.insert("CARGO_HOME".to_owned(), "/cache/cargo".to_owned());
+        env.insert("_PRIVATE2".to_owned(), "x".to_owned());
+
+        let argv = su_command("vscode", &env, "true").expect("valid keys accepted");
+
+        assert!(argv[4].contains("export CARGO_HOME=/cache/cargo"));
+        assert!(argv[4].contains("export _PRIVATE2=x"));
     }
 
     #[test]

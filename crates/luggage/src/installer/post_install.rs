@@ -80,7 +80,7 @@ fn run_one(
         }
     };
 
-    let argv = su_command(user, env, &body);
+    let argv = su_command(user, env, &body)?;
     let outcome = runner.run(&argv[0], &argv[1..])?;
     if outcome.success() {
         Ok(())

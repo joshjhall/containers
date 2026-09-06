@@ -240,6 +240,28 @@ pub fn prepare_scripts_dir(
     scripts: &[(&str, &str)],
 ) -> Result<PathBuf, ScriptsDirError> {
     let state_root = state_root.ok_or(ScriptsDirError::NoStateRoot)?;
+    // Defend at the sink, not only upstream (#924). `AgentContext::load`
+    // allow-lists the project name this is derived from, but this function does
+    // the `Path::join` — where `/` and `..` are real components — and cannot see
+    // whether its caller validated. A future caller, or a reordering of that
+    // validation, would silently turn this back into a path escape.
+    // `Normal` is the only component kind that names a new directory: it
+    // excludes `.` and `..` (which are `CurDir`/`ParentDir`, each a single
+    // component, so a bare count would let `..` through) as well as any root or
+    // prefix. Requiring exactly one Normal component also rejects separators.
+    let sole_component = {
+        let mut components = Path::new(container_name).components();
+        match (components.next(), components.next()) {
+            (Some(std::path::Component::Normal(c)), None) => Some(c),
+            _ => None,
+        }
+    };
+    if sole_component.is_none_or(|c| c != std::ffi::OsStr::new(container_name)) {
+        return Err(unsafe_path(
+            &state_root.join(container_name),
+            format!("container name {container_name:?} is not a single path component"),
+        ));
+    }
     let parent = state_root.join("stibbons").join("agent-scripts");
     std::fs::create_dir_all(&parent).map_err(|e| io_err(&parent, e))?;
     // Lock down the shared parent too: it is what makes the umask window in
@@ -439,6 +461,22 @@ mod tests {
         assert!(!again.join("stale.sh").exists(), "stale file must not survive");
         assert!(again.join("agent-entrypoint.sh").exists(), "scripts rewritten");
         assert_eq!(mode_of(&again), 0o700);
+    }
+
+    /// #924: a container name that is not a single path component is refused,
+    /// so the `Path::join` cannot escape the 0700 tree. `AgentContext::load`
+    /// also allow-lists the project name this derives from, but this function
+    /// owns the join and must not depend on a caller it cannot see.
+    #[test]
+    fn traversing_container_name_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        for name in ["../../escape-agent-1", "sub/dir-agent-1", "..", ""] {
+            let err = prepare_scripts_dir(Some(tmp.path()), name, &scripts())
+                .expect_err("must be rejected");
+            assert!(err.to_string().contains("not a single path component"), "{name:?}: {err}");
+        }
+        assert!(!tmp.path().join("escape-agent-1").exists(), "nothing written outside the tree");
     }
 
     /// Two agents get separate directories, so starting one container never

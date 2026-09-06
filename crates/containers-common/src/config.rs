@@ -154,7 +154,45 @@ impl IgorConfig {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
         let data = std::fs::read_to_string(path)?;
         let cfg: Self = serde_yaml::from_str(&data)?;
+        cfg.validate()?;
         Ok(cfg)
+    }
+
+    /// Rejects project fields that would corrupt a generated file (#924 QW2).
+    ///
+    /// `template::renderer` renders `.tmpl` names through a stock
+    /// `minijinja::Environment`, where autoescape is `None` (and the `json`
+    /// cargo feature is off, so renaming the templates would not help). These
+    /// four fields reach `devcontainer.json` and `docker-compose.yml` verbatim
+    /// on `update`, `add`, `remove`, and `init --non-interactive` — every path
+    /// except the interactive wizard, which is the only place validation lived
+    /// (`wizard/steps.rs`, and only for `name`). A `"` or a newline silently
+    /// produces a broken file rather than an error.
+    ///
+    /// Validating at `load` covers every non-interactive entry point at once,
+    /// and mirrors how `AgentContext::load` validates repo names at its own I/O
+    /// boundary.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error naming the field and the offending value when a field
+    /// falls outside its allow-list. Empty values pass: they are how an
+    /// unset optional field is spelled, and each has a default applied later.
+    pub fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // Same allow-list the wizard enforces for `name`.
+        let ident = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
+        check_field("project.name", &self.project.name, ident)?;
+        check_field("project.username", &self.project.username, ident)?;
+        // Image refs carry a registry host, port, path, tag, and digest.
+        check_field("project.base_image", &self.project.base_image, |c| {
+            c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | ':' | '/' | '@' | '-')
+        })?;
+        // A relative path: separators and dots are fine, whitespace and quotes
+        // are not.
+        check_field("containers_dir", &self.containers_dir, |c| {
+            c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-')
+        })?;
+        Ok(())
     }
 
     /// Writes the config to the given path.
@@ -168,6 +206,27 @@ impl IgorConfig {
         std::fs::write(path, data)?;
         Ok(())
     }
+}
+
+/// Rejects `value` when any character falls outside `allowed`.
+///
+/// An empty value passes — that is how an unset optional field is spelled, and
+/// each caller applies a default afterwards. The error names the field and
+/// shows the value quoted, so a stray newline or quote is visible in the
+/// message rather than mangling it.
+fn check_field(
+    field: &str,
+    value: &str,
+    allowed: impl Fn(char) -> bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(bad) = value.chars().find(|c| !allowed(*c)) {
+        return Err(format!(
+            "invalid .igor.yml: {field} contains {bad:?} (value: {value:?}); \
+             it is written verbatim into generated files"
+        )
+        .into());
+    }
+    Ok(())
 }
 
 // These helpers must take `&T` (not `T`) because serde's `skip_serializing_if`
@@ -267,6 +326,91 @@ mod tests {
     fn load_without_services() {
         let cfg = IgorConfig::load(testdata_dir().join("minimal.igor.yml")).unwrap();
         assert!(cfg.services.is_empty());
+    }
+
+    // --- #924 QW2: project-field validation ---
+
+    /// A config that differs from a valid one only in the field under test, so
+    /// a rejection is attributable to that field and nothing else.
+    fn cfg_with(field: &str, value: &str) -> IgorConfig {
+        let mut cfg = IgorConfig {
+            schema_version: 1,
+            containers_dir: "containers".into(),
+            project: ProjectConfig {
+                name: "myapp".into(),
+                username: "developer".into(),
+                base_image: "debian:trixie-slim".into(),
+                working_dir: None,
+            },
+            ..IgorConfig::default()
+        };
+        match field {
+            "name" => cfg.project.name = value.into(),
+            "username" => cfg.project.username = value.into(),
+            "base_image" => cfg.project.base_image = value.into(),
+            "containers_dir" => cfg.containers_dir = value.into(),
+            other => panic!("unknown field {other}"),
+        }
+        cfg
+    }
+
+    /// Each field rejects the quote/whitespace/newline that would corrupt a
+    /// generated file. Autoescape is off in the renderer, so these reach
+    /// `devcontainer.json` / `docker-compose.yml` verbatim.
+    #[test]
+    fn validate_rejects_quotes_whitespace_and_newlines_per_field() {
+        for field in ["name", "username", "base_image", "containers_dir"] {
+            for bad in ["a\"b", "a b", "a\nb", "a'b"] {
+                let Err(err) = cfg_with(field, bad).validate() else {
+                    panic!("{field} must reject {bad:?}");
+                };
+                let msg = err.to_string();
+                assert!(msg.contains(field), "error names the field: {msg}");
+            }
+        }
+    }
+
+    /// The baseline the rejections are measured against: the same builder with
+    /// realistic values passes, so the test above is not passing vacuously.
+    /// `base_image` keeps `:` and `/`; `containers_dir` keeps `/` and `.`.
+    #[test]
+    fn validate_accepts_realistic_values() {
+        cfg_with("name", "my-app_2").validate().unwrap();
+        cfg_with("username", "dev_user-1").validate().unwrap();
+        cfg_with("base_image", "ghcr.io/org/img:1.2-slim").validate().unwrap();
+        cfg_with("containers_dir", "./sub/containers").validate().unwrap();
+    }
+
+    /// An empty value is how an unset optional field is spelled — every one of
+    /// these has a default applied downstream, so validation must not turn a
+    /// minimal config into an error.
+    #[test]
+    fn validate_accepts_empty_fields() {
+        for field in ["name", "username", "base_image", "containers_dir"] {
+            cfg_with(field, "").validate().unwrap();
+        }
+    }
+
+    /// The AC's regression half: a valid `.igor.yml` still loads unchanged, so
+    /// `stibbons update` is unaffected. `load_minimal`/`load_fullstack` above
+    /// now also exercise the validator on every committed fixture.
+    #[test]
+    fn load_still_accepts_valid_config() {
+        let cfg = IgorConfig::load(testdata_dir().join("minimal.igor.yml")).unwrap();
+        assert_eq!(cfg.project.name, "myapp");
+    }
+
+    /// Validation runs at `load`, not only when called directly — that is what
+    /// covers `update` / `add` / `remove` / `init --non-interactive`.
+    #[test]
+    fn load_rejects_invalid_project_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.igor.yml");
+        std::fs::write(&path, "schema_version: 1\nproject:\n  name: \"my\\\"app\"\n").unwrap();
+
+        let err = IgorConfig::load(&path).expect_err("must reject");
+
+        assert!(err.to_string().contains("project.name"), "{err}");
     }
 
     #[test]

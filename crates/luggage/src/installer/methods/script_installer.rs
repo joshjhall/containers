@@ -79,7 +79,7 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
         .artifact
         .file_name()
         .map_or_else(|| "script-installer".to_owned(), |n| n.to_string_lossy().into_owned());
-    let argv = su_command(ctx.user, &env, &body);
+    let argv = su_command(ctx.user, &env, &body)?;
     let outcome = ctx.runner.run(&argv[0], &argv[1..])?;
     if !outcome.success() {
         return Err(LuggageError::PostInstallFailed {
