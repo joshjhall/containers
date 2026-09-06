@@ -399,6 +399,375 @@ test_workspace_scan_reports_repo_paths() {
     unseed_workspace
 }
 
+# ============================================================================
+# Discovery trust boundary (issue #916)
+# ============================================================================
+# Since #828 this script discovers what to repair rather than being told. A
+# `.git` FILE is a `gitdir:` pointer git follows anywhere, and the old `-d`/`-e`
+# gates both dereference symlinks — so a directory or link planted under a shared
+# /workspace could redirect the unattended boot-and-hourly repair at a repo
+# elsewhere on the filesystem. These pin what discovery will and will not follow.
+
+# A repo OUTSIDE the workspace, used as the redirection target. Returns its path
+# via the OUTSIDE_REPO global.
+seed_outside_repo() {
+    OUTSIDE_REPO="$TEST_TEMP_DIR/outside"
+    make_repo "$OUTSIDE_REPO"
+    echo "outside" >"$OUTSIDE_REPO/f.txt"
+    git -C "$OUTSIDE_REPO" add -A >/dev/null 2>&1
+    git -C "$OUTSIDE_REPO" commit -qm "seed" >/dev/null 2>&1
+}
+
+test_planted_git_pointer_is_not_repaired() {
+    # THE VECTOR. Verified against the pre-fix script: it repaired the planted
+    # entry AND walked the outside repo's own worktrees, writing core.ignorecase
+    # into a repository the operator never named.
+    local ws="$TEST_TEMP_DIR/ws-planted"
+    seed_outside_repo
+    command mkdir -p "$ws"
+    plant_git_pointer "$ws/evil" "$OUTSIDE_REPO/.git"
+
+    local output
+    output=$(run_fs_health_workspace "$ws" insensitive)
+
+    assert_equals "unset" "$(get_ignorecase_at "$OUTSIDE_REPO")" \
+        "A planted .git pointer must not redirect repairs at a repo outside the workspace"
+    assert_contains "$output" "not repairing" \
+        "The refusal should be reported, not silent — a declined repo is invisible otherwise"
+}
+
+test_symlinked_entry_is_not_followed() {
+    # `[ -d ]` and `[ -e ]` both follow symlinks, so a link planted at depth 1
+    # was dereferenced and its target repaired.
+    local ws="$TEST_TEMP_DIR/ws-symlink"
+    seed_outside_repo
+    command mkdir -p "$ws"
+    command ln -s "$OUTSIDE_REPO" "$ws/link-out"
+
+    local output
+    output=$(run_fs_health_workspace "$ws" insensitive)
+
+    assert_equals "unset" "$(get_ignorecase_at "$OUTSIDE_REPO")" \
+        "A depth-1 symlink must not be followed into a repo outside the workspace"
+    assert_contains "$output" "is a symlink" \
+        "The skipped symlink should be reported with its own reason"
+}
+
+test_ordinary_repo_still_repaired() {
+    # Guard against the gate narrowing the normal case — the whole point of #828.
+    local ws="$TEST_TEMP_DIR/ws-ordinary"
+    make_repo "$ws/repo"
+
+    run_fs_health_workspace "$ws" insensitive >/dev/null
+
+    assert_equals "true" "$(get_ignorecase_at "$ws/repo")" \
+        "An ordinary repo must still be repaired"
+}
+
+test_worktree_with_owner_inside_workspace_still_repaired() {
+    local ws="$TEST_TEMP_DIR/ws-wt-inside"
+    make_repo "$ws/repo"
+    echo "x" >"$ws/repo/f.txt"
+    git -C "$ws/repo" add -A >/dev/null 2>&1
+    git -C "$ws/repo" commit -qm "seed" >/dev/null 2>&1
+    git -C "$ws/repo" worktree add -q "$ws/wt" -b inside-branch >/dev/null 2>&1
+
+    local output
+    output=$(run_fs_health_workspace "$ws" sensitive)
+
+    assert_not_contains "$output" "$ws/wt: git dir" \
+        "A worktree whose owner is inside the workspace must not be refused"
+}
+
+test_worktree_with_owner_outside_workspace_still_repaired() {
+    # THE LOAD-BEARING TEST. A linked worktree's git dir resolves OUTSIDE itself
+    # by design, and `git worktree add` accepts any path — so a worktree living
+    # in the workspace can legitimately be owned by a repo outside it.
+    #
+    # This is why the gate keys on REGISTRATION (the <gitdir>/gitdir back-pointer)
+    # rather than containment: both entry-level and workspace-level containment
+    # would refuse this entry, silently un-fixing the #882 repair for the user who
+    # most needs it. Measured before choosing the design.
+    local ws="$TEST_TEMP_DIR/ws-wt-outside"
+    seed_outside_repo
+    command mkdir -p "$ws"
+    git -C "$OUTSIDE_REPO" worktree add -q "$ws/owned-elsewhere" -b outside-branch >/dev/null 2>&1
+
+    local output
+    output=$(run_fs_health_workspace "$ws" sensitive)
+
+    assert_not_contains "$output" "owned-elsewhere: git dir" \
+        "A registered worktree owned by a repo outside the workspace must still be repaired"
+}
+
+test_separate_git_dir_is_refused_by_discovery() {
+    # DENY-BY-DEFAULT, and this test pins the trade deliberately.
+    #
+    # `git init --separate-git-dir=<elsewhere>` is a legitimate shape, and an
+    # earlier revision accepted it on the theory that a git dir nothing else
+    # claims is safe. That reopened the hole: planting a pointer at such a
+    # victim's git dir made the unattended scan write into it (measured — the
+    # victim's core.ignorecase went from unset to true).
+    #
+    # The two are indistinguishable from the git dir side — no back-pointer for
+    # either, `--show-toplevel` reports the entry for both, `core.worktree` unset
+    # for both — so automatic discovery refuses the shape rather than guessing.
+    # The repo is not unrepairable: single scope still scans it (see
+    # test_separate_git_dir_repaired_in_single_scope), which is the operator
+    # naming the target instead of the filesystem offering it.
+    local ws="$TEST_TEMP_DIR/ws-sgd"
+    local gitdir="$TEST_TEMP_DIR/gitdirs/repo.git"
+    command mkdir -p "$ws/repo" "$TEST_TEMP_DIR/gitdirs"
+    git init -q --separate-git-dir="$gitdir" "$ws/repo" >/dev/null 2>&1
+    git -C "$ws/repo" config --unset core.ignorecase 2>/dev/null || true
+
+    local output
+    output=$(run_fs_health_workspace "$ws" insensitive)
+
+    assert_equals "unset" "$(get_ignorecase_at "$ws/repo")" \
+        "Automatic discovery must not follow a git dir it cannot attribute to the entry"
+    assert_contains "$output" "workspace-fs-health" \
+        "The refusal should name the single-scope command that still scans it"
+}
+
+test_separate_git_dir_repaired_in_single_scope() {
+    # The other half of that trade: naming the repo explicitly still repairs it,
+    # so deny-by-default costs discovery, not the repair itself.
+    local root="$TEST_TEMP_DIR/sgd-single"
+    local gitdir="$TEST_TEMP_DIR/gitdirs-single/repo.git"
+    command mkdir -p "$root" "$TEST_TEMP_DIR/gitdirs-single"
+    git init -q --separate-git-dir="$gitdir" "$root" >/dev/null 2>&1
+    git -C "$root" config --unset core.ignorecase 2>/dev/null || true
+
+    (
+        export PROJECT_ROOT="$root"
+        export FS_CASE_STATE=insensitive
+        export FS_HEALTH_ENV_FILE
+        bash "$FS_HEALTH_SCRIPT"
+    ) >/dev/null 2>&1
+
+    assert_equals "true" "$(get_ignorecase_at "$root")" \
+        "An explicitly named --separate-git-dir repo must still be repaired"
+}
+
+test_planted_pointer_at_separate_git_dir_victim_is_refused() {
+    # THE REGRESSION the accept-standalone rule caused. A victim repo whose git
+    # dir is not named `.git` was reachable by planting a pointer at it: the old
+    # basename check only caught `/elsewhere/.git`, so `v.git` and
+    # `.git/modules/<name>` sailed through. Measured before the fix: the
+    # victim's core.ignorecase was written.
+    local ws="$TEST_TEMP_DIR/ws-victim"
+    local victim="$TEST_TEMP_DIR/victim"
+    local victim_gitdir="$TEST_TEMP_DIR/victim-gitdirs/v.git"
+    command mkdir -p "$victim" "$TEST_TEMP_DIR/victim-gitdirs" "$ws"
+    git init -q --separate-git-dir="$victim_gitdir" "$victim" >/dev/null 2>&1
+    git --git-dir="$victim_gitdir" config --unset core.ignorecase 2>/dev/null || true
+
+    plant_git_pointer "$ws/evil" "$victim_gitdir"
+
+    run_fs_health_workspace "$ws" insensitive >/dev/null
+
+    local result
+    result=$(git --git-dir="$victim_gitdir" config --get core.ignorecase 2>/dev/null || echo "unset")
+    assert_equals "unset" "$result" \
+        "A pointer aimed at a git dir not named .git must not redirect repairs either"
+}
+
+test_planted_pointer_at_workspace_root_is_refused() {
+    # The workspace-root branch emits WORKSPACE_ROOT directly, so it needs the
+    # SAME gate as a depth-1 entry — it is the identical shape, and a workspace on
+    # a shared mount is exactly where a planted .git can appear, root included.
+    local ws="$TEST_TEMP_DIR/ws-root-planted"
+    seed_outside_repo
+    command mkdir -p "$ws"
+    command printf 'gitdir: %s\n' "$OUTSIDE_REPO/.git" >"$ws/.git"
+
+    local output
+    output=$(run_fs_health_workspace "$ws" insensitive)
+
+    assert_equals "unset" "$(get_ignorecase_at "$OUTSIDE_REPO")" \
+        "A planted pointer AT the workspace root must not redirect repairs either"
+    assert_contains "$output" "not repairing" \
+        "The root-level refusal should be reported too"
+}
+
+test_ordinary_repo_at_workspace_root_still_repaired() {
+    # Guard the other side of that gate: the root being a plain repo is the
+    # single-mount layout #828 deliberately kept working.
+    local ws="$TEST_TEMP_DIR/ws-root-ok"
+    make_repo "$ws"
+
+    run_fs_health_workspace "$ws" insensitive >/dev/null
+
+    assert_equals "true" "$(get_ignorecase_at "$ws")" \
+        "An ordinary repo AT the workspace root must still be repaired"
+}
+
+test_workspace_root_double_slash_is_refused() {
+    # A string match on '/' alone is bypassed by any path-equivalent spelling.
+    # `pwd -P` does NOT normalize this one: POSIX lets an implementation treat a
+    # leading '//' as distinct, and this one does — measured, `cd // && pwd -P`
+    # prints '//', so the guard needs an explicit collapse.
+    #
+    # Not purely adversarial either: "${BASE}/${SUB}" produces a doubled slash
+    # whenever either half is already slashed.
+    local output
+    output=$(run_fs_health_workspace "//" sensitive)
+
+    assert_contains "$output" "refusing to scan" \
+        "WORKSPACE_ROOT='//' must be refused — it walks the real filesystem root"
+}
+
+test_workspace_root_dot_form_is_refused() {
+    # /. and /workspace/.. both resolve to the filesystem root.
+    local output
+    output=$(run_fs_health_workspace "/." sensitive)
+
+    assert_contains "$output" "refusing to scan" \
+        "A path-equivalent form resolving to / must be refused"
+}
+
+test_git_dir_registered_to_another_entry_is_refused() {
+    # The third outcome of the trust gate, which had its own message and no test:
+    # a back-pointer that EXISTS but names a different entry. Reached by making a
+    # real worktree, then pointing a second directory at that worktree's git dir —
+    # the registration record is genuine, it just is not for this entry.
+    local ws="$TEST_TEMP_DIR/ws-misregistered"
+    make_repo "$ws/repo"
+    echo "x" >"$ws/repo/f.txt"
+    git -C "$ws/repo" add -A >/dev/null 2>&1
+    git -C "$ws/repo" commit -qm "seed" >/dev/null 2>&1
+    git -C "$ws/repo" worktree add -q "$ws/real-wt" -b mis-branch >/dev/null 2>&1
+
+    local wt_gitdir
+    wt_gitdir=$(git -C "$ws/real-wt" rev-parse --absolute-git-dir 2>/dev/null)
+    plant_git_pointer "$ws/impostor" "$wt_gitdir"
+
+    local output
+    output=$(run_fs_health_workspace "$ws" sensitive)
+
+    assert_contains "$output" "is registered to" \
+        "A git dir whose back-pointer names a different entry gets its own refusal"
+}
+
+test_workspace_root_home_is_refused() {
+    # #916 names this case in the same sentence as '/': "a typo naming `/` or
+    # `/home` turns into a wide unattended write sweep". /home is the likelier
+    # typo and the worse outcome — one directory per user account, each a
+    # plausible repo holder, all written to by a job nobody watches.
+    local output
+    output=$(run_fs_health_workspace "/home" sensitive)
+
+    assert_contains "$output" "system directory" \
+        "WORKSPACE_ROOT=/home must be refused, not just /"
+}
+
+test_workspace_root_every_system_dir_is_refused() {
+    # Sweep the WHOLE denylist, not one representative. A `case` pattern is a
+    # single line of alternations, so a dropped `|`, a misspelled entry, or
+    # a deleted arm breaks exactly one entry and nothing else — invisible to a
+    # spot check on /home. The list is duplicated here on purpose: a test that
+    # derived it from the script would pass no matter what the script said.
+    local dir failures=""
+    for dir in /home /root /etc /usr /var /opt /srv /tmp /boot /dev /proc /sys \
+        /run /bin /sbin /lib /lib32 /lib64 /mnt /media \
+        /usr/bin /usr/sbin /usr/lib /usr/lib32 /usr/lib64 /usr/local; do
+        case "$(run_fs_health_workspace "$dir" sensitive)" in
+            *"system directory"*) ;;
+            *) failures="${failures} ${dir}" ;;
+        esac
+    done
+
+    assert_equals "" "$failures" \
+        "Every denylisted system directory should be refused (unrefused:${failures})"
+}
+
+test_denylist_sweep_covers_every_script_entry() {
+    # The sweep above duplicates the script's list on purpose — a test deriving
+    # it from the script would pass no matter what the script said. But a
+    # duplicated list drifts: the first version of that sweep silently omitted
+    # /usr/lib32 and /usr/lib64, so a dropped alternation in those two arms would
+    # have gone uncaught by the very test written to catch exactly that.
+    #
+    # So compare the two lists directly. This does not replace the sweep (it
+    # proves nothing about behavior); it only pins that the sweep is complete.
+    local script_entries test_entries
+    script_entries=$(/usr/bin/awk -F'[|)]' '
+        /^ *\/home \| \/root \| \/etc/ {
+            for (i = 1; i <= NF; i++) {
+                gsub(/^[ \t]+|[ \t]+$/, "", $i)
+                if ($i ~ /^\//) print $i
+            }
+            exit
+        }' "$FS_HEALTH_SCRIPT" | command sort)
+
+    # Collect from the `for dir in ...` header only. The loop body is skipped
+    # entirely: an earlier version of this extraction kept reading past `; do`
+    # and swallowed every absolute path in the rest of the file (/etc/bash_env,
+    # /usr/bin/grep, …), which made the comparison fail for reasons that had
+    # nothing to do with the denylist.
+    test_entries=$(/usr/bin/awk '
+        /for dir in \/home/ { collecting = 1 }
+        collecting {
+            line = $0
+            done_here = (line ~ /; do$/)
+            gsub(/for dir in|; do$|\\$/, "", line)
+            n = split(line, parts, /[ \t]+/)
+            for (i = 1; i <= n; i++) if (parts[i] ~ /^\//) print parts[i]
+            if (done_here) exit
+        }' "${BASH_SOURCE[0]}" | command sort)
+
+    assert_equals "$script_entries" "$test_entries" \
+        "The sweep's list must match the script's denylist exactly"
+}
+
+test_workspace_root_system_dir_spelling_variants_refused() {
+    # Matched on the RESOLVED path, so the spelling tricks the root check
+    # collapses cannot walk past this one either.
+    local output
+    output=$(run_fs_health_workspace "/usr/../home" sensitive)
+
+    assert_contains "$output" "system directory" \
+        "A path-equivalent spelling of a system directory must also be refused"
+}
+
+test_workspace_root_under_home_is_allowed() {
+    # The denylist names TREE ROOTS, not their contents. A workspace mounted at
+    # /home/<user>/code is an ordinary setup and must not be swept up by the
+    # guard — the failure mode of over-refusing is a repair that silently stops
+    # happening, which is what this module exists to prevent.
+    local ws="$TEST_TEMP_DIR/ws-under"
+    make_repo "$ws/repo"
+
+    local output
+    output=$(run_fs_health_workspace "$ws" insensitive)
+
+    assert_not_contains "$output" "system directory" \
+        "A workspace below a system directory must still be scanned"
+    assert_equals "true" "$(get_ignorecase_at "$ws/repo")" \
+        "A repo under such a workspace must still be repaired"
+}
+
+test_workspace_root_slash_is_refused() {
+    local output
+    output=$(run_fs_health_workspace "/" sensitive)
+
+    assert_contains "$output" "refusing to scan" \
+        "WORKSPACE_ROOT=/ must be refused rather than sweeping the filesystem"
+    assert_file_not_exists "$FS_HEALTH_ENV_FILE" \
+        "A refused root must not arm the hourly leg with itself"
+}
+
+test_workspace_root_relative_is_refused() {
+    # A relative root resolves against the caller's cwd — under cron, the user's
+    # home. Refuse rather than guess.
+    local output
+    output=$(run_fs_health_workspace "relative/path" sensitive)
+
+    assert_contains "$output" "must be an absolute path" \
+        "A relative WORKSPACE_ROOT must be refused"
+}
+
 test_workspace_scan_skips_non_repos() {
     # A workspace legitimately holds non-repo directories and unreadable ones.
     # Neither is an error, and neither should produce output.
@@ -583,6 +952,15 @@ test_workspace_scan_does_not_double_scan_submodule() {
         "A submodule at depth 1 of a repo workspace root should be repaired exactly once"
     assert_contains "$output" "sub/AGENTS.md" \
         "The submodule repair should keep its submodule label, not be re-reported bare"
+
+    # A submodule is seen by BOTH walks: the gitlink walk that repairs it, and
+    # depth-1 discovery. Discovery runs in a process-substitution subshell with
+    # no view of the scanned-roots ledger, so without an explicit gitlink check
+    # it announced "not repairing" for a directory being repaired a few lines
+    # later — a false alarm in an unattended log. Asserting only the repair count
+    # (above) is what let that ship: the misleading line changes no count.
+    assert_not_contains "$output" "not repairing" \
+        "A submodule must not be announced as refused when the gitlink walk repairs it"
 }
 
 test_workspace_scan_dedups_sibling_worktree_either_order() {
@@ -1269,6 +1647,26 @@ run_test_with_setup test_silent_with_healthy_symlinks_present "Silent when all s
 run_test_with_setup test_regular_files_untouched "Regular files untouched"
 run_test_with_setup test_workspace_scan_repairs_every_repo "Workspace scan repairs every discovered repo"
 run_test_with_setup test_workspace_scan_reports_repo_paths "Workspace scan names each repo it repairs"
+run_test_with_setup test_planted_git_pointer_is_not_repaired "A planted .git pointer is refused and reported"
+run_test_with_setup test_symlinked_entry_is_not_followed "A depth-1 symlink is not followed"
+run_test_with_setup test_ordinary_repo_still_repaired "An ordinary repo is still repaired"
+run_test_with_setup test_worktree_with_owner_inside_workspace_still_repaired "A worktree owned from inside the workspace is still repaired"
+run_test_with_setup test_worktree_with_owner_outside_workspace_still_repaired "A worktree owned from OUTSIDE the workspace is still repaired"
+run_test_with_setup test_separate_git_dir_is_refused_by_discovery "Discovery refuses an unattributable git dir"
+run_test_with_setup test_separate_git_dir_repaired_in_single_scope "Single scope still repairs a --separate-git-dir repo"
+run_test_with_setup test_planted_pointer_at_separate_git_dir_victim_is_refused "A pointer at a non-.git-named victim is refused"
+run_test_with_setup test_planted_pointer_at_workspace_root_is_refused "A planted pointer at the workspace root is refused"
+run_test_with_setup test_ordinary_repo_at_workspace_root_still_repaired "An ordinary repo at the workspace root is still repaired"
+run_test_with_setup test_workspace_root_double_slash_is_refused "WORKSPACE_ROOT=// is refused"
+run_test_with_setup test_workspace_root_dot_form_is_refused "A path-equivalent root form is refused"
+run_test_with_setup test_git_dir_registered_to_another_entry_is_refused "A git dir registered to another entry is refused"
+run_test_with_setup test_workspace_root_home_is_refused "WORKSPACE_ROOT=/home is refused"
+run_test_with_setup test_workspace_root_every_system_dir_is_refused "Every denylisted system directory is refused"
+run_test_with_setup test_denylist_sweep_covers_every_script_entry "The sweep's list matches the script's denylist"
+run_test_with_setup test_workspace_root_system_dir_spelling_variants_refused "A system-dir spelling variant is refused"
+run_test_with_setup test_workspace_root_under_home_is_allowed "A workspace below a system dir is still scanned"
+run_test_with_setup test_workspace_root_slash_is_refused "WORKSPACE_ROOT=/ is refused"
+run_test_with_setup test_workspace_root_relative_is_refused "A relative WORKSPACE_ROOT is refused"
 run_test_with_setup test_workspace_scan_skips_non_repos "Workspace scan skips non-repo and unreadable dirs"
 run_test_with_setup test_workspace_root_itself_scanned_when_a_repo "Workspace root itself is scanned when it is a repo"
 run_test_with_setup test_workspace_scan_reports_zero_repos "Zero repos under the workspace is reported"

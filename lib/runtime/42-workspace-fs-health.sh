@@ -182,6 +182,105 @@ SNAPSHOT_PROJECT_ROOT="$PROJECT_ROOT"
 CASE_DETECT_SCRIPT="${CASE_DETECT_SCRIPT:-/usr/local/bin/detect-case-sensitivity.sh}"
 LOG_PREFIX="[fs-health]"
 
+# Reject a workspace root that would turn one typo into a filesystem-wide sweep
+# (issue #916).
+#
+# The value is taken verbatim from the environment and drives an UNATTENDED
+# write scan — every boot and hourly from cron. `WORKSPACE_ROOT=/` would
+# enumerate every top-level directory and repair any that looks like a repo.
+#
+# An EMPTY value needs no arm here: the `:-` above has already replaced it with
+# /workspace. That is the right outcome (the documented default, not a sweep),
+# and an `''` case arm would be a branch nothing can reach.
+#
+# Rejected by REPORTING and scanning nothing, rather than silently falling back
+# to /workspace: a run that inspects a different tree than the operator asked
+# for is the silent-wrong-target class this module already exists to fix (#828).
+# The snapshot is deliberately NOT written on this path, so the hourly leg does
+# not inherit a root the boot run refused.
+FS_HEALTH_ROOT_REJECTED=false
+case "$WORKSPACE_ROOT" in
+    /*) ;;
+    *)
+        # A relative root resolves against whatever cwd the caller happened to
+        # have — under cron that is the user's home. Refuse rather than guess.
+        command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — it must be an absolute path" >&2
+        FS_HEALTH_ROOT_REJECTED=true
+        ;;
+esac
+
+# Compare the RESOLVED root against /, not the literal string. A string match on
+# '/' alone is trivially bypassed by any path-equivalent spelling — `//` (POSIX
+# collapses a leading double slash), `/.`, or a concatenation that produced
+# `/workspace/..` — each of which `find` then walks as the real filesystem root,
+# reproducing exactly the sweep this guard exists to prevent. Measured: `//`
+# enumerated //sbin, //lib, //bin … before this check was added.
+#
+# A doubled slash is not only an adversarial input; it is what "${BASE}/${SUB}"
+# produces when either half is already slashed, so this is reachable by ordinary
+# misconfiguration.
+#
+# An unresolvable root is left to the existing "does not exist" report below
+# rather than rejected here, so a simple typo keeps its clearer diagnostic.
+if [ "$FS_HEALTH_ROOT_REJECTED" != "true" ]; then
+    FS_HEALTH_ROOT_RESOLVED=$(cd "$WORKSPACE_ROOT" 2>/dev/null && pwd -P) || FS_HEALTH_ROOT_RESOLVED=""
+
+    # Collapse repeated leading slashes before comparing. `pwd -P` does NOT do
+    # this for the two-slash case: POSIX explicitly permits an implementation to
+    # treat a leading `//` as distinct, and this one does — measured, `cd // &&
+    # pwd -P` prints `//`, so a bare `= "/"` comparison still let `//` through
+    # and the sweep proceeded.
+    while [ "$FS_HEALTH_ROOT_RESOLVED" != "${FS_HEALTH_ROOT_RESOLVED#//}" ]; do
+        FS_HEALTH_ROOT_RESOLVED="${FS_HEALTH_ROOT_RESOLVED#/}"
+    done
+
+    # Refuse the filesystem root AND the well-known system trees, which #916
+    # names in the same breath: "a typo naming `/` or `/home` turns into a wide
+    # unattended write sweep". `/home` is the more likely typo of the two and the
+    # worse outcome — one directory per user account, each a plausible repo
+    # holder, all written to by a job nobody is watching.
+    #
+    # A DENYLIST, not an allowlist, is the right shape here. An allowlist (say,
+    # "must be under /workspace") would refuse the legitimate operator who mounts
+    # a workspace at /srv/code or /data — a real configuration this script has no
+    # business vetoing. The denylist only has to name the handful of trees that
+    # are never a workspace, and being wrong about one of those is a refusal an
+    # operator sees and can override by choosing a different root, not a silent
+    # write into somewhere they did not name.
+    #
+    # Matched on the RESOLVED path, so the same spelling tricks the root check
+    # collapses (/home/, //home, /home/x/..) cannot walk past this either.
+    # Test BOTH the resolved path and the literal one. Neither alone is enough,
+    # and a sweep over the whole list is what showed it — a single spot check on
+    # /home passed while six entries went unrefused:
+    #
+    #   /bin /sbin /lib   resolve to /usr/bin, /usr/sbin, /usr/lib on a
+    #                     merged-/usr distro, so the RESOLVED path is not in the
+    #                     list even though the literal one is
+    #   /root /lib32 /lib64
+    #                     are not `cd`-able as the container user, so resolution
+    #                     yields "" and a resolved-only check skipped them
+    #                     entirely — the arm that most needed to fire
+    #
+    # Matching the literal too closes both, and costs nothing: a path spelled
+    # exactly as a system root is refused whether or not it can be resolved.
+    for FS_HEALTH_ROOT_CANDIDATE in "$FS_HEALTH_ROOT_RESOLVED" "${WORKSPACE_ROOT%/}"; do
+        [ -n "$FS_HEALTH_ROOT_CANDIDATE" ] || continue
+        case "$FS_HEALTH_ROOT_CANDIDATE" in
+            '/')
+                command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — it resolves to the filesystem root" >&2
+                FS_HEALTH_ROOT_REJECTED=true
+                break
+                ;;
+            /home | /root | /etc | /usr | /var | /opt | /srv | /tmp | /boot | /dev | /proc | /sys | /run | /bin | /sbin | /lib | /lib32 | /lib64 | /mnt | /media | /usr/bin | /usr/sbin | /usr/lib | /usr/lib32 | /usr/lib64 | /usr/local)
+                command echo "$LOG_PREFIX refusing to scan WORKSPACE_ROOT='${WORKSPACE_ROOT}' — '${FS_HEALTH_ROOT_CANDIDATE}' is a system directory, not a workspace" >&2
+                FS_HEALTH_ROOT_REJECTED=true
+                break
+                ;;
+        esac
+    done
+fi
+
 # Neutralize an inherited git environment before ANY git runs (issue #886).
 #
 # `git -C <dir>` does NOT win against these variables — git reads the
@@ -951,6 +1050,157 @@ scan_root() {
     return 0
 }
 
+# Decide whether a discovered entry's git dir is one this run will follow.
+#
+# Args: $1 = the depth-1 entry. Returns 0 to accept, 1 to reject (and reports).
+#
+# THE PROBLEM (issue #916). Since #828 this script discovers what to repair
+# instead of being told. A `.git` FILE is a `gitdir: <path>` pointer, and git
+# resolves it without requiring the target to stay anywhere near the workspace —
+# so before this gate, anyone able to create a directory under the shared
+# /workspace could redirect the boot-and-hourly job's `git config` writes and
+# `ln -sfn` rewrites at a repository elsewhere on the filesystem. #886 accepted a
+# comparable reach for out-of-tree worktrees, but that rested on REGISTERING a
+# worktree requiring git-level write access to the target's .git/worktrees;
+# writing a directory name under a shared mount is a far weaker bar, so that
+# acceptance does not carry over.
+#
+# WHY NOT THE OBVIOUS CHECK. "The git dir must live under the entry" is wrong and
+# would break #882. Measured, on a workspace at ws/:
+#
+#   ws/plain            (ordinary repo)      -> ws/plain/.git
+#   ws/wt               (worktree, owner in) -> ws/plain/.git/worktrees/wt
+#   ws/outside-owner-wt (worktree, owner OUT)-> /elsewhere/.git/worktrees/outside-owner-wt
+#   ws/evil             (planted .git file)  -> /elsewhere/.git
+#
+# A legitimate worktree's git dir resolves OUTSIDE itself by design, and the
+# third row shows it can legitimately resolve outside the workspace entirely —
+# `git worktree add` accepts any path. So neither entry-level nor workspace-level
+# containment separates the third row from the fourth, and choosing either would
+# silently stop repairing exactly the worktrees #882 exists to fix.
+#
+# WHAT ACTUALLY DISCRIMINATES: registration. Git records a linked worktree with a
+# BACK-POINTER at <gitdir>/gitdir naming the entry it belongs to. A planted .git
+# file has no such record — nothing on the other end agrees it exists. Measured:
+#
+#   real worktree: <gitdir>/gitdir contains ws/outside-owner-wt/.git
+#   planted:       <gitdir>/gitdir absent
+#
+# `rev-parse --git-common-dir` was also considered and REJECTED: it returns the
+# same value (/elsewhere/.git) for both rows, so it cannot tell them apart.
+#
+# So: accept the entry's own .git (an ordinary repo), or a git dir whose
+# back-pointer resolves to this entry (a registered worktree, wherever its owner
+# lives). Reject the rest.
+#
+# A SUBMODULE matches neither, and that is correct rather than an oversight: its
+# git dir is <parent>/.git/modules/<name>, and `git submodule add` writes no
+# back-pointer (that mechanism is worktree-only). It needs no acceptance here,
+# because discovery is not how a submodule gets repaired — repair_repo_tree's
+# gitlink walk reaches it from the parent that owns it, with the label prefix
+# that makes its output readable.
+#
+# What it must NOT do is announce a refusal for one. A submodule sitting at
+# depth 1 of a repo workspace root is seen by BOTH walks, and discover_repos
+# runs as a process-substitution subshell that cannot see the FS_HEALTH_SCANNED
+# ledger the other walk maintains — so it would print "not repairing" for a
+# directory that IS being repaired a few lines later. Wrong, and alarming in an
+# unattended log. entry_is_gitlink_of_parent detects that case and skips it
+# silently.
+# True when this entry is a gitlink (mode 160000) in its own parent's index —
+# i.e. an initialized submodule of the directory it sits in.
+#
+# Such an entry is repaired by repair_repo_tree's gitlink walk from that parent,
+# so discovery must skip it WITHOUT the "not repairing" refusal that would
+# otherwise be printed for something that is, in fact, repaired.
+#
+# Args: $1 = the entry. Returns 0 when it is a gitlink of its parent.
+entry_is_gitlink_of_parent() {
+    local entry="$1"
+    local parent="${entry%/*}" name="${entry##*/}"
+
+    [ -n "$parent" ] && [ "$parent" != "$entry" ] || return 1
+    [ -e "${parent}/.git" ] || return 1
+
+    "$FS_HEALTH_GIT" -C "$parent" ls-files -s -- "$name" 2>/dev/null |
+        /usr/bin/awk -F'\t' '$1 ~ /^160000 / { found = 1 } END { exit !found }'
+}
+
+entry_git_dir_is_trusted() {
+    local entry="$1"
+    local git_dir back_pointer entry_resolved back_resolved
+
+    # An unreadable or non-repo entry is not a rejection — discover_repos has
+    # already established the .git exists, so a failure here means git itself
+    # would not open it, and there is nothing to repair either way.
+    git_dir=$("$FS_HEALTH_GIT" -C "$entry" rev-parse --absolute-git-dir 2>/dev/null) || return 1
+
+    entry_resolved=$(fs_health_resolve "$entry")
+
+    # Ordinary repo: the git dir is the entry's own .git.
+    if [ "$git_dir" = "${entry_resolved}/.git" ]; then
+        return 0
+    fi
+
+    # Registered worktree: the git dir carries a back-pointer to this entry.
+    # The recorded value is the entry's .git PATH (not the directory), so
+    # compare against that.
+    back_pointer="${git_dir}/gitdir"
+    if [ -f "$back_pointer" ]; then
+        back_resolved=$(command cat "$back_pointer" 2>/dev/null) || back_resolved=""
+        # Trailing newline is part of the file; strip it before comparing.
+        back_resolved="${back_resolved%$'\n'}"
+        if [ "$back_resolved" = "${entry_resolved}/.git" ]; then
+            return 0
+        fi
+        # A back-pointer naming a DIFFERENT entry is the clearest rejection
+        # there is: this git dir is already spoken for by another worktree.
+        command echo "$LOG_PREFIX ${entry}: git dir '$git_dir' is registered to '${back_resolved}', not to this entry — not repairing" >&2
+        return 1
+    fi
+
+    # No back-pointer, and not the entry's own .git. DENY.
+    #
+    # An earlier revision accepted this case, reasoning that a git dir nothing
+    # else claims is safe — the shape `git init --separate-git-dir=<elsewhere>`
+    # produces, which writes no registration record. That reasoning was wrong,
+    # and reopened the very hole this gate closes. Measured: planting
+    # `gitdir: /victim/gitdirs/v.git` under the workspace made the unattended
+    # scan write core.ignorecase into that victim repository — the identical
+    # redirection, against a repo whose git dir simply is not named `.git`.
+    #
+    # The two cases are genuinely indistinguishable FROM THE GIT DIR SIDE, which
+    # is what forces deny-by-default rather than a cleverer probe. Everything
+    # tried, and why each fails:
+    #
+    #   <gitdir>/gitdir back-pointer  — absent for BOTH (it is a `git worktree
+    #                                   add` mechanism; --separate-git-dir and
+    #                                   submodule module dirs have none)
+    #   rev-parse --show-toplevel     — reports the ENTRY for both, planted or not
+    #   core.worktree in the git dir  — unset for both, measured on an empty repo
+    #                                   AND on one converted after it had commits
+    #   basename = '.git'             — the previous rule; misses every git dir
+    #                                   named otherwise (v.git, .git/modules/<n>)
+    #
+    # Denying costs a --separate-git-dir repo its AUTOMATIC discovery, not its
+    # repair: `workspace-fs-health <path>` and an explicit PROJECT_ROOT still
+    # scan it in single scope, where the operator has named the target rather
+    # than the filesystem offering it. That is the right trade for an unattended
+    # job that writes: an unrecognized pointer is refused loudly and a human can
+    # still act, whereas accepting it silently hands an attacker the write.
+    # A submodule of this entry's own parent is repaired by the gitlink walk, so
+    # skip it silently rather than announcing a refusal for something that IS
+    # repaired. Checked HERE, last, rather than at the top of the function: the
+    # two accept branches above are cheaper and far more common, and this probe
+    # spawns a `git ls-files` per entry that reaches it.
+    if entry_is_gitlink_of_parent "$entry"; then
+        return 1
+    fi
+
+    command echo "$LOG_PREFIX ${entry}: git dir '$git_dir' is neither this entry's own .git nor a worktree registered to it — not repairing (scan it directly with 'workspace-fs-health ${entry}' if this is intentional)" >&2
+    return 1
+}
+
 # Emit every git repo to scan, one per line, for a workspace-scope run.
 #
 # The workspace root itself comes first when it is a repo, then each depth-1
@@ -965,12 +1215,25 @@ scan_root() {
 # Entries that are not repos, and directories that cannot be read, are simply
 # not emitted — a workspace legitimately holds non-repo directories, and neither
 # is an error.
+#
+# What IS an error, and is reported rather than skipped silently, is an entry
+# that looks like a repo but whose git dir this run will not follow — see
+# entry_git_dir_is_trusted (issue #916).
 discover_repos() {
     local entry
 
     [ -d "$WORKSPACE_ROOT" ] || return 0
 
-    if [ -e "${WORKSPACE_ROOT}/.git" ]; then
+    # The root gets the SAME trust gate as a depth-1 entry (issue #916). It is
+    # the identical shape — a `.git` that may be a pointer — and exempting it
+    # would leave the fix half-applied against the very threat model it names:
+    # a workspace on a shared mount is exactly where an untrusted `.git` can be
+    # planted, root included.
+    #
+    # No symlink check here, deliberately: WORKSPACE_ROOT is the operator's own
+    # input, so a symlinked workspace root is a configuration they chose, not a
+    # link discovered inside a directory this scan was pointed at.
+    if [ -e "${WORKSPACE_ROOT}/.git" ] && entry_git_dir_is_trusted "$WORKSPACE_ROOT"; then
         command printf '%s\n' "$WORKSPACE_ROOT"
     fi
 
@@ -979,8 +1242,25 @@ discover_repos() {
     # empty, and silently skips a dotted mount. -print0 keeps paths containing
     # spaces or newlines intact.
     while IFS= read -r -d '' entry; do
+        # Skip a depth-1 SYMLINK before anything dereferences it (issue #916).
+        # `[ -d ]` and `[ -e ]` both follow symlinks, so without this a link
+        # planted under the workspace — by another process sharing the mount, or
+        # by an extracted archive — is followed and its target repaired.
+        #
+        # Checked separately from the git-dir gate below even though that gate
+        # would usually catch the same entry, because the two failures deserve
+        # different diagnostics: a symlink is a shape this scan does not follow,
+        # not a repo whose pointer is suspect.
+        if [ -L "$entry" ]; then
+            command echo "$LOG_PREFIX ${entry} is a symlink — not following it" >&2
+            continue
+        fi
+
         [ -d "$entry" ] || continue
         [ -e "${entry}/.git" ] || continue
+
+        entry_git_dir_is_trusted "$entry" || continue
+
         command printf '%s\n' "$entry"
     done < <(/usr/bin/find "$WORKSPACE_ROOT" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
 
@@ -1007,6 +1287,12 @@ if [ "$FS_HEALTH_SCOPE" = "single" ]; then
     fi
 
     scan_root "$PROJECT_ROOT"
+elif [ "$FS_HEALTH_ROOT_REJECTED" = "true" ]; then
+    # The root was refused above and already reported. Scan nothing, and do NOT
+    # write the snapshot — the hourly leg must not inherit a root this run
+    # declined (issue #916). Still exit 0: a bad env var is an operator error to
+    # surface, never a reason to fail container startup.
+    :
 else
     FS_HEALTH_REPO_COUNT=0
     while IFS= read -r fs_health_repo; do
@@ -1049,4 +1335,11 @@ fi
 # #828 fix: discovery re-runs on every invocation, so an empty workspace today
 # must still leave the hourly leg armed for a repo mounted an hour from now.
 # Removing the snapshot there is what made the old bail-out permanent.
-write_env_snapshot
+#
+# The ONE workspace-scope exception is a REFUSED root (issue #916): zero repos
+# means "nothing here yet, check again in an hour", but a rejected root means
+# "this value is not one we scan at all", and arming the hourly leg with it would
+# re-refuse sixty times a day — or, worse, act on it if the guard ever loosened.
+if [ "$FS_HEALTH_ROOT_REJECTED" != "true" ]; then
+    write_env_snapshot
+fi

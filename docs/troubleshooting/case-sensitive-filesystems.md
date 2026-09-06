@@ -196,6 +196,68 @@ further would rediscover a repo's own submodules and linked worktrees as if they
 were separate projects, and both are already reached from the root that owns
 them, with the labeling described above.
 
+#### What discovery will not follow
+
+The scan writes (`git config`, `ln -sfn`) without supervision, at every boot and
+hourly, so it is deliberate about which discovered entries it trusts. Two shapes
+are refused, each with its own reported reason:
+
+```text
+[fs-health] /workspace/link-out is a symlink — not following it
+[fs-health] /workspace/odd: git dir '/elsewhere/.git' is not this entry's own and is not a registered worktree of it — not repairing
+```
+
+A **symlink** at depth 1 is not dereferenced. A **`.git` file** is a
+`gitdir: <path>` pointer that git resolves without caring where it lands, so
+automatic discovery follows one only when it can *attribute* the git dir to the
+entry. Two shapes qualify: the git dir is the entry's own `.git`, or a
+back-pointer at `<gitdir>/gitdir` registers it to this entry (a linked
+worktree). Anything else is refused.
+
+Attribution rather than containment is load-bearing. A linked worktree's git dir
+lives in the repo that owns it, and `git worktree add` accepts any path, so a
+worktree mounted under `/workspace` may legitimately be owned by a repo outside
+it. Requiring the git dir to sit under the entry — or even under the workspace —
+would silently stop repairing exactly those worktrees.
+
+The rule is **deny-by-default** for everything else, and that costs a real case:
+a repo created with `git init --separate-git-dir=<elsewhere>` writes no
+registration record, so automatic discovery will not follow it. That is
+deliberate. Such a repo and a planted pointer aimed at one are indistinguishable
+from the git dir side — neither carries a back-pointer, both report the entry
+itself as `rev-parse --show-toplevel`, and neither records `core.worktree` — so
+accepting the shape would hand an attacker exactly the redirection this gate
+exists to stop.
+
+Nothing becomes unrepairable. Naming the repo scans it normally:
+
+```bash
+workspace-fs-health /workspace/that-repo
+```
+
+The refusal message says so. The distinction is that the operator names the
+target, rather than the filesystem offering it to an unattended job.
+
+The same gate applies to the workspace root itself, which is the identical shape
+and equally plantable on a shared mount.
+
+Refusals are reported rather than skipped quietly: a repo that is present but
+deliberately not repaired looks identical to a healthy one otherwise, which is
+the invisible non-repair this whole module exists to prevent.
+
+`WORKSPACE_ROOT` itself must be an absolute path, and must not name `/` or a
+system tree root — `/home`, `/root`, `/etc`, `/usr`, `/var`, and the rest are
+refused, since a typo naming one of them turns an unattended hourly job into a
+wide write sweep (`/home` in particular is one directory per user account).
+Comparison happens on the *resolved* path, so `//`, `/.`, and `/usr/../home`
+are caught too.
+
+Only the tree roots are refused, not their contents: a workspace mounted at
+`/home/<user>/code`, or anywhere else of your choosing, is scanned normally.
+A refused root is reported and nothing is scanned — and the hourly leg is *not*
+armed with it, so a bad value cannot quietly persist for the life of the
+container.
+
 Case-sensitivity is detected **per repo**, not once per run — separate mounts
 can genuinely differ, so a verdict sampled from one repo is not evidence about
 its neighbor.
