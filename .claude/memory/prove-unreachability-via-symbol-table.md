@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: a8a38858-6fdf-4d53-b563-5266cafd93a0
-  modified: 2026-09-07T15:59:27.256Z
+  modified: 2026-09-07T17:42:40.164Z
 ---
 
 When a scanner flags a CVE inside a statically-linked third-party Go binary we
@@ -46,9 +46,20 @@ Note `.trivyignore` entries are **global bare CVE IDs** — not per-binary or
 per-image, and with no native expiry (unlike `.osv-scanner.toml`'s
 `ignoreUntil`). So an expiry is only a `REVIEW BY:` comment the quarterly sweep
 reads, and a suppression proven for one binary silently covers every other
-binary in every scanned image. Say so in the entry when a second, older copy of
-the same tool exists (`lib/base/cosign-install.sh` ships cosign 3.0.2 for the
-kubernetes/docker features).
+binary in every scanned image. **State in the entry how many copies of the tool
+the repo ships**, so the next reader can tell whether the proof still spans all
+of them.
+
+**Then check whether the second copy is real.** #932 flagged
+`lib/base/cosign-install.sh` as shipping a second, older cosign (3.0.2) for the
+kubernetes/docker features, and #935 was filed to prove or narrow the
+suppression against it. It did not exist: `setup.sh` installs cosign in the
+same Docker stage *before* the feature scripts, and `install_cosign()` opened
+with `command -v cosign && return 0`, so the download never ran. The fix was to
+delete the dead path (#938), not to prove a second binary. Establish that a
+rival install is *reachable* — same stage? guarded? actually invoked? — before
+building an argument about its symbol table, or the whole exercise is against
+a binary nobody ships.
 
 Related: [[embedded-only-advisory-suppression]] (the `cargo tree -i` analogue
 for Rust), [[assertions-must-discriminate]].
