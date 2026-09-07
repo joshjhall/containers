@@ -14,6 +14,14 @@ addressing compliance requirements for authorized software control.
 
 ---
 
+> **On the version columns.** They record the **approved major/minor line**, not
+> the exact pin. The pins themselves live in `lib/base/setup.sh` and
+> `lib/features/*.sh`, are tracked by `bin/check-versions.sh`, and are bumped
+> weekly by auto-patch — which does **not** update this file. So these cells go
+> stale by design between reviews; treat the feature scripts as authoritative
+> and refresh here when a bump crosses the major/minor line shown. See
+> [docs/reference/versions.md](../reference/versions.md).
+
 ## Approved Software Categories
 
 ### 1. Language Runtimes
@@ -22,13 +30,13 @@ All language runtimes are version-pinned and signature-verified.
 
 | Software | Current Version | Source        | Verification |
 | -------- | --------------- | ------------- | ------------ |
-| Python   | 3.13.x          | python.org    | Sigstore/GPG |
+| Python   | 3.14.x          | python.org    | Sigstore/GPG |
 | Node.js  | 22.x LTS        | nodejs.org    | GPG          |
-| Go       | 1.23.x          | go.dev        | GPG          |
-| Rust     | 1.82.x          | rust-lang.org | GPG          |
-| Ruby     | 3.3.x           | ruby-lang.org | SHA256       |
+| Go       | 1.27.x          | go.dev        | GPG          |
+| Rust     | 1.98.x          | rust-lang.org | GPG          |
+| Ruby     | 4.0.x           | ruby-lang.org | SHA256       |
 | Java     | 21 LTS          | adoptium.net  | GPG          |
-| R        | 4.4.x           | r-project.org | SHA256       |
+| R        | 4.6.x           | r-project.org | SHA256       |
 
 **Version Policy**: Use latest stable/LTS version. Update weekly via auto-patch.
 
@@ -80,7 +88,7 @@ Required for compiling language extensions.
 
 | Tool        | Current Version | Purpose                  | Verification    |
 | ----------- | --------------- | ------------------------ | --------------- |
-| cosign      | 2.x             | Sigstore verification    | Checksum        |
+| cosign      | 3.x             | Sigstore verification    | Checksum        |
 | trivy       | (CI only)       | Vulnerability scanning   | N/A             |
 | gitleaks    | (CI only)       | Secret detection         | N/A             |
 | osv-scanner | 2.x             | CVE scanning (lockfiles) | Checksum (TOFU) |
@@ -91,9 +99,9 @@ Required for compiling language extensions.
 
 | Tool      | Current Version | Source        | Verification |
 | --------- | --------------- | ------------- | ------------ |
-| kubectl   | 1.31.x          | kubernetes.io | Sigstore     |
-| helm      | 3.16.x          | helm.sh       | GPG          |
-| terraform | 1.9.x           | hashicorp.com | GPG          |
+| kubectl   | 1.33.x          | kubernetes.io | Sigstore     |
+| helm      | 4.2.x           | helm.sh       | GPG          |
+| terraform | (apt latest)    | hashicorp.com | GPG          |
 | aws-cli   | 2.x             | AWS           | GPG          |
 | gcloud    | Latest          | Google Cloud  | Checksum     |
 | az        | Latest          | Microsoft     | Checksum     |
@@ -106,12 +114,12 @@ Version-pinned in feature scripts.
 
 | Tool    | Current Version | Purpose              |
 | ------- | --------------- | -------------------- |
-| direnv    | 2.35.x          | Environment manager  |
-| lazygit   | 0.44.x          | Git TUI              |
-| delta     | 0.18.x          | Git diff viewer      |
+| direnv    | 2.37.x          | Environment manager  |
+| lazygit   | 0.64.x          | Git TUI              |
+| delta     | 0.19.x          | Git diff viewer      |
 | mkcert    | 1.4.x           | Local TLS certs      |
 | act       | 0.2.x           | Local GitHub Actions |
-| codegraph | 1.0.x           | Code knowledge graph for AI agents (SHA256 pinned) |
+| codegraph | 1.6.x           | Code knowledge graph for AI agents (SHA256 pinned) |
 
 See [docs/reference/versions.md](../reference/versions.md) for complete list.
 
