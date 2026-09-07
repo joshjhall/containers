@@ -656,15 +656,21 @@ test_job_name_index_semantics() {
     local dir="$TEST_TEMP_DIR/wf-dup" violations=0 out count
 
     # Two jobs, same rendered name, SAME file.
+    # Job `d` has NO `name:` and is deliberately NOT last. yq renders it as an
+    # empty line, and command substitution strips TRAILING newlines — so a
+    # nameless job in final position is swallowed before the loop ever sees it,
+    # making the builder's `[ -n "$name" ] || continue` guard unreachable and
+    # any assertion about it non-discriminating. Interior position is what puts
+    # an empty `$name` through the loop body for real.
     write_fixture "$dir/twin.yml" 'jobs:
   a:
     name: Twin
   b:
     name: Twin
-  c:
-    name: Spaced ${{ matrix.os }} Name
   d:
     runs-on: ubuntu-latest
+  c:
+    name: Spaced ${{ matrix.os }} Name
 '
     # A third job with that name in a DIFFERENT file.
     write_fixture "$dir/twin2.yml" 'jobs:
@@ -693,10 +699,24 @@ test_job_name_index_semantics() {
         violations=$((violations + 1))
     fi
 
-    # A job with no `name:` must not be indexed under the empty string.
-    out=$(workflows_defining_job_name '') || out=""
-    if [ -n "$out" ]; then
-        /usr/bin/echo "  a nameless job was indexed under the empty string: '$out'"
+    # A job with no `name:` (fixture job `d`) must not be indexed AT ALL.
+    #
+    # Assert on the key COUNT rather than by querying a key — two spellings
+    # that look right are both non-discriminating. `workflows_defining_job_name
+    # ''` short-circuits on an empty argument before it ever consults the
+    # array, so it answers empty whether or not the builder's
+    # `[ -n "$name" ] || continue` guard exists. And bash rejects an empty
+    # associative-array subscript outright (`bad array subscript`) on read as
+    # well as write, so `${JOB_NAME_FILES[""]}` cannot even be spelled.
+    #
+    # What deleting the guard actually does is let an empty `$name` reach the
+    # assignment, where that same subscript error aborts the builder — and with
+    # it the whole suite. The fixtures hold exactly two distinct NAMED jobs
+    # across both files (`Twin`, three jobs collapsing to one key, and
+    # `Spaced ${{ … }} Name`), so this count is what pins the behavior.
+    count=${#JOB_NAME_FILES[@]}
+    if [ "$count" -ne 2 ]; then
+        /usr/bin/echo "  expected exactly 2 indexed job names (Twin, Spaced…Name), got $count: ${!JOB_NAME_FILES[*]}"
         violations=$((violations + 1))
     fi
 
