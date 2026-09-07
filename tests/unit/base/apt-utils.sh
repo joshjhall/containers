@@ -456,6 +456,73 @@ test_apt_install_conditional() {
     fi
 }
 
+# Test: apt_install_conditional honors both ends of its version range
+#
+# The range decides whether a package is installed at all, and the call sites in
+# python.sh / python-dev.sh were narrowed from `11 12` to `12 12` once Debian 11
+# went EOL (#933, #937). Stub get_debian_major_version and apt_install so the
+# decision is observable without touching apt, then drive every version around
+# the boundary. A test that only checked the in-range case would still pass if
+# the bound were widened back to 11.
+test_apt_install_conditional_range_boundaries() {
+    local script="
+        _APT_UTILS_LOADED=''
+        source '$PROJECT_ROOT/lib/base/apt-utils.sh' 2>/dev/null
+        get_debian_major_version() { echo \"\$STUB_VERSION\"; }
+        apt_install() { echo \"INSTALLED:\$*\"; }
+        apt_install_conditional 12 12 lzma lzma-dev
+    "
+
+    local out
+    # In range: the sole supported version that still ships these packages.
+    out=$(STUB_VERSION=12 bash -c "$script" 2>/dev/null || true)
+    assert_contains "$out" "INSTALLED:lzma lzma-dev" \
+        "apt_install_conditional 12 12 installs on Debian 12"
+
+    # Below range: an out-of-matrix bullseye base must NOT get them.
+    out=$(STUB_VERSION=11 bash -c "$script" 2>/dev/null || true)
+    assert_not_contains "$out" "INSTALLED:" \
+        "apt_install_conditional 12 12 skips on Debian 11 (EOL, below range)"
+
+    # Above range: Debian 13 dropped these in favor of liblzma-dev.
+    out=$(STUB_VERSION=13 bash -c "$script" 2>/dev/null || true)
+    assert_not_contains "$out" "INSTALLED:" \
+        "apt_install_conditional 12 12 skips on Debian 13 (above range)"
+
+    # Undeterminable version: skip rather than guess.
+    out=$(STUB_VERSION=unknown bash -c "$script" 2>/dev/null || true)
+    assert_not_contains "$out" "INSTALLED:" \
+        "apt_install_conditional skips when the version is unknown"
+}
+
+# Test: the narrowed call sites match the documented bound
+#
+# Pins the exact invocation in each feature script. AC2 of #937 is that the
+# call sites and every surface that teaches the pattern agree; a silent drift
+# back to `11 12` in either file would otherwise go unnoticed.
+test_apt_install_conditional_call_sites_pinned() {
+    if command grep -q "^apt_install_conditional 12 12 lzma lzma-dev$" "$PROJECT_ROOT/lib/features/python.sh"; then
+        assert_true true "python.sh pins apt_install_conditional 12 12 for lzma"
+    else
+        assert_true false "python.sh no longer pins apt_install_conditional 12 12 for lzma"
+    fi
+
+    if command grep -q "^apt_install_conditional 12 12 python3-distutils$" "$PROJECT_ROOT/lib/features/python-dev.sh"; then
+        assert_true true "python-dev.sh pins apt_install_conditional 12 12 for python3-distutils"
+    else
+        assert_true false "python-dev.sh no longer pins apt_install_conditional 12 12 for python3-distutils"
+    fi
+
+    # The install-side bound and the cleanup-side guard must agree, or a base
+    # outside the range purges packages it never installed.
+    if command grep -q "if is_debian_version 12 && ! is_debian_version 13; then" \
+        "$PROJECT_ROOT/lib/features/lib/python/cleanup-build-deps.sh"; then
+        assert_true true "python cleanup guard matches the install-side 12-only bound"
+    else
+        assert_true false "python cleanup guard no longer matches the install-side 12-only bound"
+    fi
+}
+
 # Test: _fix_dpkg_state helper function exists
 test_fix_dpkg_state_helper() {
     if command grep -q "^_fix_dpkg_state()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
@@ -555,6 +622,8 @@ run_test test_add_apt_repository_key_function "add_apt_repository_key function"
 run_test test_debian_version_detection "Debian version detection with fallbacks"
 run_test test_is_debian_version "is_debian_version function"
 run_test test_apt_install_conditional "apt_install_conditional function"
+run_test test_apt_install_conditional_range_boundaries "apt_install_conditional range boundaries"
+run_test test_apt_install_conditional_call_sites_pinned "apt_install_conditional call sites pinned to 12 12"
 run_test test_fix_dpkg_state_helper "_fix_dpkg_state helper function"
 run_test test_clean_apt_cache_helper "_clean_apt_cache helper function"
 
