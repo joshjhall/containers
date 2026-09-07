@@ -335,7 +335,7 @@ See `docs/troubleshooting/case-sensitive-filesystems.md` and
 
 ## Multi-Distro Support
 
-v5 targets multiple distributions: Debian (11/12/13), Alpine, RHEL/UBI, and
+v5 targets multiple distributions: Debian (12/13), Alpine, RHEL/UBI, and
 Ubuntu, with more planned. The `luggage` build engine adapts package names,
 install commands, and version constraints per distro automatically.
 
