@@ -19,7 +19,7 @@ log_command "Installing pipx" \
 safe_add_to_path "${PIPX_BIN_DIR}" || export PATH="${PIPX_BIN_DIR}:$PATH"
 
 # Use pipx to install Poetry with pinned version
-POETRY_VERSION="${POETRY_VERSION:-2.3.2}"
+POETRY_VERSION="${POETRY_VERSION:-2.4.3}"
 log_command "Installing Poetry ${POETRY_VERSION} via pipx" \
     su - "${USERNAME}" -c "
     # Source path utilities for secure PATH management
@@ -48,7 +48,7 @@ log_command "Installing Poetry ${POETRY_VERSION} via pipx" \
 # ============================================================================
 # Install uv (fast Python package manager)
 # ============================================================================
-UV_VERSION="${UV_VERSION:-0.10.5}"
+UV_VERSION="${UV_VERSION:-0.12.10}"
 log_command "Installing uv ${UV_VERSION}" \
     su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && \
     /usr/local/bin/python -m pip install --no-warn-script-location uv==${UV_VERSION}"
