@@ -1,8 +1,37 @@
 # Debian Version Compatibility
 
 This section covers issues related to Debian version differences and how the
-build system handles them across Debian 11 (Bullseye), 12 (Bookworm), and 13
-(Trixie).
+build system handles them across Debian 12 (Bookworm) and 13 (Trixie).
+
+## Debian 11 (Bullseye) — removed
+
+**Debian 11 is no longer supported.** It was dropped from the tested matrix
+after its LTS security support ended on **2026-08-31** (#933).
+
+**Symptom if you try it anyway**: the build dies configuring packages whose
+downloads 404'd:
+
+```text
+404  Not Found [IP: 146.75.30.132 80]
+Err:67 http://deb.debian.org/debian-security bullseye-security/main amd64 gnupg all 2.2.27-2+deb11u3
+
+locales depends on libc-l10n (>> 2.31); however:
+  Package libc-l10n is not installed.
+E: Sub-process /usr/bin/dpkg returned an error code (1)
+```
+
+**Cause**: as the `bullseye-security` suite is retired, package versions age
+out of the mirror. The `dpkg` dependency errors are a downstream symptom — apt
+could not fetch the packages, so their dependencies were never installed. This
+does not clear on a rerun, and it worsens over time as more packages are
+dropped.
+
+**Why we did not repoint to `archive.debian.org`**: the archive receives no
+security updates, so that leg would verify a base nobody should deploy. We
+would rather stop asserting support we cannot deliver.
+
+**Migration**: rebuild on `debian:bookworm-slim` (Debian 12) or
+`debian:trixie-slim` (Debian 13, the default).
 
 ## apt-key command not found (Terraform, Google Cloud, Kubernetes)
 
@@ -18,11 +47,15 @@ bash: line 1: apt-key: command not found
 command. The build system automatically detects your Debian version and uses the
 appropriate method.
 
-**Solution**: This is automatically handled as of v4.0.1. The system detects
-whether `apt-key` is available:
+**Solution**: This is automatically handled as of v4.0.1.
+`add_apt_repository_key()` in `lib/base/apt-repository.sh` branches on
+`is_debian_version 12`:
 
-- **Debian 11/12 (Bullseye/Bookworm)**: Uses legacy `apt-key` method
-- **Debian 13+ (Trixie and later)**: Uses modern `signed-by` GPG method
+- **Debian 12+ (Bookworm, Trixie, and later)**: Uses the modern `signed-by` GPG
+  method — this is every supported version.
+- **Below Debian 12**: Uses the legacy `apt-key` method. With Debian 11
+  dropped (#933) nothing reaches this branch; it is retained only as a floor
+  for any older base someone supplies via `BASE_IMAGE`.
 
 **If you're on an older version of this container system**:
 
@@ -96,7 +129,7 @@ apt-cache search package-name
 ## Writing Debian-Compatible Feature Scripts
 
 **Pattern**: When creating or updating feature installation scripts, use the
-Debian version detection system to ensure compatibility across Debian 11, 12,
+Debian version detection system to ensure compatibility across Debian 12
 and 13.
 
 ### Debian Version Detection Functions
@@ -133,14 +166,14 @@ apt_install_conditional 11 12 lzma lzma-dev
 ```bash
 source /tmp/build-scripts/base/apt-utils.sh
 
-if command -v apt-key >/dev/null 2>&1; then
-    # Old method for Debian 11/12
-    log_message "Using apt-key method (Debian 11/12)"
+if ! is_debian_version 12; then
+    # Old method, for a pre-Bookworm base
+    log_message "Using apt-key method (below Debian 12)"
     curl -fsSL https://example.com/key.gpg | apt-key add -
     apt-add-repository "deb https://example.com/apt stable main"
 else
-    # New method for Debian 13+
-    log_message "Using signed-by method (Debian 13+)"
+    # New method for Debian 12+
+    log_message "Using signed-by method (Debian 12+)"
     curl -fsSL https://example.com/key.gpg | gpg --dearmor -o /usr/share/keyrings/example-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/example-keyring.gpg] https://example.com/apt stable main" > /etc/apt/sources.list.d/example.list
 fi
@@ -162,7 +195,7 @@ fi
 
 Common package changes between Debian versions:
 
-| Package        | Debian 11/12 | Debian 13+ | Notes                                   |
+| Package        | Debian 12    | Debian 13+ | Notes                                   |
 | -------------- | ------------ | ---------- | --------------------------------------- |
 | lzma, lzma-dev | Available    | Removed    | Use liblzma-dev (works on all versions) |
 | apt-key        | Available    | Removed    | Use signed-by method instead            |
@@ -174,10 +207,6 @@ When adding version-specific logic:
 1. **Test locally with different base images**:
 
    ```bash
-   # Test Debian 11
-   docker build --build-arg BASE_IMAGE=debian:bullseye-slim \
-                --build-arg INCLUDE_YOUR_FEATURE=true -t test:debian11 .
-
    # Test Debian 12
    docker build --build-arg BASE_IMAGE=debian:bookworm-slim \
                 --build-arg INCLUDE_YOUR_FEATURE=true -t test:debian12 .
@@ -187,13 +216,14 @@ When adding version-specific logic:
                 --build-arg INCLUDE_YOUR_FEATURE=true -t test:debian13 .
    ```
 
-1. **CI automatically tests all versions**: The GitHub Actions workflow includes
-   a `debian-version-test` job that tests Python and cloud tools on all three
-   Debian versions.
+1. **CI automatically tests all supported versions**: The GitHub Actions
+   workflow includes a `debian-version-test` job that tests Python and cloud
+   tools on Debian 12 and 13. It runs `fail-fast: false`, so one failing
+   version does not cancel the others.
 
 ### Design Philosophy
 
-- **Backwards Compatible**: Always support Debian 11 and 12 unless absolutely
+- **Backwards Compatible**: Always support Debian 12 unless absolutely
   necessary
 - **Forward Compatible**: Prefer methods that work on Debian 13+ when possible
 - **Graceful Degradation**: Use version detection, don't assume availability

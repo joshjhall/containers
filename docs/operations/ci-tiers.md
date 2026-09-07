@@ -172,8 +172,8 @@ tier's main-branch cache.
 
 **Status:** Planned, tracked in **#408-B**.
 
-The full matrix — every feature × every supported distro (Debian 11 / 12 /
-13, Alpine, RHEL/UBI, Ubuntu) × every arch (amd64, arm64) — runs Sundays at
+The full matrix — every feature × every supported distro (Debian 12 / 13,
+Alpine, RHEL/UBI, Ubuntu) × every arch (amd64, arm64) — runs Sundays at
 03:00 UTC. This is the regression-detection tier: cross-cutting changes
 that pass PR and merge tiers but break a less-common distro/arch
 combination get caught here.

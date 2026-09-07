@@ -2,8 +2,8 @@
 # APT repository and GPG key management
 #
 # Provides version-aware functions for adding apt repositories with GPG keys.
-# Handles both legacy apt-key (Debian 11) and modern signed-by (Debian 12+)
-# methods automatically.
+# Handles both modern signed-by (Debian 12+, i.e. every supported version) and
+# legacy apt-key (below 12) methods automatically.
 #
 # Usage:
 #   Source this file in your script:
@@ -43,8 +43,10 @@ fi
 # ============================================================================
 # add_apt_repository_key - Add an apt repository with GPG key (Debian-version-aware)
 #
-# Handles both legacy apt-key (Debian 11) and modern signed-by (Debian 12+)
-# methods for adding GPG keys and apt repository sources.
+# Handles both modern signed-by (Debian 12+) and legacy apt-key (below 12)
+# methods for adding GPG keys and apt repository sources. With Debian 11 dropped
+# at EOL (#933), the legacy branch is a floor for a caller-supplied older
+# BASE_IMAGE, not a path any supported version takes.
 #
 # Arguments:
 #   $1 - tool_name:   Human-readable name for log messages (e.g., "Kubernetes")
@@ -70,8 +72,8 @@ add_apt_repository_key() {
     local key_format="${6:-armored}" # "armored" (needs dearmor) or "binary"
 
     if ! is_debian_version 12; then
-        # Legacy method for Debian 11
-        log_message "Using apt-key method (Debian 11)"
+        # Legacy method for a pre-Bookworm base (no supported version lands here)
+        log_message "Using apt-key method (below Debian 12)"
         log_message "Adding ${tool_name} GPG key"
         retry_with_backoff curl -fsSL "$key_url" | apt-key add -
 

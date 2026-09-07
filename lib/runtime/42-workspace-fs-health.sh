@@ -498,7 +498,8 @@ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 # WHY THOSE FOUR. They are guarded by `|| return 0` by design — this script must
 # never be why a container fails to start — which makes their failure path
 # invisible: exactly how the git-2.31 `--path-format=absolute` regression
-# no-opped the whole #882 feature on Debian 11 (git 2.30.2) with no diagnostic.
+# no-opped the whole #882 feature on Debian 11 (git 2.30.2) with no diagnostic
+# — that distro is gone (#933), but the silent-failure shape it exposed is not.
 # Substituting the binary is the only way to drive such a failure on demand.
 #
 # A PATH-shadowed stub does NOT work here: /etc/bash_env rebuilds PATH for
@@ -823,12 +824,14 @@ repair_linked_worktrees() {
     # Both sides are resolved with `cd ... && pwd -P` rather than
     # `rev-parse --path-format=absolute`, for two independent reasons:
     #
-    #   1. PORTABILITY. --path-format arrived in git 2.31, but Debian 11
-    #      (Bullseye) — a supported base image — ships 2.30.2. There the flag is
-    #      unrecognized, rev-parse errors, the `|| return 0` fires, and this
+    #   1. PORTABILITY. --path-format arrived only in git 2.31, so any base
+    #      shipping an older git (Debian 11 / Bullseye's 2.30.2 was the case
+    #      that caught us, before it was dropped at EOL — #933) leaves the flag
+    #      unrecognized: rev-parse errors, the `|| return 0` fires, and this
     #      whole function silently no-ops. It is designed to fail silent-and-safe,
     #      so that regression would surface as nothing at all: the #882 repair
-    #      simply never running on one of the supported distros.
+    #      simply never running on one of the supported distros. `cd && pwd -P`
+    #      has no such floor, so it stays correct as the matrix changes.
     #
     #   2. NORMALIZATION. --git-common-dir can come back relative, and `pwd -P`
     #      resolves symlinks on both sides — so a PROJECT_ROOT reached through a

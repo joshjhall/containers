@@ -45,7 +45,6 @@ pub fn project_config(
     let base_images = vec![
         "debian:trixie-slim — Debian 13 (stable)",
         "debian:bookworm-slim — Debian 12 (oldstable)",
-        "debian:bullseye-slim — Debian 11 (EOL)",
     ];
     let default_idx =
         base_images.iter().position(|s| s.starts_with(&defaults.base_image)).unwrap_or(0);
