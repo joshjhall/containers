@@ -114,3 +114,4 @@
 - [Embedded-only advisory suppression](embedded-only-advisory-suppression.md) — prove unreachability with `cargo tree -i --target <triple>`
 - [Trailing empty line hides a guard](trailing-empty-line-hides-guard.md) — $(...) strips trailing newlines; an empty-value guard is unreachable if
 - [Prove unreachability via symbol table](prove-unreachability-via-symbol-table.md) — for a CVE in a prebuilt Go binary, use `nm` on the
+- [Report I/O decides suite exit](report-io-decides-suite-exit.md) — a suite's last command sets its status; artifact I/O there fakes failures
