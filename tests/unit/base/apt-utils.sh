@@ -468,8 +468,8 @@ test_apt_install_conditional_range_boundaries() {
     local script="
         _APT_UTILS_LOADED=''
         source '$PROJECT_ROOT/lib/base/apt-utils.sh' 2>/dev/null
-        get_debian_major_version() { echo \"\$STUB_VERSION\"; }
-        apt_install() { echo \"INSTALLED:\$*\"; }
+        get_debian_major_version() { command echo \"\$STUB_VERSION\"; }
+        apt_install() { command echo \"INSTALLED:\$*\"; }
         apt_install_conditional 12 12 lzma lzma-dev
     "
 
@@ -521,6 +521,55 @@ test_apt_install_conditional_call_sites_pinned() {
     else
         assert_true false "python cleanup guard no longer matches the install-side 12-only bound"
     fi
+}
+
+# Test: the python cleanup guard actually decides correctly at runtime
+#
+# The pinning test above only greps the guard's TEXT, which catches drift but
+# proves nothing about behavior — a semantically different rewrite keeping the
+# same string would pass it. This sources the real script with the version
+# getter stubbed and inspects what the composed
+# `is_debian_version 12 && ! is_debian_version 13` actually queues for removal.
+# The boundary test nearby exercises apt_install_conditional, which this guard
+# does NOT call, so neither test substitutes for the other.
+test_python_cleanup_guard_runtime_decision() {
+    local script="
+        _APT_UTILS_LOADED=''
+        source '$PROJECT_ROOT/lib/base/apt-utils.sh' 2>/dev/null
+        get_debian_major_version() { command echo \"\$STUB_VERSION\"; }
+        log_message() { :; }
+        log_command() { :; }
+        CLEANUP_BUILD_DEPS=true
+        source '$PROJECT_ROOT/lib/features/lib/python/cleanup-build-deps.sh' >/dev/null 2>&1
+        command echo \"PKGS:\${_remove_pkgs[*]}\"
+    "
+
+    local out
+    # Debian 12 installed lzma/lzma-dev, so cleanup must purge them.
+    out=$(STUB_VERSION=12 bash -c "$script" 2>/dev/null || true)
+    assert_contains "$out" "lzma lzma-dev" \
+        "cleanup queues lzma/lzma-dev for removal on Debian 12"
+
+    # Debian 11 is out of matrix: python.sh never installed them there.
+    out=$(STUB_VERSION=11 bash -c "$script" 2>/dev/null || true)
+    assert_not_contains "$out" " lzma " \
+        "cleanup does not purge lzma on Debian 11 (never installed)"
+
+    # Debian 13 uses liblzma-dev instead; the bare packages do not exist.
+    out=$(STUB_VERSION=13 bash -c "$script" 2>/dev/null || true)
+    assert_not_contains "$out" " lzma " \
+        "cleanup does not purge lzma on Debian 13 (never installed)"
+
+    # Undeterminable version: skip rather than guess.
+    out=$(STUB_VERSION=unknown bash -c "$script" 2>/dev/null || true)
+    assert_not_contains "$out" " lzma " \
+        "cleanup does not purge lzma when the version is unknown"
+
+    # The always-removed packages must still be queued in every case, or the
+    # assertions above could pass simply because the array came back empty.
+    out=$(STUB_VERSION=13 bash -c "$script" 2>/dev/null || true)
+    assert_contains "$out" "build-essential" \
+        "cleanup still queues the version-independent build deps"
 }
 
 # Test: _fix_dpkg_state helper function exists
@@ -624,6 +673,7 @@ run_test test_is_debian_version "is_debian_version function"
 run_test test_apt_install_conditional "apt_install_conditional function"
 run_test test_apt_install_conditional_range_boundaries "apt_install_conditional range boundaries"
 run_test test_apt_install_conditional_call_sites_pinned "apt_install_conditional call sites pinned to 12 12"
+run_test test_python_cleanup_guard_runtime_decision "python cleanup guard runtime decision"
 run_test test_fix_dpkg_state_helper "_fix_dpkg_state helper function"
 run_test test_clean_apt_cache_helper "_clean_apt_cache helper function"
 
