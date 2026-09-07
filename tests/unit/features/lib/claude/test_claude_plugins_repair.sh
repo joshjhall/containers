@@ -600,6 +600,128 @@ test_expected_hooks_only_for_workflow() {
 }
 
 # ============================================================================
+# Mutual exclusion (#784 / #777)
+# ============================================================================
+# A repair is run BY HAND mid-session — precisely the window in which the auth
+# watcher may fire claude-setup. Both write ~/.claude/settings.json
+# non-atomically, so the loser's writes are clobbered and plugins end up
+# installed-but-disabled: the exact state this script repairs.
+
+# Mutual exclusion only holds if BOTH entry points lock the SAME path. Two
+# hardcoded literals could drift apart silently and would exclude nothing, so
+# the constant is shared and both call sites are pinned to it.
+test_both_entrypoints_share_one_lock_path() {
+    setup
+    local setup_src="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
+
+    assert_file_contains "$PLUGIN_LIB" 'CLAUDE_SETUP_LOCK="/tmp/claude-setup.lock"' \
+        "the shared library owns the lock path constant"
+
+    local caller
+    for caller in "$REPAIR" "$setup_src"; do
+        if command grep -qE '^[[:space:]]*_acquire_setup_lock "\$CLAUDE_SETUP_LOCK"' "$caller"; then
+            pass_test "${caller##*/} locks via the shared constant"
+        else
+            fail_test "${caller##*/} does not take the shared setup lock"
+        fi
+    done
+
+    # An env-derived path would resolve differently across process trees (a
+    # backgrounded startup script vs an operator's shell), silently restoring
+    # the race the lock exists to prevent.
+    if command grep -qE 'CLAUDE_SETUP_LOCK=.*\$\{?TMPDIR' "$PLUGIN_LIB"; then
+        fail_test "lock path is env-derived — the entry points may not agree"
+    else
+        pass_test "lock path does not depend on TMPDIR"
+    fi
+    teardown
+}
+
+# check must NOT lock: it writes nothing, so taking a 600s-blocking lock would
+# make a read-only status query hang behind an in-flight repair.
+test_check_does_not_take_the_lock() {
+    setup
+    local lockfile="$TEST_TEMP_DIR/held.lock"
+    : >"$lockfile"
+
+    if ! command -v flock >/dev/null 2>&1; then
+        skip_test "flock not available on this host"
+        teardown
+        return 0
+    fi
+
+    # Hold the lock, then confirm `check` still completes promptly.
+    local rc=0
+    flock "$lockfile" -c 'sleep 5' &
+    local holder=$!
+    sleep 0.3
+
+    local start end
+    start=$(date +%s)
+    _run_repair check >/dev/null || rc=$?
+    end=$(date +%s)
+
+    kill "$holder" 2>/dev/null || true
+    wait "$holder" 2>/dev/null || true
+
+    if [ $((end - start)) -lt 4 ]; then
+        pass_test "check returns without waiting on the setup lock"
+    else
+        fail_test "check blocked on the lock — a read-only query must not"
+    fi
+    teardown
+}
+
+# The degraded paths must stay DISTINCT. "flock is not installed" and "flock
+# works but the lock file could not be opened" have different fixes, and one
+# shared message sends the operator after the wrong one.
+test_lock_failure_branches_are_distinguishable() {
+    setup
+    local runner="$TEST_TEMP_DIR/lock-runner.sh"
+    # A PATH holding the interpreter and coreutils but NOT flock. Emptying PATH
+    # outright would make `bash` itself unresolvable, and the test would "fail"
+    # on a missing interpreter rather than on the branch under test.
+    local nolock_bin="$TEST_TEMP_DIR/nolock-bin"
+    mkdir -p "$nolock_bin"
+    local tool
+    for tool in bash cat sed grep awk head; do
+        local resolved
+        resolved=$(command -v "$tool" 2>/dev/null) || continue
+        ln -sf "$resolved" "$nolock_bin/$tool"
+    done
+
+    {
+        echo '#!/usr/bin/env bash'
+        _extract_lock_function
+        echo '_acquire_setup_lock "$1"'
+        echo 'echo REACHED'
+    } >"$runner"
+
+    # Branch 1: flock genuinely absent (PATH resolves everything but flock).
+    local out
+    out=$(env -u BASH_ENV PATH="$nolock_bin" bash "$runner" "$TEST_TEMP_DIR/a.lock" 2>&1) || true
+    assert_contains "$out" "flock not available" "a missing flock says so"
+    assert_contains "$out" "REACHED" "a missing flock warns and continues"
+
+    # Branch 2: flock present, but the lock path cannot be opened.
+    out=$(env -u BASH_ENV bash "$runner" "$TEST_TEMP_DIR/no-such-dir/b.lock" 2>&1) || true
+    assert_contains "$out" "could not open" "an unopenable path says THAT, not 'flock not available'"
+    assert_not_contains "$out" "flock not available" \
+        "the two degraded paths are not collapsed into one message"
+    assert_contains "$out" "REACHED" "an unopenable path warns and continues"
+    teardown
+}
+
+# Extract _acquire_setup_lock from the library (column-0 layout, shfmt-enforced).
+_extract_lock_function() {
+    command awk '
+        $0 == "_acquire_setup_lock() {" { in_fn = 1 }
+        in_fn { print }
+        in_fn && $0 == "}" { exit }
+    ' "$PLUGIN_LIB"
+}
+
+# ============================================================================
 # Pinning contract
 # ============================================================================
 # The repair must operate on the image-baked cache, never a working tree. This
@@ -688,6 +810,9 @@ run_test test_parse_component_count_reads_each_label "parser: reads Skills/Agent
 run_test test_parse_component_count_absent_label_is_empty "parser: absent label is empty, not zero"
 run_test test_parse_component_count_is_anchored "parser: label match is anchored"
 run_test test_expected_hooks_only_for_workflow "parser: only workflow carries a hook requirement"
+run_test test_both_entrypoints_share_one_lock_path "lock: both entry points share one lock path"
+run_test test_check_does_not_take_the_lock "lock: read-only check never blocks on it"
+run_test test_lock_failure_branches_are_distinguishable "lock: degraded branches report distinct causes"
 run_test test_repair_never_reaches_for_a_working_tree "pinning: never registers a working tree"
 run_test test_repair_sources_the_shared_library "sharing: sources the library, carries no install loop"
 run_test test_repair_loads_build_time_config "config: build-time default drives the plugin list"

@@ -458,7 +458,7 @@ test_status_parser_mirrors_production() {
 #
 # Each function is checked against the file that actually defines it (#777):
 # the plugin primitives moved to claude-plugin-lib.sh, while install_plugin and
-# _acquire_setup_lock stayed in claude-setup. Pinning the pair means a function
+# only install_plugin stayed in claude-setup. Pinning the pair means a function
 # quietly moving BACK is caught too, not just one going missing.
 test_all_production_functions_extractable() {
     local entry fn file
@@ -472,7 +472,7 @@ test_all_production_functions_extractable() {
         "librarian_install_plugins:$CLAUDE_PLUGIN_LIB" \
         "librarian_verify_plugin:$CLAUDE_PLUGIN_LIB" \
         "install_plugin:$CLAUDE_SETUP" \
-        "_acquire_setup_lock:$CLAUDE_SETUP"; do
+        "_acquire_setup_lock:$CLAUDE_PLUGIN_LIB"; do
         fn="${entry%%:*}"
         file="${entry#*:}"
         if [ -n "$(_extract_shell_function "$file" "$fn")" ]; then
@@ -1290,7 +1290,7 @@ STUB
     local runner="$tmpdir/runner.sh"
     {
         echo 'set -euo pipefail'
-        _extract_shell_function "$CLAUDE_SETUP" "_acquire_setup_lock"
+        _extract_shell_function "$CLAUDE_PLUGIN_LIB" "_acquire_setup_lock"
         echo '_acquire_setup_lock "$1"'
         echo 'echo "CONTINUED"'
     } >"$runner"
@@ -1338,17 +1338,34 @@ test_lock_unwritable_path_warns_and_continues() {
 # concurrently (30-first-startup.sh and the auth-watcher), and without a lock
 # their non-atomic settings.json read-modify-writes clobber each other.
 test_claude_setup_takes_flock() {
-    local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
     local code
     # Comments describe the lock at length — match executable lines only, so
-    # deleting the real call fails this test.
-    code=$(command grep -vE '^[[:space:]]*#' "$setup_file")
+    # deleting the real code fails this test.
+    #
+    # The lock mechanism moved to the shared library in #777 (claude-setup and
+    # claude-plugins-repair both call it, and mutual exclusion only holds if
+    # both compute the same path). Read the library for the mechanism; the
+    # separate call-site assertion below keeps claude-setup honest about
+    # actually taking it.
+    code=$(command grep -vE '^[[:space:]]*#' "$CLAUDE_PLUGIN_LIB_SRC")
 
     if command grep -qE 'flock -w [0-9]+ 200' <<<"$code"; then
-        pass_test "claude-setup acquires an flock with a bounded wait"
+        pass_test "the plugin library acquires an flock with a bounded wait"
     else
-        fail_test "claude-setup does not acquire a bounded flock"
+        fail_test "the plugin library does not acquire a bounded flock"
     fi
+
+    # Both entry points must actually TAKE the lock, not merely have access to
+    # a function that could. A repair racing a watcher-triggered setup is the
+    # exact collision #777 added a third writer to.
+    local caller
+    for caller in "$CLAUDE_SETUP_CMD_SRC" "$CLAUDE_LIB_DIR/claude-plugins-repair"; do
+        if command grep -qE '^[[:space:]]*_acquire_setup_lock "\$CLAUDE_SETUP_LOCK"' "$caller"; then
+            pass_test "${caller##*/} acquires the shared setup lock"
+        else
+            fail_test "${caller##*/} never calls _acquire_setup_lock with the shared path"
+        fi
+    done
 
     # Absent flock must not be fatal: Alpine ships only the busybox applet and
     # ubi-minimal may omit util-linux entirely.
@@ -1978,20 +1995,27 @@ test_persist_script_has_all_override_vars() {
 }
 
 # --- Source file pattern checks ---
+#
+# These assert the helper is DEFINED in the library (`^name()`), not merely
+# mentioned somewhere. After #777 moved the definitions out of claude-setup, a
+# bare substring grep against claude-setup still matched — on the call sites —
+# so the test would have kept passing even if the definition were deleted
+# outright. A definition-anchored grep against the file that actually owns it
+# is the only form that can fail for the right reason.
 
 test_claude_setup_has_resolve_override() {
-    if command grep -q '_resolve_override_list' "$CLAUDE_SETUP_CMD_SRC"; then
-        pass_test "claude-setup contains _resolve_override_list helper"
+    if command grep -q '^_resolve_override_list()' "$CLAUDE_PLUGIN_LIB_SRC"; then
+        pass_test "claude-plugin-lib defines _resolve_override_list"
     else
-        fail_test "claude-setup missing _resolve_override_list helper"
+        fail_test "claude-plugin-lib missing _resolve_override_list definition"
     fi
 }
 
 test_claude_setup_has_is_in_list() {
-    if command grep -q '_is_in_list' "$CLAUDE_SETUP_CMD_SRC"; then
-        pass_test "claude-setup contains _is_in_list helper"
+    if command grep -q '^_is_in_list()' "$CLAUDE_PLUGIN_LIB_SRC"; then
+        pass_test "claude-plugin-lib defines _is_in_list"
     else
-        fail_test "claude-setup missing _is_in_list helper"
+        fail_test "claude-plugin-lib missing _is_in_list definition"
     fi
 }
 
@@ -2016,6 +2040,8 @@ test_dockerfile_has_override_args() {
 CLAUDE_CODE_SETUP_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features" && pwd)/claude-code-setup.sh"
 CLAUDE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/claude" && pwd)"
 CLAUDE_SETUP_CMD_SRC="$CLAUDE_LIB_DIR/claude-setup"
+# The shared library that owns the plugin primitives since #777.
+CLAUDE_PLUGIN_LIB_SRC="$CLAUDE_LIB_DIR/claude-plugin-lib.sh"
 CLAUDE_AUTH_WATCHER_SRC="$CLAUDE_LIB_DIR/claude-auth-watcher"
 CLAUDE_ENV_SRC="$CLAUDE_LIB_DIR/95-claude-env.sh"
 
@@ -2453,19 +2479,22 @@ test_persist_script_has_file_default_vars() {
 
 # --- Source file checks for new helpers ---
 
+# Definition-anchored against the library that owns them (see the note above
+# the first pair) — a call-site grep in claude-setup cannot fail correctly.
+
 test_claude_setup_has_resolve_override_or_file() {
-    if command grep -q '_resolve_override_list_or_file' "$CLAUDE_SETUP_CMD_SRC"; then
-        pass_test "claude-setup contains _resolve_override_list_or_file helper"
+    if command grep -q '^_resolve_override_list_or_file()' "$CLAUDE_PLUGIN_LIB_SRC"; then
+        pass_test "claude-plugin-lib defines _resolve_override_list_or_file"
     else
-        fail_test "claude-setup missing _resolve_override_list_or_file helper"
+        fail_test "claude-plugin-lib missing _resolve_override_list_or_file definition"
     fi
 }
 
 test_claude_setup_has_file_json_to_csv() {
-    if command grep -q '_file_json_to_csv' "$CLAUDE_SETUP_CMD_SRC"; then
-        pass_test "claude-setup contains _file_json_to_csv helper"
+    if command grep -q '^_file_json_to_csv()' "$CLAUDE_PLUGIN_LIB_SRC"; then
+        pass_test "claude-plugin-lib defines _file_json_to_csv"
     else
-        fail_test "claude-setup missing _file_json_to_csv helper"
+        fail_test "claude-plugin-lib missing _file_json_to_csv definition"
     fi
 }
 

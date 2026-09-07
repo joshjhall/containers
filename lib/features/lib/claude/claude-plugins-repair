@@ -193,25 +193,18 @@ run_check() {
 # ---------------------------------------------------------------------------
 # repair — install/enable, then verify
 # ---------------------------------------------------------------------------
-# Serialized against claude-setup on the SAME lock (#784). A repair is run by
-# hand mid-session, which is precisely when the auth watcher may also fire
-# claude-setup; both then read-modify-write ~/.claude/settings.json
-# non-atomically, and the loser's writes are clobbered — leaving plugins
-# installed-but-disabled, the very state this repairs.
+# Serialized against claude-setup on the SAME lock (#784), via the SAME function
+# and constant from claude-plugin-lib.sh. A repair is run by hand mid-session,
+# which is precisely when the auth watcher may also fire claude-setup; both then
+# read-modify-write ~/.claude/settings.json non-atomically, and the loser's
+# writes are clobbered — leaving plugins installed-but-disabled, the very state
+# this repairs.
 #
-# Degrades rather than aborts when flock is unavailable: Alpine ships only the
-# busybox applet and ubi-minimal may omit it entirely, and running unlocked is
-# strictly better than refusing to repair.
+# Sharing the constant is what makes the mutual exclusion real: two entry points
+# holding a lock on two different paths exclude nothing, and a hardcoded literal
+# in each file could drift apart silently.
 run_repair() {
-    if command -v flock >/dev/null 2>&1 && exec 200>/tmp/claude-setup.lock; then
-        if ! flock -w 600 200; then
-            echo "ERROR: timed out after 600s waiting for /tmp/claude-setup.lock" >&2
-            echo "       Another claude-setup appears stuck. Check for a hung process." >&2
-            exit 1
-        fi
-    else
-        echo "  ⚠ flock unavailable — not serialized against a concurrent claude-setup" >&2
-    fi
+    _acquire_setup_lock "$CLAUDE_SETUP_LOCK"
 
     echo "Librarian plugins ($LIBRARIAN_DIR):"
     librarian_install_plugins

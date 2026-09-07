@@ -50,66 +50,41 @@ for arg in "$@"; do
 done
 
 # ============================================================================
+# Shared Plugin Primitives
+# ============================================================================
+# The override/deny-list resolution, the `claude plugin list` parsers, the
+# enablement-aware status + enable primitives, the setup lock, and the whole
+# librarian (local, offline) install path live in claude-plugin-lib.sh. They
+# were MOVED there, not copied (#777): `claude-plugins-repair` sources the same
+# file, so the every-boot path and the on-demand repair path cannot drift.
+#
+# Sourced FIRST, before anything else runs, because the mutual-exclusion lock
+# (#784) is one of the things it defines and that lock must be held for the
+# whole run — including the settings.json writes further down.
+#
+# Sourced with an explicit existence check rather than a bare `source`, because
+# under `set -e` a missing file aborts with only bash's own terse message —
+# unhelpful for the one operator who will ever hit it (a hand-copied
+# claude-setup without its library).
+CLAUDE_PLUGIN_LIB="${CLAUDE_PLUGIN_LIB:-/usr/local/lib/claude/claude-plugin-lib.sh}"
+if [ ! -r "$CLAUDE_PLUGIN_LIB" ]; then
+    echo "ERROR: required library not found: $CLAUDE_PLUGIN_LIB" >&2
+    echo "       Reinstall the claude-code-setup feature, or set CLAUDE_PLUGIN_LIB." >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "$CLAUDE_PLUGIN_LIB"
+
+# ============================================================================
 # Mutual Exclusion (issue #784)
 # ============================================================================
-# Two startup paths launch this script concurrently — 30-first-startup.sh
-# backgrounds `claude-setup --force`, and 35-auth-watcher-startup.sh backgrounds
-# claude-auth-watcher, which runs claude-setup on auth detection. Both then
-# read-modify-write ~/.claude/settings.json non-atomically (the host-event hook
-# merge below, plus `claude plugin install`'s own enabledPlugins update), so the
-# loser's writes are clobbered and plugins end up installed-but-DISABLED.
-#
-# The lock lives here in the callee rather than in either caller, so every
-# invocation path is covered — including a manual `claude-setup` run racing a
-# watcher-triggered one. It is acquired once and held for the whole run via an
-# open fd, not just around the plugin phase, because settings.json is touched in
-# more than one place.
-# The path is pinned to /tmp rather than ${TMPDIR:-/tmp} ON PURPOSE. Mutual
-# exclusion only holds if BOTH launchers compute the SAME path, and the two
-# invocations come from different process trees (one backgrounded from the
-# startup script, one nohup'd from the auth watcher). An env-derived path could
-# differ between them — a TMPDIR exported into one tree but not the other would
-# put them on separate lock files and silently restore the race. A fixed literal
-# cannot drift. It also keeps the documented recovery path
-# (docs/claude-code/plugins-and-mcps.md) truthful for an operator clearing a
-# stuck lock by hand.
-CLAUDE_SETUP_LOCK="/tmp/claude-setup.lock"
-
-# Acquire the setup lock on fd 200, or degrade with a warning.
-#
-# The body lives in a function (not inline) so the unit suite can drive it with
-# a scratch lock path and assert both failure branches — the timeout exit and
-# the unwritable-path warn-and-continue (#787). The call site below still passes
-# the fixed $CLAUDE_SETUP_LOCK literal, which is the property #784 depends on.
-_acquire_setup_lock() {
-    local lock_path="$1"
-
-    if ! command -v flock >/dev/null 2>&1; then
-        # No hard dependency on util-linux: Alpine ships only the busybox applet
-        # and ubi-minimal may omit it entirely (cf. the nologin finding in #435).
-        # Continuing unlocked is the pre-existing behavior, not a regression.
-        echo "  ⚠ flock not available — concurrent claude-setup runs are not serialized" >&2
-        return 0
-    fi
-
-    # Open the lock file on fd 200. The redirect is kept on its own line so a
-    # failure to open (e.g. unwritable TMPDIR) is caught here rather than
-    # aborting mid-run under `set -e`.
-    if ! exec 200>"$lock_path"; then
-        echo "  ⚠ could not open $lock_path — continuing without a lock" >&2
-        return 0
-    fi
-
-    # -w 600: a real run takes ~48s, so a 10-minute wait can only mean a stuck
-    # holder. Treat it as an error rather than proceeding unlocked, which would
-    # silently reintroduce the very race this guards.
-    if ! flock -w 600 200; then
-        echo "ERROR: timed out after 600s waiting for $lock_path" >&2
-        echo "       Another claude-setup appears stuck. Check for a hung process." >&2
-        exit 1
-    fi
-}
-
+# Acquired once and held for the whole run via an open fd, not just around the
+# plugin phase, because settings.json is touched in more than one place. The
+# lock lives in the callee rather than in either caller, so every invocation
+# path is covered — including a manual `claude-setup` run racing a
+# watcher-triggered one, and a `claude-plugins-repair` run racing either (#777).
+# Both the constant and the function come from claude-plugin-lib.sh, so the two
+# entry points cannot drift onto different lock files.
 _acquire_setup_lock "$CLAUDE_SETUP_LOCK"
 
 # Secure token storage path (RAM-backed, never touches disk)
@@ -217,14 +192,6 @@ echo ""
 # under `set -e` a missing file aborts with only bash's own terse message —
 # unhelpful for the one operator who will ever hit it (a hand-copied
 # claude-setup without its library).
-CLAUDE_PLUGIN_LIB="${CLAUDE_PLUGIN_LIB:-/usr/local/lib/claude/claude-plugin-lib.sh}"
-if [ ! -r "$CLAUDE_PLUGIN_LIB" ]; then
-    echo "ERROR: required library not found: $CLAUDE_PLUGIN_LIB" >&2
-    echo "       Reinstall the claude-code-setup feature, or set CLAUDE_PLUGIN_LIB." >&2
-    exit 1
-fi
-# shellcheck source=/dev/null
-source "$CLAUDE_PLUGIN_LIB"
 
 # ============================================================================
 # Plugin Installation Logic

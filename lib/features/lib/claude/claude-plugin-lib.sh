@@ -353,6 +353,72 @@ enable_plugin() {
 }
 
 # ============================================================================
+# Mutual Exclusion (issue #784)
+# ============================================================================
+# Two startup paths launch claude-setup concurrently — 30-first-startup.sh
+# backgrounds `claude-setup --force`, and 35-auth-watcher-startup.sh backgrounds
+# claude-auth-watcher, which runs claude-setup on auth detection. Both then
+# read-modify-write ~/.claude/settings.json non-atomically (the host-event hook
+# merge, plus `claude plugin install`'s own enabledPlugins update), so the
+# loser's writes are clobbered and plugins end up installed-but-DISABLED.
+#
+# claude-plugins-repair is a THIRD writer, and the one most likely to race: it
+# is run by hand mid-session, which is exactly when the auth watcher may fire
+# (#777). It takes the same lock, which is only meaningful if both compute the
+# SAME path — hence the shared constant here rather than a literal in each file.
+#
+# The path is pinned to /tmp rather than ${TMPDIR:-/tmp} ON PURPOSE. The
+# invocations come from different process trees (one backgrounded from the
+# startup script, one nohup'd from the auth watcher, one from an operator's
+# shell). An env-derived path could differ between them — a TMPDIR exported into
+# one tree but not the other would put them on separate lock files and silently
+# restore the race. A fixed literal cannot drift. It also keeps the documented
+# recovery path (docs/claude-code/plugins-and-mcps.md) truthful for an operator
+# clearing a stuck lock by hand.
+# shellcheck disable=SC2034  # read by the sourcing scripts, not by this library
+CLAUDE_SETUP_LOCK="/tmp/claude-setup.lock"
+
+# Acquire the setup lock on fd 200, or degrade with a warning.
+#
+# The body lives in a function (not inline) so the unit suite can drive it with
+# a scratch lock path and assert both failure branches — the timeout exit and
+# the unwritable-path warn-and-continue (#787). Both call sites pass the fixed
+# $CLAUDE_SETUP_LOCK literal, which is the property #784 depends on.
+#
+# The two degraded paths are reported DISTINCTLY on purpose: "flock is not
+# installed" and "flock works but the lock file could not be opened" have
+# different fixes, and collapsing them into one message sends the operator after
+# the wrong one.
+_acquire_setup_lock() {
+    local lock_path="$1"
+
+    if ! command -v flock >/dev/null 2>&1; then
+        # No hard dependency on util-linux: Alpine ships only the busybox applet
+        # and ubi-minimal may omit it entirely (cf. the nologin finding in #435).
+        # Continuing unlocked is the pre-existing behavior, not a regression.
+        echo "  ⚠ flock not available — concurrent claude-setup runs are not serialized" >&2
+        return 0
+    fi
+
+    # Open the lock file on fd 200. The redirect is kept on its own line so a
+    # failure to open (e.g. unwritable TMPDIR) is caught here rather than
+    # aborting mid-run under `set -e`.
+    if ! exec 200>"$lock_path"; then
+        echo "  ⚠ could not open $lock_path — continuing without a lock" >&2
+        return 0
+    fi
+
+    # -w 600: a real run takes ~48s, so a 10-minute wait can only mean a stuck
+    # holder. Treat it as an error rather than proceeding unlocked, which would
+    # silently reintroduce the very race this guards.
+    if ! flock -w 600 200; then
+        echo "ERROR: timed out after 600s waiting for $lock_path" >&2
+        echo "       Another claude-setup appears stuck. Check for a hung process." >&2
+        exit 1
+    fi
+}
+
+# ============================================================================
 # Librarian Plugin Installation (no auth required, offline)
 # ============================================================================
 # The general-purpose skills/agents ship as the librarian plugins. The build
