@@ -10,7 +10,7 @@
 #   - k9s: Terminal-based Kubernetes cluster UI
 #   - helm: Kubernetes package manager
 #   - krew: kubectl plugin package manager
-#   - cosign: kubectl binary and container image verification (Sigstore)
+#   - cosign: kubectl binary and container image verification (Sigstore, from base)
 #   - Essential plugins: ctx, ns, tree, neat
 #   - Auto-completion for kubectl and aliases
 #   - Automatic kubeconfig detection
@@ -20,7 +20,7 @@
 #   - k9s: Terminal UI for Kubernetes
 #   - helm: Latest version
 #   - krew: Plugin manager for kubectl
-#   - cosign: Sigstore for kubectl binary and image verification
+#   - cosign: Sigstore for kubectl binary and image verification (base install)
 #
 # Version Compatibility:
 #   kubectl version should be within one minor version of your cluster.
@@ -315,11 +315,11 @@ if [ -n "$KREW_FILENAME" ]; then
 fi
 
 # ============================================================================
-# Cosign Installation (for kubectl Sigstore verification)
+# Cosign Availability (for kubectl Sigstore verification)
 # ============================================================================
-# shellcheck source=lib/base/cosign-install.sh
-source /tmp/build-scripts/base/cosign-install.sh
-install_cosign || {
+# shellcheck source=lib/base/cosign-require.sh
+source /tmp/build-scripts/base/cosign-require.sh
+require_cosign || {
     log_feature_end
     exit 1
 }

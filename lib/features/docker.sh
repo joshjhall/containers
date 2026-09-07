@@ -43,7 +43,7 @@
 #   - Docker Buildx: Advanced build capabilities with BuildKit
 #   - lazydocker: Terminal UI for Docker management
 #   - dive: Docker image layer analysis tool
-#   - cosign: Container image signing and verification (Sigstore)
+#   - cosign: Container image signing and verification (Sigstore, from base)
 #   - Helper functions for common operations
 #   - Automatic user group configuration
 #
@@ -53,7 +53,7 @@
 #   - docker-buildx-plugin: Docker Buildx for advanced builds
 #   - lazydocker: Terminal UI for Docker management
 #   - dive: Docker image layer analysis tool
-#   - cosign: Sigstore container image signing and verification
+#   - cosign: Sigstore container image signing and verification (base install)
 #
 # Requirements:
 #   - Docker socket: Mount with -v /var/run/docker.sock:/var/run/docker.sock
@@ -296,11 +296,11 @@ log_command "Cleaning up build directory" \
     command rm -rf "$BUILD_TEMP"
 
 # ============================================================================
-# Cosign Installation (Container Image Signing)
+# Cosign Availability (Container Image Signing)
 # ============================================================================
-# shellcheck source=lib/base/cosign-install.sh
-source /tmp/build-scripts/base/cosign-install.sh
-install_cosign || {
+# shellcheck source=lib/base/cosign-require.sh
+source /tmp/build-scripts/base/cosign-require.sh
+require_cosign || {
     log_feature_end
     exit 1
 }

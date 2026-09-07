@@ -47,10 +47,23 @@ CVE-2024-24790  # net/netip issue - mkcert uses standard net package
 # listening socket.
 #
 # Caveat for whoever revisits: a bare CVE line here is GLOBAL, not per-binary.
-# lib/base/cosign-install.sh installs a separate, older cosign (3.0.2) for the
-# kubernetes/docker features. That is not in the `minimal` image this job
-# scans, but this entry would cover it too. Re-check if that path is ever
-# scanned, and prefer removing this entry over widening it.
+# It covers every cosign in every scanned image, so it is only as sound as the
+# set of binaries the evidence above was established against.
+#
+# Today that set has exactly one member. lib/base/setup.sh installs cosign at
+# the tracked COSIGN_VERSION, unconditionally, into /usr/local/bin during the
+# `base` stage — and that is the only cosign the repo ships. The docker and
+# kubernetes features used to source a helper that dpkg-installed a second,
+# separately pinned 3.0.2 .deb, but it ran in the same Docker stage *after*
+# setup.sh, behind a `command -v cosign` short-circuit, so it never installed
+# anything. That dead path was removed in #935; the features now assert the
+# base install is present instead (lib/base/cosign-require.sh).
+#
+# So the proof above covers every cosign scanned. If a second install path is
+# ever reintroduced, this entry silently extends to a binary nobody checked —
+# re-run the two nm commands against it, or narrow this entry. Prefer removing
+# it over widening it. tests/unit/base/cosign-require.sh guards the single-path
+# invariant.
 #
 # Remove once a cosign release embeds x/crypto >= 0.55.0. Tracked in #932.
 CVE-2026-56854  # x/crypto/ssh source-address bypass - SSH server symbols not linked into cosign
