@@ -26,6 +26,7 @@ init_test_framework
 test_suite "claude-setup Template Installation Tests"
 
 CLAUDE_SETUP="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
+CLAUDE_PLUGIN_LIB="$PROJECT_ROOT/lib/features/lib/claude/claude-plugin-lib.sh"
 
 # Setup: create a fake templates dir and HOME, then extract the installation
 # section into a standalone script we can run without needing claude CLI.
@@ -253,12 +254,19 @@ test_no_stamp_machinery() {
 test_librarian_offline_install_present() {
     # The librarian plugins install from the local /opt/librarian marketplace,
     # offline and without auth — outside the auth-gated official plugin block.
-    assert_file_contains "$CLAUDE_SETUP" '/opt/librarian' \
-        "claude-setup installs from the local /opt/librarian marketplace"
-    assert_file_contains "$CLAUDE_SETUP" 'claude plugin marketplace add "$LIBRARIAN_DIR"' \
-        "claude-setup registers the local librarian marketplace"
-    assert_file_contains "$CLAUDE_SETUP" 'CLAUDE_LIBRARIAN_PLUGINS' \
-        "claude-setup honors the CLAUDE_LIBRARIAN_PLUGINS override"
+    #
+    # The implementation moved to claude-plugin-lib.sh in #777 so that
+    # `claude-plugins-repair` re-runs the SAME code on demand. Assert the
+    # library owns the mechanism and that claude-setup still invokes it —
+    # asserting only one half would let the boot path silently stop calling it.
+    assert_file_contains "$CLAUDE_PLUGIN_LIB" '/opt/librarian' \
+        "the plugin library installs from the local /opt/librarian marketplace"
+    assert_file_contains "$CLAUDE_PLUGIN_LIB" 'claude plugin marketplace add "$LIBRARIAN_DIR"' \
+        "the plugin library registers the local librarian marketplace"
+    assert_file_contains "$CLAUDE_PLUGIN_LIB" 'CLAUDE_LIBRARIAN_PLUGINS' \
+        "the plugin library honors the CLAUDE_LIBRARIAN_PLUGINS override"
+    assert_file_contains "$CLAUDE_SETUP" 'librarian_install_plugins' \
+        "claude-setup still runs the librarian install on every boot"
 }
 
 # ============================================================================

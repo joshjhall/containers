@@ -30,8 +30,14 @@
 #              compares against whatever origin/main already points at).
 #
 # SYNC SET. Defaults to the runtime copies the host executes — `.claude/hooks`,
-# `justfile`, `bin`. Override by passing path prefixes as positional args
+# `justfile`, `just`, `bin`. Override by passing path prefixes as positional args
 # (repo-root-relative), e.g. `sync-host.sh justfile` to refresh only that.
+#
+# NOTE for a host still running a PRE-#777 copy of this script: its default set
+# has no `just`, so the first sync pulls the import-bearing justfile without the
+# just/ modules it needs and every `just` recipe fails until the next sync. The
+# recovery is to invoke this script directly — `bash bin/sync-host.sh` — which
+# does not go through `just`. Self-correcting, and only ever once.
 #
 # Resolves the repo root bare-safely via bin/repo-root.sh (landed in #604);
 # all paths are relative to that root, so the script works from any cwd.
@@ -42,7 +48,12 @@
 set -euo pipefail
 
 # Default sync set: the runtime working copies a bare host actually executes.
-DEFAULT_PREFIXES=(.claude/hooks justfile bin)
+#
+# `just` is in the set because the justfile `import`s just/*.just (#777), and an
+# unresolvable import fails EVERY recipe, not merely the module's own. Syncing
+# the justfile without its modules would leave the host with a justfile that
+# runs nothing at all.
+DEFAULT_PREFIXES=(.claude/hooks justfile just bin)
 
 check_only=0
 do_fetch=1
