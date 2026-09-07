@@ -428,11 +428,24 @@ _acquire_setup_lock() {
 # network and no authentication, so this runs unconditionally on every boot and
 # self-heals a fresh ~/.claude home volume (replaces the #574 stamp re-sync).
 #
-# LIBRARIAN_DIR is overridable ONLY so the unit suite can point it at a fixture.
-# Production callers leave it at /opt/librarian: that tree is the image-baked,
-# LIBRARIAN_REF-pinned cache. Pointing it at a librarian working-tree checkout
-# would register the UN-pinned tree and silently defeat the pin (#777).
-LIBRARIAN_DIR="${LIBRARIAN_DIR:-/opt/librarian}"
+# LIBRARIAN_DIR is a FIXED literal, not an env override.
+#
+# /opt/librarian is the image-baked, LIBRARIAN_REF-pinned cache, and pinning is
+# the whole point (#777): registering a librarian working-tree checkout instead
+# would silently install whatever is checked out rather than the version the
+# image was built with. An env-settable LIBRARIAN_DIR would let anything that
+# controls the environment — a compose `environment:` block, a stray `.env`,
+# a build arg — redirect the trusted local marketplace, which is exactly the
+# invariant this file exists to hold. `main` hardcoded it; keep it that way.
+#
+# The unit suite reaches it through LIBRARIAN_DIR_TEST_OVERRIDE, a separate,
+# obviously-named variable. A test-only seam that cannot be tripped by ordinary
+# container configuration is strictly safer than widening the production one,
+# and it makes any real attempt to repoint the marketplace look wrong on sight.
+LIBRARIAN_DIR="/opt/librarian"
+if [ -n "${LIBRARIAN_DIR_TEST_OVERRIDE:-}" ]; then
+    LIBRARIAN_DIR="$LIBRARIAN_DIR_TEST_OVERRIDE"
+fi
 LIBRARIAN_MARKETPLACE="librarian"
 DEFAULT_LIBRARIAN_PLUGINS="dev-core,review-audit,workflow"
 

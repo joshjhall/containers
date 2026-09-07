@@ -13,7 +13,8 @@
 #   - a stub `claude` first on PATH, whose behavior is driven by files in a
 #     scratch dir (so a subprocess can change what the next call returns),
 #   - CLAUDE_PLUGIN_LIB pointing at the real library,
-#   - LIBRARIAN_DIR pointing at a fixture directory,
+#   - LIBRARIAN_DIR_TEST_OVERRIDE pointing at a fixture directory (the
+#     production LIBRARIAN_DIR is a fixed literal and NOT env-settable),
 #   - HOME pointing at a fake home holding known_marketplaces.json.
 #
 # That matters because the failures this script exists to catch are all
@@ -162,6 +163,10 @@ case "$1 $2" in
         exit 0
         ;;
     "plugin marketplace")
+        if [ "$(command cat "$MOCK_STATE/marketplace_fails" 2>/dev/null || echo 0)" = "1" ]; then
+            echo "marketplace add failed: no such directory" >&2
+            exit 1
+        fi
         exit 0
         ;;
 esac
@@ -181,7 +186,7 @@ _run_repair() {
         HOME="$FAKE_HOME" \
         MOCK_STATE="$MOCK_STATE" \
         CLAUDE_PLUGIN_LIB="$PLUGIN_LIB" \
-        LIBRARIAN_DIR="$FAKE_LIBRARIAN" \
+        LIBRARIAN_DIR_TEST_OVERRIDE="$FAKE_LIBRARIAN" \
         ENABLED_FEATURES_FILE="/nonexistent-enabled-features" \
         CLAUDE_LIBRARIAN_PLUGINS="dev-core,review-audit,workflow" \
         CLAUDE_SETUP_RETRY_DELAY=0 \
@@ -226,7 +231,7 @@ test_missing_plugin_lib_fails_loud() {
     out=$(env -u BASH_ENV PATH="$STUB_BIN:$PATH" HOME="$FAKE_HOME" \
         MOCK_STATE="$MOCK_STATE" \
         CLAUDE_PLUGIN_LIB="/nonexistent/claude-plugin-lib.sh" \
-        LIBRARIAN_DIR="$FAKE_LIBRARIAN" \
+        LIBRARIAN_DIR_TEST_OVERRIDE="$FAKE_LIBRARIAN" \
         bash "$REPAIR" check 2>&1) || rc=$?
 
     assert_equals "3" "$rc" "a missing shared library exits 3"
@@ -266,7 +271,7 @@ test_help_works_without_environment() {
 
     local out rc=0
     out=$(env -u BASH_ENV PATH="$STUB_BIN:$PATH" HOME="$FAKE_HOME" \
-        CLAUDE_PLUGIN_LIB="/nonexistent" LIBRARIAN_DIR="/nonexistent" \
+        CLAUDE_PLUGIN_LIB="/nonexistent" LIBRARIAN_DIR_TEST_OVERRIDE="/nonexistent" \
         bash "$REPAIR" --help 2>&1) || rc=$?
 
     assert_equals "0" "$rc" "--help exits 0 even with nothing installed"
@@ -418,7 +423,7 @@ test_repair_honors_librarian_plugins_override() {
     local rc=0
     env -u BASH_ENV PATH="$STUB_BIN:$PATH" HOME="$FAKE_HOME" \
         MOCK_STATE="$MOCK_STATE" CLAUDE_PLUGIN_LIB="$PLUGIN_LIB" \
-        LIBRARIAN_DIR="$FAKE_LIBRARIAN" \
+        LIBRARIAN_DIR_TEST_OVERRIDE="$FAKE_LIBRARIAN" \
         ENABLED_FEATURES_FILE="/nonexistent-enabled-features" \
         CLAUDE_LIBRARIAN_PLUGINS="dev-core" \
         bash "$REPAIR" repair >/dev/null 2>&1 || rc=$?
@@ -438,7 +443,7 @@ test_repair_honors_disabled_plugins_kill_switch() {
     local rc=0
     env -u BASH_ENV PATH="$STUB_BIN:$PATH" HOME="$FAKE_HOME" \
         MOCK_STATE="$MOCK_STATE" CLAUDE_PLUGIN_LIB="$PLUGIN_LIB" \
-        LIBRARIAN_DIR="$FAKE_LIBRARIAN" \
+        LIBRARIAN_DIR_TEST_OVERRIDE="$FAKE_LIBRARIAN" \
         ENABLED_FEATURES_FILE="/nonexistent-enabled-features" \
         CLAUDE_LIBRARIAN_PLUGINS="dev-core,review-audit,workflow" \
         CLAUDE_DISABLED_PLUGINS="workflow" \
@@ -449,6 +454,25 @@ test_repair_honors_disabled_plugins_kill_switch() {
     assert_contains "$calls" "plugin install dev-core@librarian" "un-denied plugins still install"
     assert_not_contains "$calls" "plugin install workflow@librarian" \
         "the deny-list suppresses install, not just re-enable (#789)"
+    teardown
+}
+
+# A failed marketplace registration is absorbed (`|| true`) so one bad plugin
+# cannot abort a boot — which means the WARNING is the only signal it happened.
+# If that line ever stopped being printed, the failure would be fully silent.
+test_failed_marketplace_registration_warns() {
+    setup
+    _write_marketplaces_without_librarian
+    _set_all_status "absent"
+    echo "1" >"$MOCK_STATE/marketplace_fails"
+
+    local out rc=0
+    out=$(_run_repair repair) || rc=$?
+
+    assert_contains "$out" "Failed to register librarian marketplace" \
+        "a failed registration is reported, not swallowed"
+    assert_contains "$out" "marketplace add failed" \
+        "the underlying CLI error is surfaced"
     teardown
 }
 
@@ -729,6 +753,41 @@ _extract_lock_function() {
 # for a checkout", which is a statement about the whole file rather than about
 # any single execution.
 
+# The pin is only as strong as LIBRARIAN_DIR being unreachable from ordinary
+# container configuration. If a plain `LIBRARIAN_DIR=...` in a compose
+# `environment:` block, a `.env`, or a build arg could redirect it, anything
+# controlling the environment could point the trusted local marketplace at an
+# arbitrary tree — installing whatever is there instead of the LIBRARIAN_REF
+# version the image was built with, with no warning.
+test_production_librarian_dir_is_not_env_settable() {
+    setup
+    local evil="$TEST_TEMP_DIR/evil-checkout"
+    mkdir -p "$evil"
+
+    # Set the PRODUCTION variable (not the test seam) and confirm it is ignored:
+    # the run must still resolve /opt/librarian, which does not exist here, so
+    # it fails loud with exit 3 rather than quietly using $evil.
+    local out rc=0
+    out=$(env -u BASH_ENV PATH="$STUB_BIN:$PATH" HOME="$FAKE_HOME" \
+        MOCK_STATE="$MOCK_STATE" CLAUDE_PLUGIN_LIB="$PLUGIN_LIB" \
+        ENABLED_FEATURES_FILE="/nonexistent-enabled-features" \
+        LIBRARIAN_DIR="$evil" \
+        bash "$REPAIR" check 2>&1) || rc=$?
+
+    assert_not_contains "$out" "$evil" \
+        "a plain LIBRARIAN_DIR env var cannot redirect the marketplace"
+    assert_contains "$out" "/opt/librarian" \
+        "the fixed literal is what gets resolved"
+
+    # And the source says so: a bare ${LIBRARIAN_DIR:-...} default would
+    # reintroduce the override.
+    assert_file_contains "$PLUGIN_LIB" 'LIBRARIAN_DIR="/opt/librarian"' \
+        "the library assigns the pinned path as a literal"
+    assert_file_not_contains "$PLUGIN_LIB" 'LIBRARIAN_DIR="${LIBRARIAN_DIR:-' \
+        "the library does not accept LIBRARIAN_DIR from the environment"
+    teardown
+}
+
 test_repair_never_reaches_for_a_working_tree() {
     setup
     local code
@@ -766,7 +825,7 @@ test_repair_loads_build_time_config() {
     local rc=0
     env -u BASH_ENV PATH="$STUB_BIN:$PATH" HOME="$FAKE_HOME" \
         MOCK_STATE="$MOCK_STATE" CLAUDE_PLUGIN_LIB="$PLUGIN_LIB" \
-        LIBRARIAN_DIR="$FAKE_LIBRARIAN" \
+        LIBRARIAN_DIR_TEST_OVERRIDE="$FAKE_LIBRARIAN" \
         ENABLED_FEATURES_FILE="$conf" \
         bash "$REPAIR" repair >/dev/null 2>&1 || rc=$?
 
@@ -800,6 +859,7 @@ run_test test_repair_reenables_disabled_plugins "repair: re-enables rather than 
 run_test test_repair_is_idempotent "repair: idempotent (second run installs nothing)"
 run_test test_repair_honors_librarian_plugins_override "repair: honors CLAUDE_LIBRARIAN_PLUGINS"
 run_test test_repair_honors_disabled_plugins_kill_switch "repair: honors CLAUDE_DISABLED_PLUGINS (#789)"
+run_test test_failed_marketplace_registration_warns "repair: a failed marketplace registration warns loudly"
 run_test test_repair_fails_when_hooks_not_discovered "verify: Hooks (0) fails despite a clean install"
 run_test test_repair_fails_when_agents_not_discovered "verify: Agents (0) fails despite a clean install"
 run_test test_repair_fails_when_skills_not_discovered "verify: Skills (0) fails despite a clean install"
@@ -813,6 +873,7 @@ run_test test_expected_hooks_only_for_workflow "parser: only workflow carries a 
 run_test test_both_entrypoints_share_one_lock_path "lock: both entry points share one lock path"
 run_test test_check_does_not_take_the_lock "lock: read-only check never blocks on it"
 run_test test_lock_failure_branches_are_distinguishable "lock: degraded branches report distinct causes"
+run_test test_production_librarian_dir_is_not_env_settable "pinning: LIBRARIAN_DIR is not env-settable"
 run_test test_repair_never_reaches_for_a_working_tree "pinning: never registers a working tree"
 run_test test_repair_sources_the_shared_library "sharing: sources the library, carries no install loop"
 run_test test_repair_loads_build_time_config "config: build-time default drives the plugin list"
