@@ -109,3 +109,5 @@
 - [virtiofs EBADF is not bindfs](virtiofs-ebadf-not-bindfs.md) — wedged worktree entries fail on the lower virtiofs too; quarantine-by-rename works, artifacts hold 0 live bytes
 - [Validation on load is a breaking change](validation-on-load-is-a-breaking-change.md) — a loader allow-list breaks existing files AND desyncs the writer; validate on save too, share one exported predicate (#924)
 - [Degraded review gate is not a pass](degraded-review-gate-is-not-a-pass.md) — a review dimension that dies on a 429 returns no verdict, not a clean one; re-run it before merging (#924)
+- [Octarine publishes as octarine-core](octarine-package-renamed-core.md) — `package =` rename since beta.5; MSRV 1.97; deny.toml skips need re-derivation, not bound bumps
+- [Embedded-only advisory suppression](embedded-only-advisory-suppression.md) — prove unreachability with `cargo tree -i --target <triple>`; suppress in deny.toml AND .osv-scanner.toml
