@@ -78,7 +78,8 @@ TIER 4: Calculated Checksums (TOFU fallback) ← LAST RESORT
 - **Node.js**: GPG signatures (SHASUMS256.txt.sig via release team keyring)
 - **Go (Golang)**: GPG signatures (.asc via Google signing key)
 - **Terraform**: GPG signatures (SHA256SUMS.sig via HashiCorp key)
-- **kubectl**: Sigstore (requires cosign from kubernetes or docker feature)
+- **kubectl**: Sigstore (cosign is a base tool installed by `lib/base/setup.sh`;
+  the kubernetes and docker features assert its presence via `require_cosign`)
 
 **Example**:
 

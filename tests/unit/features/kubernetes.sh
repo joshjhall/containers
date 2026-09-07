@@ -339,8 +339,10 @@ test_download_verification() {
         assert_true false "Doesn't use verify_download"
     fi
 
-    # kubernetes.sh uses verify_download for all tools (k9s, helm, krew, cosign)
-    # with register_tool_checksum_fetcher for Tier 3 checksum resolution
+    # kubernetes.sh uses verify_download for the tools it installs (k9s, helm,
+    # krew) with register_tool_checksum_fetcher for Tier 3 checksum resolution.
+    # cosign is not among them: it comes from the base install and kubernetes.sh
+    # only asserts its presence via require_cosign (#935).
 }
 
 # Test: Script sources download-verify.sh

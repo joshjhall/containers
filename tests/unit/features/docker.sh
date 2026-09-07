@@ -386,10 +386,17 @@ test_dive_arch_mapping() {
     assert_file_contains "$source_file" "dive_" "docker.sh uses dive deb package naming"
 }
 
-# Test: Cosign installation
-test_cosign_installation_reference() {
+# Test: Cosign availability guard
+#
+# docker.sh does not install cosign — it asserts the base install is present
+# (#935). Assert the actual call and its source, not the bare word "cosign",
+# which appears in comments and would pass even if the guard were deleted.
+test_cosign_requirement_reference() {
     local source_file="$PROJECT_ROOT/lib/features/docker.sh"
-    assert_file_contains "$source_file" "cosign" "docker.sh installs cosign for container image signing"
+    assert_file_contains "$source_file" "cosign-require.sh" \
+        "docker.sh sources the cosign availability guard"
+    assert_file_contains "$source_file" "require_cosign ||" \
+        "docker.sh fails the feature build when cosign is unavailable"
 }
 
 # Test: Docker helper functions - docker-clean
@@ -427,7 +434,7 @@ run_test test_docker_socket_chgrp_pattern "Docker socket uses chgrp docker"
 run_test test_docker_socket_chmod_pattern "Docker socket uses chmod g+rw"
 run_test test_lazydocker_arch_mapping "Lazydocker architecture filename mapping"
 run_test test_dive_arch_mapping "Dive architecture filename mapping"
-run_test test_cosign_installation_reference "Cosign installation referenced"
+run_test test_cosign_requirement_reference "Cosign availability guard referenced"
 run_test test_docker_clean_function_definition "docker-clean function defined"
 run_test test_docker_shell_function_definition "docker-shell function defined"
 run_test test_docker_config_env_var "DOCKER_CONFIG env var set"
