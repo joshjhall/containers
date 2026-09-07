@@ -220,6 +220,15 @@ update_version() {
                     # lockstep with the pin (issue #506). Future luggage-managed
                     # tools add the same one-liner to their case.
                     update_luggage_catalog "rust" "$latest" || return "$RC_UPDATE_FAILED"
+                    # The devcontainer pins the same full X.Y.Z toolchain. It is
+                    # asserted against the Dockerfile ARG by
+                    # tests/unit/rust-version-sync.sh, so leaving it out made every
+                    # Rust bump fail that suite until fixed by hand. The X.Y-only
+                    # pins (CI toolchain, Cargo.toml MSRV, clippy.toml, the
+                    # luggage-builder image tag) are deliberately NOT touched here:
+                    # a patch bump does not change them, and a minor bump needs a
+                    # human to review MSRV implications.
+                    sed_inplace "s/RUST_VERSION: \"[0-9][^\"]*\"/RUST_VERSION: \"$latest\"/" "$PROJECT_ROOT/.devcontainer/docker-compose.yml"
                     ;;
                 Ruby)
                     sed_inplace "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
@@ -477,7 +486,19 @@ update_version() {
                     sed_inplace "s/POETRY_VERSION=\"\${POETRY_VERSION:-[^}]*}\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^POETRY_VERSION=\"[0-9][^\"]*\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                # Two independent uv pins exist: dev-tools.sh (tool "uv") and
+                # lib/python/install-tools.sh (tool "uv-python"). The sed is
+                # identical; only $script_path differs, so each entry rewrites
+                # just its own file. Kept as two separate labels rather than an
+                # `uv|uv-python)` alternation because tests/unit/version-updater-parity.sh
+                # extracts case labels with a regex that allows no spaces around
+                # the `|` — a spaced alternation reads as zero cases and makes
+                # the parity guard report both tools as unhandled.
                 uv)
+                    sed_inplace "s/UV_VERSION=\"\${UV_VERSION:-[^}]*}\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^UV_VERSION=\"[0-9][^\"]*\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                uv-python)
                     sed_inplace "s/UV_VERSION=\"\${UV_VERSION:-[^}]*}\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^UV_VERSION=\"[0-9][^\"]*\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
                     ;;

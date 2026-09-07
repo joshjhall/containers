@@ -265,13 +265,20 @@ extract_all_versions() {
     # Mise (polyglot runtime version manager) from Dockerfile
     _add_dockerfile_version MISE_VERSION "Mise"
 
-    # Python tools (use non-anchored grep for POETRY_VERSION/UV_VERSION)
-    if [ -f "$PROJECT_ROOT/lib/features/python.sh" ]; then
-        ver=$(extract_version_from_line "$(command grep "POETRY_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | command head -1)") || true
-        [ -n "$ver" ] && add_tool "Poetry" "$ver" "python.sh" || true
+    # Python tools (use non-anchored grep for POETRY_VERSION/UV_VERSION).
+    # These pins live in lib/features/lib/python/install-tools.sh, NOT in
+    # python.sh: the installs were extracted into that helper, and because the
+    # lookup below is a `grep` guarded by `-f`, pointing it at the old path
+    # matched nothing and silently dropped Poetry from the report entirely
+    # (a missing tool looks identical to a passing one). Keep this path in
+    # lockstep with wherever the pins actually live.
+    _PY_TOOLS_FILE="lib/features/lib/python/install-tools.sh"
+    if [ -f "$PROJECT_ROOT/$_PY_TOOLS_FILE" ]; then
+        ver=$(extract_version_from_line "$(command grep "POETRY_VERSION=" "$PROJECT_ROOT/$_PY_TOOLS_FILE" 2>/dev/null | command head -1)") || true
+        [ -n "$ver" ] && add_tool "Poetry" "$ver" "lib/python/install-tools.sh" || true
 
-        ver=$(extract_version_from_line "$(command grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | command head -1)") || true
-        [ -n "$ver" ] && add_tool "uv" "$ver" "python.sh" || true
+        ver=$(extract_version_from_line "$(command grep "UV_VERSION=" "$PROJECT_ROOT/$_PY_TOOLS_FILE" 2>/dev/null | command head -1)") || true
+        [ -n "$ver" ] && add_tool "uv-python" "$ver" "lib/python/install-tools.sh" || true
     fi
 
     # Dev tools from dev-tools.sh
@@ -466,6 +473,7 @@ main() {
             pixi) check_github_release "pixi" "prefix-dev/pixi" ;;
             Poetry) check_github_release "Poetry" "python-poetry/poetry" ;;
             uv) check_github_release "uv" "astral-sh/uv" ;;
+            uv-python) check_github_release "uv-python" "astral-sh/uv" ;;
             lazygit) check_github_release "lazygit" "jesseduffield/lazygit" ;;
             lazydocker) check_github_release "lazydocker" "jesseduffield/lazydocker" ;;
             direnv) check_github_release "direnv" "direnv/direnv" ;;
@@ -493,7 +501,11 @@ main() {
             osv-scanner) check_github_release "osv-scanner" "google/osv-scanner" ;;
             yq) check_github_release "yq" "mikefarah/yq" ;;
             sd) check_github_release "sd" "chmln/sd" ;;
-            dua) check_github_release "dua" "Byron/dua-cli" ;;
+            # dua-cli publishes the CLI on the v2.x track and the dua-core
+            # *library* under dua-core-vN tags. /releases/latest returns the
+            # library tag ("dua-core-v4.0.0"), which is not a version string
+            # and made update-versions skip the tool. Track the CLI major.
+            dua) check_github_release_major_track "dua" "Byron/dua-cli" ;;
             hyperfine) check_github_release "hyperfine" "sharkdp/hyperfine" ;;
             vale) check_github_release "vale" "vale-cli/vale" ;;
             typos) check_github_release "typos" "crate-ci/typos" ;;
