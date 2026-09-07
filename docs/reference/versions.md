@@ -11,54 +11,54 @@ that need tracking and updating.
 
 These are defined as build arguments in the Dockerfile:
 
-- `PYTHON_VERSION` (currently 3.14.3)
+- `PYTHON_VERSION` (currently 3.14.7)
 - `NODE_VERSION` (currently 22)
-- `RUST_VERSION` (currently 1.94.0)
-- `RUBY_VERSION` (currently 4.0.1)
-- `R_VERSION` (currently 4.5.3)
-- `GO_VERSION` (currently 1.26.1)
+- `RUST_VERSION` (currently 1.98.1)
+- `RUBY_VERSION` (currently 4.0.6)
+- `R_VERSION` (currently 4.6.1)
+- `GO_VERSION` (currently 1.27.1)
 - `MOJO_VERSION` (currently 25.4)
 - `JAVA_VERSION` (currently 21)
-- `KOTLIN_VERSION` (currently 2.3.10)
-- `KUBECTL_VERSION` (currently 1.33.9)
-- `K9S_VERSION` (currently 0.50.18)
+- `KOTLIN_VERSION` (currently 2.4.20)
+- `KUBECTL_VERSION` (currently 1.33.13)
+- `K9S_VERSION` (currently 0.51.0)
 - `KREW_VERSION` (currently 0.5.0)
-- `HELM_VERSION` (currently 4.1.3)
-- `TERRAGRUNT_VERSION` (currently 0.99.4)
-- `TFDOCS_VERSION` (currently 0.21.0)
-- `PIXI_VERSION` (currently 0.66.0)
-- `TFLINT_VERSION` (currently 0.61.0)
+- `HELM_VERSION` (currently 4.2.4)
+- `TERRAGRUNT_VERSION` (currently 1.1.4)
+- `TFDOCS_VERSION` (currently 0.24.0)
+- `PIXI_VERSION` (currently 0.80.0)
+- `TFLINT_VERSION` (currently 0.64.0)
 
 ## Shell Script Hardcoded Versions
 
 ### lib/features/dev-tools.sh
 
 - `DIRENV_VERSION="2.37.1"`
-- `LAZYGIT_VERSION="0.59.0"`
-- `DELTA_VERSION="0.18.2"`
+- `LAZYGIT_VERSION="0.65.0"`
+- `DELTA_VERSION="0.19.2"`
 - `MKCERT_VERSION="1.4.4"`
-- `ACT_VERSION="0.2.84"`
-- `GLAB_VERSION="1.86.0"`
+- `ACT_VERSION="0.2.89"`
+- `GLAB_VERSION="1.116.0"`
 - `DUF_VERSION="0.9.1"`
-- `ENTR_VERSION="5.7"`
+- `ENTR_VERSION="5.8"`
 - `GITCLIFF_VERSION="2.8.0"`
-- `BIOME_VERSION="2.4.4"`
+- `BIOME_VERSION="2.5.12"`
 - `TAPLO_VERSION="0.10.0"`
-- `TYPOS_VERSION="1.45.1"`
-- `SHFMT_VERSION="3.13.1"`
+- `TYPOS_VERSION="1.50.1"`
+- `SHFMT_VERSION="3.14.1"`
 - `CONFORM_VERSION="0.1.0-alpha.31"`
 
 ### lib/features/docker.sh
 
-- `LAZYDOCKER_VERSION="0.24.4"`
+- `LAZYDOCKER_VERSION="0.25.2"`
 - `DIVE_VERSION="0.13.1"`
 
 ### lib/features/java-dev.sh
 
-- `SPRING_VERSION="4.0.3"`
-- `JBANG_VERSION="0.137.0"`
-- `MVND_VERSION="1.0.3"` (indented)
-- `GJF_VERSION="1.34.1"`
+- `SPRING_VERSION="4.1.1"`
+- `JBANG_VERSION="0.141.0"`
+- `MVND_VERSION="1.0.6"` (indented)
+- `GJF_VERSION="1.36.1"`
 
 ## Tools Installed by Package Manager
 
@@ -165,7 +165,8 @@ any crate without a prebuilt binary. All are `--locked` and pinned to a
 - lazygit, direnv, act, delta, glab, mkcert, duf, entr, git-cliff, biome, taplo (dev-tools.sh)
 - dive, lazydocker (docker.sh)
 - spring-boot-cli, jbang, mvnd, google-java-format (java-dev.sh)
-- Poetry (python.sh)
+- Poetry, uv (`lib/features/lib/python/install-tools.sh`) — note this is a
+  *second* uv pin, independent of the dev-tools.sh one; both are tracked
 - cargo-* extensions, bacon, sccache, tokei, just, mdbook, taplo-cli (rust-dev.sh)
 - cargo-nextest, cargo-llvm-cov, cargo-machete (rust-dev.sh)
 - mold linker (rust-dev.sh; checked against `rui314/mold` GitHub releases)
@@ -187,9 +188,9 @@ any crate without a prebuilt binary. All are `--locked` and pinned to a
 
 - All Dockerfile ARG versions are pinned and tracked
 - All shell script tool installations use version variables
-- Poetry is pinned to a specific version (2.3.2)
-- Helm is pinned to a specific version (4.1.3)
-- duf and entr have version variables (0.9.1 and 5.7)
+- Poetry is pinned to a specific version (2.4.3)
+- Helm is pinned to a specific version (4.2.4)
+- duf and entr have version variables (0.9.1 and 5.8)
 
 ✅ **Automated version management:**
 

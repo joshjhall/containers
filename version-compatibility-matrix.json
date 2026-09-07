@@ -1,11 +1,6 @@
 {
-  "last_updated": "2026-08-16T03:53:16Z",
+  "last_updated": "2026-09-07T19:45:15Z",
   "base_images": [
-    {
-      "name": "debian:11-slim",
-      "status": "supported",
-      "tested": true
-    },
     {
       "name": "debian:12-slim",
       "status": "supported",
@@ -49,7 +44,7 @@
       "deprecated": []
     },
     "rust": {
-      "current": "1.97.1",
+      "current": "1.98.1",
       "supported": [
         "1.80.0",
         "1.81.0",
@@ -70,7 +65,7 @@
       "deprecated": []
     },
     "go": {
-      "current": "1.26.6",
+      "current": "1.27.1",
       "supported": [
         "1.23.0",
         "1.24.0",

@@ -146,8 +146,9 @@ compiling each CRAN package (tidyverse, devtools, …) from source into
 `/cache/r/library`, which dominated its cold build. Rather than cache-mounting
 `/cache/r`, the R feature scripts point `repos` at **Posit Package Manager
 (PPM)** — `https://packagemanager.posit.co/cran/__linux__/<codename>/<snapshot>`
-— which serves prebuilt binary packages for Debian 11/12/13. `install.packages()`
-then untars a prebuilt binary instead of compiling. The repo is exposed as
+— which serves prebuilt binary packages for the Debian releases this repo
+targets (12/13). `install.packages()` then untars a prebuilt binary instead of
+compiling. The repo is exposed as
 `R_PPM_REPO` in `/etc/R/Renviron.site` and consumed at both build time (the
 `r-dev.sh` install scripts) and runtime (`Rprofile.site` and the `r-*` shell
 helpers), so user-run installs get binaries too. PPM requires an `HTTPUserAgent`

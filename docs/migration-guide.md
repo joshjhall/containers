@@ -92,7 +92,8 @@ v5), not skipping major versions.
 
 #### New Features (v4.0+)
 
-- Debian 11, 12, and 13 (Trixie) support
+- Debian 11, 12, and 13 (Trixie) support (Debian 11 was later dropped at
+  its LTS EOL, 2026-08-31 — see the Base Image section of the README)
 - Improved cache strategy
 - Enhanced security hardening
 - Health check system

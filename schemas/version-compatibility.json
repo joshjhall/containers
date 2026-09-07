@@ -18,7 +18,7 @@
           "name": {
             "type": "string",
             "description": "Base image name",
-            "examples": ["debian:11-slim", "debian:12-slim", "debian:13-slim"]
+            "examples": ["debian:12-slim", "debian:13-slim"]
           },
           "status": {
             "type": "string",
