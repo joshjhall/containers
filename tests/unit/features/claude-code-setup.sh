@@ -82,6 +82,7 @@ my-custom-server: python server.py - running'
 # ============================================================================
 
 CLAUDE_SETUP="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
+CLAUDE_PLUGIN_LIB="$PROJECT_ROOT/lib/features/lib/claude/claude-plugin-lib.sh"
 
 # Print one shell function's definition verbatim from a script.
 #
@@ -105,26 +106,33 @@ _extract_shell_function() {
     ' "$file"
 }
 
-# Load a function from claude-setup into this shell, or abort the suite.
+# Load a function from a production script into this shell, or abort the suite.
 # A silent no-op here would make every test below vacuously pass.
+#
+# Takes the source file explicitly (#777): the plugin primitives moved out of
+# claude-setup into claude-plugin-lib.sh so `claude-plugins-repair` could reuse
+# them, and only install_plugin — which targets the auth-gated official
+# marketplace — stayed behind. Extracting from the wrong file is exactly the
+# silent-skip this helper's FATAL exists to prevent, so the caller names it.
 _load_production_function() {
-    local name="$1" src
-    src=$(_extract_shell_function "$CLAUDE_SETUP" "$name")
+    local name="$1" file="${2:-$CLAUDE_SETUP}" src
+    src=$(_extract_shell_function "$file" "$name")
     if [ -z "$src" ]; then
-        echo "FATAL: could not extract $name() from $CLAUDE_SETUP" >&2
+        echo "FATAL: could not extract $name() from $file" >&2
         exit 1
     fi
     eval "$src"
 }
 
-# The real implementations, pulled from claude-setup (#787).
-_load_production_function "_plugin_status_in_list"
-_load_production_function "_is_in_list"
-_load_production_function "plugin_status"
-_load_production_function "enable_plugin"
-_load_production_function "install_plugin"
-_load_production_function "_plugin_is_denied"
-_load_production_function "_log_denied_plugin"
+# The real implementations (#787). Most now live in the shared library; only
+# install_plugin is still defined in claude-setup itself.
+_load_production_function "_plugin_status_in_list" "$CLAUDE_PLUGIN_LIB"
+_load_production_function "_is_in_list" "$CLAUDE_PLUGIN_LIB"
+_load_production_function "plugin_status" "$CLAUDE_PLUGIN_LIB"
+_load_production_function "enable_plugin" "$CLAUDE_PLUGIN_LIB"
+_load_production_function "_plugin_is_denied" "$CLAUDE_PLUGIN_LIB"
+_load_production_function "_log_denied_plugin" "$CLAUDE_PLUGIN_LIB"
+_load_production_function "install_plugin" "$CLAUDE_SETUP"
 
 # Globals the extracted functions close over. install_plugin builds full_name
 # from $MARKETPLACE; the deny-list helpers read $DISABLED_PLUGINS; the retry
@@ -417,16 +425,16 @@ test_plugin_status_empty_list() {
 # — but a rename or a reformat that breaks _extract_shell_function's column-0
 # assumption still could. These greps fail loudly on that, naming the cause.
 test_status_parser_mirrors_production() {
-    local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
     local code
     # Executable lines only — the surrounding comments quote both the Status:
     # line and the enable call, which would mask their deletion.
-    code=$(command grep -vE '^[[:space:]]*#' "$setup_file")
+    # Reads the shared library, which is where these moved in #777.
+    code=$(command grep -vE '^[[:space:]]*#' "$CLAUDE_PLUGIN_LIB")
 
     if command grep -q '^_plugin_status_in_list()' <<<"$code"; then
-        pass_test "_plugin_status_in_list defined in claude-setup"
+        pass_test "_plugin_status_in_list defined in claude-plugin-lib.sh"
     else
-        fail_test "_plugin_status_in_list missing from claude-setup"
+        fail_test "_plugin_status_in_list missing from claude-plugin-lib.sh"
     fi
 
     if command grep -qE "Status:.*disabled" <<<"$code"; then
@@ -438,23 +446,39 @@ test_status_parser_mirrors_production() {
     # The repair path is what satisfies AC4 — detection alone leaves a raced
     # container broken.
     if command grep -q 'claude plugin enable' <<<"$code"; then
-        pass_test "claude-setup re-enables a disabled plugin"
+        pass_test "the plugin library re-enables a disabled plugin"
     else
-        fail_test "claude-setup never calls 'claude plugin enable'"
+        fail_test "the plugin library never calls 'claude plugin enable'"
     fi
 }
 
 # Every function these tests execute must actually extract. Without this, a
 # rename or a reformat turns _load_production_function into a no-op path and the
 # functional tests below would test nothing at all.
+#
+# Each function is checked against the file that actually defines it (#777):
+# the plugin primitives moved to claude-plugin-lib.sh, while install_plugin and
+# only install_plugin stayed in claude-setup. Pinning the pair means a function
+# quietly moving BACK is caught too, not just one going missing.
 test_all_production_functions_extractable() {
-    local fn
-    for fn in _plugin_status_in_list _is_in_list plugin_status enable_plugin \
-        install_plugin _plugin_is_denied _log_denied_plugin _acquire_setup_lock; do
-        if [ -n "$(_extract_shell_function "$CLAUDE_SETUP" "$fn")" ]; then
-            pass_test "$fn() extractable from claude-setup"
+    local entry fn file
+    for entry in \
+        "_plugin_status_in_list:$CLAUDE_PLUGIN_LIB" \
+        "_is_in_list:$CLAUDE_PLUGIN_LIB" \
+        "plugin_status:$CLAUDE_PLUGIN_LIB" \
+        "enable_plugin:$CLAUDE_PLUGIN_LIB" \
+        "_plugin_is_denied:$CLAUDE_PLUGIN_LIB" \
+        "_log_denied_plugin:$CLAUDE_PLUGIN_LIB" \
+        "librarian_install_plugins:$CLAUDE_PLUGIN_LIB" \
+        "librarian_verify_plugin:$CLAUDE_PLUGIN_LIB" \
+        "install_plugin:$CLAUDE_SETUP" \
+        "_acquire_setup_lock:$CLAUDE_PLUGIN_LIB"; do
+        fn="${entry%%:*}"
+        file="${entry#*:}"
+        if [ -n "$(_extract_shell_function "$file" "$fn")" ]; then
+            pass_test "$fn() extractable from ${file##*/}"
         else
-            fail_test "$fn() not extractable — renamed, reformatted, or deleted"
+            fail_test "$fn() not extractable from ${file##*/} — renamed, reformatted, moved, or deleted"
         fi
     done
 }
@@ -531,12 +555,12 @@ claude() {
     return 0
 }
 MOCK
-        _extract_shell_function "$CLAUDE_SETUP" "_plugin_status_in_list"
-        _extract_shell_function "$CLAUDE_SETUP" "_is_in_list"
-        _extract_shell_function "$CLAUDE_SETUP" "plugin_status"
-        _extract_shell_function "$CLAUDE_SETUP" "_plugin_is_denied"
-        _extract_shell_function "$CLAUDE_SETUP" "_log_denied_plugin"
-        _extract_shell_function "$CLAUDE_SETUP" "enable_plugin"
+        _extract_shell_function "$CLAUDE_PLUGIN_LIB" "_plugin_status_in_list"
+        _extract_shell_function "$CLAUDE_PLUGIN_LIB" "_is_in_list"
+        _extract_shell_function "$CLAUDE_PLUGIN_LIB" "plugin_status"
+        _extract_shell_function "$CLAUDE_PLUGIN_LIB" "_plugin_is_denied"
+        _extract_shell_function "$CLAUDE_PLUGIN_LIB" "_log_denied_plugin"
+        _extract_shell_function "$CLAUDE_PLUGIN_LIB" "enable_plugin"
         _extract_shell_function "$CLAUDE_SETUP" "install_plugin"
         echo 'install_plugin "commit-commands" >/dev/null 2>&1'
         echo 'echo "REACHED"'
@@ -748,7 +772,10 @@ test_install_plugin_succeeds_first_try() {
 # window silently becomes the weaker one again.
 test_enable_and_install_share_retry_shape() {
     local enable_src install_src
-    enable_src=$(_extract_shell_function "$CLAUDE_SETUP" "enable_plugin")
+    # The pair now spans two files (#777) — enable_plugin moved to the shared
+    # library, install_plugin stayed with the auth-gated path. The invariant is
+    # unchanged, and matters slightly more across a file boundary.
+    enable_src=$(_extract_shell_function "$CLAUDE_PLUGIN_LIB" "enable_plugin")
     install_src=$(_extract_shell_function "$CLAUDE_SETUP" "install_plugin")
 
     local e_max i_max
@@ -869,19 +896,20 @@ test_deny_list_is_exact_match() {
 # Source guard: the librarian loop has its own inline install path and never
 # calls install_plugin, so it needs its own deny check. Missing it would leave
 # the kill-switch inert for exactly the plugins it matters most for.
-# Scoped to the librarian block itself, not a whole-file count: the function
-# DEFINITION also matches _plugin_is_denied, so a naive count stays above a
-# threshold even after the loop's call is deleted.
+# Scoped to the librarian function itself, not a whole-file count: the deny
+# helper's DEFINITION also matches _plugin_is_denied, so a naive count stays
+# above a threshold even after the loop's call is deleted.
+#
+# The block became librarian_install_plugins() in claude-plugin-lib.sh (#777),
+# which is now shared by the boot path and `claude-plugins-repair` — so this one
+# guard covers the kill-switch on both paths at once.
 test_deny_list_applied_in_librarian_loop() {
     local block
-    block=$(command awk '
-        /^if \[ -d "\$LIBRARIAN_DIR" \]; then/ { in_block = 1 }
-        in_block { print }
-        in_block && /^fi$/ { exit }
-    ' "$CLAUDE_SETUP" | command grep -vE '^[[:space:]]*#')
+    block=$(_extract_shell_function "$CLAUDE_PLUGIN_LIB" "librarian_install_plugins" |
+        command grep -vE '^[[:space:]]*#')
 
     if [ -z "$block" ]; then
-        fail_test "could not locate the librarian install block in claude-setup"
+        fail_test "could not locate librarian_install_plugins() in claude-plugin-lib.sh"
         return
     fi
 
@@ -903,7 +931,8 @@ test_deny_list_applied_in_librarian_loop() {
 # the deny-list actually goes through it rather than reading the env var raw.
 test_deny_list_supports_file_variant() {
     local code
-    code=$(command grep -vE '^[[:space:]]*#' "$CLAUDE_SETUP")
+    # Resolution moved to the shared library in #777.
+    code=$(command grep -vE '^[[:space:]]*#' "$CLAUDE_PLUGIN_LIB")
 
     if command grep -q '_resolve_override_list_or_file "CLAUDE_DISABLED_PLUGINS"' <<<"$code"; then
         pass_test "CLAUDE_DISABLED_PLUGINS resolves via the _FILE-aware helper"
@@ -1261,7 +1290,7 @@ STUB
     local runner="$tmpdir/runner.sh"
     {
         echo 'set -euo pipefail'
-        _extract_shell_function "$CLAUDE_SETUP" "_acquire_setup_lock"
+        _extract_shell_function "$CLAUDE_PLUGIN_LIB" "_acquire_setup_lock"
         echo '_acquire_setup_lock "$1"'
         echo 'echo "CONTINUED"'
     } >"$runner"
@@ -1309,17 +1338,34 @@ test_lock_unwritable_path_warns_and_continues() {
 # concurrently (30-first-startup.sh and the auth-watcher), and without a lock
 # their non-atomic settings.json read-modify-writes clobber each other.
 test_claude_setup_takes_flock() {
-    local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
     local code
     # Comments describe the lock at length — match executable lines only, so
-    # deleting the real call fails this test.
-    code=$(command grep -vE '^[[:space:]]*#' "$setup_file")
+    # deleting the real code fails this test.
+    #
+    # The lock mechanism moved to the shared library in #777 (claude-setup and
+    # claude-plugins-repair both call it, and mutual exclusion only holds if
+    # both compute the same path). Read the library for the mechanism; the
+    # separate call-site assertion below keeps claude-setup honest about
+    # actually taking it.
+    code=$(command grep -vE '^[[:space:]]*#' "$CLAUDE_PLUGIN_LIB_SRC")
 
     if command grep -qE 'flock -w [0-9]+ 200' <<<"$code"; then
-        pass_test "claude-setup acquires an flock with a bounded wait"
+        pass_test "the plugin library acquires an flock with a bounded wait"
     else
-        fail_test "claude-setup does not acquire a bounded flock"
+        fail_test "the plugin library does not acquire a bounded flock"
     fi
+
+    # Both entry points must actually TAKE the lock, not merely have access to
+    # a function that could. A repair racing a watcher-triggered setup is the
+    # exact collision #777 added a third writer to.
+    local caller
+    for caller in "$CLAUDE_SETUP_CMD_SRC" "$CLAUDE_LIB_DIR/claude-plugins-repair"; do
+        if command grep -qE '^[[:space:]]*_acquire_setup_lock "\$CLAUDE_SETUP_LOCK"' "$caller"; then
+            pass_test "${caller##*/} acquires the shared setup lock"
+        else
+            fail_test "${caller##*/} never calls _acquire_setup_lock with the shared path"
+        fi
+    done
 
     # Absent flock must not be fatal: Alpine ships only the busybox applet and
     # ubi-minimal may omit util-linux entirely.
@@ -1949,20 +1995,27 @@ test_persist_script_has_all_override_vars() {
 }
 
 # --- Source file pattern checks ---
+#
+# These assert the helper is DEFINED in the library (`^name()`), not merely
+# mentioned somewhere. After #777 moved the definitions out of claude-setup, a
+# bare substring grep against claude-setup still matched — on the call sites —
+# so the test would have kept passing even if the definition were deleted
+# outright. A definition-anchored grep against the file that actually owns it
+# is the only form that can fail for the right reason.
 
 test_claude_setup_has_resolve_override() {
-    if command grep -q '_resolve_override_list' "$CLAUDE_SETUP_CMD_SRC"; then
-        pass_test "claude-setup contains _resolve_override_list helper"
+    if command grep -q '^_resolve_override_list()' "$CLAUDE_PLUGIN_LIB_SRC"; then
+        pass_test "claude-plugin-lib defines _resolve_override_list"
     else
-        fail_test "claude-setup missing _resolve_override_list helper"
+        fail_test "claude-plugin-lib missing _resolve_override_list definition"
     fi
 }
 
 test_claude_setup_has_is_in_list() {
-    if command grep -q '_is_in_list' "$CLAUDE_SETUP_CMD_SRC"; then
-        pass_test "claude-setup contains _is_in_list helper"
+    if command grep -q '^_is_in_list()' "$CLAUDE_PLUGIN_LIB_SRC"; then
+        pass_test "claude-plugin-lib defines _is_in_list"
     else
-        fail_test "claude-setup missing _is_in_list helper"
+        fail_test "claude-plugin-lib missing _is_in_list definition"
     fi
 }
 
@@ -1987,6 +2040,8 @@ test_dockerfile_has_override_args() {
 CLAUDE_CODE_SETUP_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features" && pwd)/claude-code-setup.sh"
 CLAUDE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/claude" && pwd)"
 CLAUDE_SETUP_CMD_SRC="$CLAUDE_LIB_DIR/claude-setup"
+# The shared library that owns the plugin primitives since #777.
+CLAUDE_PLUGIN_LIB_SRC="$CLAUDE_LIB_DIR/claude-plugin-lib.sh"
 CLAUDE_AUTH_WATCHER_SRC="$CLAUDE_LIB_DIR/claude-auth-watcher"
 CLAUDE_ENV_SRC="$CLAUDE_LIB_DIR/95-claude-env.sh"
 
@@ -2424,19 +2479,22 @@ test_persist_script_has_file_default_vars() {
 
 # --- Source file checks for new helpers ---
 
+# Definition-anchored against the library that owns them (see the note above
+# the first pair) — a call-site grep in claude-setup cannot fail correctly.
+
 test_claude_setup_has_resolve_override_or_file() {
-    if command grep -q '_resolve_override_list_or_file' "$CLAUDE_SETUP_CMD_SRC"; then
-        pass_test "claude-setup contains _resolve_override_list_or_file helper"
+    if command grep -q '^_resolve_override_list_or_file()' "$CLAUDE_PLUGIN_LIB_SRC"; then
+        pass_test "claude-plugin-lib defines _resolve_override_list_or_file"
     else
-        fail_test "claude-setup missing _resolve_override_list_or_file helper"
+        fail_test "claude-plugin-lib missing _resolve_override_list_or_file definition"
     fi
 }
 
 test_claude_setup_has_file_json_to_csv() {
-    if command grep -q '_file_json_to_csv' "$CLAUDE_SETUP_CMD_SRC"; then
-        pass_test "claude-setup contains _file_json_to_csv helper"
+    if command grep -q '^_file_json_to_csv()' "$CLAUDE_PLUGIN_LIB_SRC"; then
+        pass_test "claude-plugin-lib defines _file_json_to_csv"
     else
-        fail_test "claude-setup missing _file_json_to_csv helper"
+        fail_test "claude-plugin-lib missing _file_json_to_csv definition"
     fi
 }
 

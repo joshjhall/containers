@@ -421,6 +421,25 @@ install -m 755 /tmp/build-scripts/features/lib/claude/claude-setup \
     /usr/local/bin/claude-setup
 
 # ============================================================================
+# Install the Shared Plugin Library + On-Demand Repair Command
+# ============================================================================
+# claude-plugin-lib.sh holds the plugin primitives and the offline librarian
+# install path. It is SOURCED by both claude-setup (every boot) and
+# claude-plugins-repair (on demand), so the two paths cannot drift (#777).
+# Mode 644: it is sourced, never executed.
+log_message "Installing shared plugin library..."
+install -d -m 755 /usr/local/lib/claude
+install -m 644 /tmp/build-scripts/features/lib/claude/claude-plugin-lib.sh \
+    /usr/local/lib/claude/claude-plugin-lib.sh
+
+# A Claude Code self-update mid-session can silently de-register the librarian
+# marketplace and uninstall its plugins. claude-setup already repairs that, but
+# only at container start; this is the on-demand trigger for the same code.
+log_message "Creating claude-plugins-repair command..."
+install -m 755 /tmp/build-scripts/features/lib/claude/claude-plugins-repair \
+    /usr/local/bin/claude-plugins-repair
+
+# ============================================================================
 # Create First-Startup Script (calls claude-setup)
 # ============================================================================
 log_message "Creating first-startup script..."
@@ -478,10 +497,10 @@ fi
 # ============================================================================
 log_feature_summary \
     --feature "Claude Code Setup" \
-    --tools "claude,claude-setup,claude-auth-watcher,bash-language-server" \
-    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/opt/librarian,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh,~/.claude/settings.json" \
+    --tools "claude,claude-setup,claude-plugins-repair,claude-auth-watcher,bash-language-server" \
+    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-plugins-repair,/usr/local/lib/claude/claude-plugin-lib.sh,/usr/local/bin/claude-auth-watcher,/opt/librarian,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh,~/.claude/settings.json" \
     --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_EXTRA_SKILLS,CLAUDE_EXTRA_AGENTS,CLAUDE_AUTO_DETECT_MCPS,CLAUDE_MCP_AUTO_AUTH,CLAUDE_AUTH_WATCHER_TIMEOUT,CLAUDE_PLUGINS,CLAUDE_MCPS,CLAUDE_AGENTS,CLAUDE_SKILLS,LIBRARIAN_REF,CLAUDE_LIBRARIAN_PLUGINS" \
-    --commands "claude,claude-setup,claude-auth-watcher" \
+    --commands "claude,claude-setup,claude-plugins-repair,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."
 
 # End logging

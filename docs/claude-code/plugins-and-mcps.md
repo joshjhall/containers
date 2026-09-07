@@ -209,6 +209,70 @@ first-startup script and the auth watcher) cannot interleave their
 `~/.claude/settings.json` writes. Where `flock` is unavailable, setup logs a
 warning and proceeds unlocked.
 
+### Troubleshooting: slash commands stop resolving mid-session
+
+**Symptom.** Every `/workflow:*`, `/dev-core:*`, and `/review-audit:*` command
+stops resolving partway through a session. There is no error message anywhere —
+`claude plugin list` simply stops listing the plugins, so the first sign is a
+slash command that does nothing.
+
+**Cause.** A Claude Code self-update inside a running container can de-register
+the `librarian` marketplace and uninstall its plugins. Only the two registry
+files are lost:
+
+- `~/.claude/plugins/known_marketplaces.json` — the `librarian` entry (the
+  GitHub-sourced marketplaces are untouched; only the **directory-sourced** one
+  is dropped)
+- `~/.claude/plugins/installed_plugins.json` — the `*@librarian` entries
+
+The version-pinned plugin cache and `/opt/librarian` itself survive intact, so
+this is a registration problem, not a missing-files problem.
+
+`claude-setup` repairs exactly this on every container start, but a self-update
+happens mid-life — so the repair cannot fire until the next restart.
+
+**Fix.** Run the repair, then restart Claude Code:
+
+```bash
+just claude-plugins-repair     # or, in-container: claude-plugins-repair repair
+```
+
+To check first without changing anything — this is also the one-command answer
+to "did the update eat my plugins?", instead of reading two JSON files:
+
+```bash
+just claude-plugins-check      # read-only; exit 1 if not fully registered
+```
+
+Both are idempotent and safe to run mid-session. `check` writes nothing.
+
+Verification asserts **component discovery**, not just a clean install exit: a
+plugin can install successfully and still expose nothing. `workflow` must report
+`Hooks (2)` (it reports `Hooks (0)` when `hooks/hooks.json` is not wired), and
+every plugin must report non-zero skills and agents (agents report `0` under a
+nested directory layout — Claude Code only discovers flat `agents/<name>.md`).
+
+A missing `/opt/librarian` is a **loud** failure (exit 3), not a quiet success —
+a repair that did nothing must not look like a repair that worked.
+
+> **Do not re-add the marketplace from a librarian checkout.** The obvious
+> manual recovery —
+>
+> ```bash
+> claude plugin marketplace add .      # from a librarian working tree — WRONG
+> ```
+>
+> registers the **un-pinned working tree** instead of the image-baked cache,
+> silently defeating `LIBRARIAN_REF` pinning. You get whatever is checked out
+> rather than the version the image was built with, and nothing warns you.
+> `claude-plugins-repair` always targets `/opt/librarian` and never reaches for
+> a checkout.
+
+Both commands honor `CLAUDE_LIBRARIAN_PLUGINS` and `CLAUDE_DISABLED_PLUGINS`
+exactly as the boot path does — they run the same code, from a shared library
+(`/usr/local/lib/claude/claude-plugin-lib.sh`), so the boot path and the repair
+path cannot drift.
+
 ## MCP Server Configuration
 
 ### Extra MCP Servers

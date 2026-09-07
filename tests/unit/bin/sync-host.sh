@@ -67,7 +67,13 @@ make_fixture() {
         git init -q -b main
         printf '#!/bin/sh\necho hook-v1\n' >.claude/hooks/golem-notify.sh
         command chmod +x .claude/hooks/golem-notify.sh
-        printf 'default:\n\t@echo just-v1\n' >justfile
+        # The justfile `import`s just/*.just (#777). The modules are part of the
+        # fixture because an unresolvable import fails EVERY recipe, not just the
+        # module's own — so a host that syncs the justfile without just/ has a
+        # justfile that runs nothing at all.
+        printf 'default:\n\t@echo just-v1\n\nimport "just/mod.just"\n' >justfile
+        command mkdir -p just
+        printf 'probe:\n\t@echo module-v1\n' >just/mod.just
         command chmod +x bin/repo-root.sh bin/sync-host.sh
         git add -A
         git commit -qm init
@@ -93,6 +99,8 @@ place_stale() {
     printf '#!/bin/sh\necho STALE\n' >"$HOST/.claude/hooks/golem-notify.sh"
     command chmod +x "$HOST/.claude/hooks/golem-notify.sh"
     printf 'default:\n\t@echo STALE\n' >"$HOST/justfile"
+    command mkdir -p "$HOST/just"
+    printf 'probe:\n\t@echo STALE\n' >"$HOST/just/mod.just"
 }
 
 # ---------------------------------------------------------------------------
@@ -108,6 +116,7 @@ test_check_reports_drift() {
     assert_not_equals "0" "$rc" "--check exits non-zero when copies drift"
     assert_contains "$out" "golem-notify.sh" "--check names the drifted hook"
     assert_contains "$out" "justfile" "--check names the drifted justfile"
+    assert_contains "$out" "just/mod.just" "--check names the drifted just module (#777)"
     teardown
 }
 
@@ -127,6 +136,42 @@ test_refresh_updates_stale_copies() {
         "hook content now matches origin/main"
     assert_contains "$(command cat "$HOST/justfile")" "just-v1" \
         "justfile content now matches origin/main"
+    # The regression #777 guards: syncing the justfile without its just/
+    # modules leaves an unresolvable import, and THAT fails every recipe.
+    assert_contains "$(command cat "$HOST/just/mod.just")" "module-v1" \
+        "just module refreshed alongside the justfile (#777)"
+    teardown
+}
+
+# ---------------------------------------------------------------------------
+# 2b. The default sync set covers `just`, and a host with NO just/ at all gets
+#     one created. This is the bootstrap case: a host on a pre-#777 justfile
+#     syncing forward must not land an import-bearing justfile with no modules.
+# ---------------------------------------------------------------------------
+test_default_set_creates_missing_just_dir() {
+    setup
+    make_fixture
+    place_stale
+    command rm -rf "$HOST/just"
+
+    local out rc=0
+    out="$(bash "$HOST/bin/sync-host.sh" --check --no-fetch 2>&1)" || rc=$?
+    assert_not_equals "0" "$rc" "a wholly missing just/ is drift"
+    assert_contains "$out" "just/mod.just" "--check names the missing module"
+
+    rc=0
+    bash "$HOST/bin/sync-host.sh" --no-fetch >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "refresh exits 0"
+    assert_file_exists "$HOST/just/mod.just" "refresh creates the missing just module"
+
+    # The point of all this: with both present, the justfile actually resolves.
+    if command -v just >/dev/null 2>&1; then
+        rc=0
+        (cd "$HOST" && just --list >/dev/null 2>&1) || rc=$?
+        assert_equals "0" "$rc" "the refreshed justfile + modules resolve under just"
+    else
+        skip_test "just not available on this host"
+    fi
     teardown
 }
 
@@ -219,6 +264,7 @@ test_unknown_option_errors() {
 
 run_test test_check_reports_drift
 run_test test_refresh_updates_stale_copies
+run_test test_default_set_creates_missing_just_dir
 run_test test_refresh_preserves_exec_bit
 run_test test_check_clean_after_refresh
 run_test test_missing_file_is_drift_then_created

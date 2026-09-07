@@ -1,0 +1,230 @@
+#!/bin/bash
+# claude-plugins-repair - Re-register and reinstall the librarian plugins on
+#                         demand, from the image-baked /opt/librarian cache.
+#
+# WHY THIS EXISTS (issue #777)
+# ----------------------------
+# A Claude Code update inside a running container was observed to silently
+# de-register the `librarian` marketplace and uninstall all three plugins
+# (dev-core, review-audit, workflow). What was actually lost was only the two
+# registry files — ~/.claude/plugins/known_marketplaces.json and
+# installed_plugins.json — while the version-pinned plugin cache and
+# /opt/librarian itself survived intact. Notably only the DIRECTORY-sourced
+# marketplace was dropped; the GitHub-sourced ones were untouched.
+#
+# The net effect is silent: every /workflow:*, /dev-core:* and /review-audit:*
+# skill vanishes mid-session with no error anywhere. `claude plugin list` simply
+# stops listing them, so the failure is noticed only when a slash command fails
+# to resolve.
+#
+# claude-setup already contains the correct repair — its librarian block is
+# offline, idempotent, and guarded — but it only runs at container START. A
+# self-update happens mid-life in a long-running container, so nothing re-runs
+# it until the next rebuild. The gap was TRIGGER, not logic.
+#
+# This script is that trigger. It shares one implementation with the boot path
+# (claude-plugin-lib.sh), so the two cannot drift.
+#
+# PINNING IS THE POINT
+# --------------------
+# Repair always targets /opt/librarian: the image-baked tree cloned at a pinned
+# LIBRARIAN_REF. The tempting manual recovery —
+#
+#     claude plugin marketplace add .        # from a librarian working tree
+#
+# registers the UN-pinned working tree instead, silently defeating the pin.
+# This script never reaches for a checkout.
+#
+# Usage:
+#   claude-plugins-repair repair   Re-register the marketplace + install/enable
+#                                  every plugin, then verify discovery.
+#   claude-plugins-repair check    Read-only. Report marketplace + plugin state.
+#                                  Writes nothing.
+#
+# Exit codes:
+#   0  repair succeeded / check found everything registered and discovered
+#   1  check found something missing, or repair could not fully verify
+#   2  usage error (bad or absent subcommand)
+#   3  /opt/librarian is absent — nothing to repair from
+#
+# Exit 3 is deliberately distinct: with no librarian tree there is no repair to
+# attempt, and reporting that as a success would make a no-op indistinguishable
+# from a fix. That is the exact silent-failure shape this issue is about.
+set -euo pipefail
+
+CLAUDE_PLUGIN_LIB="${CLAUDE_PLUGIN_LIB:-/usr/local/lib/claude/claude-plugin-lib.sh}"
+
+usage() {
+    command sed -n 's/^# \{0,1\}//p' <<'USAGE'
+# Usage: claude-plugins-repair <repair|check>
+#
+#   repair   Re-register the librarian marketplace and install/enable every
+#            plugin from the image-baked /opt/librarian cache, then verify
+#            that skills, agents, and hooks were actually discovered.
+#   check    Read-only. Report whether the marketplace and every plugin are
+#            registered and discoverable. Exit 1 if not.
+USAGE
+}
+
+subcmd="${1:-}"
+
+case "$subcmd" in
+    repair | check) ;;
+    -h | --help | help)
+        usage
+        exit 0
+        ;;
+    "")
+        echo "ERROR: no subcommand given" >&2
+        usage >&2
+        exit 2
+        ;;
+    *)
+        echo "ERROR: unknown subcommand: $subcmd" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
+
+if ! command -v claude >/dev/null 2>&1; then
+    echo "ERROR: the 'claude' CLI is not on PATH — cannot inspect or repair plugins." >&2
+    exit 3
+fi
+
+if [ ! -r "$CLAUDE_PLUGIN_LIB" ]; then
+    echo "ERROR: required library not found: $CLAUDE_PLUGIN_LIB" >&2
+    echo "       Reinstall the claude-code-setup feature, or set CLAUDE_PLUGIN_LIB." >&2
+    exit 3
+fi
+
+# Load build-time configuration BEFORE the library, exactly as claude-setup does.
+#
+# This is load-bearing, not boilerplate. The plugin lists resolve through a
+# ${VAR}_DEFAULT / __UNSET__ sentinel pair that persist-feature-flags.sh bakes
+# into this file at build time; CLAUDE_LIBRARIAN_PLUGINS_DEFAULT lives there and
+# nowhere else. Without it, _resolve_override_list sees neither the runtime var
+# nor a build-time default, resolves to EMPTY, and the repair cheerfully reports
+# "(none — CLAUDE_LIBRARIAN_PLUGINS set to empty)" while repairing nothing —
+# the same class of silent no-op this script exists to eliminate.
+ENABLED_FEATURES_FILE="${ENABLED_FEATURES_FILE:-/etc/container/config/enabled-features.conf}"
+if [ -f "$ENABLED_FEATURES_FILE" ]; then
+    # shellcheck source=/dev/null
+    source "$ENABLED_FEATURES_FILE"
+fi
+
+# shellcheck source=/dev/null
+source "$CLAUDE_PLUGIN_LIB"
+
+# Fail loud on a missing librarian tree, BEFORE doing anything else. A repair
+# that quietly does nothing looks exactly like a repair that worked.
+if [ ! -d "$LIBRARIAN_DIR" ]; then
+    echo "ERROR: librarian marketplace not found at $LIBRARIAN_DIR" >&2
+    echo "       There is nothing to repair from. This image was built without" >&2
+    echo "       the librarian clone, or the directory was removed." >&2
+    echo "       Rebuild with the claude-code-setup feature enabled." >&2
+    exit 3
+fi
+
+# ---------------------------------------------------------------------------
+# check — read-only
+# ---------------------------------------------------------------------------
+# Reports the two things a de-registration actually breaks: the marketplace
+# entry, and each plugin's enablement + component discovery. Writes nothing, so
+# it is safe to wire into a status dashboard or run mid-incident.
+run_check() {
+    local plugins plugin state
+    local -a plugin_list
+    local failures=0
+
+    echo "Librarian plugins ($LIBRARIAN_DIR):"
+
+    if librarian_marketplace_registered; then
+        echo "  ✓ Marketplace registered ($LIBRARIAN_MARKETPLACE)"
+    else
+        echo "  ✗ Marketplace NOT registered ($LIBRARIAN_MARKETPLACE)"
+        failures=$((failures + 1))
+    fi
+
+    plugins=$(librarian_resolve_plugins)
+    if [ -z "$plugins" ]; then
+        echo "    (none — CLAUDE_LIBRARIAN_PLUGINS set to empty)"
+        [ "$failures" -eq 0 ]
+        return
+    fi
+
+    IFS=',' read -ra plugin_list <<<"$plugins"
+    for plugin in "${plugin_list[@]}"; do
+        plugin=$(echo "$plugin" | xargs)
+        [ -z "$plugin" ] && continue
+        if _plugin_is_denied "$plugin"; then
+            _log_denied_plugin "$plugin"
+            continue
+        fi
+
+        state=$(plugin_status "$plugin")
+        case "$state" in
+            enabled)
+                # Enabled is necessary but not sufficient — a plugin can be
+                # enabled and still expose nothing (#777). Verify discovery.
+                librarian_verify_plugin "$plugin" || failures=$((failures + 1))
+                ;;
+            disabled)
+                echo "    ✗ $plugin (installed but DISABLED)"
+                failures=$((failures + 1))
+                ;;
+            *)
+                echo "    ✗ $plugin (not installed)"
+                failures=$((failures + 1))
+                ;;
+        esac
+    done
+
+    if [ "$failures" -gt 0 ]; then
+        echo ""
+        echo "$failures problem(s) found. Run: claude-plugins-repair repair"
+        return 1
+    fi
+
+    echo ""
+    echo "All librarian plugins registered and discoverable."
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# repair — install/enable, then verify
+# ---------------------------------------------------------------------------
+# Serialized against claude-setup on the SAME lock (#784), via the SAME function
+# and constant from claude-plugin-lib.sh. A repair is run by hand mid-session,
+# which is precisely when the auth watcher may also fire claude-setup; both then
+# read-modify-write ~/.claude/settings.json non-atomically, and the loser's
+# writes are clobbered — leaving plugins installed-but-disabled, the very state
+# this repairs.
+#
+# Sharing the constant is what makes the mutual exclusion real: two entry points
+# holding a lock on two different paths exclude nothing, and a hardcoded literal
+# in each file could drift apart silently.
+run_repair() {
+    _acquire_setup_lock "$CLAUDE_SETUP_LOCK"
+
+    echo "Librarian plugins ($LIBRARIAN_DIR):"
+    librarian_install_plugins
+
+    echo ""
+    echo "Verifying component discovery:"
+    if ! librarian_verify_plugins; then
+        echo ""
+        echo "ERROR: one or more plugins installed but did not expose their components." >&2
+        echo "       The install itself reported success — see the lines above for what" >&2
+        echo "       was missing. Check /opt/librarian for a malformed plugin." >&2
+        return 1
+    fi
+
+    echo ""
+    echo "Repair complete. Restart Claude Code to pick up the plugins."
+    return 0
+}
+
+case "$subcmd" in
+    check) run_check ;;
+    repair) run_repair ;;
+esac

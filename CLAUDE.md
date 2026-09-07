@@ -245,6 +245,13 @@ extras via `CLAUDE_EXTRA_PLUGINS`. MCPs configurable via `CLAUDE_MCPS`
 registry (10 short names), entry formats, HTTP auth, release channel, and
 model selection.
 
+If every `/workflow:*`, `/dev-core:*`, and `/review-audit:*` command stops
+resolving mid-session, a Claude Code self-update de-registered the librarian
+marketplace. `just claude-plugins-check` reports it; `just
+claude-plugins-repair` fixes it (both idempotent; `check` writes nothing).
+Never re-add the marketplace from a librarian checkout — that registers the
+un-pinned working tree and silently defeats `LIBRARIAN_REF`.
+
 ### Skills & Agents
 
 The general-purpose skills and agents ship as the sibling
