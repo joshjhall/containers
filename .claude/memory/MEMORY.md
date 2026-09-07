@@ -111,3 +111,5 @@
 - [Degraded review gate is not a pass](degraded-review-gate-is-not-a-pass.md) — a review dimension that dies on a 429 returns no verdict, not a clean one; re-run it before merging (#924)
 - [Octarine publishes as octarine-core](octarine-package-renamed-core.md) — `package =` rename since beta.5; MSRV 1.97; deny.toml skips need re-derivation, not bound bumps
 - [Embedded-only advisory suppression](embedded-only-advisory-suppression.md) — prove unreachability with `cargo tree -i --target <triple>`; suppress in deny.toml AND .osv-scanner.toml
+- [Trailing empty line hides a guard](trailing-empty-line-hides-guard.md) — $(...) strips trailing newlines; an empty-value guard is unreachable if the fixture puts it last (#919)
+- [Prove unreachability via symbol table](prove-unreachability-via-symbol-table.md) — for a CVE in a prebuilt Go binary, use `nm` on the checksum-matched artifact (both arches) with a positive control; check a stale suppression is still live before refreshing it (#932)
