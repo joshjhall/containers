@@ -141,7 +141,22 @@ fetch_url() {
         echo "$response" >"$cache_file"
     fi
 
-    echo "$response"
+    # Callers pipe this into early-exiting consumers (`head -1`, and `jq`, which
+    # aborts on a non-JSON error page). Those close the pipe as soon as they
+    # have what they need, while this write is still going. When SIGPIPE is
+    # ignored — as it is under some CI runners, which start jobs with the
+    # disposition inherited — the kernel returns EPIPE instead of killing the
+    # writer, and bash prints `echo: write error: Broken pipe` to stderr.
+    #
+    # That warning is not cosmetic here: `--json` callers capture this script
+    # with `2>&1`, so the line lands INSIDE the JSON document and makes it
+    # unparsable. The failure then surfaces as "malformed JSON" pointing at the
+    # generator, rather than at a truncated pipe read (see #929).
+    #
+    # Suppressing just this write keeps the diagnostic value elsewhere: a real
+    # write failure to the cache file above is still reported, and a genuinely
+    # malformed payload still fails jq in the caller.
+    echo "$response" 2>/dev/null || true
 }
 
 # Version storage
@@ -419,7 +434,10 @@ main() {
             Node.js) check_nodejs ;;
             Go)
                 progress_msg "  Go..."
-                set_latest "Go" "$(fetch_url "https://go.dev/VERSION?m=text" | command head -1 | command sed 's/^go//')"
+                # `sed -n 1p` (not `head -1`) drains the pipe instead of
+                # exiting on the first line, so fetch_url's write always
+                # completes. See the EPIPE note on fetch_url (#929).
+                set_latest "Go" "$(fetch_url "https://go.dev/VERSION?m=text" | command sed -n '1{s/^go//;p;}')"
                 progress_done
                 ;;
             Rust) check_rust ;;
