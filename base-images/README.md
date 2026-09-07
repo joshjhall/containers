@@ -225,7 +225,9 @@ Sub-issues filed against this design tracker, organized by tier:
 
 ### Tier 2 — Likely-needed soon (defer to v2)
 
-- debian-11 amd64+arm64 (Standard EOL was 2026-06-30; LTS until 2028 — keep on supported-with-warnings basis until LTS expires)
+- ~~debian-11 amd64+arm64~~ — **dropped, will not be built.** LTS security
+  support ended 2026-08-31, and `bullseye-security` package versions now 404
+  from the mirror, so the base cannot be built at all (#933)
 - ubuntu-22.04 LTS amd64+arm64 (LTS until 2027)
 - ubuntu-24.04 LTS amd64+arm64 (LTS until 2029)
 - ubi-10 amd64+arm64 (when GA)

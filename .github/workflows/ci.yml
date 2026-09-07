@@ -607,10 +607,13 @@ jobs:
     needs: test
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
+      # One dead distro must not cancel the healthy legs: Debian 11's post-EOL
+      # mirror 404s took bookworm and trixie down with it (#933).
+      fail-fast: false
       matrix:
         debian:
-          - version: "11"
-            codename: bullseye
+          # Debian 11 (bullseye) removed at EOL 2026-08-31 — see #933 and
+          # docs/troubleshooting/debian-compatibility.md.
           - version: "12"
             codename: bookworm
           - version: "13"

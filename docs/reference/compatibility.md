@@ -338,7 +338,7 @@ If a combination fails, add notes to the matrix:
 Ensure compatibility across Debian versions:
 
 ```bash
-for base in "debian:11-slim" "debian:12-slim" "debian:13-slim"; do
+for base in "debian:12-slim" "debian:13-slim"; do
     ./bin/test-version-compatibility.sh \
         --variant python-dev \
         --python-version 3.13.0 \

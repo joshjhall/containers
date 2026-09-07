@@ -341,8 +341,10 @@ install commands, and version constraints per distro automatically.
 
 ### Debian Version Compatibility (current)
 
-Supports Debian 11 (Bullseye), 12 (Bookworm), and 13 (Trixie) with automatic
-detection. See `docs/troubleshooting/debian-compatibility.md` for version
+Supports Debian 12 (Bookworm) and 13 (Trixie) with automatic detection. Debian
+11 (Bullseye) was dropped at its LTS EOL (2026-08-31) — `bullseye-security`
+package versions now 404, and the archive receives no security updates (#933).
+See `docs/troubleshooting/debian-compatibility.md` for version
 detection APIs (`apt_install`, `apt_install_conditional`, `is_debian_version`),
 key differences by version, and testing guidance.
 

@@ -169,9 +169,11 @@ and `docs/reference/environment-variables.md`.
 
 ## Base Image
 
-The default base is `debian:trixie-slim`. Debian 11 (Bullseye), 12
-(Bookworm), and 13 (Trixie) are auto-detected and supported. Override with
+The default base is `debian:trixie-slim`. Debian 12 (Bookworm) and 13 (Trixie)
+are auto-detected and supported. Override with
 `--build-arg BASE_IMAGE=debian:bookworm-slim` if you need an older base.
+Debian 11 (Bullseye) is no longer supported — it was dropped at its LTS EOL
+(2026-08-31).
 
 See `docs/troubleshooting/debian-compatibility.md` for the version
 detection API and known differences.

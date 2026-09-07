@@ -62,7 +62,8 @@ if [ "${ID}" = "debian" ]; then
     export DEBIAN_VERSION
     echo "Detected Debian ${VERSION_ID} (${VERSION_CODENAME:-unknown})"
 
-    # Note: This build system supports Debian 11 (Bullseye), 12 (Bookworm), and 13 (Trixie)
+    # Note: This build system supports Debian 12 (Bookworm) and 13 (Trixie).
+    # Debian 11 (Bullseye) was dropped at its LTS EOL, 2026-08-31 (#933).
     # Version-specific package handling is done in apt-utils.sh using apt_install_conditional
 elif [ "${ID}" = "ubuntu" ]; then
     UBUNTU_VERSION="${VERSION_ID%%.*}"
