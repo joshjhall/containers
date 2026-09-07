@@ -175,6 +175,14 @@ reset_job_name_map() {
 # passing on a stale map.
 build_job_name_map() {
     local dir="${1:-$WORKFLOWS_DIR}"
+    # A missing or unreadable dir makes `find` print to its own stderr and emit
+    # nothing, which the `while read` below cannot distinguish from "no
+    # workflows here" — the same swallow this whole change exists to remove,
+    # one layer up from yq. Fail loud instead.
+    if [ ! -d "$dir" ]; then
+        /usr/bin/echo "  workflow directory does not exist: $dir" >&2
+        return 1
+    fi
     if [ -n "$JOB_NAME_MAP_BUILT" ] && [ "$JOB_NAME_MAP_DIR" = "$dir" ]; then
         return 0
     fi
@@ -623,7 +631,20 @@ jobs:
         violations=$((violations + 1))
     fi
 
-    # 5. The site-203 false-pass, pinned directly: a parse failure and a
+    # 5. A missing directory fails loud too — `find` on a nonexistent path
+    #    emits nothing, which would otherwise read as "no workflows here".
+    reset_job_name_map
+    rc=0
+    out=$(build_job_name_map "$TEST_TEMP_DIR/wf-does-not-exist" 2>&1) || rc=$?
+    if [ "$rc" -eq 0 ]; then
+        /usr/bin/echo "  a nonexistent workflow dir returned success — an empty build would read as 'no such job'"
+        violations=$((violations + 1))
+    elif ! /usr/bin/printf '%s\n' "$out" | /usr/bin/grep -qF 'wf-does-not-exist'; then
+        /usr/bin/echo "  missing-dir failure did not name the directory: $out"
+        violations=$((violations + 1))
+    fi
+
+    # 6. The path-filter false-pass, pinned directly: a parse failure and a
     #    legitimate `false` must not look alike.
     rc=0
     run_yq '((.on // .["on"]).pull_request // {}) | has("paths")' "$bad_dir/broken.yml" >/dev/null 2>&1 || rc=$?
