@@ -70,7 +70,18 @@ for test_file in $UNIT_TEST_FILES; do
             FAILED_SUITES+=("$test_name")
         fi
     else
-        echo -e "  ${RED}✗ ERROR${NC} (Test suite failed to run)"
+        suite_rc=$?
+        # A suite can exit non-zero while its own report says 0 failed: the
+        # framework's generate_report is the last command under `set -e`, so an
+        # I/O error emitting the report becomes the suite's status. Say so
+        # explicitly instead of "failed to run" — that wording sent a previous
+        # investigation looking for a broken test that did not exist.
+        if echo "$output" | command grep -qE "^  Failed:[[:space:]]+0$"; then
+            echo -e "  ${RED}✗ ERROR${NC} (exit $suite_rc, but the suite reported 0 failed —"
+            echo "    infrastructure error, not a test failure; see tests/framework.sh generate_report)"
+        else
+            echo -e "  ${RED}✗ ERROR${NC} (Test suite failed to run, exit $suite_rc)"
+        fi
         echo "  Output: $output"
         FAILED_SUITES+=("$test_name")
         TOTAL_FAILED=$((TOTAL_FAILED + 1))

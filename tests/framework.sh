@@ -117,6 +117,41 @@ tf_scratch_root() {
     command printf '/tmp'
 }
 
+# Staging directory for report writes.
+#
+# $RESULTS_DIR lives in the repo, which is commonly a virtiofs + bindfs FUSE
+# mount whose writes are not reliably visible to an immediately-following read
+# (see the tf_scratch_root comment below and #821). Scratch was moved off that
+# mount; reports were deliberately left on it as "just artifacts". They are not
+# just artifacts: generate_report is the final command of every suite running
+# under `set -e`, so an I/O error while emitting the report becomes the suite's
+# exit status. That surfaces as a suite whose own report says "0 failed" while
+# the harness records it as ERROR — indistinguishable from a real failure, and
+# green again on re-run.
+#
+# Measured on this container with a write-then-read loop, 8 procs x 400:
+# 1 lost / 3200 under tests/results, 0 / 3200 under /tmp.
+#
+# So reports are written to a coherent filesystem first and copied into
+# $RESULTS_DIR afterwards. When the results dir is already coherent (native CI
+# runners, most Linux hosts) this returns $RESULTS_DIR and the copy is a no-op
+# self-copy that cp handles without touching the file, so those runs keep the
+# exact previous behaviour and pay nothing.
+tf_report_staging_dir() {
+    # Stage when the results dir is known-incoherent, and ALSO when it is not
+    # writable at all: tf_is_incoherent_fs treats an unprobeable path as
+    # acceptable (a probe failure must never redden a run), which would
+    # otherwise hand back a directory the report cannot be written to.
+    if tf_is_incoherent_fs "$RESULTS_DIR" || [ ! -w "$RESULTS_DIR" ]; then
+        local tfr_dir="$TEST_SCRATCH_PARENT/reports"
+        if command mkdir -p "$tfr_dir" 2>/dev/null && [ -w "$tfr_dir" ]; then
+            command printf '%s' "$tfr_dir"
+            return 0
+        fi
+    fi
+    command printf '%s' "$RESULTS_DIR"
+}
+
 # Scratch space for test fixtures — deliberately OUTSIDE the repository (#821).
 #
 # This repo is commonly mounted through virtiofs plus a bindfs FUSE overlay. On
@@ -519,6 +554,9 @@ run_tests() {
 # Generate test report
 generate_report() {
     local report_file="$RESULTS_DIR/test-report-$TEST_RUN_ID.txt"
+    local tf_gr_staged_dir
+    tf_gr_staged_dir=$(tf_report_staging_dir)
+    local tf_gr_staged="$tf_gr_staged_dir/test-report-$TEST_RUN_ID.txt"
 
     {
         echo "Test Report"
@@ -539,12 +577,30 @@ generate_report() {
         fi
         echo "  Pass Rate:   ${pass_rate}%"
 
-    } | command tee "$report_file"
+    } | { command tee "$tf_gr_staged" || command cat; }
+
+    # Publish the finished report to $RESULTS_DIR (see the staging rationale at
+    # the tf_report_staging_dir definition). Copy the COMPLETE file rather than
+    # writing through: a partial read of a report still being appended is one of
+    # the ways the incoherent mount corrupts a run. A publish failure must not
+    # redden a green suite — the report is an artifact, not an assertion — so it
+    # degrades to a warning and the staged copy is named as the source of truth.
+    if ! command cp -f "$tf_gr_staged" "$report_file" 2>/dev/null; then
+        echo "WARNING: could not publish report to $report_file (staged copy: $tf_gr_staged)" >&2
+        report_file="$tf_gr_staged"
+    fi
 
     echo
     echo "Report saved to: $report_file"
 
-    # Return non-zero if any tests failed
+    # Return non-zero if any tests failed.
+    #
+    # This MUST be the last command: suites run under `set -e` with
+    # `generate_report` as their final statement, so this status becomes the
+    # suite's exit status. Anything fallible added below would let an I/O
+    # hiccup exit non-zero while the report itself reads 0 failed — the exact
+    # "5 passed, 0 failed" suite the harness recorded as an ERROR that
+    # prompted this fix.
     [ $TESTS_FAILED -eq 0 ]
 }
 
@@ -555,4 +611,4 @@ export -f pass_test fail_test skip_test network_tests_disabled
 export -f setup teardown run_test run_tests
 export -f start_test assert_success assert_command_exists assert_file_executable
 export -f init_test_framework generate_report
-export -f tf_fstype_of tf_is_incoherent_fs tf_scratch_root
+export -f tf_fstype_of tf_is_incoherent_fs tf_scratch_root tf_report_staging_dir

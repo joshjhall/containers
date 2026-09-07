@@ -142,11 +142,29 @@ test_no_unit_suite_uses_the_reports_dir_for_scratch() {
     local banned="RESULTS"
     banned="${banned}_DIR"
 
+    # One file is exempt: test_framework_report_exit.sh exists to test the
+    # report path itself (a green suite must not be reddened by a failed report
+    # write), so it necessarily names the reports dir. The exemption is by
+    # filename only, and the follow-up assertion below re-checks that even THAT
+    # file never uses the reports dir for scratch — so the guard keeps its teeth
+    # rather than growing a hole a future suite could hide in.
+    local exempt="test_framework_report_exit.sh"
+
     local hits=""
-    hits=$(/usr/bin/grep -rn -- "$banned" "$unit_dir" 2>/dev/null || true)
+    hits=$(/usr/bin/grep -rn -- "$banned" "$unit_dir" 2>/dev/null |
+        /usr/bin/grep -v "/$exempt:" || true)
 
     assert_equals "" "$hits" \
         "unit suites must use \$TEST_SCRATCH_BASE for scratch, not the reports dir (#821)"
+
+    # The exempt file may NAME the reports dir but must never build scratch from
+    # it — the actual #821 failure mode.
+    local exempt_scratch=""
+    if [ -f "$unit_dir/$exempt" ]; then
+        exempt_scratch=$(/usr/bin/grep -n "TEST_TEMP_DIR=\"\$$banned" "$unit_dir/$exempt" 2>/dev/null || true)
+    fi
+    assert_equals "" "$exempt_scratch" \
+        "even the report-path suite must not use the reports dir for scratch (#821)"
 }
 
 # The docs and the skill reference are what a human or an agent copies when
