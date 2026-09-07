@@ -14,10 +14,46 @@ CVE-2023-24538  # html/template backticks - mkcert doesn't serve HTML
 CVE-2023-24540  # html/template JS whitespace - mkcert doesn't serve HTML
 CVE-2024-24790  # net/netip issue - mkcert uses standard net package
 
-# cosign (v3.0.4) - built with Go 1.25.5, waiting on upstream rebuild
-# TODO: Remove once cosign releases a version with Go >= 1.25.7 and grpc >= 1.79.3
-CVE-2025-68121  # crypto/tls session resumption - in cosign's embedded Go stdlib
-CVE-2026-33186  # grpc-go auth bypass - in cosign's embedded grpc, fix requires cosign rebuild
+# ---------------------------------------------------------------------------
+# cosign (v3.1.3) - CVE-2026-56854 in the embedded golang.org/x/crypto v0.53.0
+# ---------------------------------------------------------------------------
+# REVIEW BY: 2026-12-31 (quarterly review — do not renew without re-checking)
+#
+# Scanned as `usr/local/bin/cosign (gobinary)`: Trivy reads Go module metadata
+# compiled into the third-party sigstore release binary we download in
+# lib/base/setup.sh. This repo contains no Go code and no go.mod, so there is
+# nothing here to bump. COSIGN_VERSION=3.1.3 is already the newest cosign
+# release; the fix needs an upstream rebuild against x/crypto >= 0.55.0.
+# `ignore-unfixed: true` does not mask it — Trivy marks it `fixed` because
+# 0.55.0 exists upstream, even though no cosign release embeds it yet.
+#
+# Not exploitable here, verified against the binary rather than assumed. The
+# advisory (GO-2026-6303) names exactly two symbols, both SSH *server* paths:
+#   golang.org/x/crypto/ssh — NewServerConn, connection.serverAuthenticate
+# Neither is present in the shipped binary — the Go linker dropped them as
+# dead code. Reproduce on either published artifact (amd64 is what CI scans;
+# both were checked against the SHA256 pins in lib/base/setup.sh):
+#
+#   nm /usr/local/bin/cosign | grep -E 'crypto/ssh\.(NewServerConn|.*serverAuthenticate)'   # -> no output
+#   nm /usr/local/bin/cosign | grep -c 'golang.org/x/crypto/ssh\.'                          # -> 253
+#
+# The second command is the discriminator: x/crypto/ssh IS linked, so the empty
+# first result is a real absence and not a grep that silently matches nothing.
+# The four callbacks the advisory implicates (PasswordCallback,
+# KeyboardInteractiveCallback, NoClientAuthCallback, GSSAPIWithMICConfig.
+# AllowLogin) are absent too. What cosign links from x/crypto/ssh is public-key
+# parsing only — ParseAuthorizedKey, ParsePublicKey, MarshalAuthorizedKey — and
+# every call site we have is verify-blob / sign / attest. No SSH server, no
+# listening socket.
+#
+# Caveat for whoever revisits: a bare CVE line here is GLOBAL, not per-binary.
+# lib/base/cosign-install.sh installs a separate, older cosign (3.0.2) for the
+# kubernetes/docker features. That is not in the `minimal` image this job
+# scans, but this entry would cover it too. Re-check if that path is ever
+# scanned, and prefer removing this entry over widening it.
+#
+# Remove once a cosign release embeds x/crypto >= 0.55.0. Tracked in #932.
+CVE-2026-56854  # x/crypto/ssh source-address bypass - SSH server symbols not linked into cosign
 
 # npm dev tool transitive dependencies - not exploitable in container context
 # These are dependencies of global npm packages (jest, mocha, clinic, etc.)
