@@ -43,8 +43,13 @@ fi
 #   3. lsb_release command (if available)
 #
 # Returns:
-#   The major version number (e.g., "11", "12", "13")
+#   The major version number (e.g., "12", "13")
 #   Returns "unknown" if version cannot be determined
+#
+#   A bullseye base still maps to "11", but Debian 11 is EOL and is no longer a
+#   supported input (#933) — the mapping is retained only so an out-of-matrix
+#   BASE_IMAGE is detected rather than reported as "unknown". Callers gating on
+#   a supported version should not treat "11" as a normal value.
 #
 # Example:
 #   DEBIAN_VERSION=$(get_debian_major_version)

@@ -100,7 +100,7 @@ log_feature_end
 | ----------------------------------------- | -------------------- | ---------------------------------------- |
 | `apt_update`                              | `apt-utils.sh`       | Update package lists with retry          |
 | `apt_install pkg1 pkg2`                   | `apt-utils.sh`       | Install packages with retry              |
-| `apt_install_conditional 11 12 pkg`       | `apt-utils.sh`       | Install only on Debian 11-12             |
+| `apt_install_conditional 12 12 pkg`       | `apt-utils.sh`       | Install only on Debian 12                |
 | `is_debian_version 13`                    | `apt-utils.sh`       | Check Debian version                     |
 | `log_feature_start "Name" "ver"`          | `logging.sh`         | Start feature log block                  |
 | `log_feature_end`                         | `logging.sh`         | End feature log block                    |

@@ -12,6 +12,28 @@ use super::WizardDefaults;
 /// not accept what the loader will later reject.
 const IDENT_HELP: &str = "Only letters, digits, '-', '_', and '.' allowed";
 
+/// The base images offered by the wizard, each as `"<image> — <description>"`.
+///
+/// Debian 11 (Bullseye) was removed at its LTS EOL (#933), so a config carrying
+/// `debian:bullseye-slim` no longer matches any entry — see
+/// [`default_base_image_index`] for what happens to such a default.
+///
+/// Always non-empty, which is what makes index 0 a valid fallback.
+fn base_image_options() -> Vec<&'static str> {
+    vec!["debian:trixie-slim — Debian 13 (stable)", "debian:bookworm-slim — Debian 12 (oldstable)"]
+}
+
+/// Resolves the starting cursor for the base-image prompt.
+///
+/// Matches `default` against the image name at the head of each option. A
+/// default that no longer appears in the list — a stale config naming a base
+/// image since dropped from the matrix — falls back to index 0 (the current
+/// stable) rather than failing: the wizard is interactive, so the user sees and
+/// confirms the pre-selected entry either way.
+fn default_base_image_index(options: &[&str], default: &str) -> usize {
+    options.iter().position(|s| s.starts_with(default)).unwrap_or(0)
+}
+
 /// Step 1: Project configuration — name, username, base image, containers dir.
 pub fn project_config(
     defaults: &WizardDefaults,
@@ -42,12 +64,8 @@ pub fn project_config(
         })
         .prompt()?;
 
-    let base_images = vec![
-        "debian:trixie-slim — Debian 13 (stable)",
-        "debian:bookworm-slim — Debian 12 (oldstable)",
-    ];
-    let default_idx =
-        base_images.iter().position(|s| s.starts_with(&defaults.base_image)).unwrap_or(0);
+    let base_images = base_image_options();
+    let default_idx = default_base_image_index(&base_images, &defaults.base_image);
 
     let selected_image =
         Select::new("Base image:", base_images).with_starting_cursor(default_idx).prompt()?;
@@ -180,4 +198,65 @@ pub fn tool_selection(reg: &Registry) -> Result<Vec<String>, Box<dyn std::error:
         .iter()
         .filter_map(|s| all_display.iter().position(|d| d == s).map(|i| ids[i].clone()))
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Index 0 is only a safe fallback while the list is non-empty.
+    #[test]
+    fn base_image_options_is_non_empty() {
+        assert!(!base_image_options().is_empty());
+    }
+
+    #[test]
+    fn live_default_selects_its_own_entry() {
+        let options = base_image_options();
+
+        let trixie = default_base_image_index(&options, "debian:trixie-slim");
+        let bookworm = default_base_image_index(&options, "debian:bookworm-slim");
+
+        // Assert on the resolved option, not just the integer: a bare
+        // `assert_eq!(idx, 0)` would also pass if matching broke and every
+        // default fell through to the fallback.
+        assert!(options[trixie].starts_with("debian:trixie-slim"));
+        assert!(options[bookworm].starts_with("debian:bookworm-slim"));
+        assert_ne!(trixie, bookworm, "distinct defaults must resolve to distinct entries");
+    }
+
+    /// A config naming a base image dropped from the matrix (#933 removed
+    /// bullseye) must fall back to the first entry — the intended behavior, not
+    /// a panic and not a silent mis-selection of some unrelated image.
+    #[test]
+    fn removed_default_falls_back_to_first_entry() {
+        let options = base_image_options();
+
+        let idx = default_base_image_index(&options, "debian:bullseye-slim");
+
+        assert_eq!(idx, 0);
+        assert!(
+            !options.iter().any(|s| s.starts_with("debian:bullseye-slim")),
+            "bullseye must be absent, or this test proves nothing about the fallback"
+        );
+    }
+
+    /// An unset default is the same fallback path, reached differently:
+    /// `starts_with("")` matches the first entry rather than missing entirely.
+    #[test]
+    fn empty_default_selects_first_entry() {
+        let options = base_image_options();
+
+        assert_eq!(default_base_image_index(&options, ""), 0);
+    }
+
+    /// The fallback is a floor, not a coincidence of the current list: an
+    /// unmatched default resolves to 0 for any list shape.
+    #[test]
+    fn unmatched_default_falls_back_regardless_of_list_contents() {
+        let options = ["alpine:3.22 — Alpine", "debian:trixie-slim — Debian 13"];
+
+        assert_eq!(default_base_image_index(&options, "ubuntu:24.04"), 0);
+        assert_eq!(default_base_image_index(&options, "debian:trixie-slim"), 1);
+    }
 }

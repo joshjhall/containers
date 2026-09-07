@@ -105,8 +105,10 @@ apt_install \
     ca-certificates
 
 # Install version-specific packages
-# lzma and lzma-dev were removed in Debian 13 (Trixie), replaced by liblzma-dev
-apt_install_conditional 11 12 lzma lzma-dev
+# lzma and lzma-dev were removed in Debian 13 (Trixie), replaced by liblzma-dev.
+# Debian 11 (Bullseye) was dropped at its LTS EOL (#933), so 12 is the only
+# supported version that still ships these packages.
+apt_install_conditional 12 12 lzma lzma-dev
 
 # ============================================================================
 # Cache Configuration

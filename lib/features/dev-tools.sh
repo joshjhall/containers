@@ -161,7 +161,7 @@ apt_install \
 
 # Modern ls replacement - Debian version dependent
 # Debian 13+: eza available from apt
-# Debian 11/12: eza installed from GitHub release (exa is archived upstream)
+# Debian 12: eza installed from GitHub release (exa is archived upstream)
 if is_debian_version 13; then
     log_message "Installing eza (modern ls replacement) from apt..."
     apt_install eza

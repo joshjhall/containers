@@ -25,7 +25,7 @@ if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
 
     # Remove build dependencies we installed earlier
     # Note: We keep wget and ca-certificates as they may be needed for runtime operations
-    # Build the package list conditionally (lzma/lzma-dev only exist on Debian 11-12)
+    # Build the package list conditionally (lzma/lzma-dev only exist on Debian 12)
     _remove_pkgs=(
         build-essential gdb lcov libbz2-dev libffi-dev libgdbm-dev
         liblzma-dev libncurses5-dev libreadline-dev libsqlite3-dev
