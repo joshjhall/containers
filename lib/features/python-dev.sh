@@ -56,8 +56,10 @@ apt_install \
     libjpeg-dev \
     zlib1g-dev
 
-# python3-distutils was removed in Debian 13 (merged into python3-stdlib-extensions)
-apt_install_conditional 11 12 python3-distutils
+# python3-distutils was removed in Debian 13 (merged into python3-stdlib-extensions).
+# Debian 11 (Bullseye) was dropped at its LTS EOL (#933), so 12 is the only
+# supported version that still ships this package.
+apt_install_conditional 12 12 python3-distutils
 
 # ============================================================================
 # Prerequisites Check

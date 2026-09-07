@@ -25,13 +25,17 @@ if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
 
     # Remove build dependencies we installed earlier
     # Note: We keep wget and ca-certificates as they may be needed for runtime operations
-    # Build the package list conditionally (lzma/lzma-dev only exist on Debian 11-12)
+    # Build the package list conditionally (lzma/lzma-dev only exist on Debian 12)
     _remove_pkgs=(
         build-essential gdb lcov libbz2-dev libffi-dev libgdbm-dev
         liblzma-dev libncurses5-dev libreadline-dev libsqlite3-dev
         libssl-dev tk-dev uuid-dev zlib1g-dev
     )
-    if ! is_debian_version 13; then
+    # Mirror python.sh's install-side bound exactly (apt_install_conditional
+    # 12 12): remove these only where they were installed. A bare
+    # `! is_debian_version 13` would also fire on an out-of-matrix bullseye
+    # base, purging packages that were never installed there.
+    if is_debian_version 12 && ! is_debian_version 13; then
         _remove_pkgs+=(lzma lzma-dev)
     fi
     log_command "Removing build packages" \

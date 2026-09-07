@@ -136,8 +136,10 @@ and 13.
 
 The build system provides three functions in `lib/base/apt-utils.sh`:
 
-1. **`get_debian_major_version()`** - Returns the major version number (11, 12,
-   or 13)
+1. **`get_debian_major_version()`** - Returns the major version number (12 or
+   13 on a supported base). It still maps a bullseye base to `11`, but Debian 11
+   is EOL and no longer a supported input (#933) — treat `11` as an
+   out-of-matrix value, not a normal one.
 1. **`is_debian_version <min>`** - Checks if current version >= minimum
 1. **`apt_install_conditional <min> <max> <packages...>`** - Install packages
    only on specific versions
@@ -157,8 +159,10 @@ apt_install \
     ca-certificates
 
 # Install version-specific packages
-# lzma/lzma-dev were removed in Debian 13, replaced by liblzma-dev
-apt_install_conditional 11 12 lzma lzma-dev
+# lzma/lzma-dev were removed in Debian 13, replaced by liblzma-dev.
+# Debian 11 was dropped at its LTS EOL (#933), so 12 is the only
+# supported version that still ships them.
+apt_install_conditional 12 12 lzma lzma-dev
 ```
 
 #### Example 2: Conditional logic for installation methods

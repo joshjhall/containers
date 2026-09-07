@@ -72,8 +72,8 @@ APT_NETWORK_ERROR_CODE=100                       # apt exit code for network/rep
 #   apt_install_conditional <min_version> <package1> [package2...]
 #
 # Example:
-#   # Install lzma packages only on Debian 11/12, not on 13+
-#   apt_install_conditional 11 12 lzma lzma-dev
+#   # Install lzma packages only on Debian 12, not on 13+
+#   apt_install_conditional 12 12 lzma lzma-dev
 #
 #   # Install new package only on Debian 13+
 #   apt_install_conditional 13 99 new-package
