@@ -16,7 +16,23 @@ version = 2
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
-ignore = []
+# Advisory suppressions. Same contract as .osv-scanner.toml: every entry needs
+# a reason, and the same advisory must be suppressed in both files or the two
+# gates disagree.
+ignore = [
+  # atomic-polyfill (unmaintained, archived upstream, no successor version).
+  # Reached only via octarine -> phonenumber -> postcard -> heapless 0.7, and
+  # heapless declares atomic-polyfill ONLY for embedded targets
+  # (thumbv6m-none-eabi, riscv32*, avr, xtensa) — verified with
+  # `cargo tree -i atomic-polyfill --target <triple>`, which prints nothing for
+  # every triple we build (the six release-binaries targets plus the glibc
+  # host). No target we ship ever compiles this crate.
+  #
+  # There is no upgrade path from here: postcard's newest release (1.1.3) still
+  # requires heapless ^0.7, so the dependency cannot be bumped from our side.
+  # Revisit when phonenumber drops postcard or postcard moves to heapless 0.9.
+  { id = "RUSTSEC-2023-0089", reason = "unmaintained; embedded-target-only via heapless 0.7, never compiled on any target we build. See #802-style note in .osv-scanner.toml." },
+]
 
 [licenses]
 version = 2
@@ -63,16 +79,19 @@ deny = []
 # reports as an `unmatched-skip` warning.
 skip = [
   # --- RustCrypto trait-generation split -------------------------------
-  # octarine's AEAD/KDF stack (aes-gcm 0.10, chacha20poly1305 0.10, argon2
-  # 0.5, x25519-dalek 2) still builds on the digest 0.10 / crypto-common 0.1
-  # generation. Our own hashing (containers-common, luggage) uses sha2 0.11,
-  # which is on the 0.11 generation. Collapses when those crates release
-  # versions cut against digest 0.11.
-  { crate = "block-buffer:<0.12", reason = "digest 0.10 generation via octarine's AEAD stack" },
-  { crate = "crypto-common:<0.2", reason = "digest 0.10 generation via octarine's AEAD stack" },
-  { crate = "digest:<0.11", reason = "digest 0.10 generation via octarine's AEAD stack" },
-  { crate = "cpufeatures:<0.3", reason = "digest 0.10 generation via octarine's AEAD stack" },
-  { crate = "chacha20:<0.10", reason = "octarine's chacha20poly1305 0.10 pins chacha20 0.9; atomic-write-file is on 0.10" },
+  # As of octarine v0.3.0-beta.7 its AEAD/KDF stack itself moved to the
+  # digest 0.11 generation (aes-gcm 0.11, chacha20poly1305 0.11, argon2 0.6,
+  # x25519-dalek 3), but two leaf crates it depends on have not: bs58 0.5
+  # (base58check for BTC address validation) is on sha2 0.10, and ml-kem 0.3
+  # (post-quantum KEM) is on sha3 0.11. Our own hashing (containers-common,
+  # luggage) uses sha2 0.11. Collapses when bs58 and ml-kem cut releases
+  # against the 0.11 generation.
+  { crate = "block-buffer:<0.12", reason = "digest 0.10 generation via octarine's bs58 -> sha2 0.10" },
+  { crate = "crypto-common:<0.2", reason = "digest 0.10 generation via octarine's bs58 -> sha2 0.10" },
+  { crate = "digest:<0.11", reason = "digest 0.10 generation via octarine's bs58 -> sha2 0.10" },
+  { crate = "cpufeatures:<0.3", reason = "digest 0.10 generation via octarine's bs58 -> sha2 0.10" },
+  { crate = "sha2:<0.11", reason = "bs58 0.5 (octarine's base58check) is on sha2 0.10; ours is 0.11" },
+  { crate = "sha3:<0.12", reason = "ml-kem 0.3 (octarine's PQ KEM) is on sha3 0.11; octarine itself is on 0.12" },
 
   # --- rand / getrandom generation split -------------------------------
   # governor 0.10 (octarine's rate limiter) is on rand 0.9; octarine and
@@ -88,11 +107,11 @@ skip = [
 
   # --- proc-macro helper split -------------------------------------------
   # local-ip-address -> neli -> derive_builder 0.20 uses darling 0.20 (syn 2);
-  # octarine-derive uses darling 0.23. syn 2 vs 3 is the ecosystem-wide
+  # octarine-derive uses darling 0.24. syn 2 vs 3 is the ecosystem-wide
   # proc-macro migration currently in flight.
-  { crate = "darling:<0.23", reason = "derive_builder 0.20 via neli/local-ip-address" },
-  { crate = "darling_core:<0.23", reason = "derive_builder 0.20 via neli/local-ip-address" },
-  { crate = "darling_macro:<0.23", reason = "derive_builder 0.20 via neli/local-ip-address" },
+  { crate = "darling:<0.24", reason = "derive_builder 0.20 via neli/local-ip-address" },
+  { crate = "darling_core:<0.24", reason = "derive_builder 0.20 via neli/local-ip-address" },
+  { crate = "darling_macro:<0.24", reason = "derive_builder 0.20 via neli/local-ip-address" },
   { crate = "syn:<3", reason = "ecosystem mid-migration from syn 2 to syn 3" },
 
   # --- target-gated, never co-compiled -----------------------------------
@@ -100,6 +119,13 @@ skip = [
   # the lockfile but no single target ever compiles more than one.
   { crate = "windows-sys:<0.61", reason = "target-gated (Windows only); versions never co-compile" },
   { crate = "r-efi:<6", reason = "target-gated (UEFI only); versions never co-compile" },
+
+  # --- octarine's phonenumber stack ---------------------------------------
+  # phonenumber 0.3 (octarine's libphonenumber port) brings regex-cache, which
+  # is still on the regex 1.5-era regex-syntax 0.6.
+  { crate = "regex-syntax:<0.8", reason = "regex-cache 0.2 via octarine's phonenumber" },
+  # reqwest/hyper-util are on base64 0.22; octarine itself is on 0.23.
+  { crate = "base64:<0.23", reason = "hyper-util/reqwest lag octarine's base64 0.23" },
 ]
 skip-tree = []
 
