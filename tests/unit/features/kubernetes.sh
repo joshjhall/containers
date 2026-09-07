@@ -339,8 +339,26 @@ test_download_verification() {
         assert_true false "Doesn't use verify_download"
     fi
 
-    # kubernetes.sh uses verify_download for all tools (k9s, helm, krew, cosign)
-    # with register_tool_checksum_fetcher for Tier 3 checksum resolution
+    # kubernetes.sh uses verify_download for the tools it installs (k9s, helm,
+    # krew) with register_tool_checksum_fetcher for Tier 3 checksum resolution.
+    # cosign is not among them: it comes from the base install and kubernetes.sh
+    # only asserts its presence via require_cosign (#935).
+}
+
+# Test: Cosign availability guard
+#
+# kubernetes.sh does not install cosign — it asserts the base install is
+# present (#935). Mirrors test_cosign_requirement_reference in the docker
+# suite: assert the source line and the failure branch, not the bare word
+# "cosign", which appears in comments and would pass even if the guard were
+# deleted.
+test_cosign_requirement_reference() {
+    local kubernetes_script="$PROJECT_ROOT/lib/features/kubernetes.sh"
+
+    assert_file_contains "$kubernetes_script" "cosign-require.sh" \
+        "kubernetes.sh sources the cosign availability guard"
+    assert_file_contains "$kubernetes_script" "require_cosign ||" \
+        "kubernetes.sh fails the feature build when cosign is unavailable"
 }
 
 # Test: Script sources download-verify.sh
@@ -378,6 +396,7 @@ run_test_with_setup test_k8s_verification "K8s verification script"
 run_test_with_setup test_uses_add_apt_repository_key "Uses shared add_apt_repository_key"
 run_test_with_setup test_dynamic_checksum_fetching "Dynamic checksum fetching"
 run_test_with_setup test_download_verification "Download verification functions"
+run_test_with_setup test_cosign_requirement_reference "Cosign availability guard referenced"
 run_test_with_setup test_sources_download_verify "Sources download-verify.sh"
 
 # Generate test report

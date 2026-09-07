@@ -78,7 +78,8 @@ TIER 4: Calculated Checksums (TOFU fallback) ← LAST RESORT
 - **Node.js**: GPG signatures (SHASUMS256.txt.sig via release team keyring)
 - **Go (Golang)**: GPG signatures (.asc via Google signing key)
 - **Terraform**: GPG signatures (SHA256SUMS.sig via HashiCorp key)
-- **kubectl**: Sigstore (requires cosign from kubernetes or docker feature)
+- **kubectl**: Sigstore (cosign is a base tool installed by `lib/base/setup.sh`;
+  the kubernetes and docker features assert its presence via `require_cosign`)
 
 **Example**:
 
@@ -196,7 +197,7 @@ when no other verification method is available
 | **Node.js**   | ✅ GPG              | ✅ Yes          | ✅ SHASUMS256.txt  | Signature verification via release team keyring     |
 | **Go**        | ✅ GPG              | ✅ Yes          | ✅ go.dev/dl JSON  | Signature verification via Google signing key       |
 | **Terraform** | ✅ GPG              | N/A             | ✅ SHA256SUMS      | Signature verification via HashiCorp key            |
-| **kubectl**   | ✅ Sigstore         | N/A             | N/A                | Sigstore verification requires cosign               |
+| **kubectl**   | ✅ Sigstore         | N/A             | N/A                | Sigstore via cosign (base install, see above)       |
 | **Ruby**      | ❌ None             | ✅ Yes          | ✅ ruby-lang.org   | Currently uses Tier 2 or 3                          |
 | **Rust**      | N/A                 | N/A             | ✅ rustup-init     | Verified by rustup's built-in system                |
 | **R**         | N/A                 | N/A             | N/A                | Installed via apt (GPG-verified automatically)      |
