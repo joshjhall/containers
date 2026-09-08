@@ -135,7 +135,12 @@ case "$1 $2" in
         ;;
     "plugin details")
         name="${3%%@*}"
-        if [ -f "$MOCK_STATE/details-$name" ]; then
+        # Details are gated on installation, as the real CLI's are: a plugin
+        # that never installed cannot report a component inventory. Without
+        # this gate a failed install still yielded a healthy-looking details
+        # blob, which would let a verification test pass for the wrong reason.
+        status=$(command cat "$MOCK_STATE/status-$name" 2>/dev/null || echo absent)
+        if [ "$status" != "absent" ] && [ -f "$MOCK_STATE/details-$name" ]; then
             command cat "$MOCK_STATE/details-$name"
             exit 0
         fi
@@ -264,6 +269,28 @@ test_boot_verifies_after_a_successful_install() {
         "verification still fails the boot despite the successful install"
     assert_contains "$output" "no skills discovered" \
         "boot reports zero skills on the newly installed plugin"
+}
+
+test_hard_install_failure_is_reported_and_survivable() {
+    # `claude plugin install` itself exits non-zero. Distinct from the soft
+    # failures above (zero counts, unreadable details): here the install branch
+    # in librarian_install_plugins prints "⚠ Failed to install" and ABSORBS the
+    # error, still returning 0 — so only the verification that follows can turn
+    # this into a failed boot. That is the same false-✓ mechanism as the
+    # headline case, reached through the install branch rather than the
+    # already-enabled one.
+    _set_all_status "absent"
+    echo "1" >"$MOCK_STATE/install_fails"
+
+    local output
+    output=$(_run_boot)
+
+    assert_contains "$output" "⚠ Failed to install" \
+        "boot reports the hard install failure"
+    assert_contains "$output" "BOOT_RC=1" \
+        "a plugin that never installed fails verification"
+    assert_contains "$output" "BOOT_SURVIVED" \
+        "boot survives a hard install failure under set -e"
 }
 
 test_boot_reports_every_failing_plugin() {
@@ -450,6 +477,7 @@ test_marketplace_grep_records_its_fast_path_role() {
 run_test test_boot_fails_when_components_not_discovered "boot: an inert install fails verification (#944)"
 run_test test_boot_fails_when_details_unreadable "boot: unreadable plugin details fails verification"
 run_test test_boot_verifies_after_a_successful_install "boot: verifies what it just installed"
+run_test test_hard_install_failure_is_reported_and_survivable "boot: a hard install failure is reported and survivable"
 run_test test_boot_reports_every_failing_plugin "boot: reports every failing plugin, not just the first"
 run_test test_verification_failure_does_not_abort_boot "severity: a verification failure is loud but not fatal"
 run_test test_missing_librarian_dir_is_a_skip_not_a_failure "severity: missing librarian dir is a skip at boot"
