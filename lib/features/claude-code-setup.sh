@@ -439,6 +439,23 @@ log_message "Creating claude-plugins-repair command..."
 install -m 755 /tmp/build-scripts/features/lib/claude/claude-plugins-repair \
     /usr/local/bin/claude-plugins-repair
 
+# The lock directory both entry points serialize on (CLAUDE_SETUP_LOCK).
+#
+# ROOT-OWNED and 0755 on purpose (#943): the container user must be able to
+# open the lock FILE for writing, but must NOT be able to create or replace
+# entries in the directory. That is what makes the /tmp symlink-plant this
+# replaces impossible rather than merely detectable — an unprivileged user
+# cannot swap the lock path for a symlink to somewhere else.
+#
+# The file is pre-created and chowned to the container user because the
+# directory it lives in is not writable by that user, so an absent file could
+# not be created at runtime. Mode 644: it carries no content and is never read
+# — only flock'd.
+log_message "Creating setup lock directory..."
+install -d -m 755 -o root -g root /etc/container/lock
+install -m 644 -o "$TARGET_USER" -g "$TARGET_USER" /dev/null \
+    /etc/container/lock/claude-setup.lock
+
 # ============================================================================
 # Create First-Startup Script (calls claude-setup)
 # ============================================================================
@@ -498,7 +515,7 @@ fi
 log_feature_summary \
     --feature "Claude Code Setup" \
     --tools "claude,claude-setup,claude-plugins-repair,claude-auth-watcher,bash-language-server" \
-    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-plugins-repair,/usr/local/lib/claude/claude-plugin-lib.sh,/usr/local/bin/claude-auth-watcher,/opt/librarian,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh,~/.claude/settings.json" \
+    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-plugins-repair,/usr/local/lib/claude/claude-plugin-lib.sh,/usr/local/bin/claude-auth-watcher,/opt/librarian,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh,/etc/container/lock/claude-setup.lock,~/.claude/settings.json" \
     --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_EXTRA_SKILLS,CLAUDE_EXTRA_AGENTS,CLAUDE_AUTO_DETECT_MCPS,CLAUDE_MCP_AUTO_AUTH,CLAUDE_AUTH_WATCHER_TIMEOUT,CLAUDE_PLUGINS,CLAUDE_MCPS,CLAUDE_AGENTS,CLAUDE_SKILLS,LIBRARIAN_REF,CLAUDE_LIBRARIAN_PLUGINS" \
     --commands "claude,claude-setup,claude-plugins-repair,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."

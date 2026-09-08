@@ -638,8 +638,13 @@ test_both_entrypoints_share_one_lock_path() {
     setup
     local setup_src="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
 
-    assert_file_contains "$PLUGIN_LIB" 'CLAUDE_SETUP_LOCK="/tmp/claude-setup.lock"' \
+    assert_file_contains "$PLUGIN_LIB" 'CLAUDE_SETUP_LOCK="/etc/container/lock/claude-setup.lock"' \
         "the shared library owns the lock path constant"
+
+    # The directory must not be world-writable (#943): the /tmp path this
+    # replaced let any local user plant a symlink at the lock path.
+    assert_file_not_contains "$PLUGIN_LIB" 'CLAUDE_SETUP_LOCK="/tmp/' \
+        "the lock does not live in a world-writable directory"
 
     local caller
     for caller in "$REPAIR" "$setup_src"; do
@@ -736,6 +741,98 @@ test_lock_failure_branches_are_distinguishable() {
     teardown
 }
 
+# The lock path guard (#943). The root-owned parent directory is the real
+# control, but it exists only in a built image — these drive the in-process
+# check that backs it up, which is what would fire if the path ever moved back
+# somewhere writable.
+
+# Run _acquire_setup_lock against a given path in a fresh bash, with flock
+# stubbed to succeed so the test never actually blocks. Echoes the combined
+# output; REACHED in it means the function returned rather than exiting.
+_run_acquire_lock() {
+    local lock_path="$1"
+    local runner="$TEST_TEMP_DIR/lock-guard-runner.sh"
+    local stub_bin="$TEST_TEMP_DIR/lock-guard-bin"
+
+    mkdir -p "$stub_bin"
+    command printf '#!/usr/bin/env bash\nexit 0\n' >"$stub_bin/flock"
+    chmod 755 "$stub_bin/flock"
+
+    {
+        echo '#!/usr/bin/env bash'
+        _extract_lock_function
+        echo '_acquire_setup_lock "$1"'
+        echo 'echo REACHED'
+    } >"$runner"
+
+    env -u BASH_ENV PATH="$stub_bin:$PATH" bash "$runner" "$lock_path" 2>&1 || true
+}
+
+# A symlinked lock path is the /tmp attack this move closes: an unprivileged
+# user plants a symlink, and the fd-200 open writes wherever it points.
+test_symlinked_lock_path_is_refused() {
+    setup
+    local target="$TEST_TEMP_DIR/attacker-target"
+    local link="$TEST_TEMP_DIR/planted.lock"
+    ln -s "$target" "$link"
+
+    local out
+    out=$(_run_acquire_lock "$link")
+
+    assert_contains "$out" "symlink" "a symlinked lock path says THAT specifically"
+    assert_contains "$out" "REACHED" "a symlinked lock path degrades rather than exiting"
+    assert_file_not_exists "$target" \
+        "the symlink was NOT followed — nothing was created at its target"
+    teardown
+}
+
+# The message must name the actual cause. Collapsing this into the existing
+# "could not open" or "flock not available" text would send an operator after
+# the wrong fix — the same property the two pre-existing branches assert.
+test_lock_guard_messages_are_distinct() {
+    setup
+    local link="$TEST_TEMP_DIR/distinct.lock"
+    ln -s "$TEST_TEMP_DIR/elsewhere" "$link"
+
+    local out
+    out=$(_run_acquire_lock "$link")
+
+    assert_not_contains "$out" "flock not available" \
+        "a symlinked path is not reported as a missing flock"
+    assert_not_contains "$out" "could not open" \
+        "a symlinked path is not reported as an unopenable path"
+    teardown
+}
+
+# An ordinary, user-owned path in a normal directory must still lock. Without
+# this the two refusal tests above would pass on a guard that rejected
+# everything.
+test_ordinary_lock_path_is_accepted() {
+    setup
+    local lock="$TEST_TEMP_DIR/ordinary.lock"
+
+    local out
+    out=$(_run_acquire_lock "$lock")
+
+    assert_contains "$out" "REACHED" "an ordinary lock path is acquired"
+    assert_not_contains "$out" "⚠" "an ordinary lock path warns about nothing"
+    assert_file_exists "$lock" "the lock file was created at the requested path"
+    teardown
+}
+
+# A bare host or test harness has no /etc/container/lock. That must degrade the
+# same warn-and-continue way, not abort setup.
+test_absent_lock_directory_degrades() {
+    setup
+
+    local out
+    out=$(_run_acquire_lock "$TEST_TEMP_DIR/no-such-dir/absent.lock")
+
+    assert_contains "$out" "could not open" "an absent lock directory says so"
+    assert_contains "$out" "REACHED" "an absent lock directory does not abort setup"
+    teardown
+}
+
 # Extract _acquire_setup_lock from the library (column-0 layout, shfmt-enforced).
 _extract_lock_function() {
     command awk '
@@ -743,6 +840,75 @@ _extract_lock_function() {
         in_fn { print }
         in_fn && $0 == "}" { exit }
     ' "$PLUGIN_LIB"
+}
+
+# ============================================================================
+# Whitespace trimming (#943)
+# ============================================================================
+# _trim replaced an `echo "$x" | xargs` pipeline at three call sites. The
+# aliasing concern is what CLAUDE.md's convention is about, but the sharper bug
+# is that `xargs` INTERPRETS its input: it strips quotes and processes
+# backslashes, so those values came back altered rather than merely trimmed.
+
+# Source just the library into this shell to drive its pure helpers directly.
+# The library is sourced-not-executed by design and sets no shell options.
+_source_plugin_lib() {
+    # shellcheck disable=SC1090  # path is a test fixture, resolved at runtime
+    source "$PLUGIN_LIB"
+}
+
+test_trim_strips_surrounding_whitespace() {
+    setup
+    _source_plugin_lib
+
+    assert_equals "dev-core" "$(_trim "  dev-core")" "leading spaces are stripped"
+    assert_equals "dev-core" "$(_trim "dev-core  ")" "trailing spaces are stripped"
+    assert_equals "dev-core" "$(_trim "  dev-core  ")" "both ends are stripped"
+    assert_equals "dev-core" "$(_trim "$(command printf '\tdev-core\t')")" \
+        "tabs are whitespace too"
+    assert_equals "dev-core" "$(_trim "dev-core")" "an already-clean value is unchanged"
+    teardown
+}
+
+test_trim_handles_empty_and_all_whitespace() {
+    setup
+    _source_plugin_lib
+
+    assert_equals "" "$(_trim "")" "an empty value trims to empty"
+    assert_equals "" "$(_trim "   ")" "an all-whitespace value trims to empty"
+    teardown
+}
+
+# The behavioral difference from `xargs`, and the reason this is not a cosmetic
+# swap. `echo 'a"b' | xargs` warns or mangles; `echo 'a\b' | xargs` yields 'ab'.
+# _trim must return everything between the outermost non-space characters
+# byte-for-byte.
+test_trim_does_not_interpret_quotes_or_backslashes() {
+    setup
+    _source_plugin_lib
+
+    assert_equals 'a"b' "$(_trim '  a"b  ')" "a double quote survives trimming"
+    assert_equals "a'b" "$(_trim "  a'b  ")" "a single quote survives trimming"
+    assert_equals 'a\b' "$(_trim '  a\b  ')" "a backslash survives trimming"
+    assert_equals 'a b' "$(_trim '  a b  ')" "interior whitespace is preserved"
+    teardown
+}
+
+# The call sites, not just the helper: _is_in_list is what actually consumes
+# padded entries, and it is the deny-list's matcher (#789).
+test_is_in_list_matches_padded_entries() {
+    setup
+    _source_plugin_lib
+
+    assert_true "_is_in_list 'workflow' 'dev-core, workflow, review-audit'" \
+        "a space-padded entry still matches"
+    assert_true "_is_in_list 'workflow' '  workflow  '" \
+        "a lone padded entry still matches"
+    assert_false "_is_in_list 'work' 'dev-core, workflow'" \
+        "matching stays exact — a prefix does not match"
+    assert_false "_is_in_list 'workflow' ''" \
+        "an empty list matches nothing"
+    teardown
 }
 
 # ============================================================================
@@ -873,6 +1039,14 @@ run_test test_expected_hooks_only_for_workflow "parser: only workflow carries a 
 run_test test_both_entrypoints_share_one_lock_path "lock: both entry points share one lock path"
 run_test test_check_does_not_take_the_lock "lock: read-only check never blocks on it"
 run_test test_lock_failure_branches_are_distinguishable "lock: degraded branches report distinct causes"
+run_test test_symlinked_lock_path_is_refused "lock: a symlinked path is refused, not followed (#943)"
+run_test test_lock_guard_messages_are_distinct "lock: the symlink refusal names its own cause"
+run_test test_ordinary_lock_path_is_accepted "lock: an ordinary path is still acquired"
+run_test test_absent_lock_directory_degrades "lock: an absent lock directory degrades, not aborts"
+run_test test_trim_strips_surrounding_whitespace "trim: strips leading/trailing whitespace (#943)"
+run_test test_trim_handles_empty_and_all_whitespace "trim: empty and all-whitespace values"
+run_test test_trim_does_not_interpret_quotes_or_backslashes "trim: quotes/backslashes survive (unlike xargs)"
+run_test test_is_in_list_matches_padded_entries "trim: _is_in_list matches space-padded entries"
 run_test test_production_librarian_dir_is_not_env_settable "pinning: LIBRARIAN_DIR is not env-settable"
 run_test test_repair_never_reaches_for_a_working_tree "pinning: never registers a working tree"
 run_test test_repair_sources_the_shared_library "sharing: sources the library, carries no install loop"

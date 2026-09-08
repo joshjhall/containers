@@ -204,10 +204,26 @@ mainly so tests need not sleep, but it is a legitimate operator knob for a slow
 or a known-fast marketplace.
 
 `claude-setup` also serializes itself with an `flock` on
-`/tmp/claude-setup.lock`, so the two startup paths that launch it (the
-first-startup script and the auth watcher) cannot interleave their
+`/etc/container/lock/claude-setup.lock`, so the two startup paths that launch it
+(the first-startup script and the auth watcher) cannot interleave their
 `~/.claude/settings.json` writes. Where `flock` is unavailable, setup logs a
 warning and proceeds unlocked.
+
+That directory is created root-owned at build time and is deliberately **not**
+writable by the container user (#943) — only the lock file inside it is. The
+lock lived at `/tmp/claude-setup.lock` until then, where any local user could
+win the race to create it as a symlink and redirect the write. Setup also
+refuses a lock path that is a symlink or owned by another user, warning and
+proceeding unlocked rather than following it.
+
+To clear a stuck lock, kill the process holding it — do **not** delete the file.
+`flock` releases on process exit, so there is no such thing as a stale lock file
+here, and the file cannot be recreated by the container user once removed (the
+directory is root-owned):
+
+```bash
+fuser -v /etc/container/lock/claude-setup.lock   # who holds it
+```
 
 ### Troubleshooting: slash commands stop resolving mid-session
 

@@ -127,6 +127,10 @@ _load_production_function() {
 # The real implementations (#787). Most now live in the shared library; only
 # install_plugin is still defined in claude-setup itself.
 _load_production_function "_plugin_status_in_list" "$CLAUDE_PLUGIN_LIB"
+# _trim before _is_in_list, which calls it (#943). These are loaded one at a
+# time by name, so a helper a loaded function depends on must be loaded too —
+# otherwise it fails at call time with "command not found" rather than at load.
+_load_production_function "_trim" "$CLAUDE_PLUGIN_LIB"
 _load_production_function "_is_in_list" "$CLAUDE_PLUGIN_LIB"
 _load_production_function "plugin_status" "$CLAUDE_PLUGIN_LIB"
 _load_production_function "enable_plugin" "$CLAUDE_PLUGIN_LIB"
@@ -1393,10 +1397,20 @@ test_claude_setup_takes_flock() {
         pass_test "lock path does not depend on TMPDIR"
     fi
 
-    if command grep -qE 'CLAUDE_SETUP_LOCK="/tmp/claude-setup\.lock"' <<<"$code"; then
-        pass_test "lock path is the documented /tmp/claude-setup.lock"
+    if command grep -qE 'CLAUDE_SETUP_LOCK="/etc/container/lock/claude-setup\.lock"' <<<"$code"; then
+        pass_test "lock path is the documented /etc/container/lock/claude-setup.lock"
     else
         fail_test "lock path does not match the path documented for operators"
+    fi
+
+    # The lock must not sit in a world-writable directory (#943). At /tmp any
+    # local user could win the race to create it as a symlink and redirect the
+    # fd-200 open; a root-owned parent makes that impossible rather than merely
+    # detectable.
+    if command grep -qE 'CLAUDE_SETUP_LOCK="(/tmp|/var/tmp|/dev/shm)/' <<<"$code"; then
+        fail_test "lock lives in a world-writable directory — symlink plant is possible"
+    else
+        pass_test "lock does not live in a world-writable directory"
     fi
 }
 
