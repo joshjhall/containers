@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.20.0] - 2026-09-08
+
+### Added
+
+- Implement tier-2 pinned-checksum verification (#890)
+- Make TOFU acceptances queryable in the evidence schema (#896)
+- Add unwedge-worktree to free virtiofs-wedged worktree paths
+- Add on-demand librarian plugin repair (#777) (#942)
+
+### Build
+
+- Upgrade octarine v0.3.0-beta.3 -> v0.3.0-beta.7 (#928)
+
+### CI/CD
+
+- Add required-checks manifest and never-reports guard (#904) (#908)
+
+### Changed
+
+- Remove the dead second cosign install path (#938)
+
+### Documentation
+
+- Add clap env-attr note; extend worktree + symlink entries
+- Correct FUSE-residue diagnosis; note fs-health misses worktrees
+- Note Workflow scriptPath and worktree-guard refusals
+- Record the Debian 11 git-flag floor; close out #882 (#889)
+- Record PAT admin-grant trap and the discriminate-rule loop
+- Record the loader-validation trap and the degraded review gate
+- Record the octarine-core rename and embedded-only suppressions
+- Record symbol-table unreachability proof and trailing-newline guard gap
+- Correct the second-cosign example after #935
+- Refresh the stale versions in the software allowlist
+- Add the grep-pin coverage lesson and trim the index
+- Sync docs and metadata with the Debian 11 drop
+- Record the report-I/O-decides-suite-exit lesson
+
+### Fixed
+
+- Stop skipping .devcontainer JSON in the dprint-json hook
+- Bump chacha20 to 0.10.2 to clear yanked-crate advisory
+- Drop container-only LSP binary paths from committed Zed settings
+- Decide issue triage from effective severity/effort labels (#883)
+- Scan linked worktrees in fs-health (#882) (#884)
+- Harden the fs-health linked-worktree pass (#886) (#893)
+- Clear the git config-redirect env family in fs-health (#894) (#895)
+- Drop hookify from DEFAULT_PLUGINS (#899)
+- Treat zero PR checks as not passing (#854) (#901)
+- Gate pr-tier on detect-changes result and guard check-name drift (#912)
+- Scan every repo under the workspace root, not just $PWD (#914)
+- Bound what fs-health workspace discovery will repair (#921)
+- Put agent scripts in a user-private 0700 dir (#924) (#925)
+- Stop EPIPE warning from corrupting --json output
+- Suppress unreachable CVE-2026-56854 in cosign (#932) (#934)
+- Drop Debian 11 (bullseye) after LTS EOL (#936)
+- Restore silently-dropped Poetry/uv tracking, unstick dua
+- Stop report I/O from setting a suite's exit status
+
+### Miscellaneous
+
+- Retire Debian 11 remnants left by the EOL drop (#939)
+- Bump 23 pinned tool versions
+- Bump librarian to v0.13.0 and mise to 2026.9.2
+
+### Testing
+
+- Cover require_docker's daemon-down branch (#879)
+- Cover load_project_config error and parse paths (#878)
+- Guard DEFAULT_PLUGINS cardinality against doc drift (#902)
+- Drive the doc-drift guard's failure branches from a fixture (#906)
+- Harden the doc-drift fixture and drive its helper's branches (#911)
+- Collapse the DEFAULT_PLUGINS guard cluster and state a depth limit (#915)
+- Compress the doc-drift prose and de-duplicate the fixtures (#920)
+- Fail loud on yq errors in required-checks (#919) (#929)
+
 ## [4.19.27] - 2026-08-29
 
 ### Added
@@ -2371,6 +2446,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.20.0]: https://github.com/joshjhall/containers/compare/v4.19.27...v4.20.0
 [4.19.27]: https://github.com/joshjhall/containers/compare/v4.19.26...v4.19.27
 [4.19.26]: https://github.com/joshjhall/containers/compare/v4.19.25...v4.19.26
 [4.19.25]: https://github.com/joshjhall/containers/compare/v4.19.24...v4.19.25
