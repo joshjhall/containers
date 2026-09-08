@@ -466,6 +466,22 @@ librarian_resolve_plugins() {
 # librarian_marketplace_registered — read-only predicate over the registry file.
 # This is the file a Claude Code self-update was observed to drop the librarian
 # entry from while leaving the two GitHub-sourced marketplaces intact (#777).
+#
+# DELIBERATELY A GREP, AND DELIBERATELY A FAST PATH — not the assertion (#944).
+# The grep answers "is the entry in the file", which is strictly weaker than
+# "are the plugins discoverable": a registry naming librarian while the plugins
+# are inert satisfies it. That was a real gap while the boot path ended at
+# librarian_install_plugins, because nothing downstream re-checked. It no longer
+# is: BOTH callers now run librarian_verify_plugins (or its singular form)
+# against `claude plugin details` afterwards — `claude-plugins-repair` since
+# #777, and boot via librarian_boot_plugins since #944.
+#
+# So the grep is an optimization that skips a redundant `claude plugin
+# marketplace add`, and the capability check that actually decides the outcome
+# runs moments later. Promoting this predicate to a CLI probe would add a
+# round-trip to every boot to answer a question already answered properly
+# downstream. If a caller is ever added that does NOT verify afterwards, this
+# reasoning lapses and the predicate must be strengthened.
 librarian_marketplace_registered() {
     local known_file="$HOME/.claude/plugins/known_marketplaces.json"
     [ -f "$known_file" ] || return 1
@@ -671,4 +687,44 @@ librarian_verify_plugins() {
     done
 
     [ "$failures" -eq 0 ]
+}
+
+# librarian_boot_plugins — the BOOT entry point: install, then verify discovery.
+#
+# claude-setup used to call librarian_install_plugins alone (#944). That is an
+# install exit code, and #777 exists precisely because a zero exit from the
+# install does not prove the components were discovered: every per-plugin
+# failure inside librarian_install_plugins is absorbed, and
+# librarian_marketplace_registered's grep prints "✓ Marketplace registered" for
+# a registry file that names librarian while the plugins are absent or inert.
+# Boot therefore printed an all-checkmark report having installed nothing — the
+# false-✓ shape #777 was filed to eliminate, still reachable at boot.
+#
+# Boot is the one moment the container can self-heal without anyone knowing to
+# run `claude-plugins-repair`, so the verification belongs here and not only on
+# the on-demand path.
+#
+# SEVERITY IS BOOT-SHAPED — report loudly, never abort. The distinct returns:
+#   2  $LIBRARIAN_DIR absent — a valid configuration at boot (an image built
+#      without the librarian clone), a hard error under repair. Same asymmetry
+#      the comment at claude-setup's call site has always documented.
+#   1  installed but one or more plugins did not expose their components.
+#   0  installed and every non-denied plugin verified.
+# The caller keeps `|| true`: claude-setup runs under `set -e` and one inert
+# plugin must not wedge the container. The non-zero return is for tests and for
+# any future caller that wants to branch on it.
+#
+# Costs one `claude plugin details` per resolved plugin (three by default) on
+# top of the install — bounded, local, and offline.
+librarian_boot_plugins() {
+    librarian_install_plugins || return 2
+
+    echo ""
+    echo "  Verifying component discovery:"
+    if ! librarian_verify_plugins; then
+        echo "  ⚠ Librarian plugins installed but did not expose all components."
+        echo "    Run: claude-plugins-repair repair"
+        return 1
+    fi
+    return 0
 }

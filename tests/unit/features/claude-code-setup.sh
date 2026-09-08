@@ -471,6 +471,8 @@ test_all_production_functions_extractable() {
         "_log_denied_plugin:$CLAUDE_PLUGIN_LIB" \
         "librarian_install_plugins:$CLAUDE_PLUGIN_LIB" \
         "librarian_verify_plugin:$CLAUDE_PLUGIN_LIB" \
+        "librarian_verify_plugins:$CLAUDE_PLUGIN_LIB" \
+        "librarian_boot_plugins:$CLAUDE_PLUGIN_LIB" \
         "install_plugin:$CLAUDE_SETUP" \
         "_acquire_setup_lock:$CLAUDE_PLUGIN_LIB"; do
         fn="${entry%%:*}"

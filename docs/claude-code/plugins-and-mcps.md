@@ -228,8 +228,8 @@ files are lost:
 The version-pinned plugin cache and `/opt/librarian` itself survive intact, so
 this is a registration problem, not a missing-files problem.
 
-`claude-setup` repairs exactly this on every container start, but a self-update
-happens mid-life — so the repair cannot fire until the next restart.
+`claude-setup` repairs and verifies exactly this on every container start, but a
+self-update happens mid-life — so the repair cannot fire until the next restart.
 
 **Fix.** Run the repair, then restart Claude Code:
 
@@ -252,8 +252,17 @@ plugin can install successfully and still expose nothing. `workflow` must report
 every plugin must report non-zero skills and agents (agents report `0` under a
 nested directory layout — Claude Code only discovers flat `agents/<name>.md`).
 
-A missing `/opt/librarian` is a **loud** failure (exit 3), not a quiet success —
-a repair that did nothing must not look like a repair that worked.
+**Container start applies the same bar.** The boot path verifies discovery too,
+not just the install exit code — otherwise a registry that still names
+`librarian` while the plugins are inert produces an all-checkmark startup that
+installed nothing. On a boot-time failure the startup output names each failing
+plugin and points at `claude-plugins-repair repair`; it never aborts
+`claude-setup`, because one inert plugin must not wedge the container.
+
+A missing `/opt/librarian` is a **loud** failure (exit 3) under `repair`, not a
+quiet success — a repair that did nothing must not look like a repair that
+worked. At boot the same condition is only a skip: an image built without the
+librarian clone is a valid configuration.
 
 > **Do not re-add the marketplace from a librarian checkout.** The obvious
 > manual recovery —
