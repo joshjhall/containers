@@ -820,6 +820,55 @@ test_ordinary_lock_path_is_accepted() {
     teardown
 }
 
+# The UID-agnostic property (#943), and the reason there is no ownership check.
+#
+# The lock file is created at BUILD time, but editors remap the container user's
+# UID AFTER build (Zed adopts the host UID; lib/runtime/lib/fix-run-permissions.sh
+# exists to reconcile exactly this for /run). A lock a remapped user cannot open
+# fails `exec 200>` and degrades to unlocked — silently restoring the race #784
+# closed. So a lock file owned by SOMEONE ELSE must still be acquired.
+test_lock_owned_by_another_user_is_still_acquired() {
+    setup
+    local lock
+
+    # A root-owned 0666 file this process does NOT own — the exact shape
+    # claude-code-setup.sh installs, and what a UID-remapped runtime sees.
+    # /dev/null is that file on every supported distro and needs no privilege
+    # to obtain, so this test runs everywhere rather than skipping (a skip
+    # would render as a pass and cover nothing).
+    lock="/dev/null"
+
+    if [ -O "$lock" ]; then
+        fail_test "/dev/null is owned by this process — fixture assumption broken"
+        teardown
+        return 0
+    fi
+
+    local out
+    out=$(_run_acquire_lock "$lock")
+
+    assert_contains "$out" "REACHED" "a foreign-owned lock is still acquired"
+    assert_not_contains "$out" "owned by another user" \
+        "no ownership check — a UID-remapped runtime must not degrade to unlocked"
+    assert_not_contains "$out" "could not open" \
+        "a 0666 lock file is openable regardless of which UID opens it"
+    teardown
+}
+
+# The mode the build installs is what makes the above true. 0644 owned by the
+# build-time UID would be unopenable by a remapped user; 0666 is openable by
+# any of them, and is safe only because the parent directory is root-owned 0755.
+test_build_installs_a_uid_agnostic_lock_file() {
+    setup
+    local setup_sh="$PROJECT_ROOT/lib/features/claude-code-setup.sh"
+
+    assert_file_contains "$setup_sh" 'install -d -m 755 -o root -g root /etc/container/lock' \
+        "the lock DIRECTORY is root-owned and not writable by the container user"
+    assert_file_contains "$setup_sh" 'install -m 666 -o root -g root /dev/null' \
+        "the lock FILE is mode 666 so any runtime UID can open it"
+    teardown
+}
+
 # A bare host or test harness has no /etc/container/lock. That must degrade the
 # same warn-and-continue way, not abort setup.
 test_absent_lock_directory_degrades() {
@@ -1043,6 +1092,8 @@ run_test test_symlinked_lock_path_is_refused "lock: a symlinked path is refused,
 run_test test_lock_guard_messages_are_distinct "lock: the symlink refusal names its own cause"
 run_test test_ordinary_lock_path_is_accepted "lock: an ordinary path is still acquired"
 run_test test_absent_lock_directory_degrades "lock: an absent lock directory degrades, not aborts"
+run_test test_lock_owned_by_another_user_is_still_acquired "lock: a foreign-owned lock is still acquired (UID remap)"
+run_test test_build_installs_a_uid_agnostic_lock_file "lock: build installs a UID-agnostic lock file"
 run_test test_trim_strips_surrounding_whitespace "trim: strips leading/trailing whitespace (#943)"
 run_test test_trim_handles_empty_and_all_whitespace "trim: empty and all-whitespace values"
 run_test test_trim_does_not_interpret_quotes_or_backslashes "trim: quotes/backslashes survive (unlike xargs)"

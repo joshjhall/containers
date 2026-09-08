@@ -400,12 +400,14 @@ enable_plugin() {
 #
 # /etc/container/lock is created ROOT-OWNED 0755 at build time
 # (claude-code-setup.sh), beside the config/first-startup/startup dirs already
-# there. An unprivileged user cannot create or replace an entry in it, so the
-# symlink plant is impossible rather than merely detected. That is the real
-# control; the ownership/symlink check in _acquire_setup_lock is defence in
-# depth. /var/lock was rejected: it symlinks to a world-writable sticky
-# /run/lock, and /run is typically a runtime tmpfs whose build-time contents do
-# not survive.
+# there. An unprivileged user cannot create, replace, or unlink an entry in it,
+# so the symlink plant is impossible rather than merely detected. That is the
+# real control; the symlink check in _acquire_setup_lock is defence in depth.
+# The lock FILE inside it is root-owned 0666 so that any runtime UID can open
+# it — see that function's comment for why an ownership check would break the
+# lock rather than harden it. /var/lock was rejected: it symlinks to a
+# world-writable sticky /run/lock, and /run is typically a runtime tmpfs whose
+# build-time contents do not survive.
 # shellcheck disable=SC2034  # read by the sourcing scripts, not by this library
 CLAUDE_SETUP_LOCK="/etc/container/lock/claude-setup.lock"
 
@@ -431,20 +433,28 @@ _acquire_setup_lock() {
         return 0
     fi
 
-    # Refuse a lock path that is a symlink, or that exists but belongs to
-    # someone else (#943). In production the root-owned parent directory already
-    # makes both impossible — this is defence in depth, and the branch that
-    # actually fires if the path is ever moved somewhere writable again. It is
-    # deliberately TOCTOU-racy: it cannot be the primary control, and treating
-    # it as one would be worse than useless. Degrade unlocked rather than
-    # exiting, matching the two branches around it, and say WHICH check tripped
-    # so an operator is not sent after a missing flock.
+    # Refuse a lock path that is a symlink (#943). In production the root-owned
+    # parent directory already makes the plant impossible — this is defence in
+    # depth, and the branch that actually fires if the path is ever moved
+    # somewhere writable again. It is deliberately TOCTOU-racy: it cannot be the
+    # primary control, and treating it as one would be worse than useless.
+    # Degrade unlocked rather than exiting, matching the two branches around it,
+    # and say WHICH check tripped so an operator is not sent after a missing
+    # flock.
+    #
+    # There is deliberately NO ownership check to go with this. The obvious
+    # `[ ! -O "$lock_path" ]` is wrong here on two counts, both of which
+    # silently degrade the lock to unlocked in ordinary supported use:
+    #   - The runtime UID is not the build-time UID. Editors remap the container
+    #     user after build (Zed adopts the host UID; see
+    #     lib/runtime/lib/fix-run-permissions.sh, which exists to reconcile
+    #     exactly this for /run), so the expected owner cannot be known here.
+    #   - `-O` compares against the caller's EUID with no root bypass, so an
+    #     operator running claude-plugins-repair under sudo would fail it — and
+    #     that hand-run mid-session is the invocation MOST likely to race.
+    # Ownership is not the control anyway: the root-owned parent directory is.
     if [ -L "$lock_path" ]; then
         echo "  ⚠ $lock_path is a symlink — refusing to follow it; continuing without a lock" >&2
-        return 0
-    fi
-    if [ -e "$lock_path" ] && [ ! -O "$lock_path" ]; then
-        echo "  ⚠ $lock_path is owned by another user — continuing without a lock" >&2
         return 0
     fi
 

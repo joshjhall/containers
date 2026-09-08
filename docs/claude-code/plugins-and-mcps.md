@@ -210,11 +210,19 @@ or a known-fast marketplace.
 warning and proceeds unlocked.
 
 That directory is created root-owned at build time and is deliberately **not**
-writable by the container user (#943) — only the lock file inside it is. The
-lock lived at `/tmp/claude-setup.lock` until then, where any local user could
-win the race to create it as a symlink and redirect the write. Setup also
-refuses a lock path that is a symlink or owned by another user, warning and
-proceeding unlocked rather than following it.
+writable by the container user (#943). The lock lived at
+`/tmp/claude-setup.lock` until then, where any local user could win the race to
+create it as a symlink and redirect the write; a root-owned parent makes that
+impossible rather than merely detectable. Setup also refuses a lock path that
+is a symlink, warning and proceeding unlocked rather than following it.
+
+The lock **file** inside that directory is root-owned and mode `0666`, so any
+runtime UID can open it. That is deliberate: editors remap the container user's
+UID after the image is built (Zed adopts the host UID), so a file owned by the
+build-time user would be unopenable by the runtime one — and setup would
+silently degrade to unlocked. Write access to the file grants nothing, since it
+holds no content and is only ever `flock`'d; the directory above it is the
+access control.
 
 To clear a stuck lock, kill the process holding it — do **not** delete the file.
 `flock` releases on process exit, so there is no such thing as a stale lock file

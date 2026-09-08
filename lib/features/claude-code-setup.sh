@@ -447,13 +447,26 @@ install -m 755 /tmp/build-scripts/features/lib/claude/claude-plugins-repair \
 # replaces impossible rather than merely detectable — an unprivileged user
 # cannot swap the lock path for a symlink to somewhere else.
 #
-# The file is pre-created and chowned to the container user because the
-# directory it lives in is not writable by that user, so an absent file could
-# not be created at runtime. Mode 644: it carries no content and is never read
-# — only flock'd.
+# The file is pre-created because the directory is not writable by the
+# container user, so an absent file could not be created at runtime.
+#
+# Mode 666, root-owned, and NOT chowned to the container user — deliberately
+# (#943). Editors remap the runtime user's UID *after* the image is built (Zed
+# adopts the host UID, VS Code keeps the image-native one; see
+# lib/runtime/lib/fix-run-permissions.sh), so any build-time owner is wrong for
+# some runtime. A 644 file chowned to the build-time UID would be UNOPENABLE by
+# a remapped user, and `exec 200>` would fail — silently degrading setup to
+# unlocked and restoring the very race #784 closed, in a supported environment.
+#
+# World-writable is safe HERE, and only because of the root-owned parent: an
+# unprivileged user cannot create, replace, or unlink an entry in a 0755
+# root-owned directory, so the path cannot be swapped for a symlink. The file
+# itself carries no content and is never read — only flock'd — so write access
+# to it grants nothing. This is what lets the lock be UID-agnostic by
+# construction rather than by runtime reconciliation.
 log_message "Creating setup lock directory..."
 install -d -m 755 -o root -g root /etc/container/lock
-install -m 644 -o "$TARGET_USER" -g "$TARGET_USER" /dev/null \
+install -m 666 -o root -g root /dev/null \
     /etc/container/lock/claude-setup.lock
 
 # ============================================================================
