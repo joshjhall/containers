@@ -436,6 +436,43 @@ test_repair_honors_librarian_plugins_override() {
     teardown
 }
 
+# The _trim call sites END-TO-END (#943), not the helper in isolation.
+#
+# An operator writing a CSV by hand naturally writes "dev-core, review-audit".
+# _trim is unit-tested above and _is_in_list is driven with padded entries, but
+# librarian_install_plugins and librarian_verify_plugins are the two loops that
+# actually consume an operator's list, and every other test here passes values
+# with no interior whitespace. A quoting slip at either call site would leave
+# every unit test green while installing a mangled or empty plugin name — the
+# exact bug class this issue exists to close.
+test_padded_plugin_list_installs_correctly() {
+    setup
+    _set_all_status "absent"
+
+    local rc=0
+    env -u BASH_ENV PATH="$STUB_BIN:$PATH" HOME="$FAKE_HOME" \
+        MOCK_STATE="$MOCK_STATE" CLAUDE_PLUGIN_LIB="$PLUGIN_LIB" \
+        LIBRARIAN_DIR_TEST_OVERRIDE="$FAKE_LIBRARIAN" \
+        ENABLED_FEATURES_FILE="/nonexistent-enabled-features" \
+        CLAUDE_LIBRARIAN_PLUGINS="dev-core, review-audit ,	workflow" \
+        bash "$REPAIR" repair >/dev/null 2>&1 || rc=$?
+
+    local calls
+    calls=$(command cat "$MOCK_STATE/calls")
+    assert_contains "$calls" "plugin install dev-core@librarian" \
+        "a space-padded first entry installs under its clean name"
+    assert_contains "$calls" "plugin install review-audit@librarian" \
+        "an entry padded on both sides installs under its clean name"
+    assert_contains "$calls" "plugin install workflow@librarian" \
+        "a tab-padded entry installs under its clean name"
+
+    # The failure mode is a name that still carries its padding, which would
+    # reach `claude plugin install` verbatim and fail against the marketplace.
+    assert_not_contains "$calls" "plugin install  " \
+        "no install is issued with a leading-space plugin name"
+    teardown
+}
+
 test_repair_honors_disabled_plugins_kill_switch() {
     setup
     _set_all_status "absent"
@@ -1073,6 +1110,7 @@ run_test test_repair_reinstalls_absent_plugins "repair: reinstalls all three plu
 run_test test_repair_reenables_disabled_plugins "repair: re-enables rather than reinstalls"
 run_test test_repair_is_idempotent "repair: idempotent (second run installs nothing)"
 run_test test_repair_honors_librarian_plugins_override "repair: honors CLAUDE_LIBRARIAN_PLUGINS"
+run_test test_padded_plugin_list_installs_correctly "repair: a space/tab-padded plugin list installs cleanly (#943)"
 run_test test_repair_honors_disabled_plugins_kill_switch "repair: honors CLAUDE_DISABLED_PLUGINS (#789)"
 run_test test_failed_marketplace_registration_warns "repair: a failed marketplace registration warns loudly"
 run_test test_repair_fails_when_hooks_not_discovered "verify: Hooks (0) fails despite a clean install"

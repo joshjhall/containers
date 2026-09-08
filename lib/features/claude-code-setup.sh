@@ -464,6 +464,14 @@ install -m 755 /tmp/build-scripts/features/lib/claude/claude-plugins-repair \
 # itself carries no content and is never read — only flock'd — so write access
 # to it grants nothing. This is what lets the lock be UID-agnostic by
 # construction rather than by runtime reconciliation.
+#
+# The accepted tradeoff: 0666 lets any local UID open the file for writing and
+# hold the flock, stalling both entry points for the full 600s timeout. That is
+# a broadening, not a new capability — `flock(2)` needs no write access, so a
+# read-only open under the old 0644 already sufficed to take the lock. Denying
+# it would mean knowing the runtime UID at build time, which is precisely what
+# is not knowable here. In a single-user dev container the tradeoff is not
+# close; revisit it if these images ever host mutually untrusting local users.
 log_message "Creating setup lock directory..."
 install -d -m 755 -o root -g root /etc/container/lock
 install -m 666 -o root -g root /dev/null \
