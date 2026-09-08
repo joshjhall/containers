@@ -94,37 +94,3 @@ sync-host *PREFIXES:
 # Drift guard for #606: report any on-disk runtime copy that differs from origin/main, exit non-zero if so (writes nothing).
 sync-host-check *PREFIXES:
     bash "{{ justfile_directory() }}/bin/sync-host.sh" --check {{ PREFIXES }}
-
-# Opt-in: wire the INCLUDE_HOST_EVENTS forwarder into the HOST ~/.claude for worktree golems (#738). Idempotent, preserves existing hooks.
-host-events-install:
-    bash "{{ justfile_directory() }}/bin/seed-host-events.sh" install
-
-# Un-wire the host event forwarder from the HOST ~/.claude (removes only our hooks + the copied script).
-host-events-remove:
-    bash "{{ justfile_directory() }}/bin/seed-host-events.sh" remove
-
-# Report whether the host event forwarder is wired into the HOST ~/.claude (read-only; exit 1 if not).
-host-events-check:
-    bash "{{ justfile_directory() }}/bin/seed-host-events.sh" check
-
-# ============================================================================
-# Librarian plugin repair (#777)
-# ============================================================================
-# A Claude Code update inside a running container can silently de-register the
-# librarian marketplace and uninstall dev-core/review-audit/workflow. Every
-# /workflow:*, /dev-core:* and /review-audit:* skill then vanishes mid-session
-# with no error — `claude plugin list` just stops listing them.
-#
-# These call the in-container command, NOT a bin/ script: the repair must run
-# against the image-baked, LIBRARIAN_REF-pinned /opt/librarian cache, which only
-# exists inside the container. Re-adding the marketplace from a librarian
-# working-tree checkout instead would register the un-pinned tree and silently
-# defeat the pin.
-
-# Re-register + reinstall the librarian plugins from the image-baked /opt/librarian cache.
-claude-plugins-repair:
-    claude-plugins-repair repair
-
-# Report whether the librarian marketplace + all three plugins are registered (read-only; exit 1 if not).
-claude-plugins-check:
-    claude-plugins-repair check

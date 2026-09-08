@@ -439,6 +439,44 @@ log_message "Creating claude-plugins-repair command..."
 install -m 755 /tmp/build-scripts/features/lib/claude/claude-plugins-repair \
     /usr/local/bin/claude-plugins-repair
 
+# The lock directory both entry points serialize on (CLAUDE_SETUP_LOCK).
+#
+# ROOT-OWNED and 0755 on purpose (#943): the container user must be able to
+# open the lock FILE for writing, but must NOT be able to create or replace
+# entries in the directory. That is what makes the /tmp symlink-plant this
+# replaces impossible rather than merely detectable — an unprivileged user
+# cannot swap the lock path for a symlink to somewhere else.
+#
+# The file is pre-created because the directory is not writable by the
+# container user, so an absent file could not be created at runtime.
+#
+# Mode 666, root-owned, and NOT chowned to the container user — deliberately
+# (#943). Editors remap the runtime user's UID *after* the image is built (Zed
+# adopts the host UID, VS Code keeps the image-native one; see
+# lib/runtime/lib/fix-run-permissions.sh), so any build-time owner is wrong for
+# some runtime. A 644 file chowned to the build-time UID would be UNOPENABLE by
+# a remapped user, and `exec 200>` would fail — silently degrading setup to
+# unlocked and restoring the very race #784 closed, in a supported environment.
+#
+# World-writable is safe HERE, and only because of the root-owned parent: an
+# unprivileged user cannot create, replace, or unlink an entry in a 0755
+# root-owned directory, so the path cannot be swapped for a symlink. The file
+# itself carries no content and is never read — only flock'd — so write access
+# to it grants nothing. This is what lets the lock be UID-agnostic by
+# construction rather than by runtime reconciliation.
+#
+# The accepted tradeoff: 0666 lets any local UID open the file for writing and
+# hold the flock, stalling both entry points for the full 600s timeout. That is
+# a broadening, not a new capability — `flock(2)` needs no write access, so a
+# read-only open under the old 0644 already sufficed to take the lock. Denying
+# it would mean knowing the runtime UID at build time, which is precisely what
+# is not knowable here. In a single-user dev container the tradeoff is not
+# close; revisit it if these images ever host mutually untrusting local users.
+log_message "Creating setup lock directory..."
+install -d -m 755 -o root -g root /etc/container/lock
+install -m 666 -o root -g root /dev/null \
+    /etc/container/lock/claude-setup.lock
+
 # ============================================================================
 # Create First-Startup Script (calls claude-setup)
 # ============================================================================
@@ -498,7 +536,7 @@ fi
 log_feature_summary \
     --feature "Claude Code Setup" \
     --tools "claude,claude-setup,claude-plugins-repair,claude-auth-watcher,bash-language-server" \
-    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-plugins-repair,/usr/local/lib/claude/claude-plugin-lib.sh,/usr/local/bin/claude-auth-watcher,/opt/librarian,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh,~/.claude/settings.json" \
+    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-plugins-repair,/usr/local/lib/claude/claude-plugin-lib.sh,/usr/local/bin/claude-auth-watcher,/opt/librarian,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh,/etc/container/lock/claude-setup.lock,~/.claude/settings.json" \
     --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_EXTRA_SKILLS,CLAUDE_EXTRA_AGENTS,CLAUDE_AUTO_DETECT_MCPS,CLAUDE_MCP_AUTO_AUTH,CLAUDE_AUTH_WATCHER_TIMEOUT,CLAUDE_PLUGINS,CLAUDE_MCPS,CLAUDE_AGENTS,CLAUDE_SKILLS,LIBRARIAN_REF,CLAUDE_LIBRARIAN_PLUGINS" \
     --commands "claude,claude-setup,claude-plugins-repair,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."

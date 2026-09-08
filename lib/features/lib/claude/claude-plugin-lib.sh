@@ -35,7 +35,7 @@
 # ---------------------
 #   - Requires bash (arrays, ${!var} indirection, <<< herestrings).
 #   - Requires `claude` on PATH for anything that shells out. The pure parsers
-#     (_match_plugin_in_list, _plugin_status_in_list, _is_in_list,
+#     (_trim, _match_plugin_in_list, _plugin_status_in_list, _is_in_list,
 #     _file_json_to_csv, _librarian_parse_component_count) are dependency-free
 #     and unit-testable in isolation — which is how they are tested.
 #   - Requires `jq` for the _FILE-variant overrides only.
@@ -78,6 +78,23 @@ _resolve_override_list() {
     return 1
 }
 
+# Trim leading and trailing whitespace from a value.
+#
+# Parameter expansion only, for two reasons. It forks no process — this runs
+# once per list entry on every boot — and, unlike the `echo "$x" | xargs` idiom
+# it replaces (#943), it does not INTERPRET the value: `xargs` processes quotes
+# and backslashes, so a plugin name containing either came back mangled rather
+# than merely trimmed. Everything between the first and last non-space
+# character is preserved byte-for-byte.
+#
+# Usage: name=$(_trim "$name")
+_trim() {
+    local s="$1"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    command printf '%s' "$s"
+}
+
 # Check if a name is in a comma-separated list (exact match).
 # Usage: _is_in_list "name" "a,b,name,c" → returns 0
 _is_in_list() {
@@ -90,8 +107,7 @@ _is_in_list() {
     local IFS=','
     local item
     for item in $haystack; do
-        # Trim whitespace
-        item=$(echo "$item" | xargs)
+        item=$(_trim "$item")
         [ "$item" = "$needle" ] && return 0
     done
     return 1
@@ -367,7 +383,7 @@ enable_plugin() {
 # (#777). It takes the same lock, which is only meaningful if both compute the
 # SAME path — hence the shared constant here rather than a literal in each file.
 #
-# The path is pinned to /tmp rather than ${TMPDIR:-/tmp} ON PURPOSE. The
+# The path is a FIXED LITERAL rather than ${TMPDIR:-...} ON PURPOSE. The
 # invocations come from different process trees (one backgrounded from the
 # startup script, one nohup'd from the auth watcher, one from an operator's
 # shell). An env-derived path could differ between them — a TMPDIR exported into
@@ -375,8 +391,25 @@ enable_plugin() {
 # restore the race. A fixed literal cannot drift. It also keeps the documented
 # recovery path (docs/claude-code/plugins-and-mcps.md) truthful for an operator
 # clearing a stuck lock by hand.
+#
+# The directory is /etc/container/lock, NOT /tmp (#943). /tmp is world-writable,
+# so any local user could win the race to create claude-setup.lock as a symlink
+# and redirect the fd-200 open below to a path of their choosing. The impact was
+# bounded — the file is used only as a lock and never read — but it was still a
+# write to an attacker-chosen path, on two entry points since #777.
+#
+# /etc/container/lock is created ROOT-OWNED 0755 at build time
+# (claude-code-setup.sh), beside the config/first-startup/startup dirs already
+# there. An unprivileged user cannot create, replace, or unlink an entry in it,
+# so the symlink plant is impossible rather than merely detected. That is the
+# real control; the symlink check in _acquire_setup_lock is defence in depth.
+# The lock FILE inside it is root-owned 0666 so that any runtime UID can open
+# it — see that function's comment for why an ownership check would break the
+# lock rather than harden it. /var/lock was rejected: it symlinks to a
+# world-writable sticky /run/lock, and /run is typically a runtime tmpfs whose
+# build-time contents do not survive.
 # shellcheck disable=SC2034  # read by the sourcing scripts, not by this library
-CLAUDE_SETUP_LOCK="/tmp/claude-setup.lock"
+CLAUDE_SETUP_LOCK="/etc/container/lock/claude-setup.lock"
 
 # Acquire the setup lock on fd 200, or degrade with a warning.
 #
@@ -400,9 +433,34 @@ _acquire_setup_lock() {
         return 0
     fi
 
+    # Refuse a lock path that is a symlink (#943). In production the root-owned
+    # parent directory already makes the plant impossible — this is defence in
+    # depth, and the branch that actually fires if the path is ever moved
+    # somewhere writable again. It is deliberately TOCTOU-racy: it cannot be the
+    # primary control, and treating it as one would be worse than useless.
+    # Degrade unlocked rather than exiting, matching the two branches around it,
+    # and say WHICH check tripped so an operator is not sent after a missing
+    # flock.
+    #
+    # There is deliberately NO ownership check to go with this. The obvious
+    # `[ ! -O "$lock_path" ]` is wrong here on two counts, both of which
+    # silently degrade the lock to unlocked in ordinary supported use:
+    #   - The runtime UID is not the build-time UID. Editors remap the container
+    #     user after build (Zed adopts the host UID; see
+    #     lib/runtime/lib/fix-run-permissions.sh, which exists to reconcile
+    #     exactly this for /run), so the expected owner cannot be known here.
+    #   - `-O` compares against the caller's EUID with no root bypass, so an
+    #     operator running claude-plugins-repair under sudo would fail it — and
+    #     that hand-run mid-session is the invocation MOST likely to race.
+    # Ownership is not the control anyway: the root-owned parent directory is.
+    if [ -L "$lock_path" ]; then
+        echo "  ⚠ $lock_path is a symlink — refusing to follow it; continuing without a lock" >&2
+        return 0
+    fi
+
     # Open the lock file on fd 200. The redirect is kept on its own line so a
-    # failure to open (e.g. unwritable TMPDIR) is caught here rather than
-    # aborting mid-run under `set -e`.
+    # failure to open (e.g. the lock directory absent on a bare host, or an
+    # unwritable path) is caught here rather than aborting mid-run under `set -e`.
     if ! exec 200>"$lock_path"; then
         echo "  ⚠ could not open $lock_path — continuing without a lock" >&2
         return 0
@@ -534,7 +592,7 @@ librarian_install_plugins() {
 
     IFS=',' read -ra plugin_list <<<"$plugins"
     for plugin in "${plugin_list[@]}"; do
-        plugin=$(echo "$plugin" | xargs)
+        plugin=$(_trim "$plugin")
         [ -z "$plugin" ] && continue
         # Deny-list (#789). Checked here too because this loop has its own
         # inline install path and never calls install_plugin — without it
@@ -678,7 +736,7 @@ librarian_verify_plugins() {
 
     IFS=',' read -ra plugin_list <<<"$plugins"
     for plugin in "${plugin_list[@]}"; do
-        plugin=$(echo "$plugin" | xargs)
+        plugin=$(_trim "$plugin")
         [ -z "$plugin" ] && continue
         # A denied plugin is absent on purpose — verifying it would report a
         # failure for the operator's own kill-switch.

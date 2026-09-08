@@ -255,6 +255,7 @@ quarterly-review:
 # includes `just`, so a bare host refreshing its runtime copies picks these up
 # alongside the justfile itself. Keep that list in step when adding a module.
 import "just/golem.just"
+import "just/claude.just"
 import "just/db.just"
 # ============================================================================
 # Cleanup

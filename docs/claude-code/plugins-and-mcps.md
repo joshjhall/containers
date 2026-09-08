@@ -204,10 +204,34 @@ mainly so tests need not sleep, but it is a legitimate operator knob for a slow
 or a known-fast marketplace.
 
 `claude-setup` also serializes itself with an `flock` on
-`/tmp/claude-setup.lock`, so the two startup paths that launch it (the
-first-startup script and the auth watcher) cannot interleave their
+`/etc/container/lock/claude-setup.lock`, so the two startup paths that launch it
+(the first-startup script and the auth watcher) cannot interleave their
 `~/.claude/settings.json` writes. Where `flock` is unavailable, setup logs a
 warning and proceeds unlocked.
+
+That directory is created root-owned at build time and is deliberately **not**
+writable by the container user (#943). The lock lived at
+`/tmp/claude-setup.lock` until then, where any local user could win the race to
+create it as a symlink and redirect the write; a root-owned parent makes that
+impossible rather than merely detectable. Setup also refuses a lock path that
+is a symlink, warning and proceeding unlocked rather than following it.
+
+The lock **file** inside that directory is root-owned and mode `0666`, so any
+runtime UID can open it. That is deliberate: editors remap the container user's
+UID after the image is built (Zed adopts the host UID), so a file owned by the
+build-time user would be unopenable by the runtime one — and setup would
+silently degrade to unlocked. Write access to the file grants nothing, since it
+holds no content and is only ever `flock`'d; the directory above it is the
+access control.
+
+To clear a stuck lock, kill the process holding it — do **not** delete the file.
+`flock` releases on process exit, so there is no such thing as a stale lock file
+here, and the file cannot be recreated by the container user once removed (the
+directory is root-owned):
+
+```bash
+fuser -v /etc/container/lock/claude-setup.lock   # who holds it
+```
 
 ### Troubleshooting: slash commands stop resolving mid-session
 

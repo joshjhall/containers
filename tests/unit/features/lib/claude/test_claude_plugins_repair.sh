@@ -436,6 +436,43 @@ test_repair_honors_librarian_plugins_override() {
     teardown
 }
 
+# The _trim call sites END-TO-END (#943), not the helper in isolation.
+#
+# An operator writing a CSV by hand naturally writes "dev-core, review-audit".
+# _trim is unit-tested above and _is_in_list is driven with padded entries, but
+# librarian_install_plugins and librarian_verify_plugins are the two loops that
+# actually consume an operator's list, and every other test here passes values
+# with no interior whitespace. A quoting slip at either call site would leave
+# every unit test green while installing a mangled or empty plugin name — the
+# exact bug class this issue exists to close.
+test_padded_plugin_list_installs_correctly() {
+    setup
+    _set_all_status "absent"
+
+    local rc=0
+    env -u BASH_ENV PATH="$STUB_BIN:$PATH" HOME="$FAKE_HOME" \
+        MOCK_STATE="$MOCK_STATE" CLAUDE_PLUGIN_LIB="$PLUGIN_LIB" \
+        LIBRARIAN_DIR_TEST_OVERRIDE="$FAKE_LIBRARIAN" \
+        ENABLED_FEATURES_FILE="/nonexistent-enabled-features" \
+        CLAUDE_LIBRARIAN_PLUGINS="dev-core, review-audit ,	workflow" \
+        bash "$REPAIR" repair >/dev/null 2>&1 || rc=$?
+
+    local calls
+    calls=$(command cat "$MOCK_STATE/calls")
+    assert_contains "$calls" "plugin install dev-core@librarian" \
+        "a space-padded first entry installs under its clean name"
+    assert_contains "$calls" "plugin install review-audit@librarian" \
+        "an entry padded on both sides installs under its clean name"
+    assert_contains "$calls" "plugin install workflow@librarian" \
+        "a tab-padded entry installs under its clean name"
+
+    # The failure mode is a name that still carries its padding, which would
+    # reach `claude plugin install` verbatim and fail against the marketplace.
+    assert_not_contains "$calls" "plugin install  " \
+        "no install is issued with a leading-space plugin name"
+    teardown
+}
+
 test_repair_honors_disabled_plugins_kill_switch() {
     setup
     _set_all_status "absent"
@@ -638,8 +675,13 @@ test_both_entrypoints_share_one_lock_path() {
     setup
     local setup_src="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
 
-    assert_file_contains "$PLUGIN_LIB" 'CLAUDE_SETUP_LOCK="/tmp/claude-setup.lock"' \
+    assert_file_contains "$PLUGIN_LIB" 'CLAUDE_SETUP_LOCK="/etc/container/lock/claude-setup.lock"' \
         "the shared library owns the lock path constant"
+
+    # The directory must not be world-writable (#943): the /tmp path this
+    # replaced let any local user plant a symlink at the lock path.
+    assert_file_not_contains "$PLUGIN_LIB" 'CLAUDE_SETUP_LOCK="/tmp/' \
+        "the lock does not live in a world-writable directory"
 
     local caller
     for caller in "$REPAIR" "$setup_src"; do
@@ -736,6 +778,147 @@ test_lock_failure_branches_are_distinguishable() {
     teardown
 }
 
+# The lock path guard (#943). The root-owned parent directory is the real
+# control, but it exists only in a built image — these drive the in-process
+# check that backs it up, which is what would fire if the path ever moved back
+# somewhere writable.
+
+# Run _acquire_setup_lock against a given path in a fresh bash, with flock
+# stubbed to succeed so the test never actually blocks. Echoes the combined
+# output; REACHED in it means the function returned rather than exiting.
+_run_acquire_lock() {
+    local lock_path="$1"
+    local runner="$TEST_TEMP_DIR/lock-guard-runner.sh"
+    local stub_bin="$TEST_TEMP_DIR/lock-guard-bin"
+
+    mkdir -p "$stub_bin"
+    command printf '#!/usr/bin/env bash\nexit 0\n' >"$stub_bin/flock"
+    chmod 755 "$stub_bin/flock"
+
+    {
+        echo '#!/usr/bin/env bash'
+        _extract_lock_function
+        echo '_acquire_setup_lock "$1"'
+        echo 'echo REACHED'
+    } >"$runner"
+
+    env -u BASH_ENV PATH="$stub_bin:$PATH" bash "$runner" "$lock_path" 2>&1 || true
+}
+
+# A symlinked lock path is the /tmp attack this move closes: an unprivileged
+# user plants a symlink, and the fd-200 open writes wherever it points.
+test_symlinked_lock_path_is_refused() {
+    setup
+    local target="$TEST_TEMP_DIR/attacker-target"
+    local link="$TEST_TEMP_DIR/planted.lock"
+    ln -s "$target" "$link"
+
+    local out
+    out=$(_run_acquire_lock "$link")
+
+    assert_contains "$out" "symlink" "a symlinked lock path says THAT specifically"
+    assert_contains "$out" "REACHED" "a symlinked lock path degrades rather than exiting"
+    assert_file_not_exists "$target" \
+        "the symlink was NOT followed — nothing was created at its target"
+    teardown
+}
+
+# The message must name the actual cause. Collapsing this into the existing
+# "could not open" or "flock not available" text would send an operator after
+# the wrong fix — the same property the two pre-existing branches assert.
+test_lock_guard_messages_are_distinct() {
+    setup
+    local link="$TEST_TEMP_DIR/distinct.lock"
+    ln -s "$TEST_TEMP_DIR/elsewhere" "$link"
+
+    local out
+    out=$(_run_acquire_lock "$link")
+
+    assert_not_contains "$out" "flock not available" \
+        "a symlinked path is not reported as a missing flock"
+    assert_not_contains "$out" "could not open" \
+        "a symlinked path is not reported as an unopenable path"
+    teardown
+}
+
+# An ordinary, user-owned path in a normal directory must still lock. Without
+# this the two refusal tests above would pass on a guard that rejected
+# everything.
+test_ordinary_lock_path_is_accepted() {
+    setup
+    local lock="$TEST_TEMP_DIR/ordinary.lock"
+
+    local out
+    out=$(_run_acquire_lock "$lock")
+
+    assert_contains "$out" "REACHED" "an ordinary lock path is acquired"
+    assert_not_contains "$out" "⚠" "an ordinary lock path warns about nothing"
+    assert_file_exists "$lock" "the lock file was created at the requested path"
+    teardown
+}
+
+# The UID-agnostic property (#943), and the reason there is no ownership check.
+#
+# The lock file is created at BUILD time, but editors remap the container user's
+# UID AFTER build (Zed adopts the host UID; lib/runtime/lib/fix-run-permissions.sh
+# exists to reconcile exactly this for /run). A lock a remapped user cannot open
+# fails `exec 200>` and degrades to unlocked — silently restoring the race #784
+# closed. So a lock file owned by SOMEONE ELSE must still be acquired.
+test_lock_owned_by_another_user_is_still_acquired() {
+    setup
+    local lock
+
+    # A root-owned 0666 file this process does NOT own — the exact shape
+    # claude-code-setup.sh installs, and what a UID-remapped runtime sees.
+    # /dev/null is that file on every supported distro and needs no privilege
+    # to obtain, so this test runs everywhere rather than skipping (a skip
+    # would render as a pass and cover nothing).
+    lock="/dev/null"
+
+    if [ -O "$lock" ]; then
+        fail_test "/dev/null is owned by this process — fixture assumption broken"
+        teardown
+        return 0
+    fi
+
+    local out
+    out=$(_run_acquire_lock "$lock")
+
+    assert_contains "$out" "REACHED" "a foreign-owned lock is still acquired"
+    assert_not_contains "$out" "owned by another user" \
+        "no ownership check — a UID-remapped runtime must not degrade to unlocked"
+    assert_not_contains "$out" "could not open" \
+        "a 0666 lock file is openable regardless of which UID opens it"
+    teardown
+}
+
+# The mode the build installs is what makes the above true. 0644 owned by the
+# build-time UID would be unopenable by a remapped user; 0666 is openable by
+# any of them, and is safe only because the parent directory is root-owned 0755.
+test_build_installs_a_uid_agnostic_lock_file() {
+    setup
+    local setup_sh="$PROJECT_ROOT/lib/features/claude-code-setup.sh"
+
+    assert_file_contains "$setup_sh" 'install -d -m 755 -o root -g root /etc/container/lock' \
+        "the lock DIRECTORY is root-owned and not writable by the container user"
+    assert_file_contains "$setup_sh" 'install -m 666 -o root -g root /dev/null' \
+        "the lock FILE is mode 666 so any runtime UID can open it"
+    teardown
+}
+
+# A bare host or test harness has no /etc/container/lock. That must degrade the
+# same warn-and-continue way, not abort setup.
+test_absent_lock_directory_degrades() {
+    setup
+
+    local out
+    out=$(_run_acquire_lock "$TEST_TEMP_DIR/no-such-dir/absent.lock")
+
+    assert_contains "$out" "could not open" "an absent lock directory says so"
+    assert_contains "$out" "REACHED" "an absent lock directory does not abort setup"
+    teardown
+}
+
 # Extract _acquire_setup_lock from the library (column-0 layout, shfmt-enforced).
 _extract_lock_function() {
     command awk '
@@ -743,6 +926,75 @@ _extract_lock_function() {
         in_fn { print }
         in_fn && $0 == "}" { exit }
     ' "$PLUGIN_LIB"
+}
+
+# ============================================================================
+# Whitespace trimming (#943)
+# ============================================================================
+# _trim replaced an `echo "$x" | xargs` pipeline at three call sites. The
+# aliasing concern is what CLAUDE.md's convention is about, but the sharper bug
+# is that `xargs` INTERPRETS its input: it strips quotes and processes
+# backslashes, so those values came back altered rather than merely trimmed.
+
+# Source just the library into this shell to drive its pure helpers directly.
+# The library is sourced-not-executed by design and sets no shell options.
+_source_plugin_lib() {
+    # shellcheck disable=SC1090  # path is a test fixture, resolved at runtime
+    source "$PLUGIN_LIB"
+}
+
+test_trim_strips_surrounding_whitespace() {
+    setup
+    _source_plugin_lib
+
+    assert_equals "dev-core" "$(_trim "  dev-core")" "leading spaces are stripped"
+    assert_equals "dev-core" "$(_trim "dev-core  ")" "trailing spaces are stripped"
+    assert_equals "dev-core" "$(_trim "  dev-core  ")" "both ends are stripped"
+    assert_equals "dev-core" "$(_trim "$(command printf '\tdev-core\t')")" \
+        "tabs are whitespace too"
+    assert_equals "dev-core" "$(_trim "dev-core")" "an already-clean value is unchanged"
+    teardown
+}
+
+test_trim_handles_empty_and_all_whitespace() {
+    setup
+    _source_plugin_lib
+
+    assert_equals "" "$(_trim "")" "an empty value trims to empty"
+    assert_equals "" "$(_trim "   ")" "an all-whitespace value trims to empty"
+    teardown
+}
+
+# The behavioral difference from `xargs`, and the reason this is not a cosmetic
+# swap. `echo 'a"b' | xargs` warns or mangles; `echo 'a\b' | xargs` yields 'ab'.
+# _trim must return everything between the outermost non-space characters
+# byte-for-byte.
+test_trim_does_not_interpret_quotes_or_backslashes() {
+    setup
+    _source_plugin_lib
+
+    assert_equals 'a"b' "$(_trim '  a"b  ')" "a double quote survives trimming"
+    assert_equals "a'b" "$(_trim "  a'b  ")" "a single quote survives trimming"
+    assert_equals 'a\b' "$(_trim '  a\b  ')" "a backslash survives trimming"
+    assert_equals 'a b' "$(_trim '  a b  ')" "interior whitespace is preserved"
+    teardown
+}
+
+# The call sites, not just the helper: _is_in_list is what actually consumes
+# padded entries, and it is the deny-list's matcher (#789).
+test_is_in_list_matches_padded_entries() {
+    setup
+    _source_plugin_lib
+
+    assert_true "_is_in_list 'workflow' 'dev-core, workflow, review-audit'" \
+        "a space-padded entry still matches"
+    assert_true "_is_in_list 'workflow' '  workflow  '" \
+        "a lone padded entry still matches"
+    assert_false "_is_in_list 'work' 'dev-core, workflow'" \
+        "matching stays exact — a prefix does not match"
+    assert_false "_is_in_list 'workflow' ''" \
+        "an empty list matches nothing"
+    teardown
 }
 
 # ============================================================================
@@ -858,6 +1110,7 @@ run_test test_repair_reinstalls_absent_plugins "repair: reinstalls all three plu
 run_test test_repair_reenables_disabled_plugins "repair: re-enables rather than reinstalls"
 run_test test_repair_is_idempotent "repair: idempotent (second run installs nothing)"
 run_test test_repair_honors_librarian_plugins_override "repair: honors CLAUDE_LIBRARIAN_PLUGINS"
+run_test test_padded_plugin_list_installs_correctly "repair: a space/tab-padded plugin list installs cleanly (#943)"
 run_test test_repair_honors_disabled_plugins_kill_switch "repair: honors CLAUDE_DISABLED_PLUGINS (#789)"
 run_test test_failed_marketplace_registration_warns "repair: a failed marketplace registration warns loudly"
 run_test test_repair_fails_when_hooks_not_discovered "verify: Hooks (0) fails despite a clean install"
@@ -873,6 +1126,16 @@ run_test test_expected_hooks_only_for_workflow "parser: only workflow carries a 
 run_test test_both_entrypoints_share_one_lock_path "lock: both entry points share one lock path"
 run_test test_check_does_not_take_the_lock "lock: read-only check never blocks on it"
 run_test test_lock_failure_branches_are_distinguishable "lock: degraded branches report distinct causes"
+run_test test_symlinked_lock_path_is_refused "lock: a symlinked path is refused, not followed (#943)"
+run_test test_lock_guard_messages_are_distinct "lock: the symlink refusal names its own cause"
+run_test test_ordinary_lock_path_is_accepted "lock: an ordinary path is still acquired"
+run_test test_absent_lock_directory_degrades "lock: an absent lock directory degrades, not aborts"
+run_test test_lock_owned_by_another_user_is_still_acquired "lock: a foreign-owned lock is still acquired (UID remap)"
+run_test test_build_installs_a_uid_agnostic_lock_file "lock: build installs a UID-agnostic lock file"
+run_test test_trim_strips_surrounding_whitespace "trim: strips leading/trailing whitespace (#943)"
+run_test test_trim_handles_empty_and_all_whitespace "trim: empty and all-whitespace values"
+run_test test_trim_does_not_interpret_quotes_or_backslashes "trim: quotes/backslashes survive (unlike xargs)"
+run_test test_is_in_list_matches_padded_entries "trim: _is_in_list matches space-padded entries"
 run_test test_production_librarian_dir_is_not_env_settable "pinning: LIBRARIAN_DIR is not env-settable"
 run_test test_repair_never_reaches_for_a_working_tree "pinning: never registers a working tree"
 run_test test_repair_sources_the_shared_library "sharing: sources the library, carries no install loop"
