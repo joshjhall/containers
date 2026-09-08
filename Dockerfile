@@ -320,7 +320,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.9.1
+ARG MISE_VERSION=2026.9.2
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi
@@ -497,7 +497,7 @@ ARG CLAUDE_CHANNEL=latest
 # Librarian plugin marketplace pin (version contract; tracked by check-versions).
 # Must be a *signed release tag* (v0.4.0+): the build fetches the signed release
 # tarball and verifies it with cosign before install (fail-closed, #671).
-ARG LIBRARIAN_REF=v0.12.0
+ARG LIBRARIAN_REF=v0.13.0
 # Librarian plugins to install from the local marketplace (comma-separated).
 # When unset, all defaults install. Set to empty "" to install none.
 ARG CLAUDE_LIBRARIAN_PLUGINS
