@@ -625,15 +625,27 @@ fi
 # exactly this on demand, mid-session, after a Claude Code self-update drops the
 # marketplace registration (#777). Do not re-inline it here.
 #
-# A missing $LIBRARIAN_DIR is the one non-zero return, and at BOOT it is only a
-# skip: an image built without the librarian clone is a valid configuration.
-# The repair path treats the same return as a hard error, because there the
-# operator explicitly asked for a repair and a silent no-op would look like
-# success (#777).
+# A missing $LIBRARIAN_DIR is only a skip at BOOT: an image built without the
+# librarian clone is a valid configuration. The repair path treats the same
+# condition as a hard error, because there the operator explicitly asked for a
+# repair and a silent no-op would look like success (#777).
+#
+# librarian_boot_plugins, NOT librarian_install_plugins (#944). The install
+# alone reports an exit code; it absorbs every per-plugin failure and its
+# marketplace check is a registry grep, so a boot that installed nothing still
+# printed only checkmarks — the #777 false-✓ reached through the boot path.
+# librarian_boot_plugins installs and then verifies component discovery against
+# `claude plugin details`, at the cost of one extra CLI call per plugin.
+#
+# The `|| true` is load-bearing: this script runs under `set -e` (line 41) and a
+# verification failure must be LOUD but not fatal — one inert plugin must not
+# wedge the container. librarian_boot_plugins itself never exits; it returns 2
+# for a missing $LIBRARIAN_DIR and 1 for a failed verification, and prints the
+# `claude-plugins-repair repair` remedy.
 echo ""
 if [ -d "$LIBRARIAN_DIR" ]; then
     echo "Librarian plugins (local marketplace, offline):"
-    librarian_install_plugins || true
+    librarian_boot_plugins || true
 else
     echo "Librarian marketplace not found at $LIBRARIAN_DIR — skipping librarian plugins"
 fi

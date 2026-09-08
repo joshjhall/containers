@@ -265,8 +265,18 @@ test_librarian_offline_install_present() {
         "the plugin library registers the local librarian marketplace"
     assert_file_contains "$CLAUDE_PLUGIN_LIB" 'CLAUDE_LIBRARIAN_PLUGINS' \
         "the plugin library honors the CLAUDE_LIBRARIAN_PLUGINS override"
-    assert_file_contains "$CLAUDE_SETUP" 'librarian_install_plugins' \
-        "claude-setup still runs the librarian install on every boot"
+    # #944: the boot call must be librarian_boot_plugins (install + verify), not
+    # a bare librarian_install_plugins. The install alone returns an exit code
+    # that proves nothing about component discovery, which is how the #777
+    # false-✓ stayed reachable at boot. Behavioral coverage of the verification
+    # itself lives in test_claude_setup_librarian_boot.sh; this pin only catches
+    # claude-setup silently dropping back to the install-only call.
+    assert_file_contains "$CLAUDE_SETUP" 'librarian_boot_plugins' \
+        "claude-setup runs the install+verify librarian boot path on every boot"
+    local bare_install
+    bare_install=$(command grep -nE '^\s*librarian_install_plugins' "$CLAUDE_SETUP" || true)
+    assert_empty "$bare_install" \
+        "claude-setup does not call librarian_install_plugins without verifying (#944)"
 }
 
 # ============================================================================
