@@ -16,14 +16,25 @@
 # the script body out of the YAML and node runs it against recording stubs for
 # the `github` / `context` / `core` globals that actions/github-script injects.
 #
-# ONE FIDELITY POINT CARRIES THIS WHOLE SUITE. The sweep's safety predicate is
-# the `state: 'closed'` argument to listForRepo — it lives in the API QUERY, not
-# in a branch of the script. A `paginate` stub that returned its fixture
-# verbatim would make every open-issue assertion vacuous: the script would
-# "pass" for the sole reason that the test never handed it an open issue. So the
-# stub below FILTERS the fixture by the `state` argument the script actually
-# passes, exactly as the real endpoint does. That is what gives
-# test_open_issue_untouched and the AC6 mutation guard their teeth.
+# TWO FIDELITY POINTS CARRY THIS WHOLE SUITE.
+#
+# 1. The sweep's safety predicate is the `state: 'closed'` argument to
+#    listForRepo — it lives in the API QUERY, not in a branch of the script. A
+#    `paginate` stub that returned its fixture verbatim would make every
+#    open-issue assertion vacuous: the script would "pass" for the sole reason
+#    that the test never handed it an open issue. So the stub below FILTERS the
+#    fixture by the `state` argument the script actually passes, exactly as the
+#    real endpoint does. That is what gives test_open_issue_untouched and the
+#    AC6 mutation guard their teeth.
+#
+# 2. The removeLabel error paths are UNREACHABLE from the fixture alone. The
+#    script only ever removes a label it just read off the same issue in the
+#    same run, so a stub deriving its 404 from that shared fixture could never
+#    fire — a test claiming to cover 404 absorption would pass by never entering
+#    the branch. The 404 fires in production only when a concurrent run or a
+#    human removes the label between the list and the remove. So faults are
+#    INJECTED independently of the fixture (the `$3` argument), which is what
+#    makes the 404, rate-limit-retry, and rethrow tests real.
 
 set -euo pipefail
 
@@ -84,19 +95,36 @@ extract_script() {
 #
 # $1 = path to the script to run (lets the non-vacuity test run a mutated copy)
 # $2 = JSON array of issue fixtures, each { number, state, labels, pull_request? }
+# $3 = optional removeLabel fault injection, as JSON:
+#        { "vanished": ["<issue>/<label>", ...], "throttle": {"<issue>/<label>": N},
+#          "fail": {"<issue>/<label>": <status>} }
+#      `vanished` makes the stub 404 for a label the LIST still reported —
+#      modeling the out-of-band race (a concurrent run, or a human) that is the
+#      only way the script's 404 branch can fire in production. `throttle` 403s
+#      the first N attempts with a secondary-rate-limit message before
+#      succeeding; `fail` raises an arbitrary status that must propagate.
+#
+# Fault state is deliberately SEPARATE from the paginate fixture. The script
+# only ever removes a label it just read off that same fixture, so a stub
+# sharing one source could never reach its own error paths — every such test
+# would pass by never entering the branch it claims to cover.
 #
 # The script is wrapped in an async IIFE because actions/github-script does the
 # same: that is what makes the script's top-level `await` legal.
 run_script() {
-    local script_path="$1" fixture="$2"
+    local script_path="$1" fixture="$2" faults="${3:-{\}}"
     local runner="$SCRATCH/run.mjs"
 
     command mkdir -p "$SCRATCH"
     command cat >"$runner" <<'RUNNER_EOF'
 import { readFileSync } from 'node:fs';
 
-const [scriptPath, fixtureJson] = process.argv.slice(2);
+const [scriptPath, fixtureJson, faultsJson] = process.argv.slice(2);
 const fixture = JSON.parse(fixtureJson);
+const faults = JSON.parse(faultsJson || '{}');
+const vanished = new Set(faults.vanished || []);
+const throttle = { ...(faults.throttle || {}) };
+const fail = faults.fail || {};
 const calls = [];
 
 // Minimal stand-ins for the globals actions/github-script injects.
@@ -107,17 +135,47 @@ const github = {
       // invoked directly — paginate below is what actually resolves it.
       listForRepo: () => {},
       removeLabel: async ({ issue_number, name }) => {
+        const key = `${issue_number}/${name}`;
+        calls.push(`attempt ${key}`);
+
+        // An arbitrary non-404 status the script must propagate rather than
+        // swallow (permissions, 5xx).
+        if (fail[key] !== undefined) {
+          const err = new Error(`injected failure ${fail[key]}`);
+          err.status = fail[key];
+          throw err;
+        }
+
+        // Secondary rate limit on the first N attempts. Shaped like the real
+        // rejection: 403 whose message names the limiter.
+        if (throttle[key] > 0) {
+          throttle[key]--;
+          const err = new Error(
+            'You have exceeded a secondary rate limit. Please wait a few minutes.',
+          );
+          err.status = 403;
+          err.response = { headers: { 'retry-after': '0' } };
+          throw err;
+        }
+
+        // The label was reported by the list but is gone by the time we try to
+        // remove it — a concurrent run, or a human, got there first. This is
+        // the ONLY way the script's 404 branch fires in production, which is
+        // why it is injected here rather than derived from the fixture.
+        if (vanished.has(key)) {
+          const err = new Error(`Label does not exist: ${name}`);
+          err.status = 404;
+          throw err;
+        }
+
         const issue = fixture.find((i) => i.number === issue_number);
         const labels = issue ? issue.labels.map((l) => l.name) : [];
-        // The real endpoint 404s when the label is not on the issue. Modeling
-        // that is what makes the idempotency test meaningful: a second sweep
-        // over an already-swept issue must absorb the 404, not blow up.
         if (!labels.includes(name)) {
           const err = new Error(`Label does not exist: ${name}`);
           err.status = 404;
           throw err;
         }
-        calls.push(`removeLabel ${issue_number}/${name}`);
+        calls.push(`removeLabel ${key}`);
       },
     },
   },
@@ -134,16 +192,25 @@ const github = {
 const context = { repo: { owner: 'joshjhall', repo: 'containers' } };
 const core = { info: () => {} };
 
+// Fake clock. The sweep deliberately paces its mutating calls ~1s apart to stay
+// under GitHub's secondary rate limiter, which would make this suite sleep for
+// minutes. Record each requested delay as `sleep <ms>` and resolve immediately:
+// the pacing stays ASSERTABLE without being waited out.
+const setTimeout = (fn, ms) => {
+  calls.push(`sleep ${ms}`);
+  return Promise.resolve().then(fn);
+};
+
 const source = readFileSync(scriptPath, 'utf8');
 const run = new Function(
-  'github', 'context', 'core',
+  'github', 'context', 'core', 'setTimeout',
   `return (async () => { ${source} })();`,
 );
-await run(github, context, core);
+await run(github, context, core, setTimeout);
 process.stdout.write(calls.join('\n'));
 RUNNER_EOF
 
-    node "$runner" "$script_path" "$fixture"
+    node "$runner" "$script_path" "$fixture" "$faults"
 }
 
 # Assert a "removeLabel <issue>/<label>" line is / is not among the recorded
@@ -284,9 +351,10 @@ test_non_status_labels_kept() {
         "sweep removed a severity/* label"
 }
 
-# AC4: idempotency. A second run over an already-swept set is a clean no-op —
-# it must neither record removals nor throw on the 404 the real endpoint
-# returns for an absent label.
+# AC4: idempotency, part 1. A second run over an already-swept set is a clean
+# no-op — no issue carries a sweepable label, so removeLabel is never reached.
+# Note what this does NOT prove: it passes by never entering the loop, so the
+# 404 branch is covered separately below.
 test_second_run_is_noop() {
     local calls
     if ! calls=$(run_script "$SCRATCH/script.js" "$SWEPT_ISSUES" 2>&1); then
@@ -298,6 +366,73 @@ test_second_run_is_noop() {
     fi
 }
 
+# AC4: idempotency, part 2 — the real 404 branch. The label is present in the
+# LIST but gone by the time removeLabel runs, which is the only way the branch
+# fires in production (a concurrent run, or a human, got there first). The sweep
+# must absorb it and keep going rather than aborting the batch.
+test_vanished_label_absorbed() {
+    local calls
+    if ! calls=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
+        '{"vanished":["100/status/pr-pending"]}' 2>&1); then
+        fail_test "a label that vanished between list and remove aborted the sweep: $calls"
+        return
+    fi
+    assert_not_called "$calls" "removeLabel 100/status/pr-pending" \
+        "a vanished label was counted as removed"
+    # The sweep must continue past it, not stop at the first 404.
+    assert_called "$calls" "removeLabel 101/status/in-progress" \
+        "sweep stopped after absorbing a 404 instead of continuing"
+}
+
+# A non-404 failure is genuine — permissions, a 5xx — and must propagate rather
+# than be silently swallowed. The converse of the test above: absorbing
+# everything would turn a broken token into a silent no-op sweep.
+test_non_404_error_propagates() {
+    if run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
+        '{"fail":{"100/status/pr-pending":500}}' >/dev/null 2>&1; then
+        fail_test "a 500 from removeLabel was swallowed — a broken sweep would report success"
+    fi
+}
+
+# Secondary rate limiting. The first backfill run fires ~200 sequential DELETEs,
+# which is exactly what GitHub's abuse-detection limiter targets. A 403 from it
+# must be retried, not treated as fatal.
+test_rate_limit_is_retried() {
+    local calls
+    if ! calls=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
+        '{"throttle":{"100/status/pr-pending":2}}' 2>&1); then
+        fail_test "a secondary-rate-limit 403 aborted the sweep instead of retrying: $calls"
+        return
+    fi
+    assert_called "$calls" "removeLabel 100/status/pr-pending" \
+        "sweep gave up on a throttled label instead of retrying to success"
+}
+
+# Retries are bounded — a permanently-throttled label must eventually surface
+# rather than spin forever.
+test_rate_limit_retries_are_bounded() {
+    if run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
+        '{"throttle":{"100/status/pr-pending":99}}' >/dev/null 2>&1; then
+        fail_test "an endlessly-throttled label did not surface — the retry loop is unbounded"
+    fi
+}
+
+# The sweep paces its mutating calls to stay under the secondary rate limiter.
+# Without this the ~200-call backfill is squarely in what that limiter catches.
+test_mutations_are_paced() {
+    local calls
+    calls=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES")
+    if ! command printf '%s\n' "$calls" | command grep -qE '^sleep [1-9][0-9]*$'; then
+        fail_test "no delay between mutating calls — a 200-issue backfill will trip GitHub's secondary rate limiter (recorded: ${calls//$'\n'/ | })"
+    fi
+}
+
+# AC5 (the one-off backfill of the existing ~199) has no case here BY DESIGN: it
+# is a `gh workflow run stale-status-labels.yml` dispatch of this very workflow,
+# not separate code. Reusing the shipped path is the point — a parallel backfill
+# script could drift from the thing it is meant to mirror — so the coverage for
+# AC5 is every case in this file plus the live dispatch itself.
+#
 # AC6 — non-vacuity. Neuter the closed-state predicate in the extracted script
 # and assert the bug appears: the sweep must then strip labels from OPEN issues.
 # Without this guard, every assertion above could pass against a script that
@@ -378,6 +513,16 @@ run_test test_non_status_labels_kept \
     "type/* and severity/* labels are not touched"
 run_test test_second_run_is_noop \
     "second run over an already-swept set is a clean no-op"
+run_test test_vanished_label_absorbed \
+    "a label that vanished between list and remove is absorbed"
+run_test test_non_404_error_propagates \
+    "a non-404 failure from removeLabel propagates"
+run_test test_rate_limit_is_retried \
+    "a secondary-rate-limit 403 is retried to success"
+run_test test_rate_limit_retries_are_bounded \
+    "rate-limit retries are bounded, not infinite"
+run_test test_mutations_are_paced \
+    "mutating calls are paced to stay under the rate limiter"
 run_test test_check_is_non_vacuous \
     "removing the closed-state predicate reinstates the bug"
 

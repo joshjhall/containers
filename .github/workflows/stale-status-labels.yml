@@ -77,6 +77,61 @@ jobs:
               { owner, repo, state: 'closed', per_page: 100 },
             );
 
+            // GitHub's secondary ("abuse detection") rate limiter targets rapid
+            // sequential MUTATING requests, and recommends roughly one per
+            // second. The first run of this sweep is a ~200-issue backfill, so
+            // an unthrottled loop is squarely in what that limiter exists to
+            // catch — and a 403 from it would abort the backfill partway.
+            const MUTATION_DELAY_MS = 1000;
+            const RETRY_MAX = 3;
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+            // Remove one label, absorbing the two outcomes that are not errors:
+            // a 404 (the label is already gone) and a secondary-rate-limit
+            // rejection (retry with backoff). Returns true only if this call
+            // actually removed something.
+            async function removeOne(issue_number, name) {
+              for (let attempt = 1; ; attempt++) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number,
+                    name,
+                  });
+                  return true;
+                } catch (err) {
+                  // Already gone — another run, or a human, removed it between
+                  // the list and this call. That is the idempotency guarantee,
+                  // not an error.
+                  if (err.status === 404) {
+                    core.info(`#${issue_number}: ${name} already absent`);
+                    return false;
+                  }
+                  // Secondary rate limit. Honour retry-after when GitHub sends
+                  // it, else back off exponentially.
+                  const throttled =
+                    err.status === 403 &&
+                    /secondary rate limit|abuse/i.test(err.message || '');
+                  if (throttled && attempt <= RETRY_MAX) {
+                    const after = Number(err.response?.headers?.['retry-after']);
+                    const waitMs = Number.isFinite(after) && after > 0
+                      ? after * 1000
+                      : MUTATION_DELAY_MS * 2 ** attempt;
+                    core.info(
+                      `#${issue_number}: rate limited, retrying in ${waitMs}ms ` +
+                        `(attempt ${attempt}/${RETRY_MAX})`,
+                    );
+                    await sleep(waitMs);
+                    continue;
+                  }
+                  // Anything else — permissions, a real 5xx, retries exhausted
+                  // — is genuine and must surface rather than be swallowed.
+                  throw err;
+                }
+              }
+            }
+
             let removed = 0;
             let touched = 0;
 
@@ -91,29 +146,19 @@ jobs:
               const stale = names.filter((n) => STALE.includes(n));
               if (stale.length === 0) continue;
 
-              touched++;
+              let modified = false;
               for (const name of stale) {
-                try {
-                  await github.rest.issues.removeLabel({
-                    owner,
-                    repo,
-                    issue_number: issue.number,
-                    name,
-                  });
+                if (await removeOne(issue.number, name)) {
                   removed++;
+                  modified = true;
                   core.info(`#${issue.number}: removed ${name}`);
-                } catch (err) {
-                  // 404 means the label was already gone — another run, or a
-                  // human, removed it between the list and this call. That is
-                  // the idempotency guarantee, not an error. Anything else is
-                  // real (permissions, rate limit) and must surface.
-                  if (err.status === 404) {
-                    core.info(`#${issue.number}: ${name} already absent`);
-                  } else {
-                    throw err;
-                  }
                 }
+                await sleep(MUTATION_DELAY_MS);
               }
+              // Count only issues this run actually changed. Incrementing on
+              // `stale.length > 0` instead would overstate the sweep whenever
+              // every label on an issue turned out to be already gone.
+              if (modified) touched++;
             }
 
             core.info(
