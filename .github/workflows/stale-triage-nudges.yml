@@ -1,0 +1,231 @@
+name: Stale Triage Nudges
+
+# Retracts the bogus `needs-triage` nudge comments the issue labeler posted
+# (issue #887).
+#
+# Issue #881 was a bug in .github/workflows/issue-labeler.yml: `sectionValue()`
+# parsed only the `### Severity` / `### Effort` headings that GitHub's FORM
+# templates render into the issue body. CLI-created issues (/workflow:file-issue,
+# `gh issue create --label ...`) carry those values as API labels and have no
+# form headings at all, so every one of them fell through to the
+# flag-for-triage path — which does two things: applies a `needs-triage` label
+# AND posts a one-time nudge comment.
+#
+# #883 fixed the decision logic, so no FURTHER bogus nudges are posted, and the
+# label backlog was swept by hand. The COMMENTS were not, and nothing ever
+# deletes them: the hidden marker below guarantees the comment is posted at most
+# ONCE, but there is no retraction path. Each surviving comment tells a human to
+# add labels that are visibly already present — permanent content in the
+# discussion thread, emailed to subscribers, and unactionable.
+#
+# THE PREDICATE IS THE POINT. This sweep deletes a marked comment only from an
+# issue carrying BOTH a `severity/*` and an `effort/*` label — the same
+# predicate the label sweep used, NOT merely "has the marker". An issue that
+# genuinely lacks a namespace received a CORRECT nudge, and that comment must
+# stay. Measured when this workflow was written: 86 issues carried a nudge, of
+# which 4 (#731, #769, #794, #897) genuinely lacked a namespace. A
+# marker-only sweep would have destroyed those 4.
+#
+# Deletion rather than editing to a retraction: the comment carried no
+# information beyond the (wrong) instruction, so a retraction would just be more
+# noise in the thread.
+#
+# TWO DELIBERATE DIVERGENCES from the sibling status-label sweep (#885):
+#
+# 1. NO `schedule:` trigger. That sweep recurs because `status/*` labels have an
+#    ongoing apply-with-no-clear path. Here the generator is already fixed by
+#    #883, so this backlog is closed-ended. A recurring job would be permanently
+#    dead weight and a standing risk of deleting a FUTURE legitimate nudge.
+# 2. `dry_run` defaults to TRUE — the opposite of a normal sweep default.
+#    Comment deletion is irreversible, unlike removing a label, so the safe
+#    direction is the default and the operator opts INTO destruction.
+#
+# Note for anyone tempted to make this search-driven: GitHub's search index does
+# not cover HTML comments. A GraphQL search for the marker returns 0 hits while
+# a search for the comment's PROSE returns 86. Matching on the prose would be
+# fragile against future rewording, so the sweep paginates issues and their
+# comments and matches the marker in the fetched body.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would be deleted without deleting it"
+        type: boolean
+        default: true
+
+permissions:
+  issues: write
+
+# Serialize so two dispatches can't race on the same comments.
+concurrency:
+  group: stale-triage-nudges
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Delete bogus needs-triage nudge comments
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sweep nudge comments
+        uses: actions/github-script@v7
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        with:
+          script: |
+            // The hidden marker the labeler embeds as the comment's first line.
+            // Matching the marker rather than the prose keeps this robust
+            // against future rewording of the nudge text.
+            const COMMENT_MARKER = '<!-- issue-labeler:needs-triage -->';
+
+            // Default to dry run when the input is absent or malformed. Only
+            // the exact string 'false' arms the destructive path — an
+            // unrecognised value must not silently delete 82 comments.
+            const dryRun = String(process.env.DRY_RUN).trim() !== 'false';
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Both namespaces must be present for a nudge to be bogus. This is
+            // the whole safety predicate — see the header.
+            function isTriaged(issue) {
+              const names = (issue.labels || []).map((l) =>
+                typeof l === 'string' ? l : l.name,
+              );
+              return (
+                names.some((n) => n.startsWith('severity/')) &&
+                names.some((n) => n.startsWith('effort/'))
+              );
+            }
+
+            // `state: 'all'` is intentional: a nudge on a CLOSED issue is just
+            // as wrong and just as permanent as one on an open issue, and the
+            // label predicate — not the issue state — is what makes deletion
+            // safe here. (The sibling status-label sweep keys on closed state
+            // because ITS predicate needs one; this one does not.)
+            const issues = await github.paginate(
+              github.rest.issues.listForRepo,
+              { owner, repo, state: 'all', per_page: 100 },
+            );
+
+            // GitHub's secondary ("abuse detection") rate limiter targets rapid
+            // sequential MUTATING requests and recommends roughly one per
+            // second. The backfill run deletes ~82 comments, well inside what
+            // that limiter exists to catch, and a 403 from it would abort the
+            // sweep partway.
+            const MUTATION_DELAY_MS = 1000;
+            const RETRY_MAX = 3;
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+            // Delete one comment, absorbing the two outcomes that are not
+            // errors: a 404 (already gone) and a secondary-rate-limit rejection
+            // (retry with backoff). Returns true only if this call actually
+            // deleted something.
+            async function deleteOne(issue_number, comment_id) {
+              for (let attempt = 1; ; attempt++) {
+                try {
+                  await github.rest.issues.deleteComment({
+                    owner,
+                    repo,
+                    comment_id,
+                  });
+                  return true;
+                } catch (err) {
+                  // Already gone — another run, or a human, deleted it between
+                  // the list and this call. That is the idempotency guarantee,
+                  // not an error.
+                  if (err.status === 404) {
+                    core.info(
+                      `#${issue_number}: comment ${comment_id} already absent`,
+                    );
+                    return false;
+                  }
+                  // Secondary rate limit. Honour retry-after when GitHub sends
+                  // it, else back off exponentially.
+                  const throttled =
+                    err.status === 403 &&
+                    /secondary rate limit|abuse/i.test(err.message || '');
+                  if (throttled && attempt <= RETRY_MAX) {
+                    const after = Number(err.response?.headers?.['retry-after']);
+                    const waitMs =
+                      Number.isFinite(after) && after > 0
+                        ? after * 1000
+                        : MUTATION_DELAY_MS * 2 ** attempt;
+                    core.info(
+                      `#${issue_number}: rate limited, retrying in ${waitMs}ms ` +
+                        `(attempt ${attempt}/${RETRY_MAX})`,
+                    );
+                    await sleep(waitMs);
+                    continue;
+                  }
+                  // Anything else — permissions, a real 5xx, retries exhausted
+                  // — is genuine and must surface rather than be swallowed.
+                  throw err;
+                }
+              }
+            }
+
+            let deleted = 0;
+            let touched = 0;
+            let kept = 0;
+
+            for (const issue of issues) {
+              // listForRepo returns pull requests as issues. A PR never
+              // received a triage nudge.
+              if (issue.pull_request) continue;
+
+              // Skip BEFORE listing comments. An issue genuinely missing a
+              // namespace got a correct nudge; there is nothing to consider on
+              // it, and skipping early also spares a comments API call per
+              // issue across the whole repo.
+              if (!isTriaged(issue)) {
+                kept++;
+                continue;
+              }
+
+              const comments = await github.paginate(
+                github.rest.issues.listComments,
+                { owner, repo, issue_number: issue.number, per_page: 100 },
+              );
+              const nudges = comments.filter((c) =>
+                (c.body || '').includes(COMMENT_MARKER),
+              );
+              if (nudges.length === 0) continue;
+
+              let modified = false;
+              for (const comment of nudges) {
+                if (dryRun) {
+                  core.info(
+                    `#${issue.number}: would delete comment ${comment.id}`,
+                  );
+                  deleted++;
+                  modified = true;
+                  continue;
+                }
+                if (await deleteOne(issue.number, comment.id)) {
+                  deleted++;
+                  modified = true;
+                  core.info(
+                    `#${issue.number}: deleted comment ${comment.id}`,
+                  );
+                }
+                await sleep(MUTATION_DELAY_MS);
+              }
+              // Count only issues this run actually changed. Incrementing on
+              // `nudges.length > 0` instead would overstate the sweep whenever
+              // every comment on an issue turned out to be already gone.
+              if (modified) touched++;
+            }
+
+            const verb = dryRun ? 'Would delete' : 'Deleted';
+            core.info(
+              `${verb} ${deleted} bogus nudge comment(s) across ${touched} ` +
+                `issue(s). Skipped ${kept} issue(s) missing a severity/* or ` +
+                `effort/* label — their nudge is correct and was kept.`,
+            );
+            if (dryRun) {
+              core.info(
+                'Dry run — nothing was deleted. Re-dispatch with ' +
+                  'dry_run=false to apply.',
+              );
+            }
