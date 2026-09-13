@@ -394,9 +394,9 @@ test_non_404_error_propagates() {
     fi
 }
 
-# Secondary rate limiting. The first backfill run fires ~200 sequential DELETEs,
-# which is exactly what GitHub's abuse-detection limiter targets. A 403 from it
-# must be retried, not treated as fatal.
+# Secondary rate limiting. The first backfill run fires ~200 sequential delete
+# requests, which is exactly what GitHub's abuse-detection limiter targets. A
+# 403 from it must be retried, not treated as fatal.
 test_rate_limit_is_retried() {
     local calls
     if ! calls=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
