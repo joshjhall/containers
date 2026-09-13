@@ -102,7 +102,10 @@ Some namespaces are owned by automation. Do not add them when filing:
 - `status/*` (`in-progress`, `pr-pending`, `commit-pending`) — managed by
   `/next-issue` and `/next-issue-ship` to track in-flight work. The one
   exception is `status/on-hold`, which you may apply manually to defer an
-  issue so the automated workflows skip it.
+  issue so the automated workflows skip it. A `status/*` label left on a
+  **closed** issue is self-healing — `stale-status-labels.yml` sweeps it
+  weekly (see [`../operations/review-cadence.md`](../operations/review-cadence.md)),
+  so there is no need to clear it by hand.
 - `audit/*` and `certainty/*` — applied by `/codebase-audit` scanner agents.
 
 ## How `/next-issue` prioritizes

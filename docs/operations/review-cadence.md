@@ -11,6 +11,7 @@ each finding means when it lands.
 | --------------- | ---------------------------------------------- | ---------------------------------------------------------------------- |
 | Weekly (Sun)    | `auto-patch.yml` at 02:00 UTC                  | Version-bump sweep → PR → auto-merge if CI passes                      |
 | Weekly (Mon)    | `security-scan.yml` at 03:00 UTC               | `cargo deny` + `osv-scanner` + `cargo audit`; opens issue on findings  |
+| Weekly (Mon)    | `stale-status-labels.yml` at 04:00 UTC         | Removes stale `status/*` labels from closed issues                     |
 | Quarterly (1st) | `quarterly-review.yml` at 09:00 UTC            | Opens tracking issue for Q1/Q2/Q3/Q4 with the manual checklist         |
 | Ad-hoc          | Human runs `just quarterly-review` locally     | Informational sweep: `machete` + `geiger` + `outdated` + `deny bans`   |
 | Ad-hoc          | Human runs `/codebase-audit` in Claude Code    | Parallel scanner agents file `audit/*` issues for human triage         |
@@ -31,6 +32,23 @@ Monday 03:00 UTC. Runs `just security-scan` in CI. On any finding it opens
 (or updates) a single tracking issue labeled `severity/high` +
 `type/compliance` + `audit/security`. Resolution is either a dependency
 bump or a narrow ignore in `deny.toml` / `.osv-scanner.toml`.
+
+### `stale-status-labels.yml` — weekly label hygiene
+
+Monday 04:00 UTC. Removes `status/in-progress`, `status/pr-pending`,
+`status/commit-pending`, `status/on-hold`, and `status/blocked` from **closed**
+issues. Those labels are applied when work starts and cleared only when
+`/workflow:ship-issue` performs the merge itself — a PR merged out of band (web
+UI, manual `gh pr merge`, an integration train) closes the issue with the label
+still attached. Besides the triage noise, `/workflow:next-issue` excludes those
+labels from priority selection, so a **reopened** issue still wearing one is
+silently skipped as a candidate.
+
+Closed is the safe predicate: an issue that is closed cannot legitimately be
+in-progress or awaiting a PR, so open issues are never touched and live work
+cannot be cleared. `status/complete` is deliberately **not** swept — it is the
+one status label that stays true once an issue closes. The sweep is idempotent;
+run it on demand with `gh workflow run stale-status-labels.yml`.
 
 ### `quarterly-review.yml` — quarterly tracking issue
 
