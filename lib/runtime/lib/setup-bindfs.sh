@@ -176,16 +176,20 @@ setup_bindfs_overlays() {
     # Ongoing cleanup during the session is handled by the fuse-cleanup-cron
     # job (every 10 minutes, installed by lib/features/bindfs.sh when cron is
     # available).
-    _fuse_cleaned=0
-    while IFS= read -r -d '' _hidden_file; do
-        # Skip files still held open by a running process
-        if command -v fuser >/dev/null 2>&1; then
-            fuser "$_hidden_file" >/dev/null 2>&1 && continue
+    #
+    # Both legs delegate to the same /usr/local/bin/fuse-cleanup. They used to
+    # carry two copies of the walk, which drifted: this one hardcoded /workspace
+    # as its root and so burned one depth level on the <repo> directory, making
+    # it strictly weaker than the cron pass it is meant to complement (#948).
+    # The shared GC discovers roots from findmnt like the cron leg does;
+    # /workspace survives only as the fallback for the case this leg uniquely
+    # handles — files stranded by a previous session whose mounts are now gone.
+    _fuse_cleanup_bin="${FUSE_CLEANUP_BIN:-/usr/local/bin/fuse-cleanup}"
+    if [ -x "$_fuse_cleanup_bin" ]; then
+        _fuse_cleaned=$(FUSE_CLEANUP_FALLBACK_ROOT=/workspace "$_fuse_cleanup_bin" 2>/dev/null || echo 0)
+        if [ "${_fuse_cleaned:-0}" -gt 0 ] 2>/dev/null; then
+            echo "🧹 Cleaned up $_fuse_cleaned stale .fuse_hidden file(s)"
         fi
-        rm -f "$_hidden_file" 2>/dev/null && _fuse_cleaned=$((_fuse_cleaned + 1))
-    done < <(command find /workspace -maxdepth 3 -name '.fuse_hidden*' -print0 2>/dev/null)
-    if [ "$_fuse_cleaned" -gt 0 ]; then
-        echo "🧹 Cleaned up $_fuse_cleaned stale .fuse_hidden file(s)"
     fi
-    unset _fuse_cleaned _hidden_file
+    unset _fuse_cleaned _fuse_cleanup_bin
 }

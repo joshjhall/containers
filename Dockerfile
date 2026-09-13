@@ -681,6 +681,17 @@ RUN if [ -f /opt/container-runtime/workspace-fs-health-cron.sh ]; then \
     chmod 755 /usr/local/bin/workspace-fs-health; \
     fi
 
+# Shared .fuse_hidden* garbage collector (issue #948). Both the boot pass
+# (lib/runtime/lib/setup-bindfs.sh) and the 10-minute cron pass installed by
+# lib/features/bindfs.sh delegate to this one script; they used to carry two
+# copies of the walk that had drifted on their root and their depth bound.
+# Installed unconditionally rather than gated on bindfs — it is a silent no-op
+# when no FUSE mount exists, and the boot pass that calls it ships regardless.
+RUN if [ -f /opt/container-runtime/fuse-cleanup.sh ]; then \
+    cp /opt/container-runtime/fuse-cleanup.sh /usr/local/bin/fuse-cleanup && \
+    chmod 755 /usr/local/bin/fuse-cleanup; \
+    fi
+
 # Hourly cron entry for that repair. Only written when the cron feature is
 # installed; without it the boot run and the on-demand command still work.
 # Minute 17 rather than 0 to stay off the top-of-hour pile-up with other jobs.
