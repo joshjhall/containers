@@ -586,6 +586,19 @@
             }
           },
           "added": "2026-09-07"
+        },
+        "2.5.13": {
+          "checksums": {
+            "amd64": {
+              "sha256": "2037af3d666febdb6e1a2f549938d6f0fe961bad0ac1a34c5fee3dec2db0b43e",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.13/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "c5f0cf249b1ef1d730376ef61390341e4fdcdb2f79a7fe94a2dacd6af6241958",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.13/biome-linux-arm64"
+            }
+          },
+          "added": "2026-09-13"
         }
       }
     },
@@ -990,6 +1003,19 @@
             }
           },
           "added": "2026-08-18"
+        },
+        "2.42.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "6ff270c9bf07d2bec5c98aa324eb7c4daf6a1a4d815c05ff1708049616047855",
+              "url": "https://github.com/rui314/mold/releases/download/v2.42.1/mold-2.42.1-x86_64-linux.tar.gz"
+            },
+            "arm64": {
+              "sha256": "16b025652d3d7456689e6025a77e1903bb2a15e7630877c26cc133f5df95b9c6",
+              "url": "https://github.com/rui314/mold/releases/download/v2.42.1/mold-2.42.1-aarch64-linux.tar.gz"
+            }
+          },
+          "added": "2026-09-13"
         }
       }
     },
@@ -1081,7 +1107,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-09-07T19:41:05Z",
+    "generated": "2026-09-13T07:04:28Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
