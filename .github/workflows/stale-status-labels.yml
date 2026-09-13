@@ -1,0 +1,166 @@
+name: Stale Status Labels
+
+# Sweeps `status/*` labels off CLOSED issues (issue #885).
+#
+# `status/*` labels have an apply path and no reliable clear path.
+# `status/in-progress` goes on when work starts, `status/pr-pending` when the PR
+# opens, `status/commit-pending` on the commit-only route — and the squash
+# commit's `Closes #N` trailer then closes the issue with the label still
+# attached. /workflow:ship-issue clears them only when ship itself performs the
+# merge, and /workflow:golem --teardown covers the parked / L1-L2 route, so a PR
+# merged OUT OF BAND (web UI, manual `gh pr merge`, an integration train) leaves
+# the label behind forever. That is the common case: the backlog was 199 labels
+# across 199 closed issues when this workflow was written, some carried since
+# April 2026.
+#
+# Beyond triage noise there is a sharper edge: /workflow:next-issue EXCLUDES
+# every label in STALE below from priority selection, so a REOPENED issue still
+# wearing one is silently skipped as a candidate with no diagnostic.
+#
+# Closed is the safe predicate — an issue that is closed cannot legitimately be
+# in-progress or awaiting a PR, so the sweep needs no heuristics and cannot race
+# live work on an open issue. That predicate is load-bearing, not decorative:
+# 54 OPEN issues legitimately carry `status/on-hold` or `status/blocked`.
+#
+# Scheduled rather than `on: issues: [closed]`: the hook form is tighter, but it
+# would only help going forward and would leave the pre-existing backlog
+# untouched. The schedule repairs the backlog AND keeps it clean, and doubles as
+# the one-off backfill via workflow_dispatch.
+
+on:
+  schedule:
+    # Weekly, Mondays 04:00 UTC. Clear of the Sun 02:00 auto-patch slot, the
+    # Mon 03:00 security-scan slot, and the quarterly 09:00 slot.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+# Serialize runs so an ad-hoc dispatch overlapping the schedule can't race on
+# label mutations.
+concurrency:
+  group: stale-status-labels
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Remove stale status labels from closed issues
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sweep closed issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Labels that assert something FALSE about a closed issue.
+            //
+            // `status/complete` is deliberately absent: it is the one status
+            // label that stays TRUE once an issue closes, so sweeping it would
+            // destroy real information. This is an explicit allowlist rather
+            // than a `startsWith('status/')` sweep with a carve-out so that a
+            // future status label is opt-IN — a new terminal marker is kept by
+            // default instead of being silently stripped.
+            const STALE = [
+              'status/in-progress',
+              'status/pr-pending',
+              'status/commit-pending',
+              'status/on-hold',
+              'status/blocked',
+            ];
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Paginate: the closed-issue backlog is in the hundreds and grows.
+            const issues = await github.paginate(
+              github.rest.issues.listForRepo,
+              { owner, repo, state: 'closed', per_page: 100 },
+            );
+
+            // GitHub's secondary ("abuse detection") rate limiter targets rapid
+            // sequential MUTATING requests, and recommends roughly one per
+            // second. The first run of this sweep is a ~200-issue backfill, so
+            // an unthrottled loop is squarely in what that limiter exists to
+            // catch — and a 403 from it would abort the backfill partway.
+            const MUTATION_DELAY_MS = 1000;
+            const RETRY_MAX = 3;
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+            // Remove one label, absorbing the two outcomes that are not errors:
+            // a 404 (the label is already gone) and a secondary-rate-limit
+            // rejection (retry with backoff). Returns true only if this call
+            // actually removed something.
+            async function removeOne(issue_number, name) {
+              for (let attempt = 1; ; attempt++) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number,
+                    name,
+                  });
+                  return true;
+                } catch (err) {
+                  // Already gone — another run, or a human, removed it between
+                  // the list and this call. That is the idempotency guarantee,
+                  // not an error.
+                  if (err.status === 404) {
+                    core.info(`#${issue_number}: ${name} already absent`);
+                    return false;
+                  }
+                  // Secondary rate limit. Honour retry-after when GitHub sends
+                  // it, else back off exponentially.
+                  const throttled =
+                    err.status === 403 &&
+                    /secondary rate limit|abuse/i.test(err.message || '');
+                  if (throttled && attempt <= RETRY_MAX) {
+                    const after = Number(err.response?.headers?.['retry-after']);
+                    const waitMs = Number.isFinite(after) && after > 0
+                      ? after * 1000
+                      : MUTATION_DELAY_MS * 2 ** attempt;
+                    core.info(
+                      `#${issue_number}: rate limited, retrying in ${waitMs}ms ` +
+                        `(attempt ${attempt}/${RETRY_MAX})`,
+                    );
+                    await sleep(waitMs);
+                    continue;
+                  }
+                  // Anything else — permissions, a real 5xx, retries exhausted
+                  // — is genuine and must surface rather than be swallowed.
+                  throw err;
+                }
+              }
+            }
+
+            let removed = 0;
+            let touched = 0;
+
+            for (const issue of issues) {
+              // listForRepo returns pull requests as issues. PRs carry their
+              // own label lifecycle and are not what this sweep is about.
+              if (issue.pull_request) continue;
+
+              const names = (issue.labels || []).map((l) =>
+                typeof l === 'string' ? l : l.name,
+              );
+              const stale = names.filter((n) => STALE.includes(n));
+              if (stale.length === 0) continue;
+
+              let modified = false;
+              for (const name of stale) {
+                if (await removeOne(issue.number, name)) {
+                  removed++;
+                  modified = true;
+                  core.info(`#${issue.number}: removed ${name}`);
+                }
+                await sleep(MUTATION_DELAY_MS);
+              }
+              // Count only issues this run actually changed. Incrementing on
+              // `stale.length > 0` instead would overstate the sweep whenever
+              // every label on an issue turned out to be already gone.
+              if (modified) touched++;
+            }
+
+            core.info(
+              `Swept ${removed} stale label(s) from ${touched} closed issue(s).`,
+            );
