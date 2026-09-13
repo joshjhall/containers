@@ -458,6 +458,7 @@ These variables can be set when running containers (via `docker run -e`):
 | `FUSE_CLEANUP_DISABLE` | `false` | Disable `.fuse_hidden*` cleanup (both the boot pass and the 10-minute cron pass) |
 | `FUSE_CLEANUP_FALLBACK_ROOT` | _(unset)_ | Directory the `.fuse_hidden*` sweep walks when no FUSE mount is found. The boot pass sets `/workspace`, so files stranded by a previous session are still cleared once its mounts are gone |
 | `FUSE_CLEANUP_ROOTS`   | _(unset)_ | Newline-separated roots to sweep, overriding `findmnt` discovery entirely. Testing seam |
+| `FUSE_CLEANUP_BIN`     | `/usr/local/bin/fuse-cleanup` | Path to the shared `.fuse_hidden*` GC that both the boot pass and the cron wrapper invoke. Testing seam |
 | `FUSE_CLEANUP_FINDMNT` | `findmnt` | `findmnt` binary used for mount discovery. Testing seam |
 
 ### Host Event Forwarding
