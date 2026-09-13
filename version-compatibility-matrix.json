@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-09-13T07:04:28Z",
+  "last_updated": "2026-09-13T07:59:00Z",
   "base_images": [
     {
       "name": "debian:12-slim",
@@ -60,7 +60,8 @@
         "1.95.0",
         "1.96.0",
         "1.97.0",
-        "1.97.1"
+        "1.97.1",
+        "1.98.1"
       ],
       "deprecated": []
     },
@@ -81,7 +82,8 @@
         "1.26.3",
         "1.26.4",
         "1.26.5",
-        "1.26.6"
+        "1.26.6",
+        "1.27.1"
       ],
       "deprecated": []
     },
@@ -149,7 +151,7 @@
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2026-08-16T03:53:16Z",
+      "tested_at": "2026-09-13T07:59:00Z",
       "notes": "Base system only, no language runtimes"
     },
     {
@@ -159,7 +161,7 @@
         "python": "3.14.7"
       },
       "status": "passing",
-      "tested_at": "2026-08-16T03:53:16Z"
+      "tested_at": "2026-09-13T07:59:00Z"
     },
     {
       "variant": "node-dev",
@@ -168,24 +170,24 @@
         "node": "22"
       },
       "status": "passing",
-      "tested_at": "2026-08-16T03:53:16Z"
+      "tested_at": "2026-09-13T07:59:00Z"
     },
     {
       "variant": "rust-golang",
       "base_image": "debian:13-slim",
       "versions": {
-        "rust": "1.97.1",
-        "go": "1.26.6"
+        "rust": "1.98.1",
+        "go": "1.27.1"
       },
       "status": "passing",
-      "tested_at": "2026-08-16T03:53:16Z"
+      "tested_at": "2026-09-13T07:59:00Z"
     },
     {
       "variant": "cloud-ops",
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2026-08-16T03:53:16Z",
+      "tested_at": "2026-09-13T07:59:00Z",
       "notes": "Docker, Kubernetes, Terraform, AWS CLI"
     },
     {
@@ -194,11 +196,11 @@
       "versions": {
         "python": "3.14.7",
         "node": "22",
-        "rust": "1.97.1",
-        "go": "1.26.6"
+        "rust": "1.98.1",
+        "go": "1.27.1"
       },
       "status": "passing",
-      "tested_at": "2026-08-16T03:53:16Z"
+      "tested_at": "2026-09-13T07:59:00Z"
     }
   ]
 }
