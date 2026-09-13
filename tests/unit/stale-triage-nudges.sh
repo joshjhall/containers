@@ -105,10 +105,12 @@ extract_script() {
 #      `env:` block delivers it ("true" / "false" / anything else)
 # $4 = optional deleteComment fault injection, as JSON:
 #        { "vanished": ["<issue>/<id>", ...], "throttle": {"<issue>/<id>": N},
-#          "fail": {"<issue>/<id>": <status>} }
+#          "fail": {"<issue>/<id>": <status>}, "retryAfter": <seconds> }
 #      `vanished` makes the stub 404 for a comment the LIST still reported —
 #      modeling the out-of-band race that is the only way the script's 404
-#      branch can fire in production.
+#      branch can fire in production. `retryAfter` sets the header on a throttle
+#      rejection; a positive value selects the script's honour-the-header branch
+#      instead of its exponential-backoff branch.
 #
 # The script is wrapped in an async IIFE because actions/github-script does the
 # same: that is what makes the script's top-level `await` legal.
@@ -166,13 +168,21 @@ const github = {
 
         // Secondary rate limit on the first N attempts. Shaped like the real
         // rejection: 403 whose message names the limiter.
+        //
+        // retryAfter defaults to '0' so the script takes its exponential-backoff
+        // branch and the suite does not wait out a real delay. A test that wants
+        // the OTHER branch — where GitHub sends a usable retry-after and the
+        // script must honour it — injects a positive value; without that, the
+        // `Number(after) > 0` arm is unreachable and untested.
         if (throttle[key] > 0) {
           throttle[key]--;
           const err = new Error(
             'You have exceeded a secondary rate limit. Please wait a few minutes.',
           );
           err.status = 403;
-          err.response = { headers: { 'retry-after': '0' } };
+          err.response = {
+            headers: { 'retry-after': String(faults.retryAfter ?? '0') },
+          };
           throw err;
         }
 
@@ -447,6 +457,26 @@ test_rate_limit_is_retried() {
         "sweep gave up on a throttled comment instead of retrying to success"
 }
 
+# The OTHER retry branch: when GitHub sends a usable `retry-after`, the script
+# must honour it rather than fall back to its own exponential backoff.
+#
+# Asserting the exact delay is what makes this discriminate. Every other
+# rate-limit test only asserts that SOME positive sleep happened, which passes
+# whichever formula produced it — so a regression that ignored the header
+# entirely (or mis-parsed it) would sail through them all.
+test_retry_after_header_is_honoured() {
+    local calls
+    if ! calls=$(run_script "$SCRATCH/script.js" "$ISSUES" false \
+        '{"throttle":{"100/5001":1},"retryAfter":5}' 2>&1); then
+        fail_test "a throttle carrying retry-after aborted the sweep: $calls"
+        return
+    fi
+    # 5 seconds * 1000 = 5000ms. The exponential fallback for attempt 1 would be
+    # MUTATION_DELAY_MS * 2**1 = 2000ms, so the two are distinguishable.
+    assert_called "$calls" "sleep 5000" \
+        "the script ignored GitHub's retry-after header and used its own backoff instead"
+}
+
 # Retries are bounded — a permanently-throttled comment must eventually surface
 # rather than spin forever.
 test_rate_limit_retries_are_bounded() {
@@ -463,6 +493,30 @@ test_mutations_are_paced() {
     if ! command printf '%s\n' "$calls" | command grep -qE '^sleep [1-9][0-9]*$'; then
         fail_test "no delay between mutating calls — an 82-comment backfill will trip GitHub's secondary rate limiter (recorded: ${calls//$'\n'/ | })"
     fi
+}
+
+# isTriaged() handles labels as bare strings as well as {name} objects, because
+# that is a shape the API and some SDK versions really return. Every fixture
+# above uses the object form, so without this case the string arm of that
+# ternary is dead code from the suite's perspective -- a regression breaking it
+# would read as green.
+#
+# Both halves of the predicate are exercised through the string path: 400 has
+# both namespaces as bare strings (delete), 401 has only severity (keep).
+test_plain_string_labels_handled() {
+    local fixture calls
+    fixture="$(command printf '[
+      {"number":400,"labels":["severity/low","effort/small"],
+       "comments":[{"id":6001,"body":"%s"}]},
+      {"number":401,"labels":["severity/high"],
+       "comments":[{"id":6002,"body":"%s"}]}
+    ]' "$NUDGE" "$NUDGE")"
+
+    calls=$(run_script "$SCRATCH/script.js" "$fixture" false)
+    assert_called "$calls" "deleteComment 400/6001" \
+        "a bogus nudge was kept because its labels came back as bare strings rather than {name} objects"
+    assert_not_called "$calls" "attempt 401/6002" \
+        "a CORRECT nudge was deleted when labels came back as bare strings — the predicate does not hold on that shape"
 }
 
 # AC5 — non-vacuity. Neuter the label predicate in the extracted script and
@@ -577,8 +631,12 @@ run_test test_non_404_error_propagates \
     "a non-404 failure from deleteComment propagates"
 run_test test_rate_limit_is_retried \
     "a secondary-rate-limit 403 is retried to success"
+run_test test_retry_after_header_is_honoured \
+    "a positive retry-after header is honoured over the backoff"
 run_test test_rate_limit_retries_are_bounded \
     "rate-limit retries are bounded, not infinite"
+run_test test_plain_string_labels_handled \
+    "labels returned as bare strings gate the predicate correctly"
 run_test test_mutations_are_paced \
     "mutating calls are paced to stay under the rate limiter"
 run_test test_check_is_non_vacuous \
