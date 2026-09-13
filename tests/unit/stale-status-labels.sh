@@ -104,6 +104,25 @@ extract_script() {
 #      the first N attempts with a secondary-rate-limit message before
 #      succeeding; `fail` raises an arbitrary status that must propagate.
 #
+#      Both fault kinds accept a widened object form alongside the bare one:
+#        throttle: 2  ==  {"count": 2, "retryAfter": 0}
+#        fail: 500    ==  {"status": 500}
+#      `retryAfter` sets the `retry-after` response header, which is what
+#      selects between the script's two backoff paths — the bare form's 0 takes
+#      the exponential fallback, a positive value takes the honour-the-header
+#      branch. `message` on `fail` matters because the script CLASSIFIES 403s by
+#      message (`/secondary rate limit|abuse/i`): the default
+#      "injected failure 403" happens not to match, so a permissions-403 test
+#      written against it would pass for an accidental reason rather than
+#      because the classification is right.
+#
+# $4 = which recorded stream to print, `calls` (default) or `info`.
+#      `core.info` output is recorded SEPARATELY from the API calls rather than
+#      merged into one stream: the sweep emits its summary line unconditionally,
+#      so merging would put a line into `calls` on every run and break
+#      test_open_issue_untouched and test_second_run_is_noop, both of which
+#      assert `calls` is empty.
+#
 # Fault state is deliberately SEPARATE from the paginate fixture. The script
 # only ever removes a label it just read off that same fixture, so a stub
 # sharing one source could never reach its own error paths — every such test
@@ -112,20 +131,38 @@ extract_script() {
 # The script is wrapped in an async IIFE because actions/github-script does the
 # same: that is what makes the script's top-level `await` legal.
 run_script() {
-    local script_path="$1" fixture="$2" faults="${3:-{\}}"
+    local script_path="$1" fixture="$2" faults="${3:-{\}}" mode="${4:-calls}"
     local runner="$SCRATCH/run.mjs"
 
     command mkdir -p "$SCRATCH"
     command cat >"$runner" <<'RUNNER_EOF'
 import { readFileSync } from 'node:fs';
 
-const [scriptPath, fixtureJson, faultsJson] = process.argv.slice(2);
+const [scriptPath, fixtureJson, faultsJson, mode] = process.argv.slice(2);
 const fixture = JSON.parse(fixtureJson);
 const faults = JSON.parse(faultsJson || '{}');
 const vanished = new Set(faults.vanished || []);
-const throttle = { ...(faults.throttle || {}) };
-const fail = faults.fail || {};
+
+// Normalize both fault kinds to their object form so the stub has one shape to
+// read. The bare forms (`throttle: 2`, `fail: 500`) predate the widened ones
+// and stay valid — every existing caller uses them.
+const throttle = Object.fromEntries(
+  Object.entries(faults.throttle || {}).map(([key, spec]) => [
+    key,
+    typeof spec === 'number'
+      ? { count: spec, retryAfter: 0 }
+      : { count: spec.count, retryAfter: spec.retryAfter ?? 0 },
+  ]),
+);
+const fail = Object.fromEntries(
+  Object.entries(faults.fail || {}).map(([key, spec]) => [
+    key,
+    typeof spec === 'number' ? { status: spec } : spec,
+  ]),
+);
+
 const calls = [];
+const infos = [];
 
 // Minimal stand-ins for the globals actions/github-script injects.
 const github = {
@@ -139,22 +176,26 @@ const github = {
         calls.push(`attempt ${key}`);
 
         // An arbitrary non-404 status the script must propagate rather than
-        // swallow (permissions, 5xx).
+        // swallow (permissions, 5xx). `message` is overridable because the
+        // script classifies 403s BY message — see the run_script header.
         if (fail[key] !== undefined) {
-          const err = new Error(`injected failure ${fail[key]}`);
-          err.status = fail[key];
+          const { status, message } = fail[key];
+          const err = new Error(message ?? `injected failure ${status}`);
+          err.status = status;
           throw err;
         }
 
         // Secondary rate limit on the first N attempts. Shaped like the real
         // rejection: 403 whose message names the limiter.
-        if (throttle[key] > 0) {
-          throttle[key]--;
+        if (throttle[key] && throttle[key].count > 0) {
+          throttle[key].count--;
           const err = new Error(
             'You have exceeded a secondary rate limit. Please wait a few minutes.',
           );
           err.status = 403;
-          err.response = { headers: { 'retry-after': '0' } };
+          err.response = {
+            headers: { 'retry-after': String(throttle[key].retryAfter) },
+          };
           throw err;
         }
 
@@ -190,7 +231,11 @@ const github = {
 };
 
 const context = { repo: { owner: 'joshjhall', repo: 'containers' } };
-const core = { info: () => {} };
+// Recorded, not discarded: the sweep's summary line is the ONLY signal an
+// operator has for how much a scheduled run actually did, so it has to be
+// assertable. Kept in its own array — see the run_script header for why
+// merging it into `calls` would break the empty-stream assertions.
+const core = { info: (message) => infos.push(message) };
 
 // Fake clock. The sweep deliberately paces its mutating calls ~1s apart to stay
 // under GitHub's secondary rate limiter, which would make this suite sleep for
@@ -206,11 +251,19 @@ const run = new Function(
   'github', 'context', 'core', 'setTimeout',
   `return (async () => { ${source} })();`,
 );
-await run(github, context, core, setTimeout);
-process.stdout.write(calls.join('\n'));
+// Print the recorded streams even when the script throws. A test asserting how
+// many attempts a FAILING call made needs the record, and the run that produces
+// it is by definition the one that ends in a throw. The non-zero exit is
+// preserved, so the tests that check only the exit code are unaffected.
+try {
+  await run(github, context, core, setTimeout);
+} catch {
+  process.exitCode = 1;
+}
+process.stdout.write((mode === 'info' ? infos : calls).join('\n'));
 RUNNER_EOF
 
-    node "$runner" "$script_path" "$fixture" "$faults"
+    node "$runner" "$script_path" "$fixture" "$faults" "$mode"
 }
 
 # Assert a "removeLabel <issue>/<label>" line is / is not among the recorded
@@ -417,6 +470,89 @@ test_rate_limit_retries_are_bounded() {
     fi
 }
 
+# The RETRY_MAX boundary, from the passing side (#956). The two tests above
+# throttle 2 times and 99 times — neither lands on RETRY_MAX (3) itself, so the
+# budget's exact edge is unpinned: refactoring the guard from
+# `attempt <= RETRY_MAX` to `attempt < RETRY_MAX` silently cuts it to 2 and both
+# of them still pass. Exactly RETRY_MAX throttles must still succeed.
+test_rate_limit_retry_max_boundary() {
+    local calls
+    if ! calls=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
+        '{"throttle":{"100/status/pr-pending":3}}' 2>&1); then
+        fail_test "throttling exactly RETRY_MAX times aborted the sweep — the retry budget is off by one: $calls"
+        return
+    fi
+    assert_called "$calls" "removeLabel 100/status/pr-pending" \
+        "sweep gave up at exactly RETRY_MAX throttles — the budget is one short of its documented value"
+}
+
+# The `retry-after` branch (#956). Every other throttle test sends
+# `retry-after: 0`, and `0 > 0` is false, so they all take the EXPONENTIAL
+# fallback — the honour-the-header path has never executed. Code that ignored
+# the header, read the wrong key, or dropped the seconds-to-ms conversion would
+# pass the whole suite.
+test_retry_after_header_is_honoured() {
+    local calls
+    if ! calls=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
+        '{"throttle":{"100/status/pr-pending":{"count":1,"retryAfter":5}}}' 2>&1); then
+        fail_test "a throttle carrying retry-after aborted the sweep: $calls"
+        return
+    fi
+    # 5 seconds -> 5000ms. Distinct from every other delay the sweep can emit.
+    assert_called "$calls" "sleep 5000" \
+        "retry-after: 5 did not produce a 5000ms wait — the header is ignored, or the seconds-to-ms conversion was dropped"
+    # MUTATION_DELAY_MS * 2 ** 1 — what the fallback would have chosen. Its
+    # presence means the header branch was skipped in favour of the backoff.
+    assert_not_called "$calls" "sleep 2000" \
+        "sweep took the exponential fallback despite a usable retry-after header"
+}
+
+# 403 CLASSIFICATION (#956). Throttle detection is a 403 whose message names the
+# limiter; a permissions 403 ("Resource not accessible by integration") is
+# terminal and must surface at once. The only other rethrow test injects a 500,
+# so widening the check to a bare `err.status === 403` would go unnoticed —
+# turning a broken token into three pointless retries and a delayed failure.
+test_non_throttle_403_propagates() {
+    local calls attempts
+    if calls=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
+        '{"fail":{"100/status/pr-pending":{"status":403,"message":"Resource not accessible by integration"}}}' 2>&1); then
+        fail_test "a permissions 403 was swallowed — a sweep with a broken token would report success"
+        return
+    fi
+    # Retried rather than rethrown is the failure this guards: the message does
+    # not name the limiter, so exactly one attempt may be made.
+    attempts=$(command printf '%s\n' "$calls" |
+        command grep -cxF "attempt 100/status/pr-pending" || true)
+    if [ "$attempts" != "1" ]; then
+        fail_test "permissions 403 was retried ${attempts}x — throttle detection is matching on status alone, ignoring the message"
+    fi
+    assert_not_called "$calls" "sleep 2000" \
+        "sweep backed off before rethrowing a non-throttle 403"
+}
+
+# The summary counters (#956). `touched` is the only signal an operator has for
+# how much a scheduled run actually did, and nothing verified it was honest.
+# PR #955 changed it to count issues actually MODIFIED — it previously
+# incremented on `stale.length > 0`, overstating the sweep whenever every label
+# on an issue turned out to be already gone.
+#
+# The fixture is the discriminator. Issue 101's only stale label is `vanished`,
+# so it is listed-but-not-modified: 100 and 102 remove one label each and 103
+# removes two (removed = 4), while 101 removes nothing (touched = 3). The
+# reverted form would count 101 as well and report 4.
+test_touched_counts_only_modified_issues() {
+    local infos
+    if ! infos=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
+        '{"vanished":["101/status/in-progress"]}' info 2>&1); then
+        fail_test "sweep threw while counting: $infos"
+        return
+    fi
+    if ! command printf '%s\n' "$infos" |
+        command grep -qxF "Swept 4 stale label(s) from 3 closed issue(s)."; then
+        fail_test "summary miscounted — an issue whose only stale label had already vanished was counted as touched, overstating the sweep (reported: ${infos//$'\n'/ | })"
+    fi
+}
+
 # The sweep paces its mutating calls to stay under the secondary rate limiter.
 # Without this the ~200-call backfill is squarely in what that limiter catches.
 test_mutations_are_paced() {
@@ -521,6 +657,14 @@ run_test test_rate_limit_is_retried \
     "a secondary-rate-limit 403 is retried to success"
 run_test test_rate_limit_retries_are_bounded \
     "rate-limit retries are bounded, not infinite"
+run_test test_rate_limit_retry_max_boundary \
+    "exactly RETRY_MAX throttles still succeeds"
+run_test test_retry_after_header_is_honoured \
+    "a positive retry-after header is honoured over the backoff"
+run_test test_non_throttle_403_propagates \
+    "a non-throttle 403 propagates on the first attempt"
+run_test test_touched_counts_only_modified_issues \
+    "the summary counts only issues actually modified"
 run_test test_mutations_are_paced \
     "mutating calls are paced to stay under the rate limiter"
 run_test test_check_is_non_vacuous \
