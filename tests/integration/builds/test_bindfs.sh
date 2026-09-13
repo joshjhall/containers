@@ -93,6 +93,22 @@ test_cron_installed() {
     assert_executable_in_path "$image" "cron"
 }
 
+# Test: shared fuse-cleanup GC is installed and executable (issue #948)
+# Both the cron wrapper and the boot pass delegate to this script; if it is
+# missing, both legs silently become no-ops.
+test_fuse_cleanup_shared_script() {
+    local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
+
+    assert_command_in_container "$image" "test -x /usr/local/bin/fuse-cleanup && echo exists" "exists"
+}
+
+# Test: shared GC exits cleanly and reports 0 with no FUSE mounts
+test_fuse_cleanup_shared_script_runs() {
+    local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
+
+    assert_command_in_container "$image" "/usr/local/bin/fuse-cleanup" "0"
+}
+
 # Test: fuse-cleanup-cron wrapper exits cleanly with no FUSE mounts
 test_fuse_cleanup_cron_runs() {
     local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
@@ -123,6 +139,8 @@ run_test test_entrypoint_has_bindfs "Entrypoint contains bindfs logic"
 run_test test_fuse_cleanup_cron_script "fuse-cleanup-cron wrapper exists and is executable"
 run_test test_fuse_cleanup_cron_job "fuse-cleanup cron job has correct permissions"
 run_test test_cron_installed "Cron daemon auto-installed with bindfs"
+run_test test_fuse_cleanup_shared_script "shared fuse-cleanup GC is installed"
+run_test test_fuse_cleanup_shared_script_runs "shared fuse-cleanup GC runs cleanly"
 run_test test_fuse_cleanup_cron_runs "fuse-cleanup-cron runs cleanly"
 run_test test_no_bindfs_without_flag "Build without bindfs flag excludes it"
 

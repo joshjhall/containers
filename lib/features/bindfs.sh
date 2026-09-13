@@ -109,41 +109,29 @@ mkdir -p /etc/cron.d
 command cat >/usr/local/bin/fuse-cleanup-cron <<'FUSE_CLEANUP_EOF'
 #!/bin/bash
 # Wrapper script for FUSE hidden file cleanup cron job
-# Sources container environment and cleans stale .fuse_hidden* files
-# from all FUSE/bindfs mount points.
+# Sources container environment, then delegates to the shared GC.
+#
+# The sweep itself lives in /usr/local/bin/fuse-cleanup, shared with the
+# boot-time pass in lib/runtime/lib/setup-bindfs.sh. This used to be a second
+# near-identical copy, and the two had already drifted on the root they walked
+# and on what their depth bound meant (issue #948). This leg now only supplies
+# the cron environment and the syslog reporting voice.
 
 # Load container environment (provides PATH, etc.)
 if [ -f /etc/container/cron-env ]; then
     source /etc/container/cron-env
 fi
 
-# Check if disabled
-if [ "${FUSE_CLEANUP_DISABLE:-false}" = "true" ]; then
+FUSE_CLEANUP_BIN="${FUSE_CLEANUP_BIN:-/usr/local/bin/fuse-cleanup}"
+
+if [ ! -x "$FUSE_CLEANUP_BIN" ]; then
+    # Shared GC not installed — nothing to do, and not cron's problem to report.
     exit 0
 fi
 
-# Find all FUSE mount points (fuse, fuse.bindfs, etc.)
-fuse_mounts=$(findmnt -n -r -o TARGET -t fuse,fuse.bindfs 2>/dev/null || true)
+cleaned=$("$FUSE_CLEANUP_BIN" 2>/dev/null || echo 0)
 
-if [ -z "$fuse_mounts" ]; then
-    # No FUSE mounts active, nothing to clean
-    exit 0
-fi
-
-cleaned=0
-while IFS= read -r mnt_target; do
-    [ -z "$mnt_target" ] && continue
-
-    while IFS= read -r -d '' hidden_file; do
-        # Skip files still held open by a running process
-        if command -v fuser >/dev/null 2>&1; then
-            fuser "$hidden_file" >/dev/null 2>&1 && continue
-        fi
-        rm -f "$hidden_file" 2>/dev/null && cleaned=$((cleaned + 1))
-    done < <(command find "$mnt_target" -maxdepth 3 -name '.fuse_hidden*' -print0 2>/dev/null)
-done <<< "$fuse_mounts"
-
-if [ "$cleaned" -gt 0 ]; then
+if [ "${cleaned:-0}" -gt 0 ] 2>/dev/null; then
     logger -t fuse-cleanup "Cleaned $cleaned stale .fuse_hidden file(s)"
 fi
 FUSE_CLEANUP_EOF

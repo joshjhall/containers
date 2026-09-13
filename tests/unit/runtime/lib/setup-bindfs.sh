@@ -112,9 +112,22 @@ test_fuse_hidden_cleanup() {
         "Script handles .fuse_hidden file cleanup"
 }
 
-test_fuser_check() {
-    assert_file_contains "$SOURCE_FILE" "fuser" \
-        "Script checks fuser before removing hidden files"
+# The boot pass delegates the sweep to the shared GC rather than carrying its own
+# copy. The fuser guard and the walk now live in lib/runtime/fuse-cleanup.sh and
+# are tested in tests/unit/runtime/fuse-cleanup.sh (issue #948).
+test_delegates_to_shared_cleanup() {
+    assert_file_contains "$SOURCE_FILE" "fuse-cleanup" \
+        "Script delegates to the shared fuse-cleanup GC"
+    assert_file_contains "$SOURCE_FILE" "FUSE_CLEANUP_FALLBACK_ROOT" \
+        "Script passes /workspace as the fallback root"
+}
+
+test_no_duplicate_sweep() {
+    # The boot copy's hardcoded /workspace root is what made it effectively
+    # maxdepth 2 relative to the mount — strictly weaker than the cron pass it
+    # complements. A reappearing walk here means the copy came back.
+    assert_file_not_contains "$SOURCE_FILE" "maxdepth" \
+        "Boot pass carries no depth-bounded walk of its own (issue #948)"
 }
 
 test_skip_map_associative_array() {
@@ -275,7 +288,8 @@ run_test test_bindfs_force_user_option "Passes --force-user to bindfs"
 run_test test_bindfs_create_for_group_option "Passes --create-for-group to bindfs"
 run_test test_bindfs_allow_other_option "Passes -o allow_other to bindfs"
 run_test test_fuse_hidden_cleanup "Handles .fuse_hidden cleanup"
-run_test test_fuser_check "Checks fuser before removing hidden files"
+run_test test_delegates_to_shared_cleanup "Delegates to the shared fuse-cleanup GC"
+run_test test_no_duplicate_sweep "Boot pass does not duplicate the sweep"
 run_test test_skip_map_associative_array "Uses BINDFS_SKIP_MAP"
 run_test test_dev_fuse_warning "Warns when /dev/fuse not available"
 run_test test_applied_counter "Tracks applied overlay count"

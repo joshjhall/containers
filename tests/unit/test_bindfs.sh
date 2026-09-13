@@ -64,11 +64,27 @@ test_feature_logging() {
 
 # Test: Feature script creates fuse-cleanup-cron wrapper
 test_creates_fuse_cleanup_cron_script() {
+    # The cron wrapper is a thin caller: it supplies the cron environment and the
+    # syslog reporting voice. The sweep itself — findmnt discovery, the fuser
+    # guard, the walk — lives in the shared lib/runtime/fuse-cleanup.sh, which
+    # the boot pass also calls (issue #948). Those assertions moved to
+    # tests/unit/runtime/fuse-cleanup.sh along with the code.
     assert_file_contains "$FEATURE_FILE" "/usr/local/bin/fuse-cleanup-cron" "Creates fuse-cleanup-cron wrapper script"
-    assert_file_contains "$FEATURE_FILE" "FUSE_CLEANUP_DISABLE" "Respects FUSE_CLEANUP_DISABLE"
-    assert_file_contains "$FEATURE_FILE" "findmnt.*fuse" "Uses findmnt to find FUSE mount points"
-    assert_file_contains "$FEATURE_FILE" "fuser" "Uses fuser to check open files"
+    assert_file_contains "$FEATURE_FILE" "/usr/local/bin/fuse-cleanup" "Delegates to the shared fuse-cleanup GC"
     assert_file_contains "$FEATURE_FILE" "logger -t fuse-cleanup" "Logs via syslog"
+}
+
+# Test: cron wrapper does not carry its own copy of the sweep (issue #948)
+test_cron_wrapper_does_not_duplicate_sweep() {
+    # Two near-identical copies of the walk are what let the cron and boot passes
+    # drift apart on their root and their depth bound. A `find` reappearing here
+    # means the copy came back.
+    assert_file_not_contains "$FEATURE_FILE" "maxdepth" \
+        "Cron wrapper carries no depth-bounded walk of its own (issue #948)"
+    # Matches the find invocation, not the bare name — the section comment
+    # legitimately explains what .fuse_hidden* files are.
+    assert_file_not_contains "$FEATURE_FILE" "find .*fuse_hidden" \
+        "Cron wrapper does not re-implement the .fuse_hidden search"
 }
 
 # Test: Feature script creates cron job file
@@ -225,6 +241,7 @@ run_test test_entrypoint_detects_fake_fs_types "Entrypoint detects Docker Deskto
 run_test test_entrypoint_skips_fuse "Entrypoint skips existing fuse mounts"
 run_test test_entrypoint_privilege_pattern "Entrypoint uses existing privilege pattern"
 run_test test_creates_fuse_cleanup_cron_script "Feature script creates fuse-cleanup-cron wrapper"
+run_test test_cron_wrapper_does_not_duplicate_sweep "Cron wrapper does not duplicate the sweep"
 run_test test_creates_fuse_cleanup_cron_job "Feature script creates fuse-cleanup cron job"
 run_test test_feature_summary_includes_cron "Feature summary includes cron paths and env"
 run_test test_dockerfile_build_arg "Dockerfile declares INCLUDE_BINDFS build arg"
