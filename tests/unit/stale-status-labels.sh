@@ -526,6 +526,12 @@ test_retry_after_header_is_honoured() {
         fail_test "a throttle carrying retry-after aborted the sweep: $calls"
         return
     fi
+    # State the success directly rather than inferring it from the exit status
+    # above: an exit code says only that nothing threw, so a stub refactor that
+    # changed what makes the script exit non-zero would weaken this test
+    # silently, with no visible change to what it appears to check.
+    assert_called "$calls" "removeLabel 100/status/pr-pending" \
+        "the retried label was never actually removed — the throttle was absorbed but the retry did not complete"
     # 5 seconds -> 5000ms. Distinct from every other delay the sweep can emit.
     assert_called "$calls" "sleep 5000" \
         "retry-after: 5 did not produce a 5000ms wait — the header is ignored, or the seconds-to-ms conversion was dropped"
