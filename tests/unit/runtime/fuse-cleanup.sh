@@ -407,6 +407,46 @@ test_sweeps_after_lock_released() {
         "Removes the file the locked-out run skipped"
 }
 
+test_symlinked_lock_path_still_sweeps() {
+    # Pins the `[ -L "$lock_path" ]` defence-in-depth branch — and pins it with a
+    # fixture that DISCRIMINATES. A symlink whose target is free proves nothing:
+    # the sweep runs whether or not the branch exists, so that version of this
+    # test passes against the mutant with the branch deleted (verified).
+    #
+    # The fixture therefore reproduces what the branch actually defends against:
+    # someone plants a symlink as the lock path and holds its TARGET. Following
+    # the link would take flock on a held file, the sweep would skip, and the
+    # planted link becomes an off switch for the GC. Refusing to follow it means
+    # the sweep proceeds unlocked, which is contended but never suppressed.
+    if ! command -v flock >/dev/null 2>&1; then
+        skip_test "flock not available on this host"
+        return
+    fi
+
+    command mkdir -p "$TEST_TEMP_DIR/deep/deeper"
+    local victim="$TEST_TEMP_DIR/deep/deeper/.fuse_hiddenSYMLINK"
+    : >"$victim"
+
+    local target="$TEST_TEMP_DIR/planted-target.lock"
+    local link="$TEST_TEMP_DIR/planted.lock"
+    command ln -s "$target" "$link"
+
+    local holder
+    hold_lock "$target"
+    holder="$LOCK_HOLDER_PID"
+
+    local count
+    count=$(FUSE_CLEANUP_ROOTS="$TEST_TEMP_DIR" FUSE_CLEANUP_LOCK="$link" \
+        bash "$SOURCE_FILE")
+
+    release_lock "$holder" "$target"
+
+    assert_equals "1" "$count" \
+        "Sweeps unlocked when the lock path is a symlink to a HELD file"
+    assert_file_not_exists "$victim" \
+        "A planted symlink cannot suppress the walk (defence in depth)"
+}
+
 test_unopenable_lock_path_still_sweeps() {
     # Degrade-to-unlocked, not degrade-to-refusing. A bare host has no
     # /etc/container/lock, and refusing to sweep there would turn a cost concern
@@ -525,6 +565,7 @@ run_test_with_setup test_handles_spaces_in_path "Handles spaces in paths"
 # Overlap guard (#950)
 run_test_with_setup test_skips_when_lock_is_held "Skips the walk while the lock is held (#950)"
 run_test_with_setup test_sweeps_after_lock_released "Sweeps once the lock is released"
+run_test_with_setup test_symlinked_lock_path_still_sweeps "Symlinked lock path degrades to unlocked"
 run_test_with_setup test_unopenable_lock_path_still_sweeps "Unopenable lock path degrades to unlocked"
 run_test_with_setup test_lock_is_non_blocking "Lock is non-blocking, not queueing"
 
