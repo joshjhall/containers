@@ -514,6 +514,28 @@ test_rate_limit_one_past_budget_fails() {
     fi
 }
 
+# Budget exhaustion must WIN over a retry-after header. The two are not
+# independent: the header is read INSIDE the `attempt <= RETRY_MAX` block, so
+# the budget check short-circuits before the header is ever consulted. Nothing
+# else covers that intersection — the test above throttles past budget with no
+# header (retryAfter 0), and the retry-after test never pushes past RETRY_MAX.
+# A gate widened to `attempt <= RETRY_MAX || after` — "keep retrying as long as
+# the server keeps telling us how long to wait" — passes both of them while
+# making the budget unbounded in exactly the case a hostile limiter produces.
+test_retry_after_does_not_extend_budget() {
+    local calls attempts
+    if calls=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
+        '{"throttle":{"100/status/pr-pending":{"count":4,"retryAfter":5}}}' 2>&1); then
+        fail_test "a retry-after header carried the sweep past RETRY_MAX — the budget is not the binding limit"
+        return
+    fi
+    attempts=$(command printf '%s\n' "$calls" |
+        command grep -cxF "attempt 100/status/pr-pending" || true)
+    if [ "$attempts" != "4" ]; then
+        fail_test "sweep made ${attempts} attempts with retry-after set, expected RETRY_MAX+1 (4) — the header is extending the retry budget"
+    fi
+}
+
 # The `retry-after` branch (#956). Every other throttle test sends
 # `retry-after: 0`, and `0 > 0` is false, so they all take the EXPONENTIAL
 # fallback — the honour-the-header path has never executed. Code that ignored
@@ -695,6 +717,8 @@ run_test test_rate_limit_retry_max_boundary \
     "exactly RETRY_MAX throttles still succeeds"
 run_test test_rate_limit_one_past_budget_fails \
     "RETRY_MAX+1 throttles fails after exactly RETRY_MAX+1 attempts"
+run_test test_retry_after_does_not_extend_budget \
+    "a retry-after header does not extend the retry budget"
 run_test test_retry_after_header_is_honoured \
     "a positive retry-after header is honoured over the backoff"
 run_test test_non_throttle_403_propagates \
