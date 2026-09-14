@@ -460,6 +460,7 @@ These variables can be set when running containers (via `docker run -e`):
 | `FUSE_CLEANUP_ROOTS`   | _(unset)_ | Newline-separated roots to sweep, overriding `findmnt` discovery entirely. Testing seam |
 | `FUSE_CLEANUP_BIN`     | `/usr/local/bin/fuse-cleanup` | Path to the shared `.fuse_hidden*` GC that both the boot pass and the cron wrapper invoke. Testing seam |
 | `FUSE_CLEANUP_FINDMNT` | `findmnt` | `findmnt` binary used for mount discovery. Testing seam |
+| `FUSE_CLEANUP_LOCK`    | `/etc/container/lock/fuse-cleanup.lock` | Lock file serializing sweeps. The sweep takes a **non-blocking** `flock` on it, so an invocation that arrives while another sweep is still walking reports `0` and exits `0` instead of queueing — the next 10-minute tick picks up anything it skipped. A missing `flock` binary (Alpine, ubi-minimal) or an unopenable path degrades to sweeping unlocked with no error |
 
 ### Host Event Forwarding
 

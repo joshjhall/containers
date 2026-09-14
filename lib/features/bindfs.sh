@@ -105,6 +105,23 @@ log_message "Creating FUSE hidden file cleanup cron job..."
 # Create cron.d directory if it doesn't exist
 mkdir -p /etc/cron.d
 
+# The sweep lock (issue #950). The cron pass fires every 10 minutes and the boot
+# pass can fire concurrently at startup; since #948 removed the depth bound,
+# nothing else caps how long one walk runs, so two can overlap on a large tree.
+# /usr/local/bin/fuse-cleanup takes a NON-BLOCKING flock on this file and skips
+# when it is held — see that script's header for why skipping beats queueing.
+#
+# Same placement and modes as /etc/container/lock/claude-setup.lock (#943):
+# root-owned 0755 directory so the path cannot be pre-planted from /tmp, and a
+# 0666 lock file so any runtime UID can open it (the container user is remapped
+# after build, so the runtime UID is not knowable here). `install -d` is
+# idempotent, so creating the directory again here is safe whether or not
+# claude-code-setup ran — the two features are independently selectable.
+log_message "Creating FUSE cleanup sweep lock..."
+install -d -m 755 -o root -g root /etc/container/lock
+install -m 666 -o root -g root /dev/null \
+    /etc/container/lock/fuse-cleanup.lock
+
 # Create the wrapper script that cron will execute
 command cat >/usr/local/bin/fuse-cleanup-cron <<'FUSE_CLEANUP_EOF'
 #!/bin/bash
@@ -165,8 +182,8 @@ log_message "  Created /etc/cron.d/fuse-cleanup (every 10 minutes)"
 log_feature_summary \
     --feature "Bindfs" \
     --tools "bindfs,fusermount3" \
-    --paths "/etc/fuse.conf,/usr/local/bin/fuse-cleanup-cron,/etc/cron.d/fuse-cleanup" \
-    --env "BINDFS_ENABLED,BINDFS_SKIP_PATHS,FUSE_CLEANUP_DISABLE" \
+    --paths "/etc/fuse.conf,/usr/local/bin/fuse-cleanup-cron,/etc/cron.d/fuse-cleanup,/etc/container/lock/fuse-cleanup.lock" \
+    --env "BINDFS_ENABLED,BINDFS_SKIP_PATHS,FUSE_CLEANUP_DISABLE,FUSE_CLEANUP_LOCK" \
     --next-steps "Run container with --cap-add SYS_ADMIN --device /dev/fuse. Overlays applied automatically by entrypoint."
 
 # End logging

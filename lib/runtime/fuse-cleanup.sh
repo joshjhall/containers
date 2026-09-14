@@ -31,6 +31,21 @@
 # the boot pass handled that the cron pass did not: files stranded by a previous
 # session that had FUSE when this one does not.
 #
+# Removing the depth bound also removed the only thing that bounded how long a
+# single sweep could run (issue #950). The cron leg fires every 10 minutes and
+# the boot pass can fire concurrently at startup, so on a large tree whose
+# expensive directories are neither .git nor node_modules (target/, .venv/,
+# vendor/, a plugin marketplace) two unbounded walks of the same tree can
+# overlap. The sweep therefore takes a NON-BLOCKING flock: a second invocation
+# that finds the lock held reports 0 and exits 0 rather than queueing.
+#
+# Non-blocking is the right shape rather than a shortcut. The overlap is pure
+# resource contention — each `rm -f` is idempotent and the `fuser` guard already
+# protects a live reader — so a skipped sweep loses nothing that the next tick
+# 10 minutes later will not pick up. Queueing (`flock -w`) would instead stack
+# cron invocations behind a slow walk on exactly the tree where the walk is
+# already slow, which is the failure this guards against.
+#
 # Prints the number of files removed to stdout as a bare integer, so each caller
 # can report in its own voice (the cron leg logs via syslog, the boot leg echoes)
 # and so the walk itself is directly testable without a real FUSE mount.
@@ -41,10 +56,67 @@
 #                                findmnt discovery entirely
 #   FUSE_CLEANUP_FALLBACK_ROOT - directory to sweep when no FUSE mount is present
 #   FUSE_CLEANUP_FINDMNT       - findmnt binary to use for discovery
+#   FUSE_CLEANUP_LOCK          - lock file serializing concurrent sweeps
+#                                (default /etc/container/lock/fuse-cleanup.lock)
 
 set -uo pipefail
 
 if [ "${FUSE_CLEANUP_DISABLE:-false}" = "true" ]; then
+    echo 0
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Overlap guard (issue #950)
+# ---------------------------------------------------------------------------
+# The lock lives in /etc/container/lock, NOT /tmp, for the reasons worked out
+# for claude-setup.lock (#943): /tmp is world-writable, so any local process
+# could pre-plant the path and hold the lock. That directory is created
+# root-owned 0755 at build time and the lock file inside it 0666, so any runtime
+# UID can open it — the container user is remapped after build (Zed adopts the
+# host UID), so the runtime UID is not knowable here.
+#
+# EVERY failure to take the lock degrades to sweeping unlocked rather than
+# exiting non-zero. Unlocked is the pre-existing behavior and is merely
+# contended, never incorrect; refusing to sweep would turn a cost concern into
+# the stranded-file bug #948 fixed. The one case that is NOT a failure —
+# the lock is held by a live sweep — is the skip.
+FUSE_CLEANUP_LOCK="${FUSE_CLEANUP_LOCK:-/etc/container/lock/fuse-cleanup.lock}"
+
+# Returns 0 when the caller should sweep, 1 when another sweep holds the lock.
+# The fd stays open for the life of the script, so the lock is released by exit
+# (including a kill) with no trap to leak.
+_acquire_sweep_lock() {
+    local lock_path="$1"
+
+    # No hard dependency on util-linux: Alpine ships only the busybox applet and
+    # ubi-minimal may omit flock entirely. Sweeping unlocked there is exactly
+    # what this script did before #950.
+    command -v flock >/dev/null 2>&1 || return 0
+
+    # Defence in depth only, and deliberately TOCTOU-racy: the root-owned parent
+    # is the real control. This branch is what fires if the path is ever moved
+    # somewhere writable again.
+    [ -L "$lock_path" ] && return 0
+
+    # Kept on its own line so an unopenable path (no /etc/container/lock on a
+    # bare host or in the unit suite) is caught here rather than aborting.
+    #
+    # The brace group carries the 2>/dev/null, NOT the exec itself: redirections
+    # are processed left to right, so `exec 201>bad 2>/dev/null` fails on 201>
+    # BEFORE the stderr redirect is in effect and the diagnostic leaks to the
+    # caller's stderr anyway (verified). A brace group is not a subshell, so
+    # fd 201 still lands in this shell.
+    { exec 201>"$lock_path"; } 2>/dev/null || return 0
+
+    # -n: report and move on rather than queueing behind the slow walk.
+    flock -n 201 || return 1
+    return 0
+}
+
+if ! _acquire_sweep_lock "$FUSE_CLEANUP_LOCK"; then
+    # Another sweep is mid-walk. Its `rm -f` calls cover this tree too, so there
+    # is nothing for this invocation to do and nothing to report as an error.
     echo 0
     exit 0
 fi
