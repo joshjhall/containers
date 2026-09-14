@@ -189,12 +189,25 @@ CRON_EOF
 
 chmod 644 /etc/cron.d/fuse-cleanup
 
-# Create the log file with group ownership so the container user can read it
-# without sudo (root:root 640 would be unreadable to them). Same trio the
-# workspace-fs-health cron entry uses in the Dockerfile.
-touch /var/log/fuse-cleanup.log
-chgrp "${USERNAME}" /var/log/fuse-cleanup.log
-chmod 640 /var/log/fuse-cleanup.log
+# Create the log file the cron entry appends to.
+#
+# Mode 0666, NOT the 640 the workspace-fs-health entry uses in the Dockerfile.
+# That entry's cron user column is `root`, so root — the file's owner — gets
+# the OWNER permission class and its write bit. This entry runs as the
+# container user, which lands in the GROUP class, and 640's group bits are
+# `r--`: the `>>` redirect would fail before the wrapper ever ran. With
+# MAILTO="" suppressing cron's failure mail, that failure would be completely
+# silent — the same class of invisible breakage this whole change exists to
+# close, reintroduced one layer down.
+#
+# Ownership cannot rescue it either: the container user is remapped after build
+# (Zed adopts the host UID — see lib/runtime/lib/resolve-container-user.sh), so
+# the runtime UID is not knowable here and a build-time chown may match nobody.
+# 0666 is the same answer, for the same reason, that
+# /etc/container/lock/fuse-cleanup.lock uses a few lines above: any runtime UID
+# must be able to open it. A diagnostic log is not secret, and the directory
+# above it is root-owned, so the path cannot be pre-planted.
+install -m 666 -o root -g root /dev/null /var/log/fuse-cleanup.log
 
 log_message "  Created /usr/local/bin/fuse-cleanup-cron"
 log_message "  Created /etc/cron.d/fuse-cleanup (every 10 minutes)"
