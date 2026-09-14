@@ -7,14 +7,14 @@ each finding means when it lands.
 
 ## Overview
 
-| Cadence         | Trigger                                        | What happens                                                           |
-| --------------- | ---------------------------------------------- | ---------------------------------------------------------------------- |
-| Weekly (Sun)    | `auto-patch.yml` at 02:00 UTC                  | Version-bump sweep → PR → auto-merge if CI passes                      |
-| Weekly (Mon)    | `security-scan.yml` at 03:00 UTC               | `cargo deny` + `osv-scanner` + `cargo audit`; opens issue on findings  |
-| Weekly (Mon)    | `stale-status-labels.yml` at 04:00 UTC         | Removes stale `status/*` labels from closed issues                     |
-| Quarterly (1st) | `quarterly-review.yml` at 09:00 UTC            | Opens tracking issue for Q1/Q2/Q3/Q4 with the manual checklist         |
-| Ad-hoc          | Human runs `just quarterly-review` locally     | Informational sweep: `machete` + `geiger` + `outdated` + `deny bans`   |
-| Ad-hoc          | Human runs `/codebase-audit` in Claude Code    | Parallel scanner agents file `audit/*` issues for human triage         |
+| Cadence         | Trigger                                     | What happens                                                          |
+| --------------- | ------------------------------------------- | --------------------------------------------------------------------- |
+| Weekly (Sun)    | `auto-patch.yml` at 02:00 UTC               | Version-bump sweep → PR → auto-merge if CI passes                     |
+| Weekly (Mon)    | `security-scan.yml` at 03:00 UTC            | `cargo deny` + `osv-scanner` + `cargo audit`; opens issue on findings |
+| Weekly (Mon)    | `stale-status-labels.yml` at 04:00 UTC      | Removes stale `status/*` labels from closed issues                    |
+| Quarterly (1st) | `quarterly-review.yml` at 09:00 UTC         | Opens tracking issue for Q1/Q2/Q3/Q4 with the manual checklist        |
+| Ad-hoc          | Human runs `just quarterly-review` locally  | Informational sweep: `machete` + `geiger` + `outdated` + `deny bans`  |
+| Ad-hoc          | Human runs `/codebase-audit` in Claude Code | Parallel scanner agents file `audit/*` issues for human triage        |
 
 ## What runs automatically
 
@@ -98,14 +98,14 @@ or close.
 
 ## Acting on findings
 
-| Tool                          | Output type        | Action                                                               |
-| ----------------------------- | ------------------ | -------------------------------------------------------------------- |
-| `cargo machete`               | Unused dep list    | Verify (feature gates!), then remove from `Cargo.toml`                |
-| `cargo geiger`                | Unsafe count table | Compare to prior quarter; investigate sustained growth               |
-| `cargo outdated`              | Version deltas     | Bump in `Cargo.toml`; test; ship via normal PR                       |
-| `cargo deny bans/sources`     | Duplicate/drift    | Add `skip` / `skip-tree` entry to `deny.toml` or bump offender        |
-| `/codebase-audit` findings    | `audit/*` issues   | Triage into `severity/*` + `effort/*`; work via `/next-issue`        |
-| `security-scan.yml` findings  | Tracking issue     | Fix the advisory or add a narrow allowlist entry; close the issue    |
+| Tool                         | Output type        | Action                                                            |
+| ---------------------------- | ------------------ | ----------------------------------------------------------------- |
+| `cargo machete`              | Unused dep list    | Verify (feature gates!), then remove from `Cargo.toml`            |
+| `cargo geiger`               | Unsafe count table | Compare to prior quarter; investigate sustained growth            |
+| `cargo outdated`             | Version deltas     | Bump in `Cargo.toml`; test; ship via normal PR                    |
+| `cargo deny bans/sources`    | Duplicate/drift    | Add `skip` / `skip-tree` entry to `deny.toml` or bump offender    |
+| `/codebase-audit` findings   | `audit/*` issues   | Triage into `severity/*` + `effort/*`; work via `/next-issue`     |
+| `security-scan.yml` findings | Tracking issue     | Fix the advisory or add a narrow allowlist entry; close the issue |
 
 ## Cadence rationale
 
@@ -118,6 +118,33 @@ findings are tractable, long enough that the checks aren't crying wolf.
 
 Start here; move individual checks to tighter or looser cadences only after
 two or three quarters of signal show the current cadence is wrong.
+
+## One-off repairs
+
+Some workflows exist to repair a **finite** backlog rather than to run on a
+cadence. They are `workflow_dispatch`-only: once the backlog is clean and the
+bug that produced it is fixed, there is nothing left for a schedule to do.
+
+### `stale-triage-nudges.yml` — retract bogus triage nudges
+
+Deletes the `needs-triage` nudge comments that #881 caused the issue labeler to
+post on issues which already carried both a `severity/*` and an `effort/*`
+label. #883 fixed the labeler, so no new ones are posted; this sweep retracts
+the ones already in the threads.
+
+It deletes a marked comment **only** from an issue carrying both labels. An
+issue genuinely missing a namespace got a _correct_ nudge, and it is kept.
+
+Comment deletion is irreversible, so `dry_run` defaults to `true` — review the
+reported candidates before arming it:
+
+```bash
+# Report what would be deleted (default)
+gh workflow run stale-triage-nudges.yml
+
+# Apply, after reviewing the dry-run output
+gh workflow run stale-triage-nudges.yml -f dry_run=false
+```
 
 ## Manual triggers
 
@@ -134,3 +161,5 @@ just quarterly-review
 - `.github/workflows/auto-patch.yml` — weekly patch-bump automation
 - `.github/workflows/security-scan.yml` — weekly dependency security scan
 - `.github/workflows/quarterly-review.yml` — quarterly tracking issue
+- `.github/workflows/stale-status-labels.yml` — weekly stale `status/*` sweep
+- `.github/workflows/stale-triage-nudges.yml` — one-off nudge-comment retraction
