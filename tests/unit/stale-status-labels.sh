@@ -493,6 +493,27 @@ test_rate_limit_retry_max_boundary() {
         "sweep gave up at exactly RETRY_MAX throttles — the budget is one short of its documented value"
 }
 
+# The same boundary from the FAILING side. The test above pins the budget
+# against a guard that is too strict; on its own it says nothing about one that
+# is too generous. `test_rate_limit_retries_are_bounded` throttles 99 times, so
+# it proves the loop terminates but not WHERE — `attempt <= RETRY_MAX + 1` would
+# satisfy both and quietly buy an extra retry. Pin the first failing count, and
+# assert the attempt total too: RETRY_MAX retries after the initial try is
+# exactly RETRY_MAX + 1 attempts, which is the number a widened budget changes.
+test_rate_limit_one_past_budget_fails() {
+    local calls attempts
+    if calls=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES" \
+        '{"throttle":{"100/status/pr-pending":4}}' 2>&1); then
+        fail_test "throttling RETRY_MAX+1 times still succeeded — the retry budget is larger than its documented value"
+        return
+    fi
+    attempts=$(command printf '%s\n' "$calls" |
+        command grep -cxF "attempt 100/status/pr-pending" || true)
+    if [ "$attempts" != "4" ]; then
+        fail_test "sweep made ${attempts} attempts, expected RETRY_MAX+1 (4) — the retry budget does not match its documented value"
+    fi
+}
+
 # The `retry-after` branch (#956). Every other throttle test sends
 # `retry-after: 0`, and `0 > 0` is false, so they all take the EXPONENTIAL
 # fallback — the honour-the-header path has never executed. Code that ignored
@@ -666,6 +687,8 @@ run_test test_rate_limit_retries_are_bounded \
     "rate-limit retries are bounded, not infinite"
 run_test test_rate_limit_retry_max_boundary \
     "exactly RETRY_MAX throttles still succeeds"
+run_test test_rate_limit_one_past_budget_fails \
+    "RETRY_MAX+1 throttles fails after exactly RETRY_MAX+1 attempts"
 run_test test_retry_after_header_is_honoured \
     "a positive retry-after header is honoured over the backoff"
 run_test test_non_throttle_403_propagates \
