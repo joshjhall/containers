@@ -255,10 +255,17 @@ const run = new Function(
 // many attempts a FAILING call made needs the record, and the run that produces
 // it is by definition the one that ends in a throw. The non-zero exit is
 // preserved, so the tests that check only the exit code are unaffected.
+//
+// The error goes to STDERR, never stdout: the tests assert on stdout, so
+// writing there would corrupt the recorded stream. Discarding it entirely
+// would be worse than the uncaught rejection this replaced — an UNEXPECTED
+// throw (a real workflow-script bug, or harness miswiring) would still fail
+// the exit-code tests, but with nothing in the output saying why.
 try {
   await run(github, context, core, setTimeout);
-} catch {
+} catch (err) {
   process.exitCode = 1;
+  process.stderr.write(`script threw: ${err && err.stack ? err.stack : err}\n`);
 }
 process.stdout.write((mode === 'info' ? infos : calls).join('\n'));
 RUNNER_EOF
