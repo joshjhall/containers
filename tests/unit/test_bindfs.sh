@@ -101,6 +101,27 @@ test_feature_summary_includes_cron() {
     assert_file_contains "$FEATURE_FILE" "FUSE_CLEANUP_DISABLE" "Feature summary includes FUSE_CLEANUP_DISABLE env var"
 }
 
+# Test: Feature script creates the sweep lock file (issue #950)
+#
+# The lock's DEFAULT path is asserted on the GC side, in
+# tests/unit/runtime/fuse-cleanup.sh. This is the other half of that contract:
+# the build must actually create the file the GC will open, with modes that let
+# a remapped runtime UID open it. A mismatch between the two halves degrades the
+# guard to permanently-unlocked, silently.
+test_creates_fuse_cleanup_lock() {
+    assert_file_contains "$FEATURE_FILE" \
+        "install -d -m 755 -o root -g root /etc/container/lock" \
+        "Creates the root-owned 0755 lock directory"
+    assert_file_contains "$FEATURE_FILE" \
+        "/etc/container/lock/fuse-cleanup.lock" \
+        "Creates the sweep lock file the shared GC opens (#950)"
+    # 0666 so any runtime UID can open it — the container user is remapped after
+    # build, so the runtime UID is not knowable at build time (cf. #943).
+    assert_file_contains "$FEATURE_FILE" \
+        "install -m 666 -o root -g root /dev/null" \
+        "Lock file is mode 666 so a remapped runtime UID can open it"
+}
+
 # Test: Bindfs runtime sub-script contains bindfs overlay section
 test_entrypoint_has_bindfs_section() {
     assert_file_contains "$BINDFS_RUNTIME_FILE" "Bindfs Overlay" "Bindfs sub-script has Bindfs Overlay section header"
@@ -243,6 +264,7 @@ run_test test_entrypoint_privilege_pattern "Entrypoint uses existing privilege p
 run_test test_creates_fuse_cleanup_cron_script "Feature script creates fuse-cleanup-cron wrapper"
 run_test test_cron_wrapper_does_not_duplicate_sweep "Cron wrapper does not duplicate the sweep"
 run_test test_creates_fuse_cleanup_cron_job "Feature script creates fuse-cleanup cron job"
+run_test test_creates_fuse_cleanup_lock "Feature script creates the sweep lock (#950)"
 run_test test_feature_summary_includes_cron "Feature summary includes cron paths and env"
 run_test test_dockerfile_build_arg "Dockerfile declares INCLUDE_BINDFS build arg"
 run_test test_dockerfile_dev_tools_trigger "Dockerfile triggers bindfs from INCLUDE_DEV_TOOLS"
