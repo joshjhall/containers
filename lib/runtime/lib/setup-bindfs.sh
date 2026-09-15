@@ -184,12 +184,23 @@ setup_bindfs_overlays() {
     # The shared GC discovers roots from findmnt like the cron leg does;
     # /workspace survives only as the fallback for the case this leg uniquely
     # handles — files stranded by a previous session whose mounts are now gone.
+    #
+    # The missing-binary branch is REPORTED, not silent (#951). The GC is
+    # installed unconditionally by the Dockerfile, so its absence means a broken
+    # image (partial build, bad permissions, a stale layer cache predating that
+    # Dockerfile change) — and a silent skip here disables the boot leg
+    # permanently while looking exactly like a clean run. That is the same
+    # invisible-stranded-files failure #948 was filed against, reintroduced
+    # through the fix for it.
     _fuse_cleanup_bin="${FUSE_CLEANUP_BIN:-/usr/local/bin/fuse-cleanup}"
     if [ -x "$_fuse_cleanup_bin" ]; then
         _fuse_cleaned=$(FUSE_CLEANUP_FALLBACK_ROOT=/workspace "$_fuse_cleanup_bin" 2>/dev/null || echo 0)
         if [ "${_fuse_cleaned:-0}" -gt 0 ] 2>/dev/null; then
             echo "🧹 Cleaned up $_fuse_cleaned stale .fuse_hidden file(s)"
         fi
+    else
+        echo "   ⚠️  FUSE cleanup skipped - $_fuse_cleanup_bin missing or not executable"
+        echo "      Stale .fuse_hidden* files will accumulate (issue #951)"
     fi
     unset _fuse_cleaned _fuse_cleanup_bin
 }

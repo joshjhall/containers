@@ -130,6 +130,15 @@ test_no_duplicate_sweep() {
         "Boot pass carries no depth-bounded walk of its own (issue #948)"
 }
 
+# The missing-GC branch must SAY something (issue #951). Before this the -x test
+# had no else, so a broken install disabled the boot leg permanently while
+# looking identical to a clean run — the invisible-stranded-files failure #948
+# was filed against, reintroduced through its own fix.
+test_missing_gc_is_reported() {
+    assert_file_contains "$SOURCE_FILE" "FUSE cleanup skipped" \
+        "Boot pass warns when the shared GC is missing (issue #951)"
+}
+
 test_skip_map_associative_array() {
     assert_file_contains "$SOURCE_FILE" "BINDFS_SKIP_MAP" \
         "Script uses BINDFS_SKIP_MAP associative array"
@@ -254,6 +263,45 @@ test_probe_true_mode_always_applies() {
     assert_equals "0" "$?" "probe_mount_needs_fix returns 0 in true mode"
 }
 
+# Functional counterpart to test_missing_gc_is_reported: prove the else branch
+# actually fires and that reporting did not turn a broken install into a boot
+# failure. A missing GC is degraded cleanup, not a fatal startup error, so
+# setup_bindfs_overlays must still return 0 (issue #951).
+test_missing_gc_warns_and_succeeds() {
+    local output
+    output=$(
+        source "$SOURCE_FILE"
+        BINDFS_ENABLED=false \
+            FUSE_CLEANUP_BIN=/nonexistent/fuse-cleanup \
+            setup_bindfs_overlays 2>&1
+    )
+    local rc=$?
+
+    assert_equals "0" "$rc" \
+        "Missing GC does not fail startup (issue #951)"
+    assert_contains "$output" "missing or not executable" \
+        "Missing GC produces a visible warning (issue #951)"
+}
+
+test_present_gc_warns_nothing() {
+    # The complement: a working GC must stay quiet. A warning that fires on the
+    # healthy path is noise operators learn to ignore, which would defeat #951.
+    local stub_dir stub output
+    stub_dir=$(mktemp -d)
+    stub="$stub_dir/fuse-cleanup"
+    command printf '%s\n' '#!/bin/bash' 'echo 0' >"$stub"
+    chmod +x "$stub"
+
+    output=$(
+        source "$SOURCE_FILE"
+        BINDFS_ENABLED=false FUSE_CLEANUP_BIN="$stub" setup_bindfs_overlays 2>&1
+    )
+    command rm -rf "$stub_dir"
+
+    assert_not_contains "$output" "missing or not executable" \
+        "Healthy GC produces no missing-binary warning (issue #951)"
+}
+
 test_probe_skips_listed_path() {
     (
         source "$SOURCE_FILE"
@@ -290,6 +338,7 @@ run_test test_bindfs_allow_other_option "Passes -o allow_other to bindfs"
 run_test test_fuse_hidden_cleanup "Handles .fuse_hidden cleanup"
 run_test test_delegates_to_shared_cleanup "Delegates to the shared fuse-cleanup GC"
 run_test test_no_duplicate_sweep "Boot pass does not duplicate the sweep"
+run_test test_missing_gc_is_reported "Warns when the shared GC is missing"
 run_test test_skip_map_associative_array "Uses BINDFS_SKIP_MAP"
 run_test test_dev_fuse_warning "Warns when /dev/fuse not available"
 run_test test_applied_counter "Tracks applied overlay count"
@@ -300,6 +349,8 @@ run_test test_parse_skip_paths_empty "parse_bindfs_skip_paths handles empty inpu
 run_test test_probe_fuse_fstype_skipped "probe_mount_needs_fix skips fuse fstype"
 run_test test_probe_true_mode_always_applies "probe_mount_needs_fix applies in true mode"
 run_test test_probe_skips_listed_path "probe_mount_needs_fix skips listed paths"
+run_test test_missing_gc_warns_and_succeeds "Missing GC warns but does not fail startup"
+run_test test_present_gc_warns_nothing "Healthy GC stays quiet"
 
 # Generate test report
 generate_report

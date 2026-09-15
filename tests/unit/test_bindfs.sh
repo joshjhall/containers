@@ -65,13 +65,103 @@ test_feature_logging() {
 # Test: Feature script creates fuse-cleanup-cron wrapper
 test_creates_fuse_cleanup_cron_script() {
     # The cron wrapper is a thin caller: it supplies the cron environment and the
-    # syslog reporting voice. The sweep itself — findmnt discovery, the fuser
+    # reporting voice. The sweep itself — findmnt discovery, the fuser
     # guard, the walk — lives in the shared lib/runtime/fuse-cleanup.sh, which
     # the boot pass also calls (issue #948). Those assertions moved to
     # tests/unit/runtime/fuse-cleanup.sh along with the code.
     assert_file_contains "$FEATURE_FILE" "/usr/local/bin/fuse-cleanup-cron" "Creates fuse-cleanup-cron wrapper script"
     assert_file_contains "$FEATURE_FILE" "/usr/local/bin/fuse-cleanup" "Delegates to the shared fuse-cleanup GC"
-    assert_file_contains "$FEATURE_FILE" "logger -t fuse-cleanup" "Logs via syslog"
+}
+
+# Test: cron leg reports rather than going to a syslog nobody runs (issue #951)
+#
+# This assertion is INVERTED from what it was. It used to require
+# `logger -t fuse-cleanup`, which encoded the defect: these images ship no
+# syslog daemon, so logger discards the message and still exits 0. A leg whose
+# only output vanishes is indistinguishable from one that never ran — the exact
+# silent-failure class #951 closes.
+test_cron_wrapper_does_not_use_logger() {
+    assert_file_not_contains "$FEATURE_FILE" "logger -t fuse-cleanup" \
+        "Cron wrapper does not route output to the absent syslog daemon (issue #951)"
+    # Match the redirect ON the cron invocation, not the bare path — the path
+    # also appears on the install line below, so a substring check would still
+    # pass if the redirect were ever detached from the */10 entry.
+    assert_file_contains "$FEATURE_FILE" "fuse-cleanup-cron >> /var/log/fuse-cleanup.log 2>&1" \
+        "Cron output is redirected to a real log file (issue #951)"
+}
+
+# Test: the missing-GC branch is reported, not silent (issue #951)
+test_cron_wrapper_reports_missing_gc() {
+    assert_file_contains "$FEATURE_FILE" "missing or not executable - sweep skipped" \
+        "Cron wrapper reports a missing shared GC (issue #951)"
+    assert_file_not_contains "$FEATURE_FILE" "not cron's problem to report" \
+        "The silent-skip rationale is gone (issue #951)"
+    # MAILTO="" is why the redirect has to work: with mail suppressed, a failed
+    # redirect leaves no trace at all.
+    assert_file_contains "$FEATURE_FILE" 'MAILTO=""' \
+        "Cron entry suppresses mail (issue #951)"
+}
+
+# Functional counterpart: extract the generated wrapper and RUN it with a
+# nonexistent GC. The boot leg got functional coverage; this leg had only
+# static greps, so nothing proved the emitted heredoc actually executes --
+# a syntax error inside it would pass every assert_file_contains above.
+test_cron_wrapper_missing_gc_executes() {
+    local tmpdir wrapper output rc
+    tmpdir=$(mktemp -d)
+    wrapper="$tmpdir/fuse-cleanup-cron"
+
+    # Pull the heredoc body out of the feature script.
+    command sed -n "/^command cat >\/usr\/local\/bin\/fuse-cleanup-cron <<'FUSE_CLEANUP_EOF'\$/,/^FUSE_CLEANUP_EOF\$/p" \
+        "$FEATURE_FILE" | command sed '1d;$d' >"$wrapper"
+    chmod +x "$wrapper"
+
+    output=$(FUSE_CLEANUP_BIN=/nonexistent/fuse-cleanup bash "$wrapper" 2>&1)
+    rc=$?
+    command rm -rf "$tmpdir"
+
+    assert_equals "0" "$rc" \
+        "Cron wrapper exits 0 when the GC is missing (issue #951)"
+    assert_contains "$output" "missing or not executable" \
+        "Cron wrapper actually prints the missing-GC report (issue #951)"
+}
+
+# Test: the cron job can actually WRITE the log file (issue #951)
+#
+# This is a permission-class test, not a string test. The cron user column here
+# is the container user, not root, so the kernel applies the GROUP class — and
+# the workspace-fs-health recipe this originally copied (chgrp + chmod 640)
+# leaves group bits `r--`. The `>>` redirect would then fail before the wrapper
+# ran, silently, because MAILTO="" suppresses cron's failure mail: the exact
+# invisible-breakage class #951 closes, one layer down. Ownership cannot fix it
+# either — the container user is remapped after build, so the runtime UID is
+# unknown here (see lib/runtime/lib/resolve-container-user.sh).
+#
+# Asserting the parsed MODE rather than the literal line means a future switch
+# to chmod/chown spelling still passes as long as a non-owner can append.
+test_cron_log_file_is_writable_by_cron_user() {
+    local mode group_digit other_digit writable
+    # Matches both spellings that could create it, with any intervening flags:
+    #   install -m 666 -o root -g root /dev/null /var/log/fuse-cleanup.log
+    #   chmod 640 /var/log/fuse-cleanup.log
+    mode=$(command grep -oE '(install -m|chmod) [0-7]{3,4}[^#]*/var/log/fuse-cleanup\.log' "$FEATURE_FILE" |
+        command grep -oE '[0-7]{3,4}' | command head -1)
+
+    assert_not_equals "" "$mode" \
+        "Log file creation specifies an explicit mode (issue #951)"
+
+    # Last two digits are the group and other classes. The cron user reaches the
+    # file through one of them, never as owner (root creates it at build time).
+    group_digit="${mode: -2:1}"
+    other_digit="${mode: -1}"
+
+    writable=no
+    case "$group_digit$other_digit" in
+        *[2367]*) writable=yes ;;
+    esac
+
+    assert_equals "yes" "$writable" \
+        "Log file mode ${mode:-<none>} lets the non-root cron user append (issue #951)"
 }
 
 # Test: cron wrapper does not carry its own copy of the sweep (issue #948)
@@ -263,6 +353,10 @@ run_test test_entrypoint_skips_fuse "Entrypoint skips existing fuse mounts"
 run_test test_entrypoint_privilege_pattern "Entrypoint uses existing privilege pattern"
 run_test test_creates_fuse_cleanup_cron_script "Feature script creates fuse-cleanup-cron wrapper"
 run_test test_cron_wrapper_does_not_duplicate_sweep "Cron wrapper does not duplicate the sweep"
+run_test test_cron_wrapper_does_not_use_logger "Cron wrapper avoids the absent syslog daemon (#951)"
+run_test test_cron_wrapper_reports_missing_gc "Cron wrapper reports a missing shared GC (#951)"
+run_test test_cron_wrapper_missing_gc_executes "Cron wrapper missing-GC branch actually runs (#951)"
+run_test test_cron_log_file_is_writable_by_cron_user "Cron log file is writable by the cron user (#951)"
 run_test test_creates_fuse_cleanup_cron_job "Feature script creates fuse-cleanup cron job"
 run_test test_creates_fuse_cleanup_lock "Feature script creates the sweep lock (#950)"
 run_test test_feature_summary_includes_cron "Feature summary includes cron paths and env"

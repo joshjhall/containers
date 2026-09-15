@@ -132,7 +132,13 @@ command cat >/usr/local/bin/fuse-cleanup-cron <<'FUSE_CLEANUP_EOF'
 # boot-time pass in lib/runtime/lib/setup-bindfs.sh. This used to be a second
 # near-identical copy, and the two had already drifted on the root they walked
 # and on what their depth bound meant (issue #948). This leg now only supplies
-# the cron environment and the syslog reporting voice.
+# the cron environment and the reporting voice.
+#
+# Output goes to stdout/stderr, which the /etc/cron.d entry redirects to
+# /var/log/fuse-cleanup.log. NOT piped to logger: these images ship no syslog
+# daemon, so there is no /dev/log to receive it and logger would discard the
+# message and still exit 0 - the same silent-failure class this leg is being
+# fixed for (issue #951).
 
 # Load container environment (provides PATH, etc.)
 if [ -f /etc/container/cron-env ]; then
@@ -142,14 +148,18 @@ fi
 FUSE_CLEANUP_BIN="${FUSE_CLEANUP_BIN:-/usr/local/bin/fuse-cleanup}"
 
 if [ ! -x "$FUSE_CLEANUP_BIN" ]; then
-    # Shared GC not installed — nothing to do, and not cron's problem to report.
+    # Shared GC not installed. Report it and exit 0: a missing GC is not a cron
+    # failure, but an UNREPORTED one leaves this leg permanently disabled while
+    # looking like a clean run - which is how the stranded .fuse_hidden* files
+    # of issue #948 became invisible in the first place (issue #951).
+    command echo "$(command date -Is) fuse-cleanup: $FUSE_CLEANUP_BIN missing or not executable - sweep skipped"
     exit 0
 fi
 
 cleaned=$("$FUSE_CLEANUP_BIN" 2>/dev/null || echo 0)
 
 if [ "${cleaned:-0}" -gt 0 ] 2>/dev/null; then
-    logger -t fuse-cleanup "Cleaned $cleaned stale .fuse_hidden file(s)"
+    command echo "$(command date -Is) fuse-cleanup: cleaned $cleaned stale .fuse_hidden file(s)"
 fi
 FUSE_CLEANUP_EOF
 
@@ -163,17 +173,45 @@ command cat >/etc/cron.d/fuse-cleanup <<CRON_EOF
 # Runs every 10 minutes
 # Configuration via environment variables:
 #   FUSE_CLEANUP_DISABLE - Set to "true" to disable
+#
+# Output is appended to /var/log/fuse-cleanup.log, group-owned by the container
+# user so a plain \`tail\` works without sudo. NOT piped to logger: these images
+# ship no syslog daemon, so logger would discard the message and still exit 0 -
+# the silent-failure class issue #951 exists to close. A plain redirect also
+# keeps cron seeing the job's own exit status rather than a pipeline's.
 
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
+MAILTO=""
 
-*/10 * * * * ${USERNAME} /usr/local/bin/fuse-cleanup-cron
+*/10 * * * * ${USERNAME} /usr/local/bin/fuse-cleanup-cron >> /var/log/fuse-cleanup.log 2>&1
 CRON_EOF
 
 chmod 644 /etc/cron.d/fuse-cleanup
 
+# Create the log file the cron entry appends to.
+#
+# Mode 0666, NOT the 640 the workspace-fs-health entry uses in the Dockerfile.
+# That entry's cron user column is `root`, so root — the file's owner — gets
+# the OWNER permission class and its write bit. This entry runs as the
+# container user, which lands in the GROUP class, and 640's group bits are
+# `r--`: the `>>` redirect would fail before the wrapper ever ran. With
+# MAILTO="" suppressing cron's failure mail, that failure would be completely
+# silent — the same class of invisible breakage this whole change exists to
+# close, reintroduced one layer down.
+#
+# Ownership cannot rescue it either: the container user is remapped after build
+# (Zed adopts the host UID — see lib/runtime/lib/resolve-container-user.sh), so
+# the runtime UID is not knowable here and a build-time chown may match nobody.
+# 0666 is the same answer, for the same reason, that
+# /etc/container/lock/fuse-cleanup.lock uses a few lines above: any runtime UID
+# must be able to open it. A diagnostic log is not secret, and the directory
+# above it is root-owned, so the path cannot be pre-planted.
+install -m 666 -o root -g root /dev/null /var/log/fuse-cleanup.log
+
 log_message "  Created /usr/local/bin/fuse-cleanup-cron"
 log_message "  Created /etc/cron.d/fuse-cleanup (every 10 minutes)"
+log_message "  Created /var/log/fuse-cleanup.log"
 
 # ============================================================================
 # Feature Summary
@@ -182,7 +220,7 @@ log_message "  Created /etc/cron.d/fuse-cleanup (every 10 minutes)"
 log_feature_summary \
     --feature "Bindfs" \
     --tools "bindfs,fusermount3" \
-    --paths "/etc/fuse.conf,/usr/local/bin/fuse-cleanup-cron,/etc/cron.d/fuse-cleanup,/etc/container/lock/fuse-cleanup.lock" \
+    --paths "/etc/fuse.conf,/usr/local/bin/fuse-cleanup-cron,/etc/cron.d/fuse-cleanup,/etc/container/lock/fuse-cleanup.lock,/var/log/fuse-cleanup.log" \
     --env "BINDFS_ENABLED,BINDFS_SKIP_PATHS,FUSE_CLEANUP_DISABLE,FUSE_CLEANUP_LOCK" \
     --next-steps "Run container with --cap-add SYS_ADMIN --device /dev/fuse. Overlays applied automatically by entrypoint."
 
