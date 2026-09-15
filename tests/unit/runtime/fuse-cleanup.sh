@@ -294,6 +294,93 @@ test_idempotent() {
 }
 
 # ============================================================================
+# Multi-root sweep and the -type f restriction (issue #952)
+# ============================================================================
+
+test_sweeps_every_root() {
+    # FUSE_CLEANUP_ROOTS is newline-separated and the script loops over every
+    # entry, but every test above passes exactly one root — so the loop body was
+    # covered and the LOOP was not. The cron leg routinely sweeps several FUSE
+    # mounts (this dev container has two), which makes the multi-root path the
+    # production one.
+    #
+    # The count assertion is what discriminates: an implementation that swept
+    # only the first root still removes a file and still prints a number, so
+    # asserting "the first file is gone" passes against it. Asserting 2 does not.
+    #
+    # The list also carries a nonexistent root and a trailing blank line, so the
+    # `[ -z "$root" ]` and `[ -d "$root" ]` continues are driven in the same
+    # pass — they must SKIP the entry, not abort the remaining roots.
+    command mkdir -p "$TEST_TEMP_DIR/mount-a/deep" "$TEST_TEMP_DIR/mount-b/deeper/still"
+    local in_a="$TEST_TEMP_DIR/mount-a/deep/.fuse_hiddenAAAA"
+    local in_b="$TEST_TEMP_DIR/mount-b/deeper/still/.fuse_hiddenBBBB"
+    : >"$in_a"
+    : >"$in_b"
+
+    local count
+    count=$(run_cleanup "$TEST_TEMP_DIR/mount-a
+$TEST_TEMP_DIR/does-not-exist
+$TEST_TEMP_DIR/mount-b
+")
+
+    assert_file_not_exists "$in_a" "Sweeps the first root"
+    assert_file_not_exists "$in_b" \
+        "Sweeps a LATER root too — the loop does not stop after the first"
+    assert_equals "2" "$count" \
+        "Counts removals across every root (issue #952)"
+}
+
+test_skips_hidden_named_symlink() {
+    # Pins `-type f`, and pins it with a fixture that DISCRIMINATES.
+    #
+    # The obvious fixture — a DIRECTORY named .fuse_hiddenXXXX — proves nothing:
+    # `rm -f` refuses a directory whether or not the walk printed it, so the
+    # directory survives and the count stays 0 against the mutant with -type f
+    # deleted. A symlink is the case that genuinely differs. find uses lstat by
+    # default, so -type f excludes it; without -type f it is printed and `rm -f`
+    # SUCCEEDS on it, removing the link and incrementing the count.
+    #
+    # Excluding it is also correct intent, not just a test artifact: FUSE only
+    # ever renames regular files to .fuse_hiddenXXXX, so a symlink wearing that
+    # name is something else's and not the GC's to delete.
+    local link="$TEST_TEMP_DIR/.fuse_hiddenLINK"
+    command ln -s "$TEST_TEMP_DIR/no-such-target" "$link"
+
+    local count
+    count=$(run_cleanup "$TEST_TEMP_DIR")
+
+    if [ -L "$link" ]; then
+        pass_test "Leaves a symlink named .fuse_hidden* alone (-type f, issue #952)"
+    else
+        fail_test "Removed a symlink named .fuse_hidden* — -type f missing from the walk"
+    fi
+    assert_equals "0" "$count" \
+        "Does not count a symlink named .fuse_hidden* as cleaned"
+}
+
+test_descends_hidden_named_directory() {
+    # The other half of -type f: a DIRECTORY named .fuse_hiddenXXXX is not itself
+    # a removal target. On its own that assertion is vacuous (see the symlink
+    # test above), so the load-bearing half here is the inner file — the walk
+    # must DESCEND into such a directory rather than treat the name as a prune.
+    # A real .fuse_hidden* file stranded underneath one would otherwise be
+    # invisible to the GC forever.
+    command mkdir -p "$TEST_TEMP_DIR/.fuse_hiddenDIR"
+    local inner="$TEST_TEMP_DIR/.fuse_hiddenDIR/.fuse_hiddenINNER"
+    : >"$inner"
+
+    local count
+    count=$(run_cleanup "$TEST_TEMP_DIR")
+
+    assert_dir_exists "$TEST_TEMP_DIR/.fuse_hiddenDIR" \
+        "Leaves a directory named .fuse_hidden* in place"
+    assert_file_not_exists "$inner" \
+        "Descends INTO a .fuse_hidden* directory — the name is not a prune"
+    assert_equals "1" "$count" \
+        "Counts only the file, not the directory that held it"
+}
+
+# ============================================================================
 # Overlap guard (issue #950)
 # ============================================================================
 # Behavioral, like everything else in this file: the property under test is
@@ -561,6 +648,11 @@ run_test_with_setup test_missing_root_exits_clean "Missing root exits clean"
 run_test_with_setup test_no_root_configured_exits_clean "No root configured exits clean"
 run_test_with_setup test_idempotent "Idempotent"
 run_test_with_setup test_handles_spaces_in_path "Handles spaces in paths"
+
+# Multi-root sweep and -type f (#952)
+run_test_with_setup test_sweeps_every_root "Sweeps every root in FUSE_CLEANUP_ROOTS (#952)"
+run_test_with_setup test_skips_hidden_named_symlink "Skips a .fuse_hidden* symlink (-type f)"
+run_test_with_setup test_descends_hidden_named_directory "Descends into a .fuse_hidden* directory"
 
 # Overlap guard (#950)
 run_test_with_setup test_skips_when_lock_is_held "Skips the walk while the lock is held (#950)"

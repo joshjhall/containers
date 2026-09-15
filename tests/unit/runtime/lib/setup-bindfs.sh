@@ -302,6 +302,103 @@ test_present_gc_warns_nothing() {
         "Healthy GC produces no missing-binary warning (issue #951)"
 }
 
+# ============================================================================
+# Boot-pass delegation (issue #952)
+# ============================================================================
+# setup_bindfs_overlays runs the shared GC, parses its stdout into a count, and
+# prints a message behind a `-gt 0` guard. Until #952 that was only string-matched
+# against the source: the parse and the guard never executed. These drive them.
+#
+# FUSE_CLEANUP_BIN makes the call point injectable, so each case is just a stub
+# that prints (or fails) in a particular way. BINDFS_ENABLED=false keeps the
+# overlay half of the function out of the picture.
+
+# Write an executable fuse-cleanup stub whose body is the given lines, echoing
+# its path. The caller owns cleanup of its parent directory (dirname of the
+# returned path). Kept out of the repo tree on purpose — the workspace is
+# FUSE-mounted here and loses write-then-read coherency.
+stub_fuse_cleanup_bin() {
+    local stub_dir stub
+    stub_dir=$(mktemp -d)
+    stub="$stub_dir/fuse-cleanup"
+    command printf '%s\n' '#!/bin/bash' "$@" >"$stub"
+    command chmod +x "$stub"
+    echo "$stub"
+}
+
+# Run setup_bindfs_overlays against a stub GC, merging stderr into stdout.
+run_boot_pass() {
+    local stub="$1"
+    (
+        source "$SOURCE_FILE"
+        BINDFS_ENABLED=false FUSE_CLEANUP_BIN="$stub" setup_bindfs_overlays 2>&1
+    )
+}
+
+test_boot_pass_reports_cleaned_count() {
+    # Asserts the COUNT, not merely the phrase. Matching "Cleaned up" alone would
+    # pass against an implementation that printed a hardcoded string and threw
+    # the GC's stdout away — which is exactly the parse this test exists for.
+    local stub output
+    stub=$(stub_fuse_cleanup_bin 'echo 7')
+
+    output=$(run_boot_pass "$stub")
+    command rm -rf "$(dirname "$stub")"
+
+    assert_contains "$output" "Cleaned up 7 stale" \
+        "Boot pass reports the count the GC printed (issue #952)"
+}
+
+test_boot_pass_silent_when_nothing_cleaned() {
+    # The `-gt 0` guard. Without it every clean boot — the overwhelmingly common
+    # case — prints "Cleaned up 0 stale .fuse_hidden file(s)", which is the kind
+    # of startup noise operators learn to scroll past.
+    local stub output
+    stub=$(stub_fuse_cleanup_bin 'echo 0')
+
+    output=$(run_boot_pass "$stub")
+    command rm -rf "$(dirname "$stub")"
+
+    assert_not_contains "$output" "Cleaned up" \
+        "Boot pass says nothing when the GC cleaned nothing (issue #952)"
+}
+
+test_boot_pass_tolerates_gc_failure() {
+    # A GC that exits non-zero with no stdout drives the `|| echo 0` fallback.
+    # Cleanup failing is degraded cleanup, never a fatal startup error — the same
+    # judgement #951 made for a missing binary.
+    local stub output rc=0
+    stub=$(stub_fuse_cleanup_bin 'exit 1')
+
+    output=$(run_boot_pass "$stub") || rc=$?
+    command rm -rf "$(dirname "$stub")"
+
+    assert_equals "0" "$rc" \
+        "A failing GC does not fail startup (issue #952)"
+    assert_not_contains "$output" "Cleaned up" \
+        "A failing GC reports no cleaned files"
+}
+
+test_boot_pass_tolerates_nonnumeric_count() {
+    # Why the comparison carries its own `2>/dev/null`: a GC that printed
+    # something non-numeric would otherwise make bash emit "integer expression
+    # expected" onto the boot log. Under `set -e` in the entrypoint the failed
+    # comparison is also the last command of the branch, so this is the case that
+    # keeps a malformed count from reading as a startup failure.
+    local stub output rc=0
+    stub=$(stub_fuse_cleanup_bin 'echo not-a-number')
+
+    output=$(run_boot_pass "$stub") || rc=$?
+    command rm -rf "$(dirname "$stub")"
+
+    assert_equals "0" "$rc" \
+        "A non-numeric count does not fail startup (issue #952)"
+    assert_not_contains "$output" "Cleaned up" \
+        "A non-numeric count reports no cleaned files"
+    assert_not_contains "$output" "integer expression" \
+        "A non-numeric count is silent — no bash diagnostic on the boot log"
+}
+
 test_probe_skips_listed_path() {
     (
         source "$SOURCE_FILE"
@@ -351,6 +448,12 @@ run_test test_probe_true_mode_always_applies "probe_mount_needs_fix applies in t
 run_test test_probe_skips_listed_path "probe_mount_needs_fix skips listed paths"
 run_test test_missing_gc_warns_and_succeeds "Missing GC warns but does not fail startup"
 run_test test_present_gc_warns_nothing "Healthy GC stays quiet"
+
+# Boot-pass delegation (#952)
+run_test test_boot_pass_reports_cleaned_count "Boot pass reports the GC's count (#952)"
+run_test test_boot_pass_silent_when_nothing_cleaned "Boot pass is silent on a zero count"
+run_test test_boot_pass_tolerates_gc_failure "Boot pass tolerates a failing GC"
+run_test test_boot_pass_tolerates_nonnumeric_count "Boot pass tolerates a non-numeric count"
 
 # Generate test report
 generate_report
