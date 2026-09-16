@@ -103,10 +103,16 @@ test_fuse_cleanup_shared_script() {
 }
 
 # Test: shared GC exits cleanly and reports 0 with no FUSE mounts
+#
+# Same exit-status-and-exact-count shape as the no-bindfs assertion below; see
+# the comment block in test_no_bindfs_without_flag for why a bare "0" expected
+# value is not an assertion here (substring matching).
 test_fuse_cleanup_shared_script_runs() {
     local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
 
-    assert_command_in_container "$image" "/usr/local/bin/fuse-cleanup" "0"
+    assert_command_in_container "$image" \
+        'out=$(/usr/local/bin/fuse-cleanup); rc=$?; [ "$rc" -eq 0 ] && [ "$out" = "0" ] && echo cleaned-none' \
+        "cleaned-none"
 }
 
 # Test: fuse-cleanup-cron wrapper exits cleanly with no FUSE mounts
@@ -116,7 +122,18 @@ test_fuse_cleanup_cron_runs() {
     assert_command_in_container "$image" "bash /usr/local/bin/fuse-cleanup-cron; echo exit_\$?" "exit_0"
 }
 
-# Test: Build without bindfs flag does not include it
+# Test: a build without the bindfs flag excludes bindfs but STILL ships the
+# shared fuse-cleanup GC (issue #954).
+#
+# The second half is the load-bearing one, and it is the half that was missing.
+# The Dockerfile installs /usr/local/bin/fuse-cleanup unconditionally rather than
+# behind INCLUDE_BINDFS, and that is deliberate: entrypoint.sh sources
+# lib/runtime/lib/setup-bindfs.sh with no INCLUDE_BINDFS gate, so the boot pass
+# calls the GC on EVERY image. Its missing-binary branch reports rather than
+# skips, by design (#951) — so gating the install would trade ~10 KB for a
+# permanent "FUSE cleanup skipped" warning at boot on every non-bindfs
+# container. Until this test existed, a minimalism pass could add that gate and
+# the whole suite would stay green.
 test_no_bindfs_without_flag() {
     local image="test-no-bindfs-$$"
     echo "Building image without bindfs: $image"
@@ -129,6 +146,31 @@ test_no_bindfs_without_flag() {
 
     # bindfs should NOT be available
     assert_command_in_container "$image" "which bindfs 2>/dev/null || echo not-found" "not-found"
+
+    # ...but the shared GC the ungated boot pass calls MUST be.
+    assert_command_in_container "$image" "test -x /usr/local/bin/fuse-cleanup && echo exists" "exists"
+
+    # Presence is not enough: a truncated or non-executing copy would satisfy the
+    # check above. Run it and pin its output (0 files cleaned, no FUSE mounts),
+    # mirroring test_fuse_cleanup_shared_script_runs on the bindfs image.
+    #
+    # The comparison is done INSIDE the container rather than by handing "0" to
+    # assert_command_in_container, because that helper matches its expected value
+    # as a SUBSTRING (`[[ "$TEST_OUTPUT" == *"$expected"* ]]`, see
+    # tests/framework/assertions/docker.sh). Against a bare "0" that is not an
+    # assertion at all: a regressed sweep reporting 10, 20 or 100 stranded files
+    # contains a "0" and would pass — the exact false-pass this assertion exists
+    # to prevent. Emitting a distinct token on equality keeps the substring
+    # semantics harmless.
+    #
+    # The exit status is checked SEPARATELY and first, because moving the call
+    # into a command substitution is what would otherwise lose it: `$(...)`
+    # captures stdout and throws the inner exit status away, so a GC that
+    # printed "0" and then died would satisfy an output-only check. Both halves
+    # have to hold — exited clean AND swept nothing.
+    assert_command_in_container "$image" \
+        'out=$(/usr/local/bin/fuse-cleanup); rc=$?; [ "$rc" -eq 0 ] && [ "$out" = "0" ] && echo cleaned-none' \
+        "cleaned-none"
 }
 
 # Run all tests
@@ -142,7 +184,7 @@ run_test test_cron_installed "Cron daemon auto-installed with bindfs"
 run_test test_fuse_cleanup_shared_script "shared fuse-cleanup GC is installed"
 run_test test_fuse_cleanup_shared_script_runs "shared fuse-cleanup GC runs cleanly"
 run_test test_fuse_cleanup_cron_runs "fuse-cleanup-cron runs cleanly"
-run_test test_no_bindfs_without_flag "Build without bindfs flag excludes it"
+run_test test_no_bindfs_without_flag "Build without bindfs excludes it but keeps the shared GC"
 
 # Generate test report
 generate_report

@@ -685,8 +685,16 @@ RUN if [ -f /opt/container-runtime/workspace-fs-health-cron.sh ]; then \
 # (lib/runtime/lib/setup-bindfs.sh) and the 10-minute cron pass installed by
 # lib/features/bindfs.sh delegate to this one script; they used to carry two
 # copies of the walk that had drifted on their root and their depth bound.
-# Installed unconditionally rather than gated on bindfs — it is a silent no-op
-# when no FUSE mount exists, and the boot pass that calls it ships regardless.
+# Installed unconditionally rather than gated on INCLUDE_BINDFS, and that is a
+# decision, not an oversight (issue #954). The boot pass is not gated either:
+# entrypoint.sh sources lib/runtime/lib/setup-bindfs.sh behind a bare [ -f ]
+# check on a runtime lib this file copies unconditionally, so the GC is CALLED on
+# every image. Its missing-binary branch reports rather than skips, by design
+# (#951, because a silent skip is indistinguishable from a clean run) — so
+# gating this install would trade ~10 KB for a permanent "FUSE cleanup skipped"
+# warning at boot on every non-bindfs container.
+# Enforced by test_no_bindfs_without_flag in tests/integration/builds/test_bindfs.sh,
+# which asserts the GC is present AND runs in a build with no bindfs.
 RUN if [ -f /opt/container-runtime/fuse-cleanup.sh ]; then \
     cp /opt/container-runtime/fuse-cleanup.sh /usr/local/bin/fuse-cleanup && \
     chmod 755 /usr/local/bin/fuse-cleanup; \
