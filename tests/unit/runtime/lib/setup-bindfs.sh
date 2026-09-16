@@ -399,6 +399,100 @@ test_boot_pass_tolerates_nonnumeric_count() {
         "A non-numeric count is silent — no bash diagnostic on the boot log"
 }
 
+# ============================================================================
+# Testing-seam neutralization (issue #953)
+# ============================================================================
+# The boot pass invokes the GC root-privileged and the GC's walk has no depth
+# bound, so whatever names its roots names the scope of a recursive `rm -f`.
+# FUSE_CLEANUP_ROOTS / FUSE_CLEANUP_FINDMNT / FUSE_CLEANUP_FALLBACK_ROOT are
+# testing seams that each redirect that walk, so the boot pass unsets them.
+#
+# These tests pin the value OBSERVED AT THE GC, not the source text. An
+# `assert_file_contains "$SOURCE_FILE" "unset"` would pass against an unset of
+# the wrong variable, in the wrong order (eating this leg's own /workspace
+# fallback), or outside the subshell that wraps the call — every way this can be
+# got wrong is a way that grep still passes.
+#
+# Reporting goes through a FILE rather than stderr because the boot pass sends
+# the GC's stderr to /dev/null, and through a file rather than stdout because
+# stdout is the cleaned count the caller parses.
+
+# Echo the value the GC actually saw for $1, having run the boot pass with the
+# environment the caller exported. Prints UNSET when the variable did not arrive.
+observe_gc_env() {
+    local var="$1" stub obs
+    obs=$(mktemp)
+    stub=$(stub_fuse_cleanup_bin \
+        "command printf '%s\\n' \"\${$var:-UNSET}\" >'$obs'" \
+        'echo 0')
+
+    run_boot_pass "$stub" >/dev/null 2>&1
+    command rm -rf "$(dirname "$stub")"
+
+    command cat "$obs"
+    command rm -f "$obs"
+}
+
+test_boot_pass_drops_injected_roots() {
+    local seen
+    seen=$(FUSE_CLEANUP_ROOTS=/etc observe_gc_env FUSE_CLEANUP_ROOTS)
+
+    assert_equals "UNSET" "$seen" \
+        "Boot pass drops an injected FUSE_CLEANUP_ROOTS (issue #953)"
+}
+
+test_boot_pass_drops_injected_findmnt() {
+    # The second path to the same arbitrary root: a discovery stub printing /
+    # hands the GC the whole filesystem without ROOTS being set at all.
+    local seen
+    seen=$(FUSE_CLEANUP_FINDMNT=/tmp/evil-findmnt observe_gc_env FUSE_CLEANUP_FINDMNT)
+
+    assert_equals "UNSET" "$seen" \
+        "Boot pass drops an injected FUSE_CLEANUP_FINDMNT (issue #953)"
+}
+
+test_boot_pass_overrides_injected_fallback_root() {
+    # FALLBACK_ROOT is the one that must be dropped AND replaced. Asserting
+    # merely "not /etc" would pass against an unset that also ate this leg's own
+    # assignment, which would silently disable the stranded-file sweep that is
+    # the boot pass's unique job. So assert the value that must arrive.
+    local seen
+    seen=$(FUSE_CLEANUP_FALLBACK_ROOT=/etc observe_gc_env FUSE_CLEANUP_FALLBACK_ROOT)
+
+    assert_equals "/workspace" "$seen" \
+        "Boot pass replaces an injected fallback root with /workspace (issue #953)"
+}
+
+test_boot_pass_preserves_disable() {
+    # The complement that keeps the neutralization from over-reaching:
+    # FUSE_CLEANUP_DISABLE is a documented operator control, not a seam. If the
+    # unset list were widened by name prefix rather than by what redirects the
+    # walk, operators would lose the documented way to turn cleanup off.
+    local seen
+    seen=$(FUSE_CLEANUP_DISABLE=true observe_gc_env FUSE_CLEANUP_DISABLE)
+
+    assert_equals "true" "$seen" \
+        "Boot pass still passes FUSE_CLEANUP_DISABLE through (issue #953)"
+}
+
+test_boot_pass_unset_does_not_leak_to_caller() {
+    # The unset lives in a command-substitution subshell, so it must not disturb
+    # the entrypoint's own environment. A bare `unset` before the call would
+    # strip the variable for everything that runs after setup_bindfs_overlays.
+    local stub after
+    stub=$(stub_fuse_cleanup_bin 'echo 0')
+
+    after=$(
+        export FUSE_CLEANUP_ROOTS=/etc
+        run_boot_pass "$stub" >/dev/null 2>&1
+        command printf '%s\n' "${FUSE_CLEANUP_ROOTS:-UNSET}"
+    )
+    command rm -rf "$(dirname "$stub")"
+
+    assert_equals "/etc" "$after" \
+        "Neutralization is scoped to the GC call, not the caller's environment"
+}
+
 test_probe_skips_listed_path() {
     (
         source "$SOURCE_FILE"
@@ -454,6 +548,13 @@ run_test test_boot_pass_reports_cleaned_count "Boot pass reports the GC's count 
 run_test test_boot_pass_silent_when_nothing_cleaned "Boot pass is silent on a zero count"
 run_test test_boot_pass_tolerates_gc_failure "Boot pass tolerates a failing GC"
 run_test test_boot_pass_tolerates_nonnumeric_count "Boot pass tolerates a non-numeric count"
+
+# Testing-seam neutralization (#953)
+run_test test_boot_pass_drops_injected_roots "Boot pass drops injected FUSE_CLEANUP_ROOTS (#953)"
+run_test test_boot_pass_drops_injected_findmnt "Boot pass drops injected FUSE_CLEANUP_FINDMNT (#953)"
+run_test test_boot_pass_overrides_injected_fallback_root "Boot pass replaces an injected fallback root (#953)"
+run_test test_boot_pass_preserves_disable "Boot pass preserves FUSE_CLEANUP_DISABLE (#953)"
+run_test test_boot_pass_unset_does_not_leak_to_caller "Neutralization does not leak to the caller (#953)"
 
 # Generate test report
 generate_report

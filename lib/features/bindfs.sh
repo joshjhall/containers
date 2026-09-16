@@ -145,6 +145,26 @@ if [ -f /etc/container/cron-env ]; then
     source /etc/container/cron-env
 fi
 
+# Drop the GC's walk-redirecting testing seams before invoking it (#953).
+#
+# The GC's walk is not depth-bounded, so whatever names its roots names the
+# scope of a recursive `rm -f`. FUSE_CLEANUP_ROOTS names those roots outright;
+# FUSE_CLEANUP_FINDMNT names the discovery binary, so a stub printing / grants
+# the same arbitrary root by a second path; FUSE_CLEANUP_FALLBACK_ROOT grants a
+# root when discovery finds nothing. All three exist only so the GC's tests can
+# drive the walk without a real FUSE mount, and nothing in production sets them.
+#
+# This MUST come after the cron-env source above: that file is itself an
+# injection path, so unsetting before it would leave the values it sets intact.
+#
+# FUSE_CLEANUP_DISABLE is NOT dropped - it is a documented operator control, and
+# the /etc/cron.d entry's own comment advertises it. FUSE_CLEANUP_BIN is left
+# open knowingly (#968); see the boot leg in lib/runtime/lib/setup-bindfs.sh.
+#
+# Unlike the boot leg this needs no subshell: the wrapper is a standalone
+# process that does nothing else, and it supplies no fallback root of its own.
+unset FUSE_CLEANUP_ROOTS FUSE_CLEANUP_FINDMNT FUSE_CLEANUP_FALLBACK_ROOT
+
 FUSE_CLEANUP_BIN="${FUSE_CLEANUP_BIN:-/usr/local/bin/fuse-cleanup}"
 
 if [ ! -x "$FUSE_CLEANUP_BIN" ]; then
