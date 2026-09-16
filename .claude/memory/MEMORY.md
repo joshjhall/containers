@@ -117,3 +117,5 @@
 - [Report I/O decides suite exit](report-io-decides-suite-exit.md) — a suite's last command sets its status; artifact I/O there fakes failures
 - [Build-time chown breaks UID remap](build-time-chown-breaks-uid-remap.md) — a build-time owner is wrong under Zed's remap; gate on the directory, not the file
 - [Mock fidelity gates assertions](mock-fidelity-gates-assertions.md) — a stub answering what the real tool could not lets tests pass on impossible states
+- [Harness placeholder args fake a review](harness-placeholder-args-fake-review.md) — a stand-in string in `args.diff` returns clean:true on nothing; pass real bytes or omit the key
+- [Ambient injection misses ordering](ambient-injection-tests-miss-ordering.md) — to pin an unset-after-source ordering, the hostile value must come from the sourced file
