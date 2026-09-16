@@ -14,7 +14,7 @@ These are defined as build arguments in the Dockerfile:
 - `PYTHON_VERSION` (currently 3.14.7)
 - `NODE_VERSION` (currently 22)
 - `RUST_VERSION` (currently 1.98.1)
-- `RUBY_VERSION` (currently 4.0.6)
+- `RUBY_VERSION` (currently 4.0.7)
 - `R_VERSION` (currently 4.6.1)
 - `GO_VERSION` (currently 1.27.1)
 - `MOJO_VERSION` (currently 25.4)
@@ -23,10 +23,10 @@ These are defined as build arguments in the Dockerfile:
 - `KUBECTL_VERSION` (currently 1.33.13)
 - `K9S_VERSION` (currently 0.51.0)
 - `KREW_VERSION` (currently 0.5.0)
-- `HELM_VERSION` (currently 4.2.4)
-- `TERRAGRUNT_VERSION` (currently 1.1.4)
+- `HELM_VERSION` (currently 4.3.0)
+- `TERRAGRUNT_VERSION` (currently 1.1.5)
 - `TFDOCS_VERSION` (currently 0.24.0)
-- `PIXI_VERSION` (currently 0.80.0)
+- `PIXI_VERSION` (currently 0.81.0)
 - `TFLINT_VERSION` (currently 0.64.0)
 
 ## Shell Script Hardcoded Versions
@@ -34,17 +34,17 @@ These are defined as build arguments in the Dockerfile:
 ### lib/features/dev-tools.sh
 
 - `DIRENV_VERSION="2.37.1"`
-- `LAZYGIT_VERSION="0.65.0"`
+- `LAZYGIT_VERSION="0.65.1"`
 - `DELTA_VERSION="0.19.2"`
 - `MKCERT_VERSION="1.4.4"`
 - `ACT_VERSION="0.2.89"`
-- `GLAB_VERSION="1.116.0"`
+- `GLAB_VERSION="1.118.0"`
 - `DUF_VERSION="0.9.1"`
 - `ENTR_VERSION="5.8"`
 - `GITCLIFF_VERSION="2.8.0"`
-- `BIOME_VERSION="2.5.12"`
+- `BIOME_VERSION="2.5.14"`
 - `TAPLO_VERSION="0.10.0"`
-- `TYPOS_VERSION="1.50.1"`
+- `TYPOS_VERSION="1.50.2"`
 - `SHFMT_VERSION="3.14.1"`
 - `CONFORM_VERSION="0.1.0-alpha.31"`
 
