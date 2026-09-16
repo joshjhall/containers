@@ -126,6 +126,119 @@ test_cron_wrapper_missing_gc_executes() {
         "Cron wrapper actually prints the missing-GC report (issue #951)"
 }
 
+# ============================================================================
+# Testing-seam neutralization in the cron leg (issue #953)
+# ============================================================================
+# Same boundary as the boot leg, reached by the other caller. The GC's walk is
+# not depth-bounded, so FUSE_CLEANUP_ROOTS / FUSE_CLEANUP_FINDMNT /
+# FUSE_CLEANUP_FALLBACK_ROOT each name the scope of a recursive `rm -f`; they
+# are testing seams and the emitted wrapper unsets them.
+#
+# Extracts and RUNS the generated wrapper, like the #951 test above, and pins
+# the value observed AT THE GC. Grepping the feature script for "unset" would
+# pass against an unset placed BEFORE the /etc/container/cron-env source — where
+# a value that file sets would survive it — which is the ordering bug most worth
+# catching here.
+
+# Write the generated cron wrapper to $1.
+extract_cron_wrapper() {
+    command sed -n "/^command cat >\/usr\/local\/bin\/fuse-cleanup-cron <<'FUSE_CLEANUP_EOF'\$/,/^FUSE_CLEANUP_EOF\$/p" \
+        "$FEATURE_FILE" | command sed '1d;$d' >"$1"
+    command chmod +x "$1"
+}
+
+# Echo what the GC saw for $1, running the extracted wrapper in the caller's
+# environment. Prints UNSET when the variable did not arrive.
+observe_cron_gc_env() {
+    local var="$1" tmpdir wrapper stub obs
+    tmpdir=$(mktemp -d)
+    wrapper="$tmpdir/fuse-cleanup-cron"
+    stub="$tmpdir/fuse-cleanup"
+    obs="$tmpdir/observed"
+
+    extract_cron_wrapper "$wrapper"
+    command printf '%s\n' '#!/bin/bash' \
+        "command printf '%s\\n' \"\${$var:-UNSET}\" >'$obs'" 'echo 0' >"$stub"
+    command chmod +x "$stub"
+
+    FUSE_CLEANUP_BIN="$stub" bash "$wrapper" >/dev/null 2>&1
+    command cat "$obs"
+    command rm -rf "$tmpdir"
+}
+
+test_cron_wrapper_drops_injected_roots() {
+    local seen
+    seen=$(FUSE_CLEANUP_ROOTS=/etc observe_cron_gc_env FUSE_CLEANUP_ROOTS)
+
+    assert_equals "UNSET" "$seen" \
+        "Cron wrapper drops an injected FUSE_CLEANUP_ROOTS (issue #953)"
+}
+
+test_cron_wrapper_drops_injected_findmnt() {
+    local seen
+    seen=$(FUSE_CLEANUP_FINDMNT=/tmp/evil-findmnt observe_cron_gc_env FUSE_CLEANUP_FINDMNT)
+
+    assert_equals "UNSET" "$seen" \
+        "Cron wrapper drops an injected FUSE_CLEANUP_FINDMNT (issue #953)"
+}
+
+test_cron_wrapper_drops_injected_fallback_root() {
+    # The cron leg supplies no fallback of its own, so unlike the boot leg this
+    # one drops unconditionally — nothing should arrive.
+    local seen
+    seen=$(FUSE_CLEANUP_FALLBACK_ROOT=/etc observe_cron_gc_env FUSE_CLEANUP_FALLBACK_ROOT)
+
+    assert_equals "UNSET" "$seen" \
+        "Cron wrapper drops an injected FUSE_CLEANUP_FALLBACK_ROOT (issue #953)"
+}
+
+test_cron_wrapper_preserves_disable() {
+    # FUSE_CLEANUP_DISABLE is an operator control, and the /etc/cron.d entry's
+    # own comment advertises it — a neutralization widened by name prefix would
+    # break the documented way to turn cleanup off.
+    local seen
+    seen=$(FUSE_CLEANUP_DISABLE=true observe_cron_gc_env FUSE_CLEANUP_DISABLE)
+
+    assert_equals "true" "$seen" \
+        "Cron wrapper still passes FUSE_CLEANUP_DISABLE through (issue #953)"
+}
+
+test_cron_wrapper_unsets_after_sourcing_env() {
+    # The ordering case, and the one the other four CANNOT reach: every test
+    # above injects through the ambient environment, which an unset placed
+    # before the `source` would strip just as well — so all four pass against
+    # the wrong order. The value that survives a too-early unset is one set by
+    # /etc/container/cron-env ITSELF, since that file is re-read afterwards.
+    #
+    # That path is hardcoded in the wrapper and root-owned, so the fixture is
+    # substituted into the extracted copy. The rewrite changes only WHERE the
+    # env file is read from, never the order of the read against the unset —
+    # which is the property under test.
+    local tmpdir wrapper stub obs env_file seen
+    tmpdir=$(mktemp -d)
+    wrapper="$tmpdir/fuse-cleanup-cron"
+    stub="$tmpdir/fuse-cleanup"
+    obs="$tmpdir/observed"
+    env_file="$tmpdir/cron-env"
+
+    extract_cron_wrapper "$wrapper"
+    command sed -i "s#/etc/container/cron-env#$env_file#g" "$wrapper"
+
+    # Stands in for a compromised or careless cron-env.
+    command printf '%s\n' 'export FUSE_CLEANUP_ROOTS=/etc' >"$env_file"
+
+    command printf '%s\n' '#!/bin/bash' \
+        "command printf '%s\\n' \"\${FUSE_CLEANUP_ROOTS:-UNSET}\" >'$obs'" 'echo 0' >"$stub"
+    command chmod +x "$stub"
+
+    FUSE_CLEANUP_BIN="$stub" bash "$wrapper" >/dev/null 2>&1
+    seen=$(command cat "$obs")
+    command rm -rf "$tmpdir"
+
+    assert_equals "UNSET" "$seen" \
+        "Cron wrapper unsets AFTER sourcing cron-env, so a root set there is dropped (issue #953)"
+}
+
 # Test: the cron job can actually WRITE the log file (issue #951)
 #
 # This is a permission-class test, not a string test. The cron user column here
@@ -356,6 +469,13 @@ run_test test_cron_wrapper_does_not_duplicate_sweep "Cron wrapper does not dupli
 run_test test_cron_wrapper_does_not_use_logger "Cron wrapper avoids the absent syslog daemon (#951)"
 run_test test_cron_wrapper_reports_missing_gc "Cron wrapper reports a missing shared GC (#951)"
 run_test test_cron_wrapper_missing_gc_executes "Cron wrapper missing-GC branch actually runs (#951)"
+
+# Testing-seam neutralization (#953)
+run_test test_cron_wrapper_drops_injected_roots "Cron wrapper drops injected FUSE_CLEANUP_ROOTS (#953)"
+run_test test_cron_wrapper_drops_injected_findmnt "Cron wrapper drops injected FUSE_CLEANUP_FINDMNT (#953)"
+run_test test_cron_wrapper_drops_injected_fallback_root "Cron wrapper drops injected FUSE_CLEANUP_FALLBACK_ROOT (#953)"
+run_test test_cron_wrapper_preserves_disable "Cron wrapper preserves FUSE_CLEANUP_DISABLE (#953)"
+run_test test_cron_wrapper_unsets_after_sourcing_env "Cron wrapper unsets after sourcing cron-env (#953)"
 run_test test_cron_log_file_is_writable_by_cron_user "Cron log file is writable by the cron user (#951)"
 run_test test_creates_fuse_cleanup_cron_job "Feature script creates fuse-cleanup cron job"
 run_test test_creates_fuse_cleanup_lock "Feature script creates the sweep lock (#950)"

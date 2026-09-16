@@ -192,9 +192,44 @@ setup_bindfs_overlays() {
     # permanently while looking exactly like a clean run. That is the same
     # invisible-stranded-files failure #948 was filed against, reintroduced
     # through the fix for it.
+    # This call runs ROOT-PRIVILEGED (the entrypoint has not yet dropped to
+    # $USERNAME) and the GC's walk is not depth-bounded, so whatever names its
+    # roots names the scope of a recursive `rm -f`. Three of the GC's inputs can
+    # redirect that walk, and all three exist ONLY as testing seams:
+    #
+    #   FUSE_CLEANUP_ROOTS         - names the roots outright
+    #   FUSE_CLEANUP_FINDMNT       - names the discovery binary, so a stub that
+    #                                prints / grants the same arbitrary root
+    #   FUSE_CLEANUP_FALLBACK_ROOT - grants a root when discovery finds nothing
+    #
+    # Read from the ambient environment they would let anyone who can influence
+    # container env (compose `environment:`, .env, a runtime arg) point a
+    # root-executed walk-and-delete at a directory of their choosing (#953). So
+    # they are dropped HERE, at the production call point, rather than validated
+    # inside the GC: a validating GC still accepts an attacker-chosen live mount,
+    # and an in-GC allow-flag would just be a second env var that whoever sets
+    # ROOTS can set too. A variable unset in this subshell cannot be read by the
+    # process that does the deleting — that is the whole boundary.
+    #
+    # FUSE_CLEANUP_DISABLE is deliberately NOT dropped: it is a documented
+    # operator control, not a walk-redirector. The set is defined by what can
+    # redirect the walk, not by the name prefix.
+    #
+    # FUSE_CLEANUP_BIN is a known larger hole left open on purpose (#968): it is
+    # read HERE rather than by the GC, both callers' test suites inject through
+    # it, and it grants arbitrary root code execution rather than deletion of
+    # .fuse_hidden* — a different fix with a different design.
+    #
+    # The unset precedes the assignment on purpose, so this leg's own
+    # FUSE_CLEANUP_FALLBACK_ROOT=/workspace still reaches the GC. That fallback
+    # is what makes the boot pass able to clear files a previous session
+    # stranded, which is the one thing this leg uniquely does.
     _fuse_cleanup_bin="${FUSE_CLEANUP_BIN:-/usr/local/bin/fuse-cleanup}"
     if [ -x "$_fuse_cleanup_bin" ]; then
-        _fuse_cleaned=$(FUSE_CLEANUP_FALLBACK_ROOT=/workspace "$_fuse_cleanup_bin" 2>/dev/null || echo 0)
+        _fuse_cleaned=$(
+            unset FUSE_CLEANUP_ROOTS FUSE_CLEANUP_FINDMNT FUSE_CLEANUP_FALLBACK_ROOT
+            FUSE_CLEANUP_FALLBACK_ROOT=/workspace "$_fuse_cleanup_bin" 2>/dev/null || echo 0
+        )
         if [ "${_fuse_cleaned:-0}" -gt 0 ] 2>/dev/null; then
             echo "🧹 Cleaned up $_fuse_cleaned stale .fuse_hidden file(s)"
         fi

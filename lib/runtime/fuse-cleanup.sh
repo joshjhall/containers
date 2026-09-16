@@ -50,12 +50,40 @@
 # can report in its own voice (the cron leg logs via syslog, the boot leg echoes)
 # and so the walk itself is directly testable without a real FUSE mount.
 #
+# Three of the variables below can REDIRECT the walk, and this script runs
+# root-privileged from the boot leg with no depth bound — so whatever names its
+# roots names the scope of a recursive `rm -f`. They are testing seams only, and
+# BOTH production callers unset them before invoking this script (#953):
+#
+#   - the boot pass, lib/runtime/lib/setup-bindfs.sh, in a subshell
+#   - the cron pass, the wrapper heredoc in lib/features/bindfs.sh
+#
+# The boundary is at the CALLER rather than here on purpose. Validating a root
+# in this script (say, against `findmnt -T`) would still accept an
+# attacker-chosen live mount — and on a container whose own workspace is a
+# bindfs mount, that check passes for the very tree the seam exists to keep
+# tests away from. An in-script allow-flag would be no better: it is just a
+# second env var, settable by anyone who can set the first. A variable the
+# caller dropped cannot be read by the process that does the deleting, which is
+# the only version of this that actually holds.
+#
+# Nothing here enforces that, and nothing can: this script cannot tell an
+# injected root from a test's. The tests for the neutralization therefore live
+# with the callers, not with this file.
+#
 # Environment:
-#   FUSE_CLEANUP_DISABLE       - "true" to do nothing and exit 0
+#   FUSE_CLEANUP_DISABLE       - "true" to do nothing and exit 0. An operator
+#                                control, NOT a testing seam — production keeps it
 #   FUSE_CLEANUP_ROOTS         - newline-separated roots to sweep, overriding
-#                                findmnt discovery entirely
-#   FUSE_CLEANUP_FALLBACK_ROOT - directory to sweep when no FUSE mount is present
-#   FUSE_CLEANUP_FINDMNT       - findmnt binary to use for discovery
+#                                findmnt discovery entirely. TEST-ONLY SEAM:
+#                                unset by both production callers (#953)
+#   FUSE_CLEANUP_FALLBACK_ROOT - directory to sweep when no FUSE mount is
+#                                present. TEST-ONLY SEAM as an inherited value:
+#                                the boot leg drops any ambient value and then
+#                                sets /workspace itself (#953)
+#   FUSE_CLEANUP_FINDMNT       - findmnt binary to use for discovery. TEST-ONLY
+#                                SEAM: a stub printing / redirects the walk just
+#                                as ROOTS would, so it is unset alongside it
 #   FUSE_CLEANUP_LOCK          - lock file serializing concurrent sweeps
 #                                (default /etc/container/lock/fuse-cleanup.lock)
 
