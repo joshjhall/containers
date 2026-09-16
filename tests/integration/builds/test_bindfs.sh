@@ -103,10 +103,16 @@ test_fuse_cleanup_shared_script() {
 }
 
 # Test: shared GC exits cleanly and reports 0 with no FUSE mounts
+#
+# Same exit-status-and-exact-count shape as the no-bindfs assertion below; see
+# the comment block in test_no_bindfs_without_flag for why a bare "0" expected
+# value is not an assertion here (substring matching).
 test_fuse_cleanup_shared_script_runs() {
     local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
 
-    assert_command_in_container "$image" "/usr/local/bin/fuse-cleanup" "0"
+    assert_command_in_container "$image" \
+        'out=$(/usr/local/bin/fuse-cleanup); rc=$?; [ "$rc" -eq 0 ] && [ "$out" = "0" ] && echo cleaned-none' \
+        "cleaned-none"
 }
 
 # Test: fuse-cleanup-cron wrapper exits cleanly with no FUSE mounts
@@ -156,8 +162,15 @@ test_no_bindfs_without_flag() {
     # contains a "0" and would pass — the exact false-pass this assertion exists
     # to prevent. Emitting a distinct token on equality keeps the substring
     # semantics harmless.
+    #
+    # The exit status is checked SEPARATELY and first, because moving the call
+    # into a command substitution is what would otherwise lose it: `$(...)`
+    # captures stdout and throws the inner exit status away, so a GC that
+    # printed "0" and then died would satisfy an output-only check. Both halves
+    # have to hold — exited clean AND swept nothing.
     assert_command_in_container "$image" \
-        '[ "$(/usr/local/bin/fuse-cleanup)" = "0" ] && echo cleaned-none' "cleaned-none"
+        'out=$(/usr/local/bin/fuse-cleanup); rc=$?; [ "$rc" -eq 0 ] && [ "$out" = "0" ] && echo cleaned-none' \
+        "cleaned-none"
 }
 
 # Run all tests
