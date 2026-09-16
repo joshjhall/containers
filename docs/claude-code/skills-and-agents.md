@@ -110,6 +110,17 @@ workflow identity at the release tag with the GitHub OIDC issuer, pinned via
 forks or test signers — see
 [environment variables](../reference/environment-variables.md)).
 
+**Directory grant (#967).** `claude-setup` also adds `/opt/librarian` to
+`permissions.additionalDirectories` in `~/.claude/settings.json`, on every boot
+and only when the directory exists. Without it the `Workflow` tool refuses a
+`scriptPath` under the tree — *"scriptPath must be a script path this tool
+returned, or a file you can already read"* — and a golem has to copy
+`ship-issue/workflow.js` into its worktree before it can run the mandatory
+adversarial pre-PR review. The refusal is not a filesystem-permission problem
+(`/opt/librarian` is world-readable); the tool gates on that settings key, so no
+`chmod` would fix it. With the grant in place, the harness runs from its real
+path.
+
 Project-level `.claude/` configs still merge with the installed plugins (union
 semantics, project wins on name conflicts).
 

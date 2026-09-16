@@ -2951,5 +2951,159 @@ run_test test_host_event_wiring_idempotent "Host events: re-merge is idempotent 
 run_test test_host_event_wiring_preserves_existing "Host events: merge preserves a pre-existing user hook"
 run_test test_host_event_wiring_is_gated "Host events: wiring is gated on the build-time flag"
 
+# ============================================================================
+# Librarian directory grant — permissions.additionalDirectories (#967)
+# ============================================================================
+# claude-setup merges $LIBRARIAN_DIR into settings.json's
+# permissions.additionalDirectories so the Workflow tool will accept a harness
+# scriptPath under it (without the grant it refuses the real path and every
+# golem has to copy ship-issue/workflow.js into its worktree first).
+#
+# These exercise the actual jq merge — asserting the granted directory is
+# present in the resulting JSON, that a re-run does not duplicate it, and that
+# pre-existing settings survive — plus a source guard that the block stays gated
+# on the directory existing.
+
+# Reproduce claude-setup's grant merge. Kept in lockstep with the jq in
+# lib/features/lib/claude/claude-setup (the "Librarian Directory Grant" block);
+# test_librarian_grant_is_gated guards the source so drift is caught.
+_librarian_grant_merge() {
+    local input="$1" dir="$2"
+    /usr/bin/jq --arg dir "$dir" '
+        .permissions.additionalDirectories //= []
+        | if (.permissions.additionalDirectories | index($dir)) then .
+          else .permissions.additionalDirectories += [$dir]
+          end
+    ' <<<"$input"
+}
+
+# Test: a fresh settings.json gains the librarian dir in additionalDirectories.
+test_librarian_grant_fresh() {
+    local result
+    result="$(_librarian_grant_merge '{}' "/opt/librarian")"
+
+    if /usr/bin/jq -e '.permissions.additionalDirectories | index("/opt/librarian") != null' \
+        >/dev/null <<<"$result"; then
+        pass_test "fresh settings.json grants /opt/librarian"
+    else
+        fail_test "fresh settings.json missing the /opt/librarian grant"
+    fi
+}
+
+# Test: re-running the merge does not duplicate the entry (AC2 — the every-boot
+# self-heal must stay idempotent).
+test_librarian_grant_idempotent() {
+    local once twice count
+    once="$(_librarian_grant_merge '{}' "/opt/librarian")"
+    twice="$(_librarian_grant_merge "$once" "/opt/librarian")"
+
+    count="$(/usr/bin/jq '[.permissions.additionalDirectories[] | select(. == "/opt/librarian")] | length' \
+        <<<"$twice")"
+    assert_equals "1" "$count" "librarian grant not duplicated on re-merge"
+
+    # The array holds exactly that one entry — a re-merge must not append a
+    # second, differently-shaped record alongside it either.
+    count="$(/usr/bin/jq '.permissions.additionalDirectories | length' <<<"$twice")"
+    assert_equals "1" "$count" "re-merge leaves a single-entry array"
+}
+
+# Test: a user's own additional directory and unrelated permission rules survive
+# the merge — the grant appends, never replaces.
+test_librarian_grant_preserves_existing() {
+    local existing result
+    existing='{"permissions":{"additionalDirectories":["/my/own/dir"],"allow":["Read(/custom/**)"]}}'
+    result="$(_librarian_grant_merge "$existing" "/opt/librarian")"
+
+    if /usr/bin/jq -e '.permissions.additionalDirectories | index("/my/own/dir") != null' \
+        >/dev/null <<<"$result"; then
+        pass_test "pre-existing additional directory preserved"
+    else
+        fail_test "pre-existing additional directory dropped"
+    fi
+    if /usr/bin/jq -e '.permissions.additionalDirectories | index("/opt/librarian") != null' \
+        >/dev/null <<<"$result"; then
+        pass_test "librarian grant appended alongside the user's directory"
+    else
+        fail_test "librarian grant not appended"
+    fi
+    if /usr/bin/jq -e '.permissions.allow | index("Read(/custom/**)") != null' \
+        >/dev/null <<<"$result"; then
+        pass_test "merge preserves an unrelated permissions.allow rule"
+    else
+        fail_test "merge dropped an unrelated permissions.allow rule"
+    fi
+}
+
+# Test (source guard): the grant in claude-setup is gated on the librarian
+# directory existing (AC3). An image built without librarian must not receive a
+# dangling grant, so this must never become an unconditional write.
+test_librarian_grant_is_gated() {
+    local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
+    local block
+    # The grant block runs from its section header to the librarian install
+    # header that follows it.
+    block="$(command sed -n '/^# Librarian Directory Grant/,/^# Librarian Plugin Installation/p' "$setup_file")"
+
+    if [ -z "$block" ]; then
+        fail_test "Librarian Directory Grant block not found in claude-setup"
+        return
+    fi
+
+    if command grep -qE '^if \[ -d "\$LIBRARIAN_DIR" \] && command -v jq' <<<"$block"; then
+        pass_test "librarian grant is gated on \$LIBRARIAN_DIR existing"
+    else
+        fail_test "librarian grant gate not found (must not write unconditionally)"
+    fi
+
+    # The granted path comes from $LIBRARIAN_DIR, never a hardcoded literal —
+    # a literal would bypass the LIBRARIAN_DIR_TEST_OVERRIDE seam and could
+    # drift from where the image actually installs librarian.
+    if command grep -qE -- '--arg dir "\$LIBRARIAN_DIR"' <<<"$block"; then
+        pass_test "grant uses \$LIBRARIAN_DIR rather than a hardcoded path"
+    else
+        fail_test "grant does not pass \$LIBRARIAN_DIR to jq"
+    fi
+}
+
+# Test: DEFAULT_PERMISSIONS carries a Read rule for the real librarian install
+# path, and that path agrees with LIBRARIAN_DIR as defined in
+# claude-plugin-lib.sh. This is the drift guard for the deliberate literal in
+# the DEFAULT_PERMISSIONS array (it is extracted as literal JSON, so it cannot
+# interpolate the variable).
+test_default_permissions_has_librarian_read() {
+    local perms librarian_dir
+    perms="$(_extract_default_permissions)"
+
+    librarian_dir="$(command sed -n 's/^LIBRARIAN_DIR="\(.*\)"$/\1/p' \
+        "$PROJECT_ROOT/lib/features/lib/claude/claude-plugin-lib.sh" | command head -1)"
+
+    if [ -z "$librarian_dir" ]; then
+        fail_test "could not extract LIBRARIAN_DIR from claude-plugin-lib.sh"
+        return
+    fi
+
+    if /usr/bin/jq -e --arg r "Read($librarian_dir/**)" 'index($r) != null' \
+        >/dev/null <<<"$perms"; then
+        pass_test "DEFAULT_PERMISSIONS reads $librarian_dir (agrees with LIBRARIAN_DIR)"
+    else
+        fail_test "DEFAULT_PERMISSIONS missing Read($librarian_dir/**)"
+    fi
+
+    # The stale checkout path this replaced must be gone — it pointed at a
+    # librarian checkout that does not exist in the container (#967).
+    if /usr/bin/jq -e 'map(select(test("workspace/librarian"))) | length == 0' \
+        >/dev/null <<<"$perms"; then
+        pass_test "stale //workspace/librarian grant is absent"
+    else
+        fail_test "stale //workspace/librarian grant still present"
+    fi
+}
+
+run_test test_librarian_grant_fresh "Librarian grant: fresh settings.json grants the librarian dir"
+run_test test_librarian_grant_idempotent "Librarian grant: re-merge is idempotent (no duplicate entry)"
+run_test test_librarian_grant_preserves_existing "Librarian grant: merge preserves existing dirs and rules"
+run_test test_librarian_grant_is_gated "Librarian grant: write is gated on \$LIBRARIAN_DIR existing"
+run_test test_default_permissions_has_librarian_read "Librarian grant: DEFAULT_PERMISSIONS reads the real install path"
+
 # Generate test report
 generate_report

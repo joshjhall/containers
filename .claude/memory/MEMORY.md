@@ -81,7 +81,7 @@
 - [Case-insensitive mount shares inodes](case-insensitive-mount-shared-inode.md) — case-shadowed entries share an inode; `git clean -fd` deletes real
 - [Stale symlink attrs on virtiofs](stale-symlink-attrs-virtiofs.md) — nlink=0 symlinks read as permanently modified
 - [git flags need the oldest-base floor](git-flags-need-debian-11-floor.md) — a newer flag behind a `|| return 0` fail-safe no-ops the whole feature
-- [workflow.js must be readable in-worktree](workflow-js-must-be-readable-in-worktree.md) — copy ship-issue/workflow.js into .claude/memory/tmp/
+- [workflow.js must be readable in-worktree](workflow-js-must-be-readable-in-worktree.md) — #967 grants /opt/librarian; copy into .claude/memory/tmp/ only on pre-#967 images
 - [Worktree guard blocks eval + heredocs](worktree-guard-blocks-eval-and-heredocs.md) — refuses the literal `eval` (incl. `yq eval`)
 - [Cron legs need a boot env snapshot](cron-legs-need-boot-env-snapshot.md) — periodic leg of a startup script sees no container env
 - [Skips render as passes](skips-render-as-passes.md) — interpreter-gated tests skipped silently in CI for months
