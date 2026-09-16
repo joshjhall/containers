@@ -3034,9 +3034,164 @@ test_librarian_grant_preserves_existing() {
     fi
 }
 
+# Extract the grant block's executable body from claude-setup and run it against
+# a caller-supplied $LIBRARIAN_DIR / $CLAUDE_SETTINGS_FILE.
+#
+# This EXECUTES the real source rather than reproducing or grepping it: the
+# block is self-contained (it reads only those two variables), so the behavior
+# under test is the shipped code, not a copy that can drift from it. A source
+# grep cannot tell a working guard from a broken one that still reads right —
+# e.g. `&&` silently swapped for `||`.
+#
+# Echoes the block's stdout; the caller inspects the settings file.
+_run_librarian_grant_block() {
+    local librarian_dir="$1" settings_file="$2"
+    local block
+    block="$(command sed -n '/^# Librarian Directory Grant/,/^# Librarian Plugin Installation/p' \
+        "$PROJECT_ROOT/lib/features/lib/claude/claude-setup")"
+
+    LIBRARIAN_DIR="$librarian_dir" CLAUDE_SETTINGS_FILE="$settings_file" \
+        bash -c "$block" 2>&1
+}
+
+# Test (behavioral): with $LIBRARIAN_DIR absent the block writes NOTHING — it
+# must not create settings.json, and must not touch an existing one (AC3). A
+# dangling grant to a nonexistent directory is the failure this prevents.
+test_librarian_grant_skipped_when_absent() {
+    local tmpdir settings
+    tmpdir=$(command mktemp -d)
+    settings="$tmpdir/settings.json"
+
+    # Case 1: no settings.json yet — the block must not create one.
+    _run_librarian_grant_block "$tmpdir/does-not-exist" "$settings" >/dev/null
+    if [ ! -f "$settings" ]; then
+        pass_test "absent \$LIBRARIAN_DIR: settings.json not created"
+    else
+        fail_test "absent \$LIBRARIAN_DIR: settings.json was created anyway"
+    fi
+
+    # Case 2: an existing settings.json must come back byte-identical.
+    echo '{"permissions":{"allow":["Read(/x/**)"]}}' >"$settings"
+    local before after
+    before="$(command cat "$settings")"
+    _run_librarian_grant_block "$tmpdir/does-not-exist" "$settings" >/dev/null
+    after="$(command cat "$settings")"
+    assert_equals "$before" "$after" "absent \$LIBRARIAN_DIR leaves settings.json untouched"
+
+    command rm -rf "$tmpdir"
+}
+
+# Test (behavioral): with $LIBRARIAN_DIR present the block actually writes the
+# grant, and a second run does not duplicate it. This runs the shipped code
+# end-to-end — the file-level counterpart to the _librarian_grant_merge tests,
+# which only exercise the jq program.
+test_librarian_grant_writes_and_reruns_clean() {
+    local tmpdir settings out count
+    tmpdir=$(command mktemp -d)
+    settings="$tmpdir/settings.json"
+
+    out="$(_run_librarian_grant_block "$tmpdir" "$settings")"
+
+    if /usr/bin/jq -e --arg d "$tmpdir" \
+        '.permissions.additionalDirectories | index($d) != null' \
+        >/dev/null <"$settings" 2>/dev/null; then
+        pass_test "present \$LIBRARIAN_DIR: grant written to settings.json"
+    else
+        fail_test "present \$LIBRARIAN_DIR: grant missing from settings.json"
+    fi
+
+    # The success branch reports it — a silent write would be indistinguishable
+    # from the skip above.
+    if command grep -q '✓' <<<"$out"; then
+        pass_test "grant reports success on stdout"
+    else
+        fail_test "grant wrote settings.json but reported nothing"
+    fi
+
+    # Second run: idempotent at the file level, not just in the jq program.
+    _run_librarian_grant_block "$tmpdir" "$settings" >/dev/null
+    count="$(/usr/bin/jq '.permissions.additionalDirectories | length' <"$settings")"
+    assert_equals "1" "$count" "re-running the block does not duplicate the grant"
+
+    command rm -rf "$tmpdir"
+}
+
+# Test (behavioral): a malformed settings.json takes the failure branch — the
+# warning is printed, the .tmp scratch file is cleaned up, and the original file
+# is left intact rather than truncated. Without this, a regression in the
+# cleanup or the warning text would be invisible.
+test_librarian_grant_handles_malformed_settings() {
+    local tmpdir settings out
+    tmpdir=$(command mktemp -d)
+    settings="$tmpdir/settings.json"
+    echo 'this is not json {{{' >"$settings"
+
+    out="$(_run_librarian_grant_block "$tmpdir" "$settings")"
+
+    if command grep -q '⚠' <<<"$out"; then
+        pass_test "malformed settings.json: failure is reported, not silent"
+    else
+        fail_test "malformed settings.json: merge failed with no warning"
+    fi
+
+    if [ ! -f "${settings}.tmp" ]; then
+        pass_test "malformed settings.json: .tmp scratch file cleaned up"
+    else
+        fail_test "malformed settings.json: .tmp scratch file left behind"
+    fi
+
+    # The original must survive — a clobbered settings.json would cost the user
+    # every other setting they had.
+    if command grep -q 'this is not json' "$settings"; then
+        pass_test "malformed settings.json left intact (not truncated)"
+    else
+        fail_test "malformed settings.json was clobbered by the failed merge"
+    fi
+
+    command rm -rf "$tmpdir"
+}
+
+# Test (behavioral): the two settings.json writers compose. CLAUDE_SETTINGS_FILE
+# was hoisted so the host-event hook wiring and this grant target one file; this
+# confirms the second merge layers onto the first instead of replacing it —
+# the interaction neither block's own tests cover.
+test_librarian_grant_composes_with_host_event_hooks() {
+    local tmpdir settings hook
+    tmpdir=$(command mktemp -d)
+    settings="$tmpdir/settings.json"
+    hook="/home/vscode/.claude/hooks/claude-host-event.sh"
+
+    # First writer: the host-event hook wiring.
+    _host_event_merge '{}' "$hook" >"$settings"
+    # Second writer: the librarian grant, onto that same file.
+    _run_librarian_grant_block "$tmpdir" "$settings" >/dev/null
+
+    if /usr/bin/jq -e --arg h "$hook" \
+        '.hooks.Stop | any(.[].hooks[]?; .command | startswith($h + " "))' \
+        >/dev/null <"$settings"; then
+        pass_test "host-event hooks survive the librarian grant merge"
+    else
+        fail_test "librarian grant clobbered the host-event hooks"
+    fi
+    if /usr/bin/jq -e --arg d "$tmpdir" \
+        '.permissions.additionalDirectories | index($d) != null' \
+        >/dev/null <"$settings"; then
+        pass_test "librarian grant lands alongside the host-event hooks"
+    else
+        fail_test "librarian grant missing after layering onto hooks"
+    fi
+
+    command rm -rf "$tmpdir"
+}
+
 # Test (source guard): the grant in claude-setup is gated on the librarian
 # directory existing (AC3). An image built without librarian must not receive a
 # dangling grant, so this must never become an unconditional write.
+#
+# This is the source-text companion to test_librarian_grant_skipped_when_absent,
+# which proves the same property behaviorally. The grep is kept for the second
+# assertion below ($LIBRARIAN_DIR over a literal) — a property about how the
+# code is WRITTEN, which execution cannot observe.
 test_librarian_grant_is_gated() {
     local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
     local block
@@ -3103,6 +3258,10 @@ run_test test_librarian_grant_fresh "Librarian grant: fresh settings.json grants
 run_test test_librarian_grant_idempotent "Librarian grant: re-merge is idempotent (no duplicate entry)"
 run_test test_librarian_grant_preserves_existing "Librarian grant: merge preserves existing dirs and rules"
 run_test test_librarian_grant_is_gated "Librarian grant: write is gated on \$LIBRARIAN_DIR existing"
+run_test test_librarian_grant_skipped_when_absent "Librarian grant: absent \$LIBRARIAN_DIR writes nothing (executed)"
+run_test test_librarian_grant_writes_and_reruns_clean "Librarian grant: present \$LIBRARIAN_DIR writes once, re-runs clean (executed)"
+run_test test_librarian_grant_handles_malformed_settings "Librarian grant: malformed settings.json warns, cleans up, preserves"
+run_test test_librarian_grant_composes_with_host_event_hooks "Librarian grant: composes with the host-event hook writer"
 run_test test_default_permissions_has_librarian_read "Librarian grant: DEFAULT_PERMISSIONS reads the real install path"
 
 # Generate test report
