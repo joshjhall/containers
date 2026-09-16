@@ -2,6 +2,7 @@
 name: workflow-js-must-be-readable-in-worktree
 description: The Workflow tool gates scriptPath on permissions.additionalDirectories — claude-setup now grants /opt/librarian (#967), so invoke the harness by its real path; the copy-into-worktree step is the fallback for pre-#967 images
 metadata:
+  node_type: memory
   type: feedback
 ---
 
