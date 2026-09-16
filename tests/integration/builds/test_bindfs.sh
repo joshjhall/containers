@@ -147,7 +147,17 @@ test_no_bindfs_without_flag() {
     # Presence is not enough: a truncated or non-executing copy would satisfy the
     # check above. Run it and pin its output (0 files cleaned, no FUSE mounts),
     # mirroring test_fuse_cleanup_shared_script_runs on the bindfs image.
-    assert_command_in_container "$image" "/usr/local/bin/fuse-cleanup" "0"
+    #
+    # The comparison is done INSIDE the container rather than by handing "0" to
+    # assert_command_in_container, because that helper matches its expected value
+    # as a SUBSTRING (`[[ "$TEST_OUTPUT" == *"$expected"* ]]`, see
+    # tests/framework/assertions/docker.sh). Against a bare "0" that is not an
+    # assertion at all: a regressed sweep reporting 10, 20 or 100 stranded files
+    # contains a "0" and would pass — the exact false-pass this assertion exists
+    # to prevent. Emitting a distinct token on equality keeps the substring
+    # semantics harmless.
+    assert_command_in_container "$image" \
+        '[ "$(/usr/local/bin/fuse-cleanup)" = "0" ] && echo cleaned-none' "cleaned-none"
 }
 
 # Run all tests
