@@ -223,6 +223,23 @@ AUTO_MEMORY_DIR="${WORKING_DIR}/.claude/memory"
 # the right place to seed them. Unconditional is fine — this whole file only runs
 # under INCLUDE_DEV_TOOLS (the same gate the workflow plugin installs under), and
 # the rules only ever match tmux session management. (#682)
+#
+# Read(/opt/librarian/**) is the librarian install tree — where the workflow
+# plugin's ship-issue/workflow.js review harness actually lives in the container.
+# It replaces a stale Read(//workspace/librarian/**) that pointed at a librarian
+# *checkout* path: real on a host dev's machine, absent here, so it matched
+# nothing and the grant went unnoticed (#967).
+#
+# It is a LITERAL, not "$LIBRARIAN_DIR" — this array is extracted as literal JSON
+# by _extract_default_permissions in tests/unit/features/claude-code-setup.sh, so
+# an interpolation would be read unexpanded. LIBRARIAN_DIR is itself a fixed
+# literal by design (claude-plugin-lib.sh), and a unit test asserts the two agree
+# so they cannot drift silently.
+#
+# The real access mechanism is permissions.additionalDirectories, written by
+# claude-setup on every boot; this Read rule is belt-and-suspenders. Its value is
+# being the TRACKED home of the correction, so new images stop shipping the
+# stale-path pattern.
 DEFAULT_PERMISSIONS='[
   "Read(~/.claude/skills/**)",
   "Read(~/.claude/agents/**)",
@@ -230,6 +247,7 @@ DEFAULT_PERMISSIONS='[
   "Read(.claude/skills/**)",
   "Read(.claude/agents/**)",
   "Read(.claude/memory/**)",
+  "Read(/opt/librarian/**)",
   "Bash(tmux new-session:*)",
   "Bash(tmux ls:*)",
   "Bash(tmux kill-session:*)"
