@@ -165,6 +165,26 @@ failures on open deleted files and is explicitly discouraged).
    find /workspace -name '.fuse_hidden*' -delete
    ```
 
+#### Why `/usr/local/bin/fuse-cleanup` ships even without bindfs
+
+Both legs above delegate to one shared sweeper, `/usr/local/bin/fuse-cleanup`,
+and the image installs it **regardless of `INCLUDE_BINDFS`** — so you will find
+it in a minimal build that has no bindfs and no cron. That is deliberate
+(issue #954), for two reasons:
+
+- The **boot-time pass is not gated either**. The entrypoint sources the bindfs
+  runtime lib whenever it exists, and that lib is copied into every image, so
+  the boot pass calls the sweeper on every container.
+- That call site **reports** a missing sweeper rather than skipping silently
+  (issue #951) — a silent skip looks exactly like a clean run, which is the
+  failure mode the shared sweeper was introduced to fix. Gating the install
+  would therefore print a `FUSE cleanup skipped` warning at every boot of every
+  non-bindfs container, in exchange for about 10 KB of shell script.
+
+The sweeper itself is a no-op when there is nothing to clean: with no FUSE mount
+and no fallback root it prints `0` and exits. Set `FUSE_CLEANUP_DISABLE=true` to
+turn the passes off entirely.
+
 ### Cannot write to /workspace
 
 **Symptom**: Permission denied when creating files in workspace.
