@@ -18,7 +18,7 @@
 #      reports as permanently modified even though its target is byte-correct.
 #      Rewriting the link in place with the same target restores sane metadata.
 #
-# Plus one DIAGNOSTIC that repairs nothing (issue #977): lgetxattr on a symlink
+# Plus one DIAGNOSTIC that repairs nothing (issue #977): listing a symlink's xattrs
 # returns ELOOP on the virtiofs lower, which kills `docker build` in BuildKit's
 # context sender. The fix is the bindfs --xattr-none overlay and applies on
 # restart; this only names the condition in the meantime. It is deliberately
@@ -522,7 +522,7 @@ FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
 FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
 
 # Injection seam for the symlink-xattr ELOOP probe (issue #977). Same reasoning
-# as FS_HEALTH_STAT above, for the same reason: ELOOP on lgetxattr is a property
+# as FS_HEALTH_STAT above, for the same reason: ELOOP on the xattr listing is a property
 # of the host mount stack, so it cannot be produced on demand on a healthy
 # filesystem — substituting the probe is the only way to drive the reporting
 # path rather than just its silence.
@@ -531,6 +531,18 @@ FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
 #   0 = xattr call answered normally (healthy — includes "no xattrs")
 #   1 = the call failed with ELOOP (the #977 condition)
 #   2 = could not determine (probe runtime missing, unexpected error)
+#
+# It must probe the xattr LISTING (llistxattr), which is what os.listxattr
+# issues — not a named fetch. Measured on the affected mount, the two differ:
+#
+#   llistxattr(symlink)            -> ELOOP    (40)   <- the #977 condition
+#   lgetxattr(symlink, "user.x")   -> ENODATA  (61)
+#   lgetxattr(regular, "user.x")   -> ENODATA  (61)
+#
+# So a named fetch answers identically on a healthy file and an affected
+# symlink, and would report every mount clean. The listing is the call that
+# discriminates, and it is the one whose ELOOP surfaces in BuildKit's
+# "too many levels of symbolic links" abort.
 #
 # python3 rather than getfattr: getfattr is NOT installed in these images
 # (attr package absent), python3 always is. A PATH-shadowed stub cannot replace
@@ -762,7 +774,7 @@ check_symlinks() {
 #
 # DIAGNOSES ONLY — REPAIRS NOTHING. That is the whole design, not a shortcoming.
 #
-# On the virtiofs lower backing /workspace, lgetxattr(2) returns ELOOP (40) for
+# On the virtiofs lower backing /workspace, llistxattr(2) returns ELOOP (40) for
 # any symlink. BuildKit's context sender calls it on every path it walks, so
 # `docker build` from the repo root dies before a single build step:
 #
@@ -788,18 +800,32 @@ check_symlinks() {
 # Args: $1 = repo root, $2 = display prefix for log lines.
 check_symlink_xattr() {
     local root="$1" label_prefix="$2"
-    local rel rc=0
+    local rel candidate rc=0
 
-    # One tracked symlink is enough: the condition is a property of the mount,
-    # not of any individual link, so probing every one would repeat the same
-    # answer at a syscall apiece. `head -n 1` on the index read, matching the
-    # ls-files idiom check_symlinks uses.
-    rel=$(git -C "$root" ls-files -s 2>/dev/null |
-        /usr/bin/awk -F'\t' '$1 ~ /^120000 / { print $2; exit }')
+    # Probing ONE symlink is enough — the condition belongs to the mount, not to
+    # any individual link, so probing every one would buy the same answer at a
+    # syscall apiece. But it must be one that is actually a live symlink ON DISK:
+    # the index and the working tree can disagree, and the entry that happens to
+    # sort first is not guaranteed to be the live one. This repo's own documented
+    # workaround for #977 REMOVES the tracked symlinks to get a build through, so
+    # "in the index, absent from disk" is a state we actively tell people to
+    # create. Keying the bail on the first entry alone would go silent there
+    # while the remaining links still trip the condition — a false negative on an
+    # affected repo, which is worse than no diagnostic at all.
+    #
+    # So: walk the tracked symlinks and stop at the first LIVE one. Costs one
+    # lstat per dead entry, and in the healthy case still stops at entry 1.
+    while IFS= read -r candidate; do
+        [ -n "$candidate" ] || continue
+        if [ -L "${root}/${candidate}" ]; then
+            rel="$candidate"
+            break
+        fi
+    done < <(git -C "$root" ls-files -s 2>/dev/null |
+        /usr/bin/awk -F'\t' '$1 ~ /^120000 / { print $2 }')
 
-    # No tracked symlinks — nothing this condition could affect.
+    # No tracked symlink is live on disk — nothing this condition could affect.
     [ -n "$rel" ] || return 0
-    [ -L "${root}/${rel}" ] || return 0
 
     if [ -n "$FS_HEALTH_XATTR_PROBE" ]; then
         "$FS_HEALTH_XATTR_PROBE" "${root}/${rel}" >/dev/null 2>&1 || rc=$?
@@ -823,7 +849,7 @@ except Exception:
     command echo "$LOG_PREFIX   BuildKit aborts with: error from sender: failed to xattr ... too many levels of symbolic links" >&2
     command echo "$LOG_PREFIX   Fixed by the bindfs --xattr-none overlay, which applies on container RESTART." >&2
     command echo "$LOG_PREFIX   Until then, build with the tracked symlinks temporarily removed:" >&2
-    command echo "$LOG_PREFIX     git -C $root ls-files -s | command awk -F'\\t' '\$1 ~ /^120000 / { print \$2 }' | xargs rm -f" >&2
+    command echo "$LOG_PREFIX     git -C $root ls-files -s | command awk -F'\\t' '\$1 ~ /^120000 / { printf \"%s\\0\", \$2 }' | xargs -0 rm -f" >&2
     command echo "$LOG_PREFIX     <run the build>, then: git -C $root checkout -- ." >&2
 
     return 0

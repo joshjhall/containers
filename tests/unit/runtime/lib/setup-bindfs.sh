@@ -533,7 +533,7 @@ capture_overlay_argv() {
 
 test_overlay_passes_xattr_none() {
     # The #977 fix: without --xattr-none, bindfs relays the lower layer's ELOOP
-    # for a symlink's lgetxattr and BuildKit's context sender aborts every
+    # when listing a symlink's xattrs, and BuildKit's context sender aborts every
     # `docker build` from the repo root.
     local argv
     argv=$(capture_overlay_argv)

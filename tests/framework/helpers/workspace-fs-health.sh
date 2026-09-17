@@ -288,7 +288,7 @@ STALE_STUB_EOF
 # Build an xattr-probe stub with a fixed exit status, and echo its path
 # (issue #977).
 #
-# ELOOP on a symlink's lgetxattr is a property of the host mount stack — it
+# ELOOP on listing a symlink's xattrs is a property of the host mount stack — it
 # cannot be produced on demand on a healthy filesystem — so substituting the
 # probe is the only way to drive the REPORTING path rather than just its
 # silence. Same reasoning as stale_stat_stub above, and the same reason the

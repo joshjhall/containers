@@ -125,10 +125,14 @@ blocks every integration test that builds an image
 (`./tests/run_integration_tests.sh`, `just test-integration-*`,
 `just test-feature`).
 
-**Cause**: `lgetxattr(2)` on a **symlink** returns `ELOOP` on the virtiofs layer
-backing `/workspace`. BuildKit's context sender calls it on every path it walks,
-so the transfer aborts. The problem is the symlink-ness, not those two paths —
-any symlink added to the repo trips it.
+**Cause**: Listing a **symlink's** extended attributes (`llistxattr(2)`) returns
+`ELOOP` on the virtiofs layer backing `/workspace`. BuildKit's context sender
+probes each path's xattrs as it walks, so the transfer aborts. The problem is the
+symlink-ness, not those two paths — any symlink added to the repo trips it.
+
+Only the *listing* call is affected. A named fetch (`lgetxattr`) answers
+`ENODATA` for both symlinks and regular files here, so it cannot be used to
+detect the condition.
 
 The symlinks themselves are healthy (`readlink`, `stat`, `cat`, and git all work
 on them). This is **not** the stale-attribute decay that `workspace-fs-health`
@@ -161,7 +165,7 @@ python3 -c "import os; print(os.listxattr('AGENTS.md', follow_symlinks=False))"
 temporarily removed, then restore them.
 
 ```bash
-git ls-files -s | /usr/bin/awk -F'\t' '$1 ~ /^120000 / { print $2 }' | xargs rm -f
+git ls-files -s | /usr/bin/awk -F'\t' '$1 ~ /^120000 / { printf "%s\0", $2 }' | xargs -0 rm -f
 ./tests/run_integration_tests.sh <suite>
 git checkout -- .   # both symlinks are tracked
 ```

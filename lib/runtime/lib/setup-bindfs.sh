@@ -102,7 +102,7 @@ apply_bindfs_overlay() {
     if [ "$BINDFS_CAN_SUDO" = "true" ]; then
         # --xattr-none is the #977 fix, not a gratuitous capability reduction.
         #
-        # BuildKit's context sender calls lgetxattr(2) on every path it walks.
+        # BuildKit's context sender probes each path's xattrs as it walks.
         # On the virtiofs lower backing /workspace, that call returns ELOOP (40)
         # for ANY symlink, and bindfs RELAYS it — so `docker build` from the repo
         # root aborts before a single build step runs:
@@ -114,7 +114,7 @@ apply_bindfs_overlay() {
         # workaround was deleting the repo's tracked symlinks around each build.
         #
         # The ELOOP is NOT bindfs's own behavior: bindfs over tmpfs answers a
-        # symlink's lgetxattr cleanly. It comes from the lower layer. --xattr-none
+        # symlink's xattr listing cleanly. It comes from the lower layer. --xattr-none
         # makes bindfs answer the call ITSELF with EOPNOTSUPP (95), which is what
         # BuildKit expects for "this file has no xattrs" — so the walk continues.
         #
