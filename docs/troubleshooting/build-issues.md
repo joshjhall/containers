@@ -107,6 +107,69 @@ find lib -type l -exec test ! -e {} \; -print
 DOCKER_BUILDKIT=0 docker build --progress=plain -t test .
 ```
 
+## Build fails immediately: "failed to xattr ... too many levels of symbolic links"
+
+**Symptom**: Every `docker build` from the repo root fails before any build step
+runs, while loading the build definition:
+
+```text
+#1 [internal] load build definition from Dockerfile
+#1 ERROR: error from sender: failed to xattr .codegraph: too many levels of symbolic links
+------
+ERROR: failed to build: failed to solve: failed to read dockerfile:
+  error from sender: failed to xattr .codegraph: too many levels of symbolic links
+```
+
+Remove the named symlink and the error moves to the next one (`AGENTS.md`). This
+blocks every integration test that builds an image
+(`./tests/run_integration_tests.sh`, `just test-integration-*`,
+`just test-feature`).
+
+**Cause**: Listing a **symlink's** extended attributes (`llistxattr(2)`) returns
+`ELOOP` on the virtiofs layer backing `/workspace`. BuildKit's context sender
+probes each path's xattrs as it walks, so the transfer aborts. The problem is the
+symlink-ness, not those two paths — any symlink added to the repo trips it.
+
+Only the *listing* call is affected. A named fetch (`lgetxattr`) answers
+`ENODATA` for both symlinks and regular files here, so it cannot be used to
+detect the condition.
+
+The symlinks themselves are healthy (`readlink`, `stat`, `cat`, and git all work
+on them). This is **not** the stale-attribute decay that `workspace-fs-health`
+repairs, and relinking does not help: a symlink created seconds ago fails
+identically, because the condition belongs to the mount.
+
+`.dockerignore` does **not** help either — the sender xattrs paths before
+applying ignore filters, so an excluded path is still probed.
+
+**Fix**: The bindfs overlay passes `--xattr-none`
+(`lib/runtime/lib/setup-bindfs.sh`), which makes bindfs answer the call itself
+with `EOPNOTSUPP` — what BuildKit expects for "no xattrs" — instead of relaying
+the lower layer's `ELOOP`. Safe because nothing in these images reads xattrs.
+(`--xattr-ro` does *not* work: it still relays `ELOOP` for symlinks.)
+
+The overlay is applied at **entrypoint**, so the fix takes effect on container
+**restart**, and only on an image built after it. On a container that predates
+it, `workspace-fs-health` names the condition at startup rather than leaving you
+with the cryptic BuildKit error.
+
+**Check whether you are affected**:
+
+```bash
+python3 -c "import os; print(os.listxattr('AGENTS.md', follow_symlinks=False))"
+# affected:  OSError: [Errno 40] Too many levels of symbolic links
+# fixed:     OSError: [Errno 95] Operation not supported   (or [])
+```
+
+**Workaround if you cannot restart**: build with the tracked symlinks
+temporarily removed, then restore them.
+
+```bash
+git ls-files -s | /usr/bin/awk -F'\t' '$1 ~ /^120000 / { printf "%s%c", $2, 0 }' | xargs -0 rm -f
+./tests/run_integration_tests.sh <suite>
+git checkout -- .   # both symlinks are tracked
+```
+
 ## Feature script execution fails mid-build
 
 **Symptom**: Build stops during a feature installation with unclear error.
