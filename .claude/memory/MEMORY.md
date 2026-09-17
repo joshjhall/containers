@@ -85,6 +85,7 @@
 - [Worktree guard blocks eval + heredocs](worktree-guard-blocks-eval-and-heredocs.md) — refuses the literal `eval` (incl. `yq eval`)
 - [Cron legs need a boot env snapshot](cron-legs-need-boot-env-snapshot.md) — periodic leg of a startup script sees no container env
 - [Skips render as passes](skips-render-as-passes.md) — interpreter-gated tests skipped silently in CI for months
+- [Sibling suite split updates mapping test](sibling-suite-split-updates-mapping-test.md) — a new tests/unit/runtime/ sibling breaks run-changed-tests.sh's exact-count assert
 - [Stale repo-local git identity](stale-repo-local-git-identity.md) — `.git/config` `t <t@t.t>` shadows the 1Password global identity
 - [Fetch before releasing](fetch-before-release-bot-owns-main.md) — auto-patch bot pushes releases+tags to main on a schedule
 - [worktree-rm blocked by held build artifacts](worktree-rm-blocked-by-held-build-artifacts.md) — deregistered worktree reads as "dirty"; cargo
