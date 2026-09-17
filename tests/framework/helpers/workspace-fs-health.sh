@@ -52,7 +52,8 @@ setup() {
     export FS_HEALTH_ENV_FILE="$TEST_TEMP_DIR/fs-health.env"
 
     unset SKIP_CASE_CHECK SKIP_CASE_FIX FS_HEALTH_UPDATE_ENV FS_HEALTH_STAT \
-        FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT WORKSPACE_ROOT 2>/dev/null || true
+        FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT FS_HEALTH_XATTR_PROBE \
+        WORKSPACE_ROOT 2>/dev/null || true
 
     # Clear any inherited git environment so a leak in the HARNESS cannot be
     # mistaken for the leak-immunity the script now provides (issue #886, widened
@@ -72,7 +73,8 @@ teardown() {
     fi
     unset PROJECT_ROOT TEST_TEMP_DIR SKIP_CASE_CHECK SKIP_CASE_FIX \
         FS_HEALTH_ENV_FILE FS_HEALTH_UPDATE_ENV FS_HEALTH_STAT \
-        FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT WORKSPACE_ROOT 2>/dev/null || true
+        FS_HEALTH_MAX_DEPTH FS_HEALTH_GIT FS_HEALTH_XATTR_PROBE \
+        WORKSPACE_ROOT 2>/dev/null || true
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
         GIT_OBJECT_DIRECTORY GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM \
         GIT_CONFIG_NOSYSTEM GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 \
@@ -91,6 +93,7 @@ run_fs_health() {
         export FS_HEALTH_ENV_FILE
         export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
         export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
+        export FS_HEALTH_XATTR_PROBE="${FS_HEALTH_XATTR_PROBE:-}"
         bash "$FS_HEALTH_SCRIPT"
     ) 2>/dev/null
 }
@@ -105,6 +108,7 @@ run_fs_health_stderr() {
         export FS_HEALTH_ENV_FILE
         export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
         export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
+        export FS_HEALTH_XATTR_PROBE="${FS_HEALTH_XATTR_PROBE:-}"
         { bash "$FS_HEALTH_SCRIPT" >/dev/null; } 2>&1
     )
 }
@@ -129,6 +133,7 @@ run_fs_health_with_global_config() {
         export FS_HEALTH_ENV_FILE
         export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
         export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
+        export FS_HEALTH_XATTR_PROBE="${FS_HEALTH_XATTR_PROBE:-}"
         command env "GIT_CONFIG_GLOBAL=$injected" bash "$FS_HEALTH_SCRIPT"
     ) >/dev/null 2>&1
 }
@@ -154,6 +159,7 @@ run_fs_health_with_legacy_config() {
         export FS_HEALTH_ENV_FILE
         export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
         export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
+        export FS_HEALTH_XATTR_PROBE="${FS_HEALTH_XATTR_PROBE:-}"
         { command env "GIT_CONFIG=$injected" bash "$FS_HEALTH_SCRIPT" >/dev/null; } 2>&1
     )
 }
@@ -279,6 +285,34 @@ STALE_STUB_EOF
     command printf '%s' "$stub"
 }
 
+# Build an xattr-probe stub with a fixed exit status, and echo its path
+# (issue #977).
+#
+# ELOOP on a symlink's lgetxattr is a property of the host mount stack — it
+# cannot be produced on demand on a healthy filesystem — so substituting the
+# probe is the only way to drive the REPORTING path rather than just its
+# silence. Same reasoning as stale_stat_stub above, and the same reason the
+# FS_HEALTH_XATTR_PROBE seam exists at all.
+#
+# A PATH-shadowed python3 would NOT work here: /etc/bash_env rebuilds PATH for
+# every non-interactive bash, so the stub is silently ignored inside the
+# script's own invocation (.claude/memory/bash-env-breaks-path-stubs.md).
+#
+# Args: $1 = exit status the probe should report
+#         0 = xattr answered normally (healthy)
+#         1 = ELOOP (the #977 condition)
+#         2 = indeterminate (probe runtime missing / unexpected error)
+# Echoes the stub's path.
+xattr_probe_stub() {
+    local rc="$1"
+    local stub="$TEST_TEMP_DIR/xattr-probe-stub-$rc"
+
+    command printf '%s\n' '#!/bin/bash' "exit $rc" >"$stub"
+    command chmod +x "$stub"
+
+    command printf '%s' "$stub"
+}
+
 # Plant a directory whose `.git` FILE points at a repo elsewhere (issue #916).
 #
 # This is the attack shape: a `.git` file is a `gitdir: <path>` pointer, and git
@@ -313,6 +347,7 @@ run_fs_health_workspace() {
         export FS_HEALTH_ENV_FILE
         export FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
         export FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
+        export FS_HEALTH_XATTR_PROBE="${FS_HEALTH_XATTR_PROBE:-}"
         { bash "$FS_HEALTH_SCRIPT" >/dev/null; } 2>&1
     )
 }

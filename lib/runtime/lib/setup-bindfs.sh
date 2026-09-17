@@ -100,12 +100,40 @@ apply_bindfs_overlay() {
     local mnt_target="$1"
 
     if [ "$BINDFS_CAN_SUDO" = "true" ]; then
+        # --xattr-none is the #977 fix, not a gratuitous capability reduction.
+        #
+        # BuildKit's context sender calls lgetxattr(2) on every path it walks.
+        # On the virtiofs lower backing /workspace, that call returns ELOOP (40)
+        # for ANY symlink, and bindfs RELAYS it — so `docker build` from the repo
+        # root aborts before a single build step runs:
+        #
+        #   error from sender: failed to xattr .codegraph:
+        #     too many levels of symbolic links
+        #
+        # That blocked every integration test that builds an image, and the only
+        # workaround was deleting the repo's tracked symlinks around each build.
+        #
+        # The ELOOP is NOT bindfs's own behavior: bindfs over tmpfs answers a
+        # symlink's lgetxattr cleanly. It comes from the lower layer. --xattr-none
+        # makes bindfs answer the call ITSELF with EOPNOTSUPP (95), which is what
+        # BuildKit expects for "this file has no xattrs" — so the walk continues.
+        #
+        # --xattr-ro was tried and does NOT work: it still relays ELOOP for
+        # symlinks (only regular files answer). --xattr-none is the only option
+        # that fixes it.
+        #
+        # Safe here ONLY because nothing in this image reads xattrs: there is no
+        # setfattr/getfattr/listxattr anywhere in lib/, tests/, or bin/, and the
+        # sole xattr present on the mount is com.apple.provenance — a macOS host
+        # artifact with no meaning inside the container. Re-check that before
+        # removing this flag; dropping it silently restores the build failure.
         if run_privileged bindfs \
             --force-user="$USERNAME" \
             --force-group="$USERNAME" \
             --create-for-user="$BINDFS_UID" \
             --create-for-group="$BINDFS_GID" \
             --perms=u+rwX,gd+rX,od+rX \
+            --xattr-none \
             -o allow_other \
             "$mnt_target" "$mnt_target" 2>/dev/null; then
             echo "   ✓ Applied bindfs overlay on $mnt_target"

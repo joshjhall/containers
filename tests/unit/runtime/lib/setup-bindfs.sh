@@ -493,6 +493,84 @@ test_boot_pass_unset_does_not_leak_to_caller() {
         "Neutralization is scoped to the GC call, not the caller's environment"
 }
 
+# ============================================================================
+# Overlay argv (issue #977)
+# ============================================================================
+# apply_bindfs_overlay's ONLY externally visible effect is the argv it hands to
+# bindfs, and run_privileged is a global supplied by entrypoint.sh — so a stub
+# that records its arguments is the seam that makes the real function's real
+# output assertable.
+#
+# These drive the function rather than grepping the source for "--xattr-none".
+# A grep-pin passes just as happily on the flag sitting in a comment or on a
+# branch that never executes (.claude/memory/grep-pin-is-not-behavioral-
+# coverage.md) — and this file's comment block for #977 mentions the flag
+# repeatedly, so a source grep here would be actively misleading: it would stay
+# green after someone deleted the flag from the command itself.
+
+# Run apply_bindfs_overlay against a recording run_privileged, echoing the
+# argv it was handed.
+capture_overlay_argv() {
+    (
+        source "$SOURCE_FILE"
+
+        run_privileged() { command printf '%s\n' "$*"; }
+
+        # Read by apply_bindfs_overlay, which was sourced above — shellcheck
+        # cannot see across that boundary.
+        # shellcheck disable=SC2034
+        BINDFS_CAN_SUDO=true
+        # shellcheck disable=SC2034
+        USERNAME=testuser
+        # shellcheck disable=SC2034
+        BINDFS_UID=1234
+        # shellcheck disable=SC2034
+        BINDFS_GID=5678
+
+        apply_bindfs_overlay /workspace/probe
+    )
+}
+
+test_overlay_passes_xattr_none() {
+    # The #977 fix: without --xattr-none, bindfs relays the lower layer's ELOOP
+    # for a symlink's lgetxattr and BuildKit's context sender aborts every
+    # `docker build` from the repo root.
+    local argv
+    argv=$(capture_overlay_argv)
+
+    assert_contains "$argv" "--xattr-none" \
+        "Overlay argv carries --xattr-none (issue #977)"
+}
+
+test_overlay_does_not_pass_xattr_ro() {
+    # --xattr-ro is the plausible-looking wrong answer: it was measured against
+    # the real mount and STILL relays ELOOP for symlinks (only regular files
+    # answer). Pinning its absence keeps a future "less drastic" substitution
+    # from silently restoring the build failure.
+    local argv
+    argv=$(capture_overlay_argv)
+
+    assert_not_contains "$argv" "--xattr-ro" \
+        "Overlay does not substitute the ineffective --xattr-ro (issue #977)"
+}
+
+test_overlay_keeps_permission_flags() {
+    # The xattr flag must not have displaced the permission mapping that is the
+    # overlay's original reason to exist. Asserting the whole argv means a
+    # regression in either direction fails here.
+    local argv
+    argv=$(capture_overlay_argv)
+
+    assert_contains "$argv" "--force-user=testuser" \
+        "Overlay still forces the user"
+    assert_contains "$argv" "--create-for-user=1234" \
+        "Overlay still maps the creating uid"
+    assert_contains "$argv" "-o allow_other" \
+        "Overlay still passes allow_other"
+    assert_contains "$argv" "/workspace/probe /workspace/probe" \
+        "Overlay still mounts the target onto itself"
+}
+
 test_probe_skips_listed_path() {
     (
         source "$SOURCE_FILE"
@@ -555,6 +633,11 @@ run_test test_boot_pass_drops_injected_findmnt "Boot pass drops injected FUSE_CL
 run_test test_boot_pass_overrides_injected_fallback_root "Boot pass replaces an injected fallback root (#953)"
 run_test test_boot_pass_preserves_disable "Boot pass preserves FUSE_CLEANUP_DISABLE (#953)"
 run_test test_boot_pass_unset_does_not_leak_to_caller "Neutralization does not leak to the caller (#953)"
+
+# Overlay argv (#977)
+run_test test_overlay_passes_xattr_none "Overlay passes --xattr-none (#977)"
+run_test test_overlay_does_not_pass_xattr_ro "Overlay avoids the ineffective --xattr-ro (#977)"
+run_test test_overlay_keeps_permission_flags "Overlay keeps its permission flags (#977)"
 
 # Generate test report
 generate_report

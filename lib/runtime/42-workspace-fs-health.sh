@@ -18,6 +18,13 @@
 #      reports as permanently modified even though its target is byte-correct.
 #      Rewriting the link in place with the same target restores sane metadata.
 #
+# Plus one DIAGNOSTIC that repairs nothing (issue #977): lgetxattr on a symlink
+# returns ELOOP on the virtiofs lower, which kills `docker build` in BuildKit's
+# context sender. The fix is the bindfs --xattr-none overlay and applies on
+# restart; this only names the condition in the meantime. It is deliberately
+# NOT part of repair 2 — see check_symlink_xattr for why conflating them would
+# misclassify the condition and trigger a rewrite that cannot help.
+#
 # Both repairs run against the superproject AND every initialized submodule,
 # recursively (issue #827). `git ls-files` stops at a 160000 gitlink, so a
 # superproject-only pass never even enumerates a submodule's symlinks — they
@@ -514,6 +521,24 @@ FS_HEALTH_GIT="${FS_HEALTH_GIT:-git}"
 # stat call. Matches the CASE_DETECT_SCRIPT / FS_HEALTH_SU seams already here.
 FS_HEALTH_STAT="${FS_HEALTH_STAT:-/usr/bin/stat}"
 
+# Injection seam for the symlink-xattr ELOOP probe (issue #977). Same reasoning
+# as FS_HEALTH_STAT above, for the same reason: ELOOP on lgetxattr is a property
+# of the host mount stack, so it cannot be produced on demand on a healthy
+# filesystem — substituting the probe is the only way to drive the reporting
+# path rather than just its silence.
+#
+# The probe is a COMMAND that takes one path and exits:
+#   0 = xattr call answered normally (healthy — includes "no xattrs")
+#   1 = the call failed with ELOOP (the #977 condition)
+#   2 = could not determine (probe runtime missing, unexpected error)
+#
+# python3 rather than getfattr: getfattr is NOT installed in these images
+# (attr package absent), python3 always is. A PATH-shadowed stub cannot replace
+# it — /etc/bash_env rebuilds PATH for every non-interactive bash, so the stub is
+# silently ignored inside this script's own invocation
+# (.claude/memory/bash-env-breaks-path-stubs.md). Hence a seam, not a stub.
+FS_HEALTH_XATTR_PROBE="${FS_HEALTH_XATTR_PROBE:-}"
+
 # Submodule recursion depth cap. Purely a containment backstop: a gitlink graph
 # is acyclic in practice, but this script must never be the reason a container
 # fails to start, and 8 is far past any real nesting.
@@ -732,6 +757,79 @@ check_symlinks() {
 }
 
 # ============================================================================
+# Symlink xattr ELOOP diagnostic (issue #977)
+# ============================================================================
+#
+# DIAGNOSES ONLY — REPAIRS NOTHING. That is the whole design, not a shortcoming.
+#
+# On the virtiofs lower backing /workspace, lgetxattr(2) returns ELOOP (40) for
+# any symlink. BuildKit's context sender calls it on every path it walks, so
+# `docker build` from the repo root dies before a single build step:
+#
+#   error from sender: failed to xattr .codegraph:
+#     too many levels of symbolic links
+#
+# The real fix is --xattr-none on the bindfs overlay (lib/runtime/lib/
+# setup-bindfs.sh), which makes bindfs answer with EOPNOTSUPP instead of
+# relaying the ELOOP. But that is applied at ENTRYPOINT, so it only takes effect
+# after a container RESTART and only on an image built after the fix. This probe
+# exists for the gap: on a pre-fix image, or before the restart, it converts a
+# cryptic BuildKit error into a named condition with the workaround attached.
+#
+# WHY THIS IS NOT PART OF check_symlinks(). It is a different failure class from
+# the #827/#882 stale-attribute decay, and conflating them would do harm rather
+# than nothing. That decay keys on nlink=0 / st_size=0 and is repaired by
+# relinking. These symlinks report perfectly healthy metadata (nlink=1, size=9),
+# and relinking provably does NOT help: a symlink created seconds ago inside the
+# repo fails identically, because the condition belongs to the mount, not to the
+# link. Folding this into symlink_stale_reason() would therefore misclassify it
+# AND trigger a rewrite that cannot fix it.
+#
+# Args: $1 = repo root, $2 = display prefix for log lines.
+check_symlink_xattr() {
+    local root="$1" label_prefix="$2"
+    local rel rc=0
+
+    # One tracked symlink is enough: the condition is a property of the mount,
+    # not of any individual link, so probing every one would repeat the same
+    # answer at a syscall apiece. `head -n 1` on the index read, matching the
+    # ls-files idiom check_symlinks uses.
+    rel=$(git -C "$root" ls-files -s 2>/dev/null |
+        /usr/bin/awk -F'\t' '$1 ~ /^120000 / { print $2; exit }')
+
+    # No tracked symlinks — nothing this condition could affect.
+    [ -n "$rel" ] || return 0
+    [ -L "${root}/${rel}" ] || return 0
+
+    if [ -n "$FS_HEALTH_XATTR_PROBE" ]; then
+        "$FS_HEALTH_XATTR_PROBE" "${root}/${rel}" >/dev/null 2>&1 || rc=$?
+    else
+        command -v python3 >/dev/null 2>&1 || return 0
+        python3 -c 'import os,sys
+try:
+    os.listxattr(sys.argv[1], follow_symlinks=False)
+except OSError as e:
+    sys.exit(1 if e.errno == 40 else 2)
+except Exception:
+    sys.exit(2)' "${root}/${rel}" >/dev/null 2>&1 || rc=$?
+    fi
+
+    # Healthy (0) and indeterminate (2) are both SILENT. This script is quiet
+    # when it has nothing to say, and a probe that cannot run is not evidence of
+    # the condition — reporting on 2 would cry wolf wherever python3 is absent.
+    [ "$rc" = "1" ] || return 0
+
+    command echo "$LOG_PREFIX ${label_prefix}${rel}: symlink xattr returns ELOOP — docker builds from this root will fail (issue #977)" >&2
+    command echo "$LOG_PREFIX   BuildKit aborts with: error from sender: failed to xattr ... too many levels of symbolic links" >&2
+    command echo "$LOG_PREFIX   Fixed by the bindfs --xattr-none overlay, which applies on container RESTART." >&2
+    command echo "$LOG_PREFIX   Until then, build with the tracked symlinks temporarily removed:" >&2
+    command echo "$LOG_PREFIX     git -C $root ls-files -s | command awk -F'\\t' '\$1 ~ /^120000 / { print \$2 }' | xargs rm -f" >&2
+    command echo "$LOG_PREFIX     <run the build>, then: git -C $root checkout -- ." >&2
+
+    return 0
+}
+
+# ============================================================================
 # Repo traversal: superproject + every initialized submodule, recursively
 # ============================================================================
 
@@ -751,6 +849,7 @@ repair_repo_tree() {
 
     check_ignorecase "$root"
     check_symlinks "$root" "$label_prefix"
+    check_symlink_xattr "$root" "$label_prefix"
 
     # Containment backstop, not an expected condition.
     [ "$depth" -lt "$FS_HEALTH_MAX_DEPTH" ] || return 0
