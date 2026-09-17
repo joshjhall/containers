@@ -599,6 +599,19 @@
             }
           },
           "added": "2026-09-13"
+        },
+        "2.5.14": {
+          "checksums": {
+            "amd64": {
+              "sha256": "290c1c85deeaf01310d9187306060b53961574856a7e34f59d9662562e6f19fe",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.14/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "50ac7f598985e21b15da57e5d87da0f7ab0c163e6f78eb6d4690309827d77ef8",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.14/biome-linux-arm64"
+            }
+          },
+          "added": "2026-09-16"
         }
       }
     },
@@ -732,6 +745,19 @@
             }
           },
           "added": "2026-08-29"
+        },
+        "2.1.14": {
+          "checksums": {
+            "amd64": {
+              "sha256": "2be3187101b3a2edd5edf8b546aa2e3820531c517b4cd0216601a9c06f07c42d",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.14/lefthook_2.1.14_Linux_x86_64.gz"
+            },
+            "arm64": {
+              "sha256": "2fd4b1f33aab4e4c8691a1a6a750b0638a40bdef871234cacb33781615dbf7ba",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.14/lefthook_2.1.14_Linux_aarch64.gz"
+            }
+          },
+          "added": "2026-09-16"
         }
       }
     },
@@ -930,6 +956,19 @@
             }
           },
           "added": "2026-08-18"
+        },
+        "2.6.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.6.0/osv-scanner_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "2c71403eb443d05891c4f268c3ad771cf4f16e5443463fd7851ef8f454d3c7e4",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.6.0/osv-scanner_linux_arm64"
+            }
+          },
+          "added": "2026-09-16"
         }
       }
     },
@@ -1107,7 +1146,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-09-13T07:04:28Z",
+    "generated": "2026-09-16T21:36:16Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }

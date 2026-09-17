@@ -259,8 +259,45 @@ _production_loc() {
 }
 
 # _scan_files — emit every swept file as a repo-relative path.
+#
+# Enumeration comes from git's index, not from a filesystem walk, because the
+# index is the only CASE-EXACT view of the tree.
+#
+# On a case-insensitive mount (macOS/Windows hosts — see
+# docs/troubleshooting/case-sensitive-filesystems.md) a single directory can
+# surface under two spellings that share one inode: `crates/luggage/src/installer`
+# and `crates/luggage/src/Installer` are the same 36 files, listed twice. `find`
+# walks both spellings and emits each file twice, and the phantom capital-letter
+# path then misses its GRANDFATHERED entry — which keys on the real, lowercase
+# path — so the ceiling arm failed on a file that is correctly catalogued. The
+# shadow cannot be deleted to fix this: it IS the tracked file, same inode, so
+# removing it removes the real one.
+#
+# `git ls-files` reports the one spelling git actually tracks, identically on
+# every platform, which is also the spelling CI sees. It additionally drops the
+# ~4,800 ignored scratch files under tests/results/ that the walk was silently
+# measuring.
+#
+# -z, and `read -d ""`, because git quotes unusual paths in its default output
+# and this check must not care what a filename contains.
+#
+# The `find` fallback is retained for a non-git checkout (a source tarball, or a
+# fixture directory in this suite's own tests). There is no case-shadow risk
+# there: the shadow is a property of the host mount, and a tree with no index to
+# disagree with has no second spelling to prefer.
 _scan_files() {
-    local dir
+    local dir path
+    if command git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+        while IFS= read -r -d '' path; do
+            case "$path" in
+                *.sh | *.rs) ;;
+                *) continue ;;
+            esac
+            command printf '%s\n' "$path"
+        done < <(command git -C "$PROJECT_ROOT" ls-files -z -- "${SCAN_DIRS[@]}") | command sort
+        return 0
+    fi
+
     for dir in "${SCAN_DIRS[@]}"; do
         [ -d "$PROJECT_ROOT/$dir" ] || continue
         command find "$PROJECT_ROOT/$dir" \
@@ -274,8 +311,9 @@ _scan_files() {
 # A file over the ceiling must be either split or grandfathered. This is the
 # arm that stops the ratchet resuming on a file nobody has catalogued.
 test_no_ungrandfathered_file_over_ceiling() {
-    local violations=0 path lines allowed
+    local violations=0 path lines allowed scanned=0
     while IFS= read -r path; do
+        scanned=$((scanned + 1))
         lines=$(_production_loc "$PROJECT_ROOT/$path")
         [ "$lines" -le "$CEILING_LINES" ] && continue
 
@@ -286,6 +324,16 @@ test_no_ungrandfathered_file_over_ceiling() {
             violations=$((violations + 1))
         fi
     done < <(_scan_files)
+
+    # An enumeration that returns nothing would make every arm above vacuously
+    # true — the check would report a clean sweep having measured no files at
+    # all. The repo has hundreds of swept files, so anything near zero means the
+    # enumerator broke, not that the tree shrank.
+    if [ "$scanned" -lt 100 ]; then
+        assert_true false \
+            "_scan_files enumerated only $scanned files; the sweep is broken, not clean."
+        return
+    fi
 
     if [ "$violations" -eq 0 ]; then
         assert_true true "no un-grandfathered file exceeds $CEILING_LINES production LOC"
