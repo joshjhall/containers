@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.20.2] - 2026-09-17
+
+### Documentation
+
+- Record the mock-fidelity-gates-assertions lesson
+- Record the placeholder-review and ambient-injection lessons
+
+### Fixed
+
+- Sweep .fuse_hidden files at any depth via one shared GC (#949)
+- Sweep stale status/* labels off closed issues (#955)
+- Retract the bogus needs-triage nudge comments (#957)
+- Guard fuse-cleanup against overlapping sweeps (#959)
+- Report a missing fuse-cleanup GC instead of skipping silently (#961)
+- Drop the fuse-cleanup walk-redirecting seams in production (#969)
+- Grant the Workflow tool access to /opt/librarian (#967) (#971)
+
+### Miscellaneous
+
+- Refresh Cargo lockfile (49 packages) (#962)
+- Drop the two resolved httparty suppressions (#964)
+- Bump 13 pinned tool versions and refresh checksums (#978)
+
+### Testing
+
+- Close four coverage gaps in stale-status-labels retry logic (#958)
+- Pin fuse-cleanup boot delegation, multi-root sweep, -type f (#965)
+- Pin the ungated fuse-cleanup install with a discriminating test (#974)
+
 ## [4.20.1] - 2026-09-13
 
 ### Fixed
@@ -14,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Miscellaneous
 
 - Clean up three deferred #777 review findings (#946)
+- Automated version updates to v4.20.1
+- Update compatibility matrix with passing test results
 
 ## [4.20.0] - 2026-09-08
 
@@ -840,12 +871,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add Cargo workspace with stibbons and containers-common crates
-- Port feature registry and dependency resolution from Go to Rust
-- Port .igor.yml config parsing from Go to Rust
-- Port template rendering and golden file tests from Go to Rust
-- Port TUI wizard from charmbracelet/huh to Rust with inquire
-- Wire up stibbons init file generation and remove Go codebase
 - Update octarine to v0.3.0-beta.1 and require Windows CI
 - Add lefthook + gitleaks, migrate git hooks from pre-commit (#366)
 - Add cspell spell checker
@@ -853,8 +878,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI/CD
 
-- Add Rust CI job, pre-commit hooks, and editor integration
-- Add v5 branch to CI triggers
 - Remove Go test job and fix Rust CI for octarine dependency
 - Fix octarine fetch in test job and allow Windows failure
 - Install mado and dprint so lefthook lint step passes in CI
@@ -864,21 +887,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrate markdown hooks to mado + dprint (#377)
 - Replace pre-commit-hooks uvx shims with native equivalents (#382)
 
-### Documentation
-
-- Rewrite README and CLAUDE.md for v5 architecture
-- Add claude memory files for v5 architecture decisions
-
 ### Fixed
 
-- Use HTTPS URL for octarine git dependency
 - Widen curl retry window for tool downloads
 - Gunzip install path produced gzipped binaries; add nmap (#378)
 
 ### Miscellaneous
 
-- Add Rust tooling config and update ignore files
-- Fix cspell dictionary ordering and add ratatui
 - Skip Go tests when cmd/igor/ no longer exists
 - Update Trivy image ref and add memory entries
 - Refresh Cargo lockfile and bump inquire 0.7 → 0.9
@@ -991,9 +1006,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.15.11] - 2026-03-25
 
+### Added
+
+- Add Cargo workspace with stibbons and containers-common crates
+- Port feature registry and dependency resolution from Go to Rust
+- Port .igor.yml config parsing from Go to Rust
+- Port template rendering and golden file tests from Go to Rust
+- Port TUI wizard from charmbracelet/huh to Rust with inquire
+- Wire up stibbons init file generation and remove Go codebase
+
+### CI/CD
+
+- Add Rust CI job, pre-commit hooks, and editor integration
+- Add v5 branch to CI triggers
+
+### Documentation
+
+- Rewrite README and CLAUDE.md for v5 architecture
+- Add claude memory files for v5 architecture decisions
+
 ### Fixed
 
 - Add MEMORY_FILE_PATH env var and fix comment indentation
+- Use HTTPS URL for octarine git dependency
 - Skip issues with status/on-hold label
 - Measure production code only for file-length thresholds
 - Exclude git submodules from codebase-audit scans
@@ -1001,6 +1036,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 
 - Parallelize op read calls and background claude-setup
+
+### Miscellaneous
+
+- Add Rust tooling config and update ignore files
+- Fix cspell dictionary ordering and add ratatui
 
 ## [4.15.10] - 2026-03-23
 
@@ -1717,10 +1757,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.12.8] - 2025-12-28
 
-### Fixed
-
-- Ignore devcontainer.json and remove invalid linter key
-
 ### Miscellaneous
 
 - Sync extension recommendations across configs
@@ -1732,6 +1768,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Filter out Go pre-release versions
+- Ignore devcontainer.json and remove invalid linter key
 
 ### Miscellaneous
 
@@ -2450,6 +2487,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.20.2]: https://github.com/joshjhall/containers/compare/v4.20.1...v4.20.2
 [4.20.1]: https://github.com/joshjhall/containers/compare/v4.20.0...v4.20.1
 [4.20.0]: https://github.com/joshjhall/containers/compare/v4.19.27...v4.20.0
 [4.19.27]: https://github.com/joshjhall/containers/compare/v4.19.26...v4.19.27
