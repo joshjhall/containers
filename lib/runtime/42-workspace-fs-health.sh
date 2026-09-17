@@ -848,8 +848,16 @@ except Exception:
     command echo "$LOG_PREFIX ${label_prefix}${rel}: symlink xattr returns ELOOP — docker builds from this root will fail (issue #977)" >&2
     command echo "$LOG_PREFIX   BuildKit aborts with: error from sender: failed to xattr ... too many levels of symbolic links" >&2
     command echo "$LOG_PREFIX   Fixed by the bindfs --xattr-none overlay, which applies on container RESTART." >&2
+    # The null separator is emitted as `printf "%s%c", $2, 0` and NOT as the
+    # obvious `printf "%s\0", $2`: mawk (the default awk in these images)
+    # silently DROPS a literal \0 from the format string, so that spelling
+    # concatenates every path into one unsplittable argument and `xargs -0 rm`
+    # then removes nothing at all — quietly, for every path, not just the ones
+    # with spaces. `%c` with a 0 argument emits a real NUL on both mawk and
+    # gawk. Verified by test_xattr_report_workaround_survives_a_path_with_spaces,
+    # which RUNS this emitted line rather than pattern-matching it.
     command echo "$LOG_PREFIX   Until then, build with the tracked symlinks temporarily removed:" >&2
-    command echo "$LOG_PREFIX     git -C $root ls-files -s | command awk -F'\\t' '\$1 ~ /^120000 / { printf \"%s\\0\", \$2 }' | xargs -0 rm -f" >&2
+    command echo "$LOG_PREFIX     git -C $root ls-files -s | command awk -F'\\t' '\$1 ~ /^120000 / { printf \"%s%c\", \$2, 0 }' | xargs -0 rm -f" >&2
     command echo "$LOG_PREFIX     <run the build>, then: git -C $root checkout -- ." >&2
 
     return 0

@@ -1064,6 +1064,52 @@ test_xattr_eloop_report_carries_workaround() {
         "The report carries the symlink-removal workaround (issue #977)"
 }
 
+test_xattr_report_workaround_survives_a_path_with_spaces() {
+    # The emitted workaround is a command we tell people to PASTE AND RUN as
+    # root-adjacent cleanup, so "it looks right" is not enough — it has to work
+    # on the paths it will meet. A tracked symlink whose path contains a space
+    # is the case that separates a correct one-liner from a plausible one:
+    # `print $2 | xargs rm -f` word-splits it into two nonexistent paths and
+    # silently removes nothing, leaving the build still broken with no signal.
+    #
+    # So this RUNS the emitted line rather than pinning its tokens. A substring
+    # assertion on "xargs -0" would pass just as well on a line that had been
+    # reverted in some other way, and would pass on a one-liner that was
+    # whitespace-safe but otherwise wrong (grep-pin-is-not-behavioral-
+    # coverage.md).
+    seed_symlinks
+    command ln -s realfile.txt "$PROJECT_ROOT/spaced name.link"
+    git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
+    git -C "$PROJECT_ROOT" commit -qm "spaced symlink" >/dev/null 2>&1
+
+    local output emitted
+    output=$(FS_HEALTH_XATTR_PROBE="$(xattr_probe_stub 1)" \
+        run_fs_health_stderr sensitive)
+
+    # Lift the emitted command back out of the log line: everything after the
+    # "git -C <root> ls-files" marker, with the log prefix stripped.
+    emitted=$(command printf '%s\n' "$output" |
+        /usr/bin/grep -F 'ls-files -s |' |
+        /usr/bin/sed 's/^.*\] *//')
+
+    assert_contains "$emitted" "ls-files" \
+        "The emitted workaround line is recoverable from the report"
+
+    # Run it for real, from the fixture repo.
+    (cd "$PROJECT_ROOT" && eval "$emitted") >/dev/null 2>&1
+
+    assert_file_not_exists "$PROJECT_ROOT/spaced name.link" \
+        "The emitted workaround removes a tracked symlink whose path has a space"
+    assert_file_not_exists "$PROJECT_ROOT/good.link" \
+        "The emitted workaround removes the ordinary tracked symlinks too"
+
+    # And the restore half of the documented procedure puts them back, so the
+    # advice is a round trip rather than a one-way deletion.
+    git -C "$PROJECT_ROOT" checkout -- . >/dev/null 2>&1
+    assert_file_exists "$PROJECT_ROOT/spaced name.link" \
+        "git checkout -- . restores the spaced symlink (issue #977)"
+}
+
 test_xattr_healthy_is_silent() {
     # The complement, and the one that keeps the diagnostic useful. This script
     # is silent when it has nothing to say; a line that also appears on a
@@ -1890,6 +1936,7 @@ run_test_with_setup test_single_scope_symlink_report_stays_relative "Single scop
 # Symlink xattr ELOOP diagnostic (#977)
 run_test_with_setup test_xattr_eloop_is_reported "ELOOP probe result names the condition (#977)"
 run_test_with_setup test_xattr_eloop_report_carries_workaround "ELOOP report carries restart + workaround (#977)"
+run_test_with_setup test_xattr_report_workaround_survives_a_path_with_spaces "The emitted workaround handles a spaced path (#977)"
 run_test_with_setup test_xattr_healthy_is_silent "Healthy xattr probe stays silent (#977)"
 run_test_with_setup test_xattr_indeterminate_is_silent "Indeterminate xattr probe stays silent (#977)"
 run_test_with_setup test_xattr_probe_does_not_repair "ELOOP diagnostic repairs nothing (#977)"

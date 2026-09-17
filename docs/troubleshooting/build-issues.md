@@ -165,7 +165,7 @@ python3 -c "import os; print(os.listxattr('AGENTS.md', follow_symlinks=False))"
 temporarily removed, then restore them.
 
 ```bash
-git ls-files -s | /usr/bin/awk -F'\t' '$1 ~ /^120000 / { printf "%s\0", $2 }' | xargs -0 rm -f
+git ls-files -s | /usr/bin/awk -F'\t' '$1 ~ /^120000 / { printf "%s%c", $2, 0 }' | xargs -0 rm -f
 ./tests/run_integration_tests.sh <suite>
 git checkout -- .   # both symlinks are tracked
 ```
