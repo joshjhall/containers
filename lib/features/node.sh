@@ -19,8 +19,9 @@
 #     * Partial version (e.g., "22.12"): Resolves to latest 22.12.x with pinned checksum
 #     * Specific version (e.g., "22.12.0"): Uses exact version
 #
-#   - COREPACK_VERSION: corepack installed when the tarball lacks it
-#     (Node 25+). Ignored when corepack is bundled (Node <= 24).
+#   - COREPACK_VERSION: corepack installed from npm only when the extracted
+#     tarball has no corepack binary (detected by presence, not by version;
+#     today that means Node 25+). Ignored when corepack is bundled.
 #
 # Supported Versions:
 #   - 26.x (current)
@@ -107,10 +108,13 @@ log_message "Installing Node.js build dependencies..."
 apt_update
 
 # Install Node.js dependencies with retry logic
+# libatomic1: newer Node.js binaries (26.x on arm64, #983) link libatomic.so.1,
+# which the slim base image does not ship; without it `node` exits 127.
 apt_install \
     curl \
     ca-certificates \
-    xz-utils
+    xz-utils \
+    libatomic1
 
 # ============================================================================
 # Node.js Installation from Source

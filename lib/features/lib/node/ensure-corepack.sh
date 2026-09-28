@@ -38,8 +38,10 @@ ensure_corepack() {
     fi
 
     log_message "corepack not bundled with this Node.js (removed in 25+); installing corepack@${COREPACK_VERSION} from npm"
+    # corepack ships no lifecycle scripts; --ignore-scripts keeps it that way
+    # for a package that goes on to fetch every image's yarn and pnpm.
     if ! log_command "Installing corepack@${COREPACK_VERSION}" \
-        npm install -g "corepack@${COREPACK_VERSION}"; then
+        npm install -g --ignore-scripts "corepack@${COREPACK_VERSION}"; then
         log_error "Failed to install corepack@${COREPACK_VERSION}"
         return 1
     fi

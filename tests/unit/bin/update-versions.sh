@@ -1351,6 +1351,10 @@ SD_VERSION="${SD_VERSION:-1.1.0}"
 HYPERFINE_VERSION="${HYPERFINE_VERSION:-1.20.0}"
 JSONC_PARSER_VERSION="${JSONC_PARSER_VERSION:-3.3.1}"
 EOF
+    command cat >"$test_dir/lib/features/node.sh" <<'EOF'
+#!/bin/bash
+COREPACK_VERSION="${COREPACK_VERSION:-0.36.0}"
+EOF
     command cat >"$test_dir/lib/features/rust-dev.sh" <<'EOF'
 #!/bin/bash
 HYPERFINE_CARGO_VERSION="${HYPERFINE_CARGO_VERSION:-1.20.0}"
@@ -1361,7 +1365,8 @@ EOF
   "tools": [
     {"tool": "sd", "current": "1.1.0", "latest": "1.2.0", "file": "dev-tools.sh", "status": "outdated"},
     {"tool": "hyperfine", "current": "1.20.0", "latest": "1.21.0", "file": "dev-tools.sh", "status": "outdated"},
-    {"tool": "jsonc-parser", "current": "3.3.1", "latest": "3.4.0", "file": "dev-tools.sh", "status": "outdated"}
+    {"tool": "jsonc-parser", "current": "3.3.1", "latest": "3.4.0", "file": "dev-tools.sh", "status": "outdated"},
+    {"tool": "corepack", "current": "0.36.0", "latest": "0.37.0", "file": "node.sh", "status": "outdated"}
   ]
 }
 EOF
@@ -1385,6 +1390,11 @@ EOF
     }
     command grep -q 'JSONC_PARSER_VERSION="${JSONC_PARSER_VERSION:-3.4.0}"' "$dev_tools" || {
         echo "    jsonc-parser: JSONC_PARSER_VERSION was not rewritten to 3.4.0"
+        ok=false
+    }
+    command grep -q 'COREPACK_VERSION="${COREPACK_VERSION:-0.37.0}"' \
+        "$test_dir/lib/features/node.sh" || {
+        echo "    corepack: COREPACK_VERSION was not rewritten to 0.37.0"
         ok=false
     }
     # The sibling cargo pin must be untouched by the hyperfine bump.
@@ -1604,7 +1614,7 @@ run_test test_invalid_version_returns_distinct_code "Invalid version returns a c
 run_test test_exit_code_contract "Exit-code contract: 2 on skipped updates (real and dry), 0 on clean runs"
 run_test test_dry_run_reports_missing_case_without_writing "Dry run reports a missing updater case without writing"
 run_test test_dry_run_short_circuits_network_and_binary "Dry run skips pin_action's network call and the luggage binary probe"
-run_test test_new_cases_rewrite_their_pins "hyperfine, jsonc-parser, and sd rewrite their own pins"
+run_test test_new_cases_rewrite_their_pins "hyperfine, jsonc-parser, sd, and corepack rewrite their own pins"
 run_test test_gemfile_case_rewrites_triage_pin "gitlab-triage rewrites the Gemfile pin, not the lock"
 run_test test_unknown_gemfile_tool_returns_no_updater_case "unknown Gemfile tool reports a missing updater case"
 run_test test_failed_rewrite_exits_three "Failed rewrite exits 3 (fatal), not 2 (tolerated)"

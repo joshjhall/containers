@@ -245,9 +245,11 @@ test_node_permissions() {
 #   installs  - npm exits 0 and links corepack onto PATH
 #   fails     - npm exits 1
 #   off-path  - npm exits 0 but links nothing onto PATH
+# PIN (optional, default 0.36.0) becomes COREPACK_VERSION; "" leaves it empty.
 # Prints the helper's exit code; npm's argv (one per line) lands in npm.argv.
 _run_ensure_corepack() {
     local mode="$1"
+    local pin="${2-0.36.0}"
     local stub_bin="$TEST_TEMP_DIR/stub-bin"
     mkdir -p "$stub_bin"
     : >"$TEST_TEMP_DIR/npm.argv"
@@ -274,7 +276,7 @@ STUB
     chmod +x "$stub_bin/npm"
 
     local rc=0
-    env -i PATH="$stub_bin" COREPACK_VERSION="0.36.0" /bin/bash -c '
+    env -i PATH="$stub_bin" COREPACK_VERSION="$pin" /bin/bash -c '
         log_message() { :; }
         log_error() { :; }
         log_command() { shift; "$@"; }
@@ -298,6 +300,7 @@ test_corepack_missing_installs_pinned() {
     assert_equals "0" "$rc" "ensure_corepack succeeds after installing corepack"
     assert_equals "install
 -g
+--ignore-scripts
 corepack@0.36.0" "$(command cat "$TEST_TEMP_DIR/npm.argv")" \
         "npm installs exactly the pinned corepack globally"
 }
@@ -312,6 +315,14 @@ test_corepack_install_off_path_is_fatal() {
     local rc
     rc=$(_run_ensure_corepack off-path)
     assert_equals "1" "$rc" "ensure_corepack fails when corepack is still not on PATH"
+}
+
+test_corepack_missing_without_pin_is_fatal() {
+    local rc
+    rc=$(_run_ensure_corepack installs "")
+    assert_equals "1" "$rc" "ensure_corepack fails when corepack is missing and no pin is set"
+    assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.argv")" \
+        "npm is not invoked without a pin (no unpinned install)"
 }
 
 # The pin must use the override pattern (bin/check-versions.sh reads it and
@@ -427,6 +438,7 @@ run_test_with_setup test_corepack_bundled_skips_npm "Bundled corepack is used as
 run_test_with_setup test_corepack_missing_installs_pinned "Missing corepack is installed at the pin"
 run_test_with_setup test_corepack_install_failure_is_fatal "corepack install failure fails the build"
 run_test_with_setup test_corepack_install_off_path_is_fatal "corepack not on PATH after install fails the build"
+run_test_with_setup test_corepack_missing_without_pin_is_fatal "Missing corepack with no pin fails without installing"
 run_test_with_setup test_corepack_pinned_and_wired "COREPACK_VERSION pinned and wired before corepack enable"
 run_test_with_setup test_node_version_verification "Node version verification script"
 run_test_with_setup test_node_path_configuration "Node PATH configuration"
