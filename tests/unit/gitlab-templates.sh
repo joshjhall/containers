@@ -34,6 +34,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=tests/framework.sh
 source "$SCRIPT_DIR/../framework.sh"
+# shellcheck source=bin/lib/triage-gem.sh
+source "$PROJECT_ROOT/bin/lib/triage-gem.sh"
 
 init_test_framework
 
@@ -822,12 +824,9 @@ test_gemfile_and_lock_agree() {
     }
 
     local gem_version lock_version
-    gem_version=$(/usr/bin/grep -E '^gem "gitlab-triage"' "$gemfile" |
-        /usr/bin/sed -E 's/.*,[[:space:]]*"([^"]+)".*/\1/')
-    # The lock records the resolved version as `    gitlab-triage (X.Y.Z)`.
-    lock_version=$(/usr/bin/grep -E '^[[:space:]]+gitlab-triage \(' "$lock" |
-        /usr/bin/head -1 |
-        /usr/bin/sed -E 's/.*\(([^)]+)\).*/\1/')
+    # Same readers regen-triage-lock.sh and check-versions.sh use (#989).
+    gem_version=$(triage_gemfile_version "$gemfile")
+    lock_version=$(triage_lock_version "$lock")
 
     if [ -n "$gem_version" ] && [ "$gem_version" = "$lock_version" ]; then
         assert_true true "Gemfile pin ($gem_version) matches the resolved Gemfile.lock"

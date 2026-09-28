@@ -8,6 +8,11 @@
 # image; the workflow reverts the bump into the skipped-updates hold gate when
 # regeneration fails.
 #
+# The version readers are bin/lib/triage-gem.sh — the same ones the script
+# uses. The docker stub below keeps its OWN Gemfile parse on purpose: it stands
+# in for bundler, and reusing the code under test there would let a broken
+# reader agree with itself.
+#
 # `docker` is a PATH stub that behaves like the real container would: it reads
 # the tar stream on stdin, and in `ok` mode emits a lock resolving whatever
 # version the STREAMED Gemfile pins. A stub that echoed a fixed version would
@@ -18,6 +23,8 @@
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../framework.sh"
+# shellcheck source=bin/lib/triage-gem.sh
+source "$PROJECT_ROOT/bin/lib/triage-gem.sh"
 
 init_test_framework
 
@@ -130,12 +137,6 @@ run_script() {
         "$SCRIPT"
 }
 
-lock_version_of() {
-    command grep -E '^[[:space:]]+gitlab-triage \(' "$1" |
-        command head -1 |
-        command sed -E 's/.*\(([^)]+)\).*/\1/'
-}
-
 new_tree() {
     local tree
     tree=$(command mktemp -d)
@@ -161,7 +162,7 @@ test_regenerates_lock_to_gemfile_pin() {
     run_script "$tree" ok >/dev/null 2>&1 || rc=$?
 
     local got
-    got=$(lock_version_of "$tree/.gitlab/triage/Gemfile.lock")
+    got=$(triage_lock_version "$tree/.gitlab/triage/Gemfile.lock")
     command rm -rf "$tree"
     assert_equals "0:1.54.0" "$rc:$got" "lock regenerated to the Gemfile pin"
 }
@@ -215,7 +216,7 @@ assert_rejects_mode() {
     run_script "$tree" "$mode" >/dev/null 2>&1 || rc=$?
 
     local got
-    got=$(lock_version_of "$tree/.gitlab/triage/Gemfile.lock")
+    got=$(triage_lock_version "$tree/.gitlab/triage/Gemfile.lock")
     command rm -rf "$tree"
     if [ "$rc" -ne 0 ] && [ "$got" = "1.0.0" ]; then
         assert_true true "$label"
@@ -336,9 +337,8 @@ STUB
         export REGEN_MODE="$mode" REGEN_LOG="$repo/regen.log"
         UPDATE_SKIPS=false
         eval "$block" >/dev/null 2>&1
-        gem=$(command grep -E '^gem "gitlab-triage"' .gitlab/triage/Gemfile |
-            command sed -E 's/.*,[[:space:]]*"([^"]+)".*/\1/')
-        command echo "$UPDATE_SKIPS:$gem:$(lock_version_of .gitlab/triage/Gemfile.lock):$(command wc -l <regen.log)"
+        gem=$(triage_gemfile_version .gitlab/triage/Gemfile)
+        command echo "$UPDATE_SKIPS:$gem:$(triage_lock_version .gitlab/triage/Gemfile.lock):$(command wc -l <regen.log)"
     )
     command rm -rf "$repo"
 }

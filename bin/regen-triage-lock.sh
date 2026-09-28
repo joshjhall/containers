@@ -27,6 +27,8 @@ set -euo pipefail
 
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${PROJECT_ROOT_OVERRIDE:-$(dirname "$BIN_DIR")}"
+# shellcheck source=bin/lib/triage-gem.sh
+source "${BIN_DIR}/lib/triage-gem.sh"
 
 TRIAGE_DIR="$PROJECT_ROOT/.gitlab/triage"
 CI_INCLUDE="$PROJECT_ROOT/.gitlab/ci/triage.yml"
@@ -60,20 +62,7 @@ image=$(yq -r '.["issue-triage"].image // ""' "$CI_INCLUDE")
 [ -n "$image" ] && [ "$image" != "null" ] ||
     die "could not read issue-triage.image from $CI_INCLUDE"
 
-# Same extraction as tests/unit/gitlab-templates.sh (test_gemfile_and_lock_agree).
-# No match yields an empty string, not a failure: under pipefail a grep miss
-# would otherwise abort the `$(...)` assignment before the die() that explains it.
-gemfile_version() {
-    { command grep -E '^gem "gitlab-triage"' "$GEMFILE" || true; } |
-        command sed -E 's/.*,[[:space:]]*"([^"]+)".*/\1/'
-}
-lock_version() {
-    { command grep -E '^[[:space:]]+gitlab-triage \(' "$1" || true; } |
-        command head -1 |
-        command sed -E 's/.*\(([^)]+)\).*/\1/'
-}
-
-want=$(gemfile_version)
+want=$(triage_gemfile_version "$GEMFILE")
 [ -n "$want" ] || die "no gitlab-triage pin found in $GEMFILE"
 
 command echo "Regenerating Gemfile.lock for gitlab-triage $want in $image"
@@ -105,7 +94,7 @@ command tar -C "$TRIAGE_DIR" -cf - "${inputs[@]}" |
 
 # A zero exit is not proof the lock moved — verify the outcome before it
 # replaces the committed lock.
-got=$(lock_version "$tmp_lock")
+got=$(triage_lock_version "$tmp_lock")
 [ "$got" = "$want" ] ||
     die "lock resolves gitlab-triage '${got:-<none>}', Gemfile pins '$want'"
 
