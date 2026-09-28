@@ -1410,9 +1410,9 @@ EOF
 
 test_gemfile_case_rewrites_triage_pin() {
     # The Gemfile file type is unlike every other updater target: the pin lives
-    # in .gitlab/triage/Gemfile, and the companion Gemfile.lock CANNOT be
-    # regenerated here (that needs a real Ruby resolver). Assert the rewrite
-    # itself is correct and that the lock is deliberately left alone.
+    # in .gitlab/triage/Gemfile, and the companion Gemfile.lock is regenerated
+    # separately by bin/regen-triage-lock.sh (a real Ruby resolver, #986).
+    # Assert the rewrite itself is correct and that the lock is left alone.
     local test_dir
     test_dir=$(mktemp -d)
 
@@ -1461,9 +1461,8 @@ EOF
         echo "    gitlab-triage: the csv dependency was disturbed"
         ok=false
     }
-    # The lock is intentionally NOT rewritten — a hand-edited lock would
-    # checksum-verify against invented data. Frozen mode then fails loudly, and
-    # tests/unit/gitlab-templates.sh catches the drift at commit time.
+    # The lock is intentionally NOT rewritten here — a hand-edited lock would
+    # checksum-verify against invented data. bin/regen-triage-lock.sh owns it.
     command grep -q 'gitlab-triage (1.50.0)' "$test_dir/.gitlab/triage/Gemfile.lock" || {
         echo "    gitlab-triage: Gemfile.lock should have been left alone for manual regeneration"
         ok=false

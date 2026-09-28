@@ -15,6 +15,7 @@ jobs:
   open-tracking-issue:
     name: Open quarterly review tracking issue
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Compute quarter label
         id: q

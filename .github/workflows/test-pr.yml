@@ -36,6 +36,7 @@ jobs:
   detect-changes:
     name: Detect changed features
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       features: ${{ steps.compute.outputs.features }}
       mode: ${{ steps.compute.outputs.mode }}
@@ -231,6 +232,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: ./.github/actions/setup-buildx-resilient
+        # Composite steps cannot bound themselves; this caps a hung setup (#987).
+        timeout-minutes: 10
 
       - name: Build feature image
         id: build
@@ -341,6 +344,7 @@ jobs:
     needs: [detect-changes, build-feature]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Summarize
         env:

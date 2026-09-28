@@ -24,6 +24,7 @@ jobs:
   version-check:
     name: Check Versions and Create Patch Branch
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
@@ -129,6 +130,22 @@ jobs:
           elif [ "$UPDATE_STATUS" -ne 0 ]; then
             echo "::error::update-versions.sh failed with status $UPDATE_STATUS"
             exit "$UPDATE_STATUS"
+          fi
+
+          # The updater rewrites the gitlab-triage pin in the Gemfile but cannot
+          # regenerate Gemfile.lock — that needs a real Ruby resolver. Without
+          # this, every gitlab-triage release red-lit the whole auto-patch branch
+          # on the Gemfile/lock sync test (issue #986). If regeneration fails,
+          # revert BOTH files so the rest of the release stays consistent and
+          # green, and route through the skipped-updates hold gate so a human
+          # sees it instead of auto-merge.
+          if ! git diff --quiet -- .gitlab/triage/Gemfile; then
+            echo "Regenerating .gitlab/triage/Gemfile.lock..."
+            if ! ./bin/regen-triage-lock.sh; then
+              echo "::warning::Could not regenerate .gitlab/triage/Gemfile.lock — gitlab-triage bump reverted and held for manual review (issue #986)"
+              git checkout -- .gitlab/triage/Gemfile .gitlab/triage/Gemfile.lock
+              UPDATE_SKIPS=true
+            fi
           fi
 
           # Update checksums for new versions
@@ -361,6 +378,7 @@ jobs:
   auto-merge:
     name: Create PR for Patch Release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: |
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
@@ -576,6 +594,7 @@ jobs:
   post-merge:
     name: Post-Merge Tag and Cleanup
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: |
       github.event_name == 'pull_request' &&
       github.event.pull_request.merged == true &&
@@ -780,6 +799,7 @@ jobs:
   ci-failure:
     name: Notify CI Failure on Patch Branch
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: |
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'failure' &&

@@ -27,6 +27,7 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -109,6 +110,7 @@ jobs:
   release:
     name: Attach binaries to release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: build
     # Only publish on a real tag push — workflow_dispatch has no release to
     # attach to and just validates the build matrix above.
