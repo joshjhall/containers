@@ -44,6 +44,10 @@ test_node_current_build() {
     fi
 
     assert_command_in_container "$image" "node --version" "v${NODE_CURRENT_VERSION}."
+    # Node 26's arm64 binary links libatomic.so.1 and exits 127 without it.
+    # Check the package directly so an amd64 runner, whose node doesn't need
+    # the library, still catches it being dropped from node.sh.
+    assert_command_in_container "$image" "dpkg-query -W -f='\${Status}' libatomic1" "install ok installed"
 }
 
 # Test: corepack was installed and its shims resolve
@@ -62,6 +66,7 @@ test_node_current_package_managers() {
     # Exit status is the check: without corepack these are not on PATH at all.
     # The runtime user's corepack home differs from the build's (root), so the
     # pnpm@9 prepared at build time is not what resolves here; don't pin it.
+    # First use downloads the release, so this needs registry access.
     assert_command_in_container "$image" "yarn --version" ""
     assert_command_in_container "$image" "pnpm --version" ""
 }
