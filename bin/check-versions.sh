@@ -6,6 +6,7 @@ set -uo pipefail
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${BIN_DIR}/lib/common.sh"
 source "${BIN_DIR}/lib/version-utils.sh"
+source "${BIN_DIR}/lib/triage-gem.sh"
 
 # Set project root
 PROJECT_ROOT="$(dirname "$BIN_DIR")"
@@ -324,8 +325,7 @@ extract_all_versions() {
     # not change under us — but tracked here so the weekly sweep surfaces drift
     # instead of leaving it to manual maintenance (#764).
     if [ -f "$PROJECT_ROOT/.gitlab/triage/Gemfile" ]; then
-        ver=$(command grep -E '^gem "gitlab-triage"' "$PROJECT_ROOT/.gitlab/triage/Gemfile" 2>/dev/null |
-            command sed -E 's/.*,[[:space:]]*"([^"]+)".*/\1/') || true
+        ver=$(triage_gemfile_version "$PROJECT_ROOT/.gitlab/triage/Gemfile")
         [ -n "$ver" ] && add_tool "gitlab-triage" "$ver" "Gemfile" || true
     fi
 
