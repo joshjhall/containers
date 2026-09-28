@@ -122,3 +122,5 @@
 - [Ambient injection misses ordering](ambient-injection-tests-miss-ordering.md) — to pin an unset-after-source ordering, the hostile value must come from the sourced file
 - [mawk drops literal NUL in printf](mawk-drops-literal-nul-in-printf.md) — use `printf "%s%c", str, 0`; a generated command must be tested by running it
 - [Symlink xattr ELOOP is virtiofs, not bindfs](symlink-xattr-eloop-is-virtiofs-not-bindfs.md) — fixed by bindfs --xattr-none; only llistxattr discriminates
+- [PR-tier rerun keeps old labels](pr-tier-rerun-keeps-old-labels.md) — ci/full-build + `gh run rerun` still skips feature builds; push a new commit
+- [Node 25+ install deps](node-25-plus-install-deps.md) — no bundled corepack (≥25) + libatomic1 on Node 26 arm64; both exit 127
