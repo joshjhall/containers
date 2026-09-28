@@ -120,3 +120,5 @@
 - [Mock fidelity gates assertions](mock-fidelity-gates-assertions.md) — a stub answering what the real tool could not lets tests pass on impossible states
 - [Harness placeholder args fake a review](harness-placeholder-args-fake-review.md) — a stand-in string in `args.diff` returns clean:true on nothing; pass real bytes or omit the key
 - [Ambient injection misses ordering](ambient-injection-tests-miss-ordering.md) — to pin an unset-after-source ordering, the hostile value must come from the sourced file
+- [mawk drops literal NUL in printf](mawk-drops-literal-nul-in-printf.md) — use `printf "%s%c", str, 0`; a generated command must be tested by running it
+- [Symlink xattr ELOOP is virtiofs, not bindfs](symlink-xattr-eloop-is-virtiofs-not-bindfs.md) — fixed by bindfs --xattr-none; only llistxattr discriminates
