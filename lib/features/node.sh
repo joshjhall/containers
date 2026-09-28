@@ -8,7 +8,8 @@
 # Features:
 #   - Node.js runtime from nodejs.org
 #   - npm (included with Node.js)
-#   - yarn and pnpm (via corepack)
+#   - yarn and pnpm (via corepack; installed from npm on Node 25+, whose
+#     tarballs no longer bundle it)
 #   - Automatic dependency detection and installation
 #   - Cache optimization for containerized environments
 #
@@ -18,10 +19,15 @@
 #     * Partial version (e.g., "22.12"): Resolves to latest 22.12.x with pinned checksum
 #     * Specific version (e.g., "22.12.0"): Uses exact version
 #
+#   - COREPACK_VERSION: corepack installed from npm only when the extracted
+#     tarball has no corepack binary (detected by presence, not by version;
+#     today that means Node 25+). Ignored when corepack is bundled.
+#
 # Supported Versions:
-#   - 22.x (current LTS)
-#   - 20.x (previous LTS)
-#   - 18.x (maintenance LTS)
+#   - 26.x (current)
+#   - 24.x (active LTS)
+#   - 22.x (maintenance LTS)
+#   - 20.x, 18.x (EOL; still installable)
 #
 set -euo pipefail
 
@@ -50,10 +56,17 @@ source /tmp/build-scripts/base/cache-utils.sh
 # Source path utilities for secure PATH management
 source /tmp/build-scripts/base/path-utils.sh
 
+# Source corepack provisioning (Node 25+ tarballs no longer bundle it)
+source /tmp/build-scripts/features/lib/node/ensure-corepack.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
 NODE_VERSION="${NODE_VERSION:-22}"
+
+# corepack is installed from npm only when the Node tarball does not bundle it
+# (25+). Pinned so a corepack release can't silently change the build.
+COREPACK_VERSION="${COREPACK_VERSION:-0.36.0}"
 
 # Validate Node.js version format to prevent shell injection
 validate_node_version "$NODE_VERSION" || {
@@ -95,10 +108,13 @@ log_message "Installing Node.js build dependencies..."
 apt_update
 
 # Install Node.js dependencies with retry logic
+# libatomic1: newer Node.js binaries (26.x on arm64, #983) link libatomic.so.1,
+# which the slim base image does not ship; without it `node` exits 127.
 apt_install \
     curl \
     ca-certificates \
-    xz-utils
+    xz-utils \
+    libatomic1
 
 # ============================================================================
 # Node.js Installation from Source
@@ -146,6 +162,9 @@ log_command "Cleaning up Node.js build directory" \
 # Package Manager Setup
 # ============================================================================
 log_message "Setting up package managers..."
+
+# Node 25+ tarballs ship no corepack; install the pinned one before using it
+ensure_corepack || exit 1
 
 # Enable corepack for yarn and pnpm
 log_command "Enabling corepack" \

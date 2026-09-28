@@ -610,6 +610,9 @@ update_version() {
                     sed_inplace "s/AGNIX_VERSION=\"\${AGNIX_VERSION:-[^}]*}\"/AGNIX_VERSION=\"\${AGNIX_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^AGNIX_VERSION=\"[0-9][^\"]*\"/AGNIX_VERSION=\"\${AGNIX_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                corepack)
+                    sed_inplace "s/COREPACK_VERSION=\"\${COREPACK_VERSION:-[^}]*}\"/COREPACK_VERSION=\"\${COREPACK_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 Trivy)
                     ;; # Trivy is installed via APT (no version to update in script)
                 *)

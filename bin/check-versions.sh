@@ -314,6 +314,9 @@ extract_all_versions() {
     # npm registry below. Pinned to stay in lockstep with librarian (#769).
     _add_feature_version AGNIX_VERSION "agnix" "dev-tools.sh"
     _add_feature_version JSONC_PARSER_VERSION "jsonc-parser" "dev-tools.sh"
+    # corepack is npm-installed by node.sh only on Node 25+, whose tarballs no
+    # longer bundle it (#983); checked against the npm registry below.
+    _add_feature_version COREPACK_VERSION "corepack" "node.sh"
 
     # gitlab-triage: the pin lives in .gitlab/triage/Gemfile (not a feature
     # script), so it needs its own extraction rather than _add_feature_version.
@@ -543,6 +546,7 @@ main() {
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;
             librarian) check_github_release "librarian" "joshjhall/librarian" ;;
             agnix) check_npm "agnix" ;;
+            corepack) check_npm "corepack" ;;
             gitlab-triage) check_rubygems "gitlab-triage" ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
