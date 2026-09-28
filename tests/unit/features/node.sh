@@ -336,22 +336,16 @@ test_corepack_non_exact_pin_is_fatal() {
     done
 }
 
-# The pin must use the override pattern (bin/check-versions.sh reads it and
-# the weekly auto-patch rewrites it) and node.sh must call the helper before
-# its first corepack invocation.
-test_corepack_pinned_and_wired() {
+# The pin must use the override pattern: bin/check-versions.sh reads it and
+# the weekly auto-patch rewrites it. That ensure_corepack runs before
+# `corepack enable` is proven by tests/integration/builds/test_node_current.sh,
+# which fails to build without it; a line-number check here would not be.
+test_corepack_pinned() {
     local node_script="$PROJECT_ROOT/lib/features/node.sh"
     assert_file_contains "$node_script" 'COREPACK_VERSION="${COREPACK_VERSION:-' \
         "node.sh pins COREPACK_VERSION with an override default"
     assert_file_not_contains "$node_script" "corepack@latest" \
         "node.sh must not install corepack@latest"
-
-    local ensure_line enable_line
-    ensure_line=$(command grep -n '^ensure_corepack' "$node_script" | command cut -d: -f1)
-    enable_line=$(command grep -n 'corepack enable$' "$node_script" | command head -1 | command cut -d: -f1)
-    assert_not_empty "$ensure_line" "node.sh calls ensure_corepack"
-    assert_true "[ '${ensure_line:-0}' -lt '${enable_line:-0}' ]" \
-        "ensure_corepack runs before corepack enable"
 }
 
 # Test: Node version verification
@@ -451,7 +445,7 @@ run_test_with_setup test_corepack_install_failure_is_fatal "corepack install fai
 run_test_with_setup test_corepack_install_off_path_is_fatal "corepack not on PATH after install fails the build"
 run_test_with_setup test_corepack_missing_without_pin_is_fatal "Missing corepack with no pin fails without installing"
 run_test_with_setup test_corepack_non_exact_pin_is_fatal "Non-exact COREPACK_VERSION is rejected before npm runs"
-run_test_with_setup test_corepack_pinned_and_wired "COREPACK_VERSION pinned and wired before corepack enable"
+run_test_with_setup test_corepack_pinned "COREPACK_VERSION pinned with an override default"
 run_test_with_setup test_node_version_verification "Node version verification script"
 run_test_with_setup test_node_path_configuration "Node PATH configuration"
 run_test_with_setup test_node_helper_functions "Node helper functions"
