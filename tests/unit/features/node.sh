@@ -232,32 +232,104 @@ test_node_permissions() {
     assert_equals "1000" "$USER_GID" "User GID is correct"
 }
 
-# Test: Corepack enablement
-test_corepack_enablement() {
-    local corepack_cmd="corepack enable"
+# ============================================================================
+# Corepack provisioning (#983): Node 25+ tarballs no longer bundle corepack
+# ============================================================================
 
-    # Test that corepack would be enabled
-    assert_not_empty "$corepack_cmd" "Corepack enable command exists"
+# _run_ensure_corepack MODE - run ensure_corepack against PATH stubs
+#
+# The helper runs under `env -i` with PATH holding only the stub dir, so the
+# host's own node/corepack can't satisfy it and BASH_ENV can't rebuild PATH.
+# MODE picks what the npm stub does on `install`:
+#   bundled   - corepack already present; npm must never run
+#   installs  - npm exits 0 and links corepack onto PATH
+#   fails     - npm exits 1
+#   off-path  - npm exits 0 but links nothing onto PATH
+# Prints the helper's exit code; npm's argv (one per line) lands in npm.argv.
+_run_ensure_corepack() {
+    local mode="$1"
+    local stub_bin="$TEST_TEMP_DIR/stub-bin"
+    mkdir -p "$stub_bin"
+    : >"$TEST_TEMP_DIR/npm.argv"
 
-    # Check for yarn and pnpm after corepack
-    local yarn_shim="$TEST_TEMP_DIR/opt/node/bin/yarn"
-    local pnpm_shim="$TEST_TEMP_DIR/opt/node/bin/pnpm"
-
-    # Create the directory first, then simulate corepack creating shims
-    mkdir -p "$(dirname "$yarn_shim")"
-    touch "$yarn_shim" "$pnpm_shim"
-
-    if [ -f "$yarn_shim" ]; then
-        assert_true true "Yarn shim would be created by corepack"
-    else
-        assert_true false "Yarn shim not created"
+    local corepack_stub='#!/bin/bash
+echo 0.36.0'
+    if [ "$mode" = "bundled" ]; then
+        printf '%s\n' "$corepack_stub" >"$stub_bin/corepack"
+        chmod +x "$stub_bin/corepack"
     fi
 
-    if [ -f "$pnpm_shim" ]; then
-        assert_true true "PNPM shim would be created by corepack"
-    else
-        assert_true false "PNPM shim not created"
-    fi
+    local install_action
+    case "$mode" in
+        installs) install_action="printf '%s\\n' '$corepack_stub' >'$stub_bin/corepack'; /bin/chmod +x '$stub_bin/corepack'; exit 0" ;;
+        fails) install_action="exit 1" ;;
+        *) install_action="exit 0" ;;
+    esac
+    command cat >"$stub_bin/npm" <<STUB
+#!/bin/bash
+printf '%s\n' "\$@" >>'$TEST_TEMP_DIR/npm.argv'
+if [ "\$1" = "install" ]; then $install_action; fi
+exit 0
+STUB
+    chmod +x "$stub_bin/npm"
+
+    local rc=0
+    env -i PATH="$stub_bin" COREPACK_VERSION="0.36.0" /bin/bash -c '
+        log_message() { :; }
+        log_error() { :; }
+        log_command() { shift; "$@"; }
+        source "$1"
+        ensure_corepack
+    ' _ "$PROJECT_ROOT/lib/features/lib/node/ensure-corepack.sh" >/dev/null 2>&1 || rc=$?
+    echo "$rc"
+}
+
+test_corepack_bundled_skips_npm() {
+    local rc
+    rc=$(_run_ensure_corepack bundled)
+    assert_equals "0" "$rc" "ensure_corepack succeeds when corepack is bundled"
+    assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.argv")" \
+        "npm is not invoked when corepack is bundled"
+}
+
+test_corepack_missing_installs_pinned() {
+    local rc
+    rc=$(_run_ensure_corepack installs)
+    assert_equals "0" "$rc" "ensure_corepack succeeds after installing corepack"
+    assert_equals "install
+-g
+corepack@0.36.0" "$(command cat "$TEST_TEMP_DIR/npm.argv")" \
+        "npm installs exactly the pinned corepack globally"
+}
+
+test_corepack_install_failure_is_fatal() {
+    local rc
+    rc=$(_run_ensure_corepack fails)
+    assert_equals "1" "$rc" "ensure_corepack fails when npm install fails"
+}
+
+test_corepack_install_off_path_is_fatal() {
+    local rc
+    rc=$(_run_ensure_corepack off-path)
+    assert_equals "1" "$rc" "ensure_corepack fails when corepack is still not on PATH"
+}
+
+# The pin must use the override pattern (bin/check-versions.sh reads it and
+# the weekly auto-patch rewrites it) and node.sh must call the helper before
+# its first corepack invocation.
+test_corepack_pinned_and_wired() {
+    local node_script="$PROJECT_ROOT/lib/features/node.sh"
+    assert_file_contains "$node_script" 'COREPACK_VERSION="${COREPACK_VERSION:-' \
+        "node.sh pins COREPACK_VERSION with an override default"
+    assert_file_not_contains "$node_script" "corepack@latest" \
+        "node.sh must not install corepack@latest"
+
+    local ensure_line enable_line
+    ensure_line=$(command grep -n '^ensure_corepack' "$node_script" | command cut -d: -f1)
+    enable_line=$(command grep -n 'corepack enable$' "$node_script" | command head -1 | command cut -d: -f1)
+    assert_not_empty "$ensure_line" "node.sh calls ensure_corepack"
+    assert_true "[ '${ensure_line:-0}' -lt '${enable_line:-0}' ]" \
+        "ensure_corepack runs before corepack enable"
 }
 
 # Test: Node version verification
@@ -351,7 +423,11 @@ run_test_with_setup test_node_installation_paths "Node installation directory st
 run_test_with_setup test_npm_cache_configuration "NPM cache configuration"
 run_test_with_setup test_node_bashrc_setup "Node bashrc configuration"
 run_test_with_setup test_node_permissions "Node permission handling"
-run_test_with_setup test_corepack_enablement "Corepack enablement for package managers"
+run_test_with_setup test_corepack_bundled_skips_npm "Bundled corepack is used as-is"
+run_test_with_setup test_corepack_missing_installs_pinned "Missing corepack is installed at the pin"
+run_test_with_setup test_corepack_install_failure_is_fatal "corepack install failure fails the build"
+run_test_with_setup test_corepack_install_off_path_is_fatal "corepack not on PATH after install fails the build"
+run_test_with_setup test_corepack_pinned_and_wired "COREPACK_VERSION pinned and wired before corepack enable"
 run_test_with_setup test_node_version_verification "Node version verification script"
 run_test_with_setup test_node_path_configuration "Node PATH configuration"
 run_test_with_setup test_node_helper_functions "Node helper functions"
