@@ -37,6 +37,13 @@ ensure_corepack() {
         return 1
     fi
 
+    # An exact X.Y.Z only: a dist-tag or range would reach npm verbatim and
+    # defeat the pin (NODE_VERSION gets the same check via validate_node_version).
+    if ! [[ "$COREPACK_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "COREPACK_VERSION must be an exact X.Y.Z version, got '${COREPACK_VERSION}'"
+        return 1
+    fi
+
     log_message "corepack not bundled with this Node.js (removed in 25+); installing corepack@${COREPACK_VERSION} from npm"
     # corepack ships no lifecycle scripts; --ignore-scripts keeps it that way
     # for a package that goes on to fetch every image's yarn and pnpm.

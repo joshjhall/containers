@@ -325,6 +325,17 @@ test_corepack_missing_without_pin_is_fatal() {
         "npm is not invoked without a pin (no unpinned install)"
 }
 
+test_corepack_non_exact_pin_is_fatal() {
+    local rc pin
+    for pin in latest "^0.36.0" "0.36" "0.36.0 --foo"; do
+        : >"$TEST_TEMP_DIR/npm.argv"
+        rc=$(_run_ensure_corepack installs "$pin")
+        assert_equals "1" "$rc" "ensure_corepack rejects COREPACK_VERSION='$pin'"
+        assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.argv")" \
+            "npm is not invoked for COREPACK_VERSION='$pin'"
+    done
+}
+
 # The pin must use the override pattern (bin/check-versions.sh reads it and
 # the weekly auto-patch rewrites it) and node.sh must call the helper before
 # its first corepack invocation.
@@ -439,6 +450,7 @@ run_test_with_setup test_corepack_missing_installs_pinned "Missing corepack is i
 run_test_with_setup test_corepack_install_failure_is_fatal "corepack install failure fails the build"
 run_test_with_setup test_corepack_install_off_path_is_fatal "corepack not on PATH after install fails the build"
 run_test_with_setup test_corepack_missing_without_pin_is_fatal "Missing corepack with no pin fails without installing"
+run_test_with_setup test_corepack_non_exact_pin_is_fatal "Non-exact COREPACK_VERSION is rejected before npm runs"
 run_test_with_setup test_corepack_pinned_and_wired "COREPACK_VERSION pinned and wired before corepack enable"
 run_test_with_setup test_node_version_verification "Node version verification script"
 run_test_with_setup test_node_path_configuration "Node PATH configuration"
