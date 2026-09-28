@@ -26,6 +26,11 @@
 # Bump deliberately. Regenerate the lock with a real resolver — never hand-edit
 # it — in the image the job uses:
 #
+#   ./bin/regen-triage-lock.sh
+#
+# The weekly auto-patch runs that same script after bumping the pin (#986). It
+# reads the image from .gitlab/ci/triage.yml and is equivalent to:
+#
 #   docker run --rm -it -v "$PWD":/w -w /w ruby:<image-tag> bash -c \
 #     'apt-get update && apt-get install -y build-essential && \
 #      bundle lock && \

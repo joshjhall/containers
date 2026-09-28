@@ -47,6 +47,7 @@ jobs:
   sweep:
     name: Remove stale status labels from closed issues
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Sweep closed issues
         uses: actions/github-script@v7

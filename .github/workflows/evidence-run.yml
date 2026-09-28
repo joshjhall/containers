@@ -105,6 +105,7 @@ jobs:
   setup:
     name: Resolve matrix
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
       dry_run: ${{ steps.gen.outputs.dry_run }}

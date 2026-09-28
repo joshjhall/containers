@@ -32,6 +32,7 @@ jobs:
   lint:
     name: Lint Dockerfiles
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,6 +48,7 @@ jobs:
     name: Build ${{ matrix.distro }}-${{ matrix.distro_version }}-${{ matrix.arch }}
     needs: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -107,6 +109,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: ./.github/actions/setup-buildx-resilient
+        # Composite steps cannot bound themselves; this caps a hung setup (#987).
+        timeout-minutes: 10
 
       - name: Compute image reference
         id: ref

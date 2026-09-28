@@ -810,10 +810,10 @@ test_gem_version_has_one_source_of_truth() {
 test_gemfile_and_lock_agree() {
     # `bundle install` runs in deployment (frozen) mode, which REFUSES to
     # resolve when the Gemfile and Gemfile.lock disagree — so a bump that
-    # touches only one of them breaks the scheduled job. The weekly auto-patch
-    # updater can rewrite the Gemfile pin but cannot regenerate the lock (that
-    # needs a real Ruby resolver), so this assertion is what catches the drift
-    # at commit time instead of at the next schedule.
+    # touches only one of them breaks the scheduled job. The auto-patch
+    # workflow regenerates the lock via bin/regen-triage-lock.sh after bumping
+    # the pin (#986); this assertion catches a manual bump that skipped it, at
+    # commit time instead of at the next schedule.
     local gemfile="$GITLAB_DIR/triage/Gemfile"
     local lock="$GITLAB_DIR/triage/Gemfile.lock"
     [ -f "$gemfile" ] && [ -f "$lock" ] || {

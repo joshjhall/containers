@@ -22,6 +22,7 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -269,6 +270,7 @@ jobs:
   lint-ai-templates:
     name: Lint AI Templates
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -312,6 +314,7 @@ jobs:
   rust-test:
     name: Rust Tests (stibbons) — ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -370,6 +373,7 @@ jobs:
     # including the newline-laden build_args block — to the display name (#583).
     name: Build (Merge Tier) — ${{ matrix.variant.name }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     needs: [test, rust-test]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
@@ -436,6 +440,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: ./.github/actions/setup-buildx-resilient
+        # Composite steps cannot bound themselves; this caps a hung setup (#987).
+        timeout-minutes: 10
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
@@ -525,6 +531,7 @@ jobs:
   integration-test:
     name: Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
@@ -604,6 +611,7 @@ jobs:
   debian-version-test:
     name: Debian Version Compatibility
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     needs: test
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
@@ -624,6 +632,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: ./.github/actions/setup-buildx-resilient
+        # Composite steps cannot bound themselves; this caps a hung setup (#987).
+        timeout-minutes: 10
 
       - name: Test Python build on Debian ${{ matrix.debian.version }}
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -674,6 +684,7 @@ jobs:
   security-test:
     name: Security Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
@@ -718,6 +729,7 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
@@ -896,6 +908,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: ./.github/actions/setup-buildx-resilient
+        # Composite steps cannot bound themselves; this caps a hung setup (#987).
+        timeout-minutes: 10
 
       - name: Run benchmarks
         id: benchmark
@@ -943,6 +957,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

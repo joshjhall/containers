@@ -6,10 +6,51 @@ description: >-
   redding out a Build job that the change under test cannot affect (#626).
   Keeps the default docker-container driver, which GHA layer cache
   (type=gha,mode=max) and multi-platform builds both require.
+  A daemon or image pull that HANGS rather than fails never trips that
+  retry, so both are done first under `timeout` (#987). Composite steps
+  cannot take `timeout-minutes`, so callers must also set one on the step
+  that uses this action: a hang inside setup-buildx-action itself is then
+  capped (failing the job in minutes, not 6h) though not retried.
 
 runs:
   using: composite
   steps:
+    # A wedged daemon hangs `docker version` indefinitely — on 2026-09-20 it
+    # held a job for the full 6h runner cap inside setup-buildx-action (#987).
+    # Bound it, retry once, then fail with a message that names the cause.
+    - name: Probe Docker daemon
+      shell: bash
+      run: |
+        for attempt in 1 2; do
+          if command timeout -k 10 60 docker version >/dev/null; then
+            exit 0
+          fi
+          if [ "$attempt" -eq 1 ]; then
+            command echo "::warning::Docker daemon did not answer within 60s; retrying in 15s"
+            command sleep 15
+          fi
+        done
+        command echo "::error::Docker daemon unresponsive after 2 attempts (60s each) — runner infrastructure fault, re-run the job"
+        exit 1
+
+    # The docker-container driver bootstraps by pulling the BuildKit image —
+    # the other network-bound step that can stall inside setup-buildx-action,
+    # where nothing can bound it: a hang there is only caught by the caller's
+    # step timeout, which kills the whole action before attempt 2 can run.
+    # Pull it here, bounded and retried, so the bootstrap finds it cached.
+    # Best effort: a pull failure falls through to setup-buildx-action, whose
+    # own failure path already retries.
+    - name: Pre-pull BuildKit image
+      shell: bash
+      run: |
+        for attempt in 1 2; do
+          if command timeout -k 10 180 docker pull -q moby/buildkit:buildx-stable-1 >/dev/null; then
+            exit 0
+          fi
+          command echo "::warning::BuildKit image pull attempt $attempt failed or exceeded 180s"
+        done
+        exit 0
+
     # First attempt — allowed to fail softly so the retry below can run.
     - name: Set up Docker Buildx (attempt 1)
       id: first
