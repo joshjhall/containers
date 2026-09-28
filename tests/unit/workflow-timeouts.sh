@@ -165,9 +165,10 @@ test_buildx_call_sites_bounded() {
 test_buildx_action_probes_daemon_with_timeout() {
     # The probe must be the FIRST step and time-bounded: anything that touches
     # the daemon before it can still hang unbounded.
+    # The bound must be a positive duration: `timeout 0` disables the limit.
     local first
     first=$(yq -r '.runs.steps[0].run // ""' "$BUILDX_ACTION")
-    if command grep -qE 'timeout .*docker version' <<<"$first"; then
+    if command grep -qE 'timeout( -k [0-9]+)? [1-9][0-9]*[smh]? docker version' <<<"$first"; then
         assert_true true "setup-buildx-resilient probes the daemon under timeout first"
     else
         assert_true false "setup-buildx-resilient's first step is not a timeout-bounded docker probe"

@@ -45,9 +45,20 @@ docker build --build-arg INCLUDE_KUBERNETES=true \
 
 ## GitHub Actions: Build timeout
 
-**Symptom**: Build exceeds 6 hour timeout.
+**Symptom**: A job is cancelled with "The job running on runner … has exceeded
+the maximum execution time of N minutes".
 
-**Solution**:
+Every job declares its own `timeout-minutes`, sized at roughly 2–3× its recent
+successful durations; `tests/unit/workflow-timeouts.sh` fails any job that
+omits one, so none can fall back to the 6-hour runner default (#987).
+
+- **A hang** (the log stops mid-step, often at `docker version` or a buildx
+  bootstrap): runner infrastructure. `setup-buildx-resilient` bounds its daemon
+  probe and BuildKit pull and retries once; re-run the job.
+- **Genuinely slower work** (a cold cache, a heavier feature cell): make the
+  build cheaper first, then raise that job's budget deliberately.
+
+**Solution** (for slow builds):
 
 ```yaml
 # Use layer caching

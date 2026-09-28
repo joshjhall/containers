@@ -176,11 +176,13 @@ any crate without a prebuilt binary. All are `--locked` and pinned to a
 - gitlab-triage (`.gitlab/triage/Gemfile`; checked against the RubyGems API).
   Powers the scheduled GitLab issue-triage job. The full dependency graph is
   locked in the committed `Gemfile.lock`, which `bundle install` verifies in
-  deployment mode on every run. The weekly sweep can rewrite the **Gemfile**
-  pin but cannot regenerate the **lock** — that needs a real Ruby resolver — so
-  a bump is finished by hand using the command in the Gemfile's header. The two
-  are asserted to stay in sync by `tests/unit/gitlab-templates.sh`, and frozen
-  mode refuses to run if they ever disagree (#764).
+  deployment mode on every run. The weekly sweep rewrites the **Gemfile** pin,
+  then regenerates the **lock** with `bin/regen-triage-lock.sh`, which runs
+  bundler in the triage job's own image (#986). If regeneration fails, the bump
+  is reverted and the auto-patch PR is held for review; finish it by hand with
+  the same script. The two are asserted to stay in sync by
+  `tests/unit/gitlab-templates.sh`, and frozen mode refuses to run if they ever
+  disagree (#764).
 
 ## Version Tracking Status
 

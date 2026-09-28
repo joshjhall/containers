@@ -277,9 +277,11 @@ jobs:
 
           One or more tools could not be updated — commonly a tool registered
           in bin/check-versions.sh with no matching case in
-          bin/lib/update-versions/updaters.sh. Those tools remain pinned at
-          their current versions. See the "Create auto-patch branch and apply
-          updates" step log for the tool names.
+          bin/lib/update-versions/updaters.sh, or a gitlab-triage bump whose
+          Gemfile.lock could not be regenerated (run bin/regen-triage-lock.sh
+          locally). Those tools remain pinned at their current versions. See
+          the "Create auto-patch branch and apply updates" step log for the
+          tool names.
           EOF
           fi
 

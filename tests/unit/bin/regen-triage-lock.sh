@@ -65,6 +65,7 @@ EOF
 #   stale       lock still resolving 1.0.0 (bundler "succeeded" but no move)
 #   noplatform  correct version, but no aarch64-linux platform
 #   fail        exits non-zero, like a bundler resolution error
+#   nogem       exits 0 but the lock has no gitlab-triage entry at all
 # Every invocation's argv is appended to $STUB_LOG.
 make_docker_stub() {
     local dir="$1"
@@ -73,6 +74,12 @@ make_docker_stub() {
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$STUB_LOG"
+# Real `docker run` without -i hands the container an EMPTY stdin; mirror that
+# so a script that dropped -i cannot pass by the stub reading the pipe anyway.
+case " $* " in
+    *" -i "*) ;;
+    *) exec </dev/null ;;
+esac
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 tar -C "$work" -xf -
@@ -84,6 +91,10 @@ case "${STUB_MODE:-ok}" in
         exit 1
         ;;
     stale) version=1.0.0 ;;
+    nogem)
+        printf 'GEM\n  specs:\n    racc (1.8.1)\n'
+        exit 0
+        ;;
 esac
 platforms="  aarch64-linux
   ruby
@@ -254,6 +265,25 @@ test_fails_without_image() {
         "missing image fails before docker is invoked"
 }
 
+test_missing_gem_is_diagnosed() {
+    have_yq || {
+        skip_test "yq not available"
+        return
+    }
+    # Under pipefail a grep miss inside the version helper used to abort the
+    # assignment silently — non-zero, but with no ERROR line to say why.
+    local tree output rc=0
+    tree=$(new_tree 1.54.0 ruby:3.3.12-slim)
+    output=$(run_script "$tree" nogem 2>&1) || rc=$?
+    command rm -rf "$tree"
+    if [ "$rc" -ne 0 ] && command grep -q "lock resolves gitlab-triage '<none>'" <<<"$output"; then
+        assert_true true "a lock without gitlab-triage fails with an explanatory error"
+    else
+        command echo "    rc=$rc output: $output"
+        assert_true false "a lock without gitlab-triage fails with an explanatory error"
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # Workflow wiring — the snippet is EXTRACTED from auto-patch.yml and executed,
 # so these tests exercise the shipped logic rather than pinning its text.
@@ -363,6 +393,7 @@ run_test test_requests_both_platforms "Requests x86_64 and aarch64 platforms"
 run_test test_fails_when_bundler_fails "Bundler failure is fatal and non-destructive"
 run_test test_fails_when_lock_did_not_move "Stale lock is rejected"
 run_test test_fails_when_platform_missing "Missing platform is rejected"
+run_test test_missing_gem_is_diagnosed "Lock without the gem is diagnosed, not silent"
 run_test test_fails_without_image "Missing image fails before docker runs"
 run_test test_workflow_block_is_extractable "auto-patch block is extractable"
 run_test test_workflow_success_keeps_bump "Workflow: success keeps the bump"

@@ -61,12 +61,14 @@ image=$(yq -r '.["issue-triage"].image // ""' "$CI_INCLUDE")
     die "could not read issue-triage.image from $CI_INCLUDE"
 
 # Same extraction as tests/unit/gitlab-templates.sh (test_gemfile_and_lock_agree).
+# No match yields an empty string, not a failure: under pipefail a grep miss
+# would otherwise abort the `$(...)` assignment before the die() that explains it.
 gemfile_version() {
-    command grep -E '^gem "gitlab-triage"' "$GEMFILE" |
+    { command grep -E '^gem "gitlab-triage"' "$GEMFILE" || true; } |
         command sed -E 's/.*,[[:space:]]*"([^"]+)".*/\1/'
 }
 lock_version() {
-    command grep -E '^[[:space:]]+gitlab-triage \(' "$1" |
+    { command grep -E '^[[:space:]]+gitlab-triage \(' "$1" || true; } |
         command head -1 |
         command sed -E 's/.*\(([^)]+)\).*/\1/'
 }
