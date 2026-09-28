@@ -54,7 +54,7 @@
 - [justfile delegation breaks content invariants](justfile-delegation-breaks-content-invariants.md) — thinning recipes into librarian wrappers breaks
 - [golem-notify wiring moved to plugin](golem-notify-wiring-moved-to-plugin.md) — #611 deleted the build-bound hook; workflow plugin's hooks.json
 - [CI lint fails on deleted paths](ci-lint-fails-on-deleted-paths.md) — Run Tests PR-lint fed deleted files to lefthook
-- [Ship review harness provider error](ship-review-harness-provider-error.md) — next-issue-ship adversarial review can 400 (provider resolve)
+- [Ship review harness provider error](ship-review-harness-provider-error.md) — harness/code-reviewer 400 on Sonnet provider; re-dispatch reviewers with model=opus
 - [Ship review harness agent-type missing](ship-review-harness-agent-type-missing.md) — ship-issue review harness hardcodes dev-core:code-reviewer
 - [Librarian signature verification](librarian-signature-verification.md) — #671: build verifies signed release tarball via cosign (not git clone)
 - [ETXTBSY held-fd is Linux-only](etxtbsy-held-fd-linux-only.md) — inducing ETXTBSY via a held write fd across exec works only on Linux
