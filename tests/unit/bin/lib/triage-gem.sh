@@ -32,6 +32,10 @@ source "https://rubygems.org"
 gem "gitlab-triage-extras", "9.9.9"
 gem "gitlab-triage", "1.54.0"
 gem "racc"
+
+group :legacy do
+gem "gitlab-triage", "1.40.0"
+end
 EOF
     # The DEPENDENCIES requirement deliberately differs from the resolution in
     # specs, and a dependent gem mentions gitlab-triage without a version.
@@ -64,7 +68,7 @@ test_gemfile_version_reads_real_pin() {
     local got
     got=$(triage_gemfile_version "$FIXTURE_DIR/Gemfile")
     teardown_fixtures
-    assert_equals "1.54.0" "$got" "reads the active pin, not the comment or a prefixed gem"
+    assert_equals "1.54.0" "$got" "reads the first active pin — not the comment, a prefixed gem, or a later duplicate"
 }
 
 test_lock_version_reads_specs_resolution() {

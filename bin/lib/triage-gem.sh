@@ -26,9 +26,12 @@ if [ -n "${_BIN_LIB_TRIAGE_GEM_SH_INCLUDED:-}" ]; then
 fi
 readonly _BIN_LIB_TRIAGE_GEM_SH_INCLUDED=1
 
-# triage_gemfile_version FILE — the X in `gem "gitlab-triage", "X"`.
+# triage_gemfile_version FILE — the X in `gem "gitlab-triage", "X"`. First
+# match only, like the lock reader: a caller's `[ "$a" = "$b" ]` must never
+# compare a multi-line value (bundler rejects a duplicated gem anyway).
 triage_gemfile_version() {
     { command grep -E '^gem "gitlab-triage"' "$1" 2>/dev/null || true; } |
+        command head -1 |
         command sed -E 's/.*,[[:space:]]*"([^"]+)".*/\1/'
 }
 
