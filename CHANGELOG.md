@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.20.3] - 2026-09-29
+
+### Changed
+
+- Share the gitlab-triage pin extraction (#990)
+
+### Documentation
+
+- Record the mawk NUL and virtiofs xattr ELOOP lessons
+- Record the Node 25+ install deps and PR-tier label rerun lessons
+- Record the Opus fallback for the review harness provider error
+
+### Fixed
+
+- Pass --xattr-none to bindfs so symlinks stop returning ELOOP (#977)
+- Install corepack from npm when Node >= 25 omits it (#984)
+- Keep auto-patch releases from failing on Gemfile.lock drift and hangs (#988)
+- Track cargo-binstall and fail loudly on never-checked tools (#992)
+
+### Miscellaneous
+
+- Bump 17 pinned tool versions and refresh checksums (#993)
+
+### Testing
+
+- Split the xattr ELOOP suite out of workspace-fs-health.sh (#980) (#982)
+
 ## [4.20.2] - 2026-09-17
 
 ### Documentation
@@ -2487,6 +2514,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.20.3]: https://github.com/joshjhall/containers/compare/v4.20.2...v4.20.3
 [4.20.2]: https://github.com/joshjhall/containers/compare/v4.20.1...v4.20.2
 [4.20.1]: https://github.com/joshjhall/containers/compare/v4.20.0...v4.20.1
 [4.20.0]: https://github.com/joshjhall/containers/compare/v4.19.27...v4.20.0
