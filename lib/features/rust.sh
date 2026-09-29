@@ -64,7 +64,7 @@ RUST_VERSION="${RUST_VERSION:-1.98.1}"
 # binaries) to avoid the from-source compile that blew the CI timeout (#517);
 # binstall falls back to `cargo install` for any crate lacking a prebuilt
 # binary. CARGO_BINSTALL_VERSION is kept in sync with rust-dev.sh.
-CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.20.0}"
+CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.24.0}"
 CARGO_WATCH_VERSION="${CARGO_WATCH_VERSION:-8.5.3}"
 MDBOOK_VERSION="${MDBOOK_VERSION:-0.5.4}"
 MDBOOK_MERMAID_VERSION="${MDBOOK_MERMAID_VERSION:-0.17.1}"

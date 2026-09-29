@@ -232,6 +232,11 @@
           "sha256": "0de5bb29a23159a6afc6f40dd510fbad05685827288ba7727c49d500719d0f92",
           "url": "https://github.com/jbangdev/jbang/releases/download/v0.141.0/jbang-0.141.0.tar",
           "added": "2026-07-15"
+        },
+        "0.142.0": {
+          "sha256": "43aaeb9bc30d9331ed57952a872b80dab3dafe8e927f0f7a90a3c8e67d08eaac",
+          "url": "https://github.com/jbangdev/jbang/releases/download/v0.142.0/jbang-0.142.0.tar",
+          "added": "2026-09-29"
         }
       }
     },
@@ -995,6 +1000,19 @@
             }
           },
           "added": "2026-08-24"
+        },
+        "4.54.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f",
+              "url": "https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "189088da0c6429ec5178dfaab1a114805f6cab0b61b165ab236efedf1d57a71b",
+              "url": "https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_arm64"
+            }
+          },
+          "added": "2026-09-29"
         }
       }
     },
@@ -1107,6 +1125,19 @@
             }
           },
           "added": "2026-08-29"
+        },
+        "1.6.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "767c112faf8175a3dd768defc1688203fef459de29c4b52c02e16a472b8f5d26",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.6.1/codegraph-linux-x64.tar.gz"
+            },
+            "arm64": {
+              "sha256": "3e31bfd645416ab4e34516a9fe444a907132b3527b18889c877148219cdcc966",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.6.1/codegraph-linux-arm64.tar.gz"
+            }
+          },
+          "added": "2026-09-29"
         }
       }
     },
@@ -1124,12 +1155,25 @@
             }
           },
           "added": "2026-06-17"
+        },
+        "1.24.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "7ffe1832c4bc3148d00f02d51c1d96c9cccdec76a0fa20e6e5692201d78bcc0b",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.24.0/cargo-binstall-x86_64-unknown-linux-musl.tgz"
+            },
+            "arm64": {
+              "sha256": "c2c44aba65d402ac43ee821387c49246bc574bde65d3d7f0f7a9e666c5a69f7f",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.24.0/cargo-binstall-aarch64-unknown-linux-musl.tgz"
+            }
+          },
+          "added": "2026-09-29"
         }
       }
     }
   },
   "metadata": {
-    "generated": "2026-09-16T21:36:16Z",
+    "generated": "2026-09-29T14:42:31Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
