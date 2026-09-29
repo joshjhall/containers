@@ -24,7 +24,7 @@ These are defined as build arguments in the Dockerfile:
 - `K9S_VERSION` (currently 0.51.0)
 - `KREW_VERSION` (currently 0.5.0)
 - `HELM_VERSION` (currently 4.3.0)
-- `TERRAGRUNT_VERSION` (currently 1.1.5)
+- `TERRAGRUNT_VERSION` (currently 1.1.6)
 - `TFDOCS_VERSION` (currently 0.24.0)
 - `PIXI_VERSION` (currently 0.81.0)
 - `TFLINT_VERSION` (currently 0.64.0)
@@ -196,7 +196,7 @@ any crate without a prebuilt binary. All are `--locked` and pinned to a
   `tests/unit/bin/check-versions.sh` enforces this offline, and
   `tests/unit/bin/update-checksums.sh` enforces that every tool pinned in
   `lib/checksums.json` is registered for checksum refresh.
-- Poetry is pinned to a specific version (2.4.3)
+- Poetry is pinned to a specific version (2.5.1)
 - Helm is pinned to a specific version (4.2.4)
 - duf and entr have version variables (0.9.1 and 5.8)
 
