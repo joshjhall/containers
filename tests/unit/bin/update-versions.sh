@@ -1360,6 +1360,12 @@ EOF
 HYPERFINE_CARGO_VERSION="${HYPERFINE_CARGO_VERSION:-1.20.0}"
 CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.20.0}"
 EOF
+    # cargo-binstall is pinned in BOTH rust.sh and rust-dev.sh, which must stay
+    # in sync (tests/unit/cargo-install-policy.sh).
+    command cat >"$test_dir/lib/features/rust.sh" <<'EOF'
+#!/bin/bash
+CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.20.0}"
+EOF
 
     command cat >"$test_dir/test.json" <<'EOF'
 {
@@ -1405,12 +1411,16 @@ EOF
         echo "    hyperfine: HYPERFINE_CARGO_VERSION was disturbed (should stay 1.20.0)"
         ok=false
     }
-    # cargo-binstall (#991) rewrites its own rust-dev.sh pin — and only that.
-    command grep -q 'CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.24.0}"' \
-        "$test_dir/lib/features/rust-dev.sh" || {
-        echo "    cargo-binstall: CARGO_BINSTALL_VERSION was not rewritten to 1.24.0"
-        ok=false
-    }
+    # cargo-binstall (#991) rewrites BOTH of its pins, or the two layers
+    # install different versions and the shared-var sync test fails.
+    local f
+    for f in rust.sh rust-dev.sh; do
+        command grep -q 'CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.24.0}"' \
+            "$test_dir/lib/features/$f" || {
+            echo "    cargo-binstall: CARGO_BINSTALL_VERSION in $f was not rewritten to 1.24.0"
+            ok=false
+        }
+    done
 
     command rm -rf "$test_dir"
     assert_true "$ok" "hyperfine, jsonc-parser, sd, corepack, and cargo-binstall rewrite their own pins and nothing else"

@@ -365,6 +365,24 @@ run_test_with_setup test_checksums_tool_registry_has_zoxide "Inline registry con
 run_test_with_setup test_checksums_defines_update_inline_checksum "Defines update_inline_checksum function"
 run_test_with_setup test_checksums_inline_rewrites_constant "Inline updater rewrites constants in place"
 run_test_with_setup test_checksums_inline_targets_setup "Inline registry targets lib/base/setup.sh"
+# registry_entries ARRAY... — print each entry of the named registry arrays,
+# evaluating ONLY those array literals (in a clean shell), never the script's
+# update logic.
+registry_entries() {
+    bash -c '
+        src=$1
+        shift
+        for name in "$@"; do
+            source <(command sed -n "/^${name}=(/,/^)/p" "$src")
+        done
+        for name in "$@"; do
+            declare -n arr="$name"
+            printf "%s\n" "${arr[@]}"
+            unset -n arr
+        done
+    ' _ "$SOURCE_FILE" "$@"
+}
+
 # Test: every tool pinned in lib/checksums.json has a refresh entry (#991)
 #
 # A tool whose checksum is pinned but not registered here keeps verifying fine
@@ -375,13 +393,8 @@ test_checksums_every_pinned_tool_registered() {
     local registered pinned missing
     # Evaluate ONLY the three registry arrays, in a clean shell, so the check
     # reads the real data without running the script's update logic.
-    registered=$(bash -c '
-        source <(command sed -n "/^TOOL_CHECKSUM_REGISTRY_\(NOARCH\|ARCH\|INLINE\)=(/,/^)/p" "$1")
-        for e in "${TOOL_CHECKSUM_REGISTRY_NOARCH[@]}" "${TOOL_CHECKSUM_REGISTRY_ARCH[@]}" \
-            "${TOOL_CHECKSUM_REGISTRY_INLINE[@]}"; do
-            printf "%s\n" "${e%%|*}"
-        done
-    ' _ "$SOURCE_FILE" | command sort -u)
+    registered=$(registry_entries TOOL_CHECKSUM_REGISTRY_NOARCH TOOL_CHECKSUM_REGISTRY_ARCH \
+        TOOL_CHECKSUM_REGISTRY_INLINE | command cut -d'|' -f1 | command sort -u)
     pinned=$(jq -r '.tools | keys[]' "$PROJECT_ROOT/lib/checksums.json" | command sort -u)
 
     # Guard the comparison itself: an empty side would make comm report nothing.
@@ -402,16 +415,18 @@ test_checksums_every_pinned_tool_registered() {
 # extract_tool_version can read it. A stale entry is skipped with only a yellow
 # "could not extract version" line — mado sat that way after rumdl replaced it.
 test_checksums_registry_vars_resolve() {
-    local bad
-    bad=$(bash -c '
-        source <(command sed -n "/^TOOL_CHECKSUM_REGISTRY_\(NOARCH\|ARCH\)=(/,/^)/p" "$1")
-        for e in "${TOOL_CHECKSUM_REGISTRY_NOARCH[@]}" "${TOOL_CHECKSUM_REGISTRY_ARCH[@]}"; do
-            IFS="|" read -r tool var script _ <<<"$e"
-            # Same two shapes extract_tool_version accepts: VAR="${VAR:-x}" or VAR="x".
-            command grep -qE "^${var}=(\"?\\\$\{${var}:-[^}]+\}|\"?[0-9])" "$2/$script" 2>/dev/null ||
-                printf "%s(%s in %s) " "$tool" "$var" "$script"
-        done
-    ' _ "$SOURCE_FILE" "$PROJECT_ROOT")
+    local entries bad="" tool var script
+    entries=$(registry_entries TOOL_CHECKSUM_REGISTRY_NOARCH TOOL_CHECKSUM_REGISTRY_ARCH)
+    # Zero entries would make the loop below vacuously clean.
+    if [ "$(command grep -c . <<<"$entries")" -lt 10 ]; then
+        assert_true false "could not read the NOARCH/ARCH registries ($(command grep -c . <<<"$entries") entries)"
+        return
+    fi
+    while IFS='|' read -r tool var script _; do
+        # Same two shapes extract_tool_version accepts: VAR="${VAR:-x}" or VAR="x".
+        command grep -qE "^${var}=(\"?\\\$\{${var}:-[^}]+\}|\"?[0-9])" "$PROJECT_ROOT/$script" 2>/dev/null ||
+            bad+="$tool($var in $script) "
+    done <<<"$entries"
     assert_equals "" "$bad" "every NOARCH/ARCH registry var resolves in its script"
 }
 

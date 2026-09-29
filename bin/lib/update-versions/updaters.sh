@@ -466,10 +466,6 @@ update_version() {
                     sed_inplace "s/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-[^}]*}\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^GITLEAKS_VERSION=\"[0-9][^\"]*\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
                     ;;
-                mado)
-                    sed_inplace "s/MADO_VERSION=\"\${MADO_VERSION:-[^}]*}\"/MADO_VERSION=\"\${MADO_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^MADO_VERSION=\"[0-9][^\"]*\"/MADO_VERSION=\"\${MADO_VERSION:-$latest}\"/" "$script_path"
-                    ;;
                 dprint)
                     sed_inplace "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^DPRINT_VERSION=\"[0-9][^\"]*\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
@@ -518,8 +514,15 @@ update_version() {
                     sed_inplace "s/JDTLS_VERSION=\"\${JDTLS_VERSION:-[^}]*}\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^JDTLS_VERSION=\"[0-9][^\"]*\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
                     ;;
-                # Cargo tools pinned in rust.sh and rust-dev.sh. cargo-watch and
-                # mdbook are defined in both files and must be kept in sync.
+                # Cargo tools pinned in rust.sh and rust-dev.sh. cargo-watch,
+                # mdbook and cargo-binstall are defined in both files and must
+                # be kept in sync (tests/unit/cargo-install-policy.sh).
+                cargo-binstall)
+                    # Prebuilt installer for the other cargo tools; its musl
+                    # tarball checksums are refreshed by update-checksums.sh (#991).
+                    sed_inplace "s/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-[^}]*}\"/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
+                    sed_inplace "s/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-[^}]*}\"/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust-dev.sh"
+                    ;;
                 cargo-watch)
                     sed_inplace "s/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-[^}]*}\"/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
                     sed_inplace "s/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-[^}]*}\"/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust-dev.sh"
@@ -584,11 +587,6 @@ update_version() {
                     ;;
                 mold)
                     sed_inplace "s/MOLD_VERSION=\"\${MOLD_VERSION:-[^}]*}\"/MOLD_VERSION=\"\${MOLD_VERSION:-$latest}\"/" "$script_path"
-                    ;;
-                cargo-binstall)
-                    # Prebuilt installer for the other cargo tools; its musl
-                    # tarball checksums are refreshed by update-checksums.sh (#991).
-                    sed_inplace "s/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-[^}]*}\"/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 sccache)
                     sed_inplace "s/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-[^}]*}\"/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-$latest}\"/" "$script_path"

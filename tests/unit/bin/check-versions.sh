@@ -531,14 +531,6 @@ test_unchecked_tool_is_loud_text() {
     fi
 }
 
-test_manual_status_is_not_unchecked() {
-    # "check manually" is a deliberate status set by a checker that ran.
-    local out
-    out=$(run_output json "android:1:check manually:unchecked")
-    assert_equals "0|0" "$(rc_of "$out")|$(json_of "$out" | jq -r '.summary.unchecked')" \
-        "a manual-check tool does not trip the unchecked gate"
-}
-
 # ============================================================================
 # Test: every registered tool has a checker case (#991) — offline, real script
 # ============================================================================
@@ -553,15 +545,16 @@ test_manual_status_is_not_unchecked() {
 # version-utils.sh `set -e` at source time, and under -e one empty fetch
 # pipeline aborted the whole script with no output at all.
 
-# run_offline_sweep DIR — writes DIR/out.json, DIR/err, and echoes the exit code.
+# run_offline_sweep DIR [SCRIPT] — writes DIR/out.json, DIR/err, and echoes the
+# exit code. SCRIPT defaults to the repo's check-versions.sh.
 run_offline_sweep() {
-    local dir="$1" rc=0
+    local dir="$1" script="${2:-$PROJECT_ROOT/bin/check-versions.sh}" rc=0
     command mkdir -p "$dir/stub"
     command printf '#!/bin/sh\nexit 22\n' >"$dir/stub/curl"
     command chmod +x "$dir/stub/curl"
     env -u BASH_ENV -u GITHUB_TOKEN \
         PATH="$dir/stub:$PATH" XDG_CACHE_HOME="$dir/cache" \
-        "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache \
+        "$script" --json --no-cache \
         >"$dir/out.json" 2>"$dir/err" || rc=$?
     echo "$rc"
 }
@@ -604,13 +597,69 @@ test_every_registered_tool_has_a_checker() {
     fi
 }
 
+test_unregistered_checker_trips_gate() {
+    # Prove the guard above fails on the defect it exists for — through the real
+    # extraction -> main() dispatch -> output path, not by injecting a status.
+    # A scratch copy of the repo's bin/ and pinned files gains ONE registration
+    # for a tool that has no case in main(); the run must exit 3 and name it.
+    local dir tree rc named
+    dir=$(command mktemp -d)
+    tree="$dir/tree"
+    command mkdir -p "$tree"
+    command cp -R "$PROJECT_ROOT/bin" "$PROJECT_ROOT/lib" "$PROJECT_ROOT/Dockerfile" "$tree/"
+    command cp -R "$PROJECT_ROOT/.github" "$PROJECT_ROOT/.gitlab" "$tree/"
+    command printf 'FIXTURE_NOCHECK_VERSION="${FIXTURE_NOCHECK_VERSION:-1.0.0}"\n' \
+        >>"$tree/lib/features/rust-dev.sh"
+    command sed -i 's|^    _add_feature_version CARGO_BINSTALL_VERSION "cargo-binstall" "rust-dev.sh"$|&\n    _add_feature_version FIXTURE_NOCHECK_VERSION "fixture-nocheck" "rust-dev.sh"|' \
+        "$tree/bin/check-versions.sh"
+    if ! command grep -q '"fixture-nocheck"' "$tree/bin/check-versions.sh"; then
+        command rm -rf "$dir"
+        assert_true false "fixture registration was not injected — anchor line moved?"
+        return
+    fi
+
+    rc=$(run_offline_sweep "$dir" "$tree/bin/check-versions.sh")
+    named=$(jq -r '(.unchecked_tools // []) | join(" ")' "$dir/out.json" 2>/dev/null)
+    command rm -rf "$dir"
+    assert_equals "3|fixture-nocheck" "$rc|$named" \
+        "a registered tool with no checker case exits 3 and is named"
+}
+
+test_cargo_binstall_resolves_outdated() {
+    # #991 AC: cargo-binstall is checked against its GitHub releases and reported
+    # outdated. The stub answers ONLY cargo-binstall's endpoint (with the same
+    # `v`-prefixed tag shape GitHub returns) and fails everything else.
+    local dir rc row
+    dir=$(command mktemp -d)
+    command mkdir -p "$dir/stub"
+    command cat >"$dir/stub/curl" <<'EOF'
+#!/bin/sh
+for a in "$@"; do
+    case "$a" in
+        https://api.github.com/repos/cargo-bins/cargo-binstall/releases/latest)
+            printf '{"tag_name":"v99.1.0"}'
+            exit 0
+            ;;
+    esac
+done
+exit 22
+EOF
+    command chmod +x "$dir/stub/curl"
+    env -u BASH_ENV -u GITHUB_TOKEN PATH="$dir/stub:$PATH" XDG_CACHE_HOME="$dir/cache" \
+        "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache >"$dir/out.json" 2>/dev/null || rc=$?
+    row=$(jq -r '.tools[] | select(.tool == "cargo-binstall") | "\(.latest) \(.status)"' "$dir/out.json" 2>/dev/null)
+    command rm -rf "$dir"
+    assert_equals "99.1.0 outdated" "$row" "cargo-binstall is checked against GitHub releases (v stripped)"
+}
+
 run_test test_exit_code_current "Exit code is 0 when all versions current"
 run_test test_exit_code_outdated "Exit code is 1 when versions outdated"
 run_test test_unchecked_tool_is_loud_json "Unchecked tool exits 3 and is named in JSON"
 run_test test_unchecked_tool_is_loud_text "Unchecked tool exits 3 and is named in text"
-run_test test_manual_status_is_not_unchecked "Manual-check status is not unchecked"
 run_test test_offline_sweep_survives_failed_fetches "Sweep survives failed fetches (errexit leak)"
 run_test test_every_registered_tool_has_a_checker "Every registered tool has a checker case"
+run_test test_unregistered_checker_trips_gate "Tool with no checker case trips the gate (via main)"
+run_test test_cargo_binstall_resolves_outdated "cargo-binstall resolves via GitHub releases"
 
 # ============================================================================
 # Test: Mock-based check function tests

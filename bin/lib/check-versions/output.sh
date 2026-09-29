@@ -11,15 +11,15 @@
 #      no checker case in main()'s dispatch. Takes precedence over 1: an
 #      unchecked tool never reaches "outdated", so it would otherwise stall at
 #      its pin forever with nothing downstream noticing (#991, cf. #781).
-#   A tool whose latest is "check manually" is a deliberate manual status and
-#   does not count as unchecked.
 
 CHECK_EXIT_OUTDATED=1
 CHECK_EXIT_UNCHECKED=3
 
-# is_unchecked STATUS LATEST — true for a tool no checker ever ran against.
+# is_unchecked STATUS — true for a tool no checker ever ran against. There is
+# deliberately no exemption: every checker that runs sets current, outdated or
+# error via set_latest, so "unchecked" only ever means a missing dispatch case.
 is_unchecked() {
-    [ "$1" = "unchecked" ] && [ "$2" != "check manually" ]
+    [ "$1" = "unchecked" ]
 }
 
 # check_exit_code OUTDATED UNCHECKED — the process exit code for these counts.
@@ -61,7 +61,7 @@ print_json_results() {
             error) errors=$((errors + 1)) ;;
             manual) manual=$((manual + 1)) ;;
         esac
-        if is_unchecked "$status" "$latest"; then
+        if is_unchecked "$status"; then
             unchecked=$((unchecked + 1))
             unchecked_tools+=("$tool")
         fi
@@ -158,7 +158,7 @@ print_results() {
                 ;;
         esac
 
-        if is_unchecked "$status" "${LATEST_VERSIONS[$i]}"; then
+        if is_unchecked "$status"; then
             unchecked=$((unchecked + 1))
             unchecked_tools+=("$tool")
         fi
