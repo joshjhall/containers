@@ -1358,6 +1358,7 @@ EOF
     command cat >"$test_dir/lib/features/rust-dev.sh" <<'EOF'
 #!/bin/bash
 HYPERFINE_CARGO_VERSION="${HYPERFINE_CARGO_VERSION:-1.20.0}"
+CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.20.0}"
 EOF
 
     command cat >"$test_dir/test.json" <<'EOF'
@@ -1366,7 +1367,8 @@ EOF
     {"tool": "sd", "current": "1.1.0", "latest": "1.2.0", "file": "dev-tools.sh", "status": "outdated"},
     {"tool": "hyperfine", "current": "1.20.0", "latest": "1.21.0", "file": "dev-tools.sh", "status": "outdated"},
     {"tool": "jsonc-parser", "current": "3.3.1", "latest": "3.4.0", "file": "dev-tools.sh", "status": "outdated"},
-    {"tool": "corepack", "current": "0.36.0", "latest": "0.37.0", "file": "node.sh", "status": "outdated"}
+    {"tool": "corepack", "current": "0.36.0", "latest": "0.37.0", "file": "node.sh", "status": "outdated"},
+    {"tool": "cargo-binstall", "current": "1.20.0", "latest": "1.24.0", "file": "rust-dev.sh", "status": "outdated"}
   ]
 }
 EOF
@@ -1403,9 +1405,15 @@ EOF
         echo "    hyperfine: HYPERFINE_CARGO_VERSION was disturbed (should stay 1.20.0)"
         ok=false
     }
+    # cargo-binstall (#991) rewrites its own rust-dev.sh pin — and only that.
+    command grep -q 'CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.24.0}"' \
+        "$test_dir/lib/features/rust-dev.sh" || {
+        echo "    cargo-binstall: CARGO_BINSTALL_VERSION was not rewritten to 1.24.0"
+        ok=false
+    }
 
     command rm -rf "$test_dir"
-    assert_true "$ok" "hyperfine, jsonc-parser, and sd rewrite their own pins and nothing else"
+    assert_true "$ok" "hyperfine, jsonc-parser, sd, corepack, and cargo-binstall rewrite their own pins and nothing else"
 }
 
 test_gemfile_case_rewrites_triage_pin() {
@@ -1613,7 +1621,7 @@ run_test test_invalid_version_returns_distinct_code "Invalid version returns a c
 run_test test_exit_code_contract "Exit-code contract: 2 on skipped updates (real and dry), 0 on clean runs"
 run_test test_dry_run_reports_missing_case_without_writing "Dry run reports a missing updater case without writing"
 run_test test_dry_run_short_circuits_network_and_binary "Dry run skips pin_action's network call and the luggage binary probe"
-run_test test_new_cases_rewrite_their_pins "hyperfine, jsonc-parser, sd, and corepack rewrite their own pins"
+run_test test_new_cases_rewrite_their_pins "hyperfine, jsonc-parser, sd, corepack, and cargo-binstall rewrite their own pins"
 run_test test_gemfile_case_rewrites_triage_pin "gitlab-triage rewrites the Gemfile pin, not the lock"
 run_test test_unknown_gemfile_tool_returns_no_updater_case "unknown Gemfile tool reports a missing updater case"
 run_test test_failed_rewrite_exits_three "Failed rewrite exits 3 (fatal), not 2 (tolerated)"

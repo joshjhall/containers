@@ -52,6 +52,19 @@ jobs:
             exit 1
           fi
 
+          # A tool registered in check-versions.sh with no checker case is
+          # reported "unchecked" and would otherwise stall at its pin forever:
+          # nothing below selects it (issue #991). Surface it by name, carry it
+          # into the apply step's hold gate, and fail this run outright when
+          # there is no branch/PR to hold (see the end of this step).
+          UNCHECKED=$(echo "$OUTPUT" | jq -r '(.unchecked_tools // []) | join(" ")')
+          if [ -n "$UNCHECKED" ]; then
+            echo "::warning::Tools with no checker case in bin/check-versions.sh (stuck at their pins): $UNCHECKED (issue #991)"
+          fi
+          {
+            echo "unchecked_tools=$UNCHECKED"
+          } >> "$GITHUB_OUTPUT"
+
           # Check for outdated tools
           OUTDATED=$(echo "$OUTPUT" | jq '[.tools[] | select(.status == "outdated")]')
           UPDATE_COUNT=$(echo "$OUTDATED" | jq 'length')
@@ -77,8 +90,14 @@ jobs:
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           else
-            echo "All versions are up to date!"
             echo "has_updates=false" >> "$GITHUB_OUTPUT"
+            if [ -n "$UNCHECKED" ]; then
+              # No outdated tools means no branch and no PR to hold, so a
+              # warning alone would read as a green "up to date" run.
+              echo "::error::No updates to apply, but these tools are never checked: $UNCHECKED — add a case to bin/check-versions.sh (issue #991)"
+              exit 1
+            fi
+            echo "All versions are up to date!"
           fi
 
       # update-versions.sh calls `luggage catalog add-version` for
@@ -91,6 +110,8 @@ jobs:
 
       - name: Create auto-patch branch and apply updates
         if: steps.check.outputs.has_updates == 'true'
+        env:
+          UNCHECKED_TOOLS: ${{ steps.check.outputs.unchecked_tools }}
         run: |
           # Configure git
           git config user.name "github-actions[bot]"
@@ -122,6 +143,12 @@ jobs:
           # message is assembled further down in THIS same step, and a
           # $GITHUB_ENV write is only visible to *later* steps.
           UPDATE_SKIPS=false
+          # Unchecked tools (no checker case) hold the PR too — see the check
+          # step. Passed via env, never interpolated into the script.
+          if [ -n "$UNCHECKED_TOOLS" ]; then
+            echo "::warning::Holding for review: never-checked tools $UNCHECKED_TOOLS (issue #991)"
+            UPDATE_SKIPS=true
+          fi
           UPDATE_STATUS=0
           ./bin/update-versions.sh --input /tmp/version-check-output.json --no-commit --no-bump || UPDATE_STATUS=$?
           if [ "$UPDATE_STATUS" -eq 2 ]; then
@@ -277,7 +304,8 @@ jobs:
 
           One or more tools could not be updated — commonly a tool registered
           in bin/check-versions.sh with no matching case in
-          bin/lib/update-versions/updaters.sh, or a gitlab-triage bump whose
+          bin/lib/update-versions/updaters.sh (or no checker case in
+          check-versions.sh itself), or a gitlab-triage bump whose
           Gemfile.lock could not be regenerated (run bin/regen-triage-lock.sh
           locally). Those tools remain pinned at their current versions. See
           the "Create auto-patch branch and apply updates" step log for the

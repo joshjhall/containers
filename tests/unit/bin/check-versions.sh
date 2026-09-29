@@ -462,42 +462,155 @@ test_extract_krew_version() {
 run_test test_extract_krew_version "Script extracts krew version from Dockerfile"
 
 # ============================================================================
-# Test: Exit code tests (previously referenced but undefined)
+# Test: Exit codes and the unchecked-tool gate (#991)
 # ============================================================================
-test_exit_code_current() {
-    # Test that when all versions are current, exit code is 0
-    # We test this by checking the output.sh logic: exit 1 only when outdated > 0
-    local script_content
-    script_content=$(/usr/bin/cat "$PROJECT_ROOT/bin/lib/check-versions/output.sh")
+# These drive the REAL bin/lib/check-versions/output.sh with a hand-built tool
+# table and read back both the JSON and the process exit, rather than grepping
+# the source for `exit 1` (which is what these tests used to do, and which
+# passed no matter what the exit logic actually did).
 
-    # Verify the script only exits 1 when outdated > 0
-    assert_contains "$script_content" 'if [ $outdated -gt 0 ]' \
-        "Exit code logic checks outdated count"
-    assert_contains "$script_content" 'exit 1' \
-        "Script exits 1 for outdated versions"
+# run_output FORMAT STATUS... — each STATUS is "tool:current:latest:status".
+# Prints the output, then "RC=<exit>" as the last line. print_results calls
+# `exit` itself, so the code is read from the subshell's status — never from a
+# line the subshell prints, which an `exit` would skip.
+run_output() {
+    local format="$1" rc=0 out
+    shift
+    out=$(
+        source "$PROJECT_ROOT/bin/lib/common.sh"
+        source "$PROJECT_ROOT/bin/lib/check-versions/output.sh"
+        set +e
+        OUTPUT_FORMAT="$format"
+        TOOLS=() CURRENT_VERSIONS=() LATEST_VERSIONS=() VERSION_STATUS=() VERSION_FILES=()
+        row="" t="" c="" l="" st=""
+        for row in "$@"; do
+            IFS=: read -r t c l st <<<"$row"
+            TOOLS+=("$t") CURRENT_VERSIONS+=("$c") LATEST_VERSIONS+=("$l")
+            VERSION_STATUS+=("$st") VERSION_FILES+=("f.sh")
+        done
+        print_results
+    ) || rc=$?
+    command sed 's/\x1b\[[0-9;]*m//g' <<<"$out"
+    echo "RC=$rc"
+}
+
+rc_of() { command sed -n 's/^RC=//p' <<<"$1" | command tail -1; }
+json_of() { command sed '/^RC=/d' <<<"$1"; }
+
+test_exit_code_current() {
+    local out
+    out=$(run_output json "a:1.0:1.0:current" "b:2.0:2.0:current")
+    assert_equals "0|0|0" "$(rc_of "$out")|$(json_of "$out" | jq -r '.exit_code')|$(json_of "$out" | jq -r '.summary.unchecked')" \
+        "all current: exit 0, exit_code 0, unchecked 0"
 }
 
 test_exit_code_outdated() {
-    # Verify that version_matches correctly identifies outdated versions
-    # which drives the exit code logic
-    version_matches() {
-        local current="$1"
-        local latest="$2"
-        if [[ "$current" == "$latest" ]]; then return 0; fi
-        if [[ "$latest" == "$current."* ]] || [[ "$latest" == "$current" ]]; then return 0; fi
-        return 1
-    }
+    local out
+    out=$(run_output json "a:1.0:1.0:current" "b:2.0:2.1:outdated")
+    assert_equals "1|1" "$(rc_of "$out")|$(json_of "$out" | jq -r '.exit_code')" \
+        "an outdated tool exits 1"
+}
 
-    # Outdated: current 1.2.3, latest 1.3.0
-    if ! version_matches "1.2.3" "1.3.0"; then
-        assert_true true "Outdated version correctly detected (drives exit code 1)"
+test_unchecked_tool_is_loud_json() {
+    local out
+    out=$(run_output json "a:1.0:2.0:outdated" "cargo-binstall:1.20.0::unchecked")
+    local got
+    got="$(rc_of "$out")|$(json_of "$out" | jq -c '[.exit_code, .summary.unchecked, .unchecked_tools]')"
+    assert_equals '3|[3,1,["cargo-binstall"]]' "$got" \
+        "an unchecked tool exits 3 (over outdated's 1) and is named in the JSON"
+}
+
+test_unchecked_tool_is_loud_text() {
+    local out
+    out=$(run_output text "cargo-binstall:1.20.0::unchecked")
+    if [ "$(rc_of "$out")" = "3" ] && command grep -q "no checker case in bin/check-versions.sh: cargo-binstall" <<<"$out"; then
+        assert_true true "text mode names the unchecked tool and exits 3"
     else
-        assert_true false "Outdated version incorrectly matched as current"
+        command echo "$out" | command tail -6
+        assert_true false "text mode names the unchecked tool and exits 3"
+    fi
+}
+
+test_manual_status_is_not_unchecked() {
+    # "check manually" is a deliberate status set by a checker that ran.
+    local out
+    out=$(run_output json "android:1:check manually:unchecked")
+    assert_equals "0|0" "$(rc_of "$out")|$(json_of "$out" | jq -r '.summary.unchecked')" \
+        "a manual-check tool does not trip the unchecked gate"
+}
+
+# ============================================================================
+# Test: every registered tool has a checker case (#991) — offline, real script
+# ============================================================================
+# Runs the REAL check-versions.sh against this repo with `curl` stubbed on PATH.
+# The stub fails every request (curl -f's exit 22 on an HTTP error), so every
+# checker that ran lands on `error`, and a tool that is still `unchecked` can
+# only be one no checker ever ran against: a registration in
+# extract_all_versions with no case in main()'s dispatch. This is the check
+# that would have caught cargo-binstall stalling from #532 to #991.
+#
+# The same run is also the regression test for the errexit leak: common.sh and
+# version-utils.sh `set -e` at source time, and under -e one empty fetch
+# pipeline aborted the whole script with no output at all.
+
+# run_offline_sweep DIR — writes DIR/out.json, DIR/err, and echoes the exit code.
+run_offline_sweep() {
+    local dir="$1" rc=0
+    command mkdir -p "$dir/stub"
+    command printf '#!/bin/sh\nexit 22\n' >"$dir/stub/curl"
+    command chmod +x "$dir/stub/curl"
+    env -u BASH_ENV -u GITHUB_TOKEN \
+        PATH="$dir/stub:$PATH" XDG_CACHE_HOME="$dir/cache" \
+        "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache \
+        >"$dir/out.json" 2>"$dir/err" || rc=$?
+    echo "$rc"
+}
+
+test_offline_sweep_survives_failed_fetches() {
+    local dir rc
+    dir=$(command mktemp -d)
+    rc=$(run_offline_sweep "$dir")
+    local total errors valid=false
+    jq -e . "$dir/out.json" >/dev/null 2>&1 && valid=true
+    total=$(jq -r '.summary.total // 0' "$dir/out.json" 2>/dev/null)
+    errors=$(jq -r '.summary.errors // 0' "$dir/out.json" 2>/dev/null)
+    command rm -rf "$dir"
+    # Every fetch failed, so every checked tool must be `error` — not current,
+    # and not a run that died before printing anything.
+    if [ "$valid" = true ] && [ "${total:-0}" -gt 50 ] && [ "$errors" = "$total" ]; then
+        assert_true true "a sweep where every fetch fails still emits JSON ($total tools, all error)"
+    else
+        assert_true false "offline sweep: rc=$rc valid_json=$valid total=$total errors=$errors"
+    fi
+}
+
+test_every_registered_tool_has_a_checker() {
+    local dir rc unchecked
+    dir=$(command mktemp -d)
+    rc=$(run_offline_sweep "$dir")
+    # jq on an EMPTY file prints nothing and exits 0 — a run that died before
+    # emitting JSON would read as "no unchecked tools". Require a real document
+    # that carries the field.
+    if jq -e 'has("unchecked_tools")' "$dir/out.json" >/dev/null 2>&1; then
+        unchecked=$(jq -r '.unchecked_tools | join(" ")' "$dir/out.json")
+    else
+        unchecked="<no JSON document>"
+    fi
+    command rm -rf "$dir"
+    if [ -z "$unchecked" ] && [ "$rc" != "3" ]; then
+        assert_true true "every tool registered in check-versions.sh has a checker case"
+    else
+        assert_true false "registered with no checker case in main(): ${unchecked} (rc=$rc)"
     fi
 }
 
 run_test test_exit_code_current "Exit code is 0 when all versions current"
 run_test test_exit_code_outdated "Exit code is 1 when versions outdated"
+run_test test_unchecked_tool_is_loud_json "Unchecked tool exits 3 and is named in JSON"
+run_test test_unchecked_tool_is_loud_text "Unchecked tool exits 3 and is named in text"
+run_test test_manual_status_is_not_unchecked "Manual-check status is not unchecked"
+run_test test_offline_sweep_survives_failed_fetches "Sweep survives failed fetches (errexit leak)"
+run_test test_every_registered_tool_has_a_checker "Every registered tool has a checker case"
 
 # ============================================================================
 # Test: Mock-based check function tests

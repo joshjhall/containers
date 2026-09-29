@@ -8,6 +8,14 @@ source "${BIN_DIR}/lib/common.sh"
 source "${BIN_DIR}/lib/version-utils.sh"
 source "${BIN_DIR}/lib/triage-gem.sh"
 
+# common.sh and version-utils.sh each `set -euo pipefail` at source time, which
+# silently re-enabled errexit here. This script is deliberately NOT errexit: a
+# checker whose fetch fails (upstream down, rate-limited, page layout changed)
+# must record that tool as `error` and let the sweep continue. Under -e, one
+# empty pipeline — e.g. the Rust forge fallback's final grep — aborted the whole
+# run with no output, so the weekly sweep produced nothing at all (#991).
+set +e
+
 # Set project root
 PROJECT_ROOT="$(dirname "$BIN_DIR")"
 
@@ -541,6 +549,7 @@ main() {
             sccache) check_crates_io "sccache" ;;
             taplo-cli) check_crates_io "taplo-cli" ;;
             mold) check_github_release "mold" "rui314/mold" ;;
+            cargo-binstall) check_github_release "cargo-binstall" "cargo-bins/cargo-binstall" ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;

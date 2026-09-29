@@ -365,6 +365,58 @@ run_test_with_setup test_checksums_tool_registry_has_zoxide "Inline registry con
 run_test_with_setup test_checksums_defines_update_inline_checksum "Defines update_inline_checksum function"
 run_test_with_setup test_checksums_inline_rewrites_constant "Inline updater rewrites constants in place"
 run_test_with_setup test_checksums_inline_targets_setup "Inline registry targets lib/base/setup.sh"
+# Test: every tool pinned in lib/checksums.json has a refresh entry (#991)
+#
+# A tool whose checksum is pinned but not registered here keeps verifying fine
+# at its current version — then silently drops to Tier 4 TOFU the moment its
+# pin is bumped, because nothing writes the new version's checksum. That is how
+# cargo-binstall, ktlint, detekt and kotlin-language-server all sat unrefreshed.
+test_checksums_every_pinned_tool_registered() {
+    local registered pinned missing
+    # Evaluate ONLY the three registry arrays, in a clean shell, so the check
+    # reads the real data without running the script's update logic.
+    registered=$(bash -c '
+        source <(command sed -n "/^TOOL_CHECKSUM_REGISTRY_\(NOARCH\|ARCH\|INLINE\)=(/,/^)/p" "$1")
+        for e in "${TOOL_CHECKSUM_REGISTRY_NOARCH[@]}" "${TOOL_CHECKSUM_REGISTRY_ARCH[@]}" \
+            "${TOOL_CHECKSUM_REGISTRY_INLINE[@]}"; do
+            printf "%s\n" "${e%%|*}"
+        done
+    ' _ "$SOURCE_FILE" | command sort -u)
+    pinned=$(jq -r '.tools | keys[]' "$PROJECT_ROOT/lib/checksums.json" | command sort -u)
+
+    # Guard the comparison itself: an empty side would make comm report nothing.
+    if [ "$(command wc -l <<<"$registered")" -lt 10 ] || [ -z "$pinned" ]; then
+        assert_true false "could not read the registries or checksums.json (registered=$(command wc -l <<<"$registered"))"
+        return
+    fi
+
+    missing=$(command comm -23 <(echo "$pinned") <(echo "$registered") | command tr '\n' ' ')
+    if [ -z "${missing// /}" ]; then
+        assert_true true "every tool pinned in lib/checksums.json has a refresh registry entry"
+    else
+        assert_true false "pinned in lib/checksums.json but never refreshed: $missing"
+    fi
+}
+
+# Test: each registry entry's version variable exists in its script, so
+# extract_tool_version can read it. A stale entry is skipped with only a yellow
+# "could not extract version" line — mado sat that way after rumdl replaced it.
+test_checksums_registry_vars_resolve() {
+    local bad
+    bad=$(bash -c '
+        source <(command sed -n "/^TOOL_CHECKSUM_REGISTRY_\(NOARCH\|ARCH\)=(/,/^)/p" "$1")
+        for e in "${TOOL_CHECKSUM_REGISTRY_NOARCH[@]}" "${TOOL_CHECKSUM_REGISTRY_ARCH[@]}"; do
+            IFS="|" read -r tool var script _ <<<"$e"
+            # Same two shapes extract_tool_version accepts: VAR="${VAR:-x}" or VAR="x".
+            command grep -qE "^${var}=(\"?\\\$\{${var}:-[^}]+\}|\"?[0-9])" "$2/$script" 2>/dev/null ||
+                printf "%s(%s in %s) " "$tool" "$var" "$script"
+        done
+    ' _ "$SOURCE_FILE" "$PROJECT_ROOT")
+    assert_equals "" "$bad" "every NOARCH/ARCH registry var resolves in its script"
+}
+
+run_test_with_setup test_checksums_every_pinned_tool_registered "Every pinned tool has a refresh entry"
+run_test_with_setup test_checksums_registry_vars_resolve "Registry version vars resolve"
 run_test_with_setup test_checksums_script_syntax "Script has valid bash syntax"
 
 # Generate test report

@@ -585,6 +585,11 @@ update_version() {
                 mold)
                     sed_inplace "s/MOLD_VERSION=\"\${MOLD_VERSION:-[^}]*}\"/MOLD_VERSION=\"\${MOLD_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                cargo-binstall)
+                    # Prebuilt installer for the other cargo tools; its musl
+                    # tarball checksums are refreshed by update-checksums.sh (#991).
+                    sed_inplace "s/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-[^}]*}\"/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 sccache)
                     sed_inplace "s/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-[^}]*}\"/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-$latest}\"/" "$script_path"
                     ;;

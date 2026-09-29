@@ -73,7 +73,13 @@ if [ -n "$INPUT_FILE" ]; then
     VERSION_DATA=$(command cat "$INPUT_FILE")
 else
     echo "Running version check..."
-    VERSION_DATA=$("$BIN_DIR/check-versions.sh" --json 2>/dev/null)
+    # check-versions exits non-zero on outdated (1) or unchecked (3) tools —
+    # expected here; validate the JSON instead of trusting the exit status.
+    VERSION_DATA=$("$BIN_DIR/check-versions.sh" --json 2>/dev/null || true)
+    if ! echo "$VERSION_DATA" | jq empty 2>/dev/null || [ -z "$VERSION_DATA" ]; then
+        echo -e "${RED}Error: check-versions.sh did not return valid JSON${NC}"
+        exit 1
+    fi
 fi
 
 # Extract outdated tools
