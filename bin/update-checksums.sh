@@ -219,6 +219,9 @@ TOOL_CHECKSUM_REGISTRY_NOARCH=(
     "kotlin-compiler|KOTLIN_VERSION|lib/features/kotlin.sh|https://github.com/JetBrains/kotlin/releases/download/v{VERSION}/kotlin-compiler-{VERSION}.zip"
     "spring-boot-cli|SPRING_VERSION|lib/features/java-dev.sh|https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/{VERSION}/spring-boot-cli-{VERSION}-bin.tar.gz"
     "jbang|JBANG_VERSION|lib/features/java-dev.sh|https://github.com/jbangdev/jbang/releases/download/v{VERSION}/jbang-{VERSION}.tar"
+    "ktlint|KTLINT_VERSION|lib/features/kotlin-dev.sh|https://github.com/ktlint/ktlint/releases/download/{VERSION}/ktlint"
+    "detekt|DETEKT_VERSION|lib/features/kotlin-dev.sh|https://github.com/detekt/detekt/releases/download/v{VERSION}/detekt-cli-{VERSION}.zip"
+    "kotlin-language-server|KLS_VERSION|lib/features/kotlin-dev.sh|https://github.com/fwcd/kotlin-language-server/releases/download/{VERSION}/server.zip"
 )
 
 # Architecture-dependent tools (different files per arch)
@@ -230,13 +233,13 @@ TOOL_CHECKSUM_REGISTRY_ARCH=(
     "taplo|TAPLO_VERSION|lib/features/dev-tools.sh|https://github.com/tamasfe/taplo/releases/download/{VERSION}/taplo-linux-x86_64.gz|https://github.com/tamasfe/taplo/releases/download/{VERSION}/taplo-linux-aarch64.gz"
     "lefthook|LEFTHOOK_VERSION|lib/features/dev-tools.sh|https://github.com/evilmartians/lefthook/releases/download/v{VERSION}/lefthook_{VERSION}_Linux_x86_64.gz|https://github.com/evilmartians/lefthook/releases/download/v{VERSION}/lefthook_{VERSION}_Linux_aarch64.gz"
     "gitleaks|GITLEAKS_VERSION|lib/features/dev-tools.sh|https://github.com/gitleaks/gitleaks/releases/download/v{VERSION}/gitleaks_{VERSION}_linux_x64.tar.gz|https://github.com/gitleaks/gitleaks/releases/download/v{VERSION}/gitleaks_{VERSION}_linux_arm64.tar.gz"
-    "mado|MADO_VERSION|lib/features/dev-tools.sh|https://github.com/akiomik/mado/releases/download/v{VERSION}/mado-Linux-gnu-x86_64.tar.gz|https://github.com/akiomik/mado/releases/download/v{VERSION}/mado-Linux-gnu-arm64.tar.gz"
     "dprint|DPRINT_VERSION|lib/features/dev-tools.sh|https://github.com/dprint/dprint/releases/download/{VERSION}/dprint-x86_64-unknown-linux-gnu.zip|https://github.com/dprint/dprint/releases/download/{VERSION}/dprint-aarch64-unknown-linux-gnu.zip"
     "osv-scanner|OSV_SCANNER_VERSION|lib/features/dev-tools.sh|https://github.com/google/osv-scanner/releases/download/v{VERSION}/osv-scanner_linux_amd64|https://github.com/google/osv-scanner/releases/download/v{VERSION}/osv-scanner_linux_arm64"
     "yq|YQ_VERSION|lib/features/dev-tools.sh|https://github.com/mikefarah/yq/releases/download/v{VERSION}/yq_linux_amd64|https://github.com/mikefarah/yq/releases/download/v{VERSION}/yq_linux_arm64"
     "eza|EZA_VERSION|lib/features/dev-tools.sh|https://github.com/eza-community/eza/releases/download/v{VERSION}/eza_x86_64-unknown-linux-gnu.tar.gz|https://github.com/eza-community/eza/releases/download/v{VERSION}/eza_aarch64-unknown-linux-gnu.tar.gz"
     "cloudflared|CLOUDFLARED_VERSION|lib/features/cloudflare.sh|https://github.com/cloudflare/cloudflared/releases/download/{VERSION}/cloudflared-linux-amd64.deb|https://github.com/cloudflare/cloudflared/releases/download/{VERSION}/cloudflared-linux-arm64.deb"
     "mold|MOLD_VERSION|lib/features/rust-dev.sh|https://github.com/rui314/mold/releases/download/v{VERSION}/mold-{VERSION}-x86_64-linux.tar.gz|https://github.com/rui314/mold/releases/download/v{VERSION}/mold-{VERSION}-aarch64-linux.tar.gz"
+    "cargo-binstall|CARGO_BINSTALL_VERSION|lib/features/rust-dev.sh|https://github.com/cargo-bins/cargo-binstall/releases/download/v{VERSION}/cargo-binstall-x86_64-unknown-linux-musl.tgz|https://github.com/cargo-bins/cargo-binstall/releases/download/v{VERSION}/cargo-binstall-aarch64-unknown-linux-musl.tgz"
     "codegraph|CODEGRAPH_VERSION|lib/features/dev-tools.sh|https://github.com/colbymchenry/codegraph/releases/download/v{VERSION}/codegraph-linux-x64.tar.gz|https://github.com/colbymchenry/codegraph/releases/download/v{VERSION}/codegraph-linux-arm64.tar.gz"
 )
 

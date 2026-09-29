@@ -190,6 +190,12 @@ any crate without a prebuilt binary. All are `--locked` and pinned to a
 
 - All Dockerfile ARG versions are pinned and tracked
 - All shell script tool installations use version variables
+- Every tool registered in `bin/check-versions.sh` must have a checker case: a
+  tool left `unchecked` makes the check exit 3, names it in the JSON
+  (`unchecked_tools`), and holds or fails the weekly auto-patch run (#991).
+  `tests/unit/bin/check-versions.sh` enforces this offline, and
+  `tests/unit/bin/update-checksums.sh` enforces that every tool pinned in
+  `lib/checksums.json` is registered for checksum refresh.
 - Poetry is pinned to a specific version (2.4.3)
 - Helm is pinned to a specific version (4.2.4)
 - duf and entr have version variables (0.9.1 and 5.8)

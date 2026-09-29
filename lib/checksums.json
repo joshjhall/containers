@@ -778,23 +778,6 @@
         }
       }
     },
-    "mado": {
-      "versions": {
-        "0.3.0": {
-          "checksums": {
-            "amd64": {
-              "sha256": "aad845cd23c8c0417cdf87b8376b75e131c38e1cb890124790567735306de6d7",
-              "url": "https://github.com/akiomik/mado/releases/download/v0.3.0/mado-Linux-gnu-x86_64.tar.gz"
-            },
-            "arm64": {
-              "sha256": "ffcdd4845329a69bc729c0242abb6163f23495c0b04dbbaf608cbed43a2f4976",
-              "url": "https://github.com/akiomik/mado/releases/download/v0.3.0/mado-Linux-gnu-arm64.tar.gz"
-            }
-          },
-          "added": "2026-04-19"
-        }
-      }
-    },
     "dprint": {
       "versions": {
         "0.54.0": {

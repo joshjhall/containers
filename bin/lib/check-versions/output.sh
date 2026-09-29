@@ -3,6 +3,35 @@
 #
 # Part of the version checking system (see bin/check-versions.sh).
 # Contains functions for rendering results in text and JSON formats.
+#
+# Exit codes (both formats):
+#   0  every tool checked and current
+#   1  one or more tools outdated
+#   3  one or more tools UNCHECKED — registered in check-versions.sh but with
+#      no checker case in main()'s dispatch. Takes precedence over 1: an
+#      unchecked tool never reaches "outdated", so it would otherwise stall at
+#      its pin forever with nothing downstream noticing (#991, cf. #781).
+
+CHECK_EXIT_OUTDATED=1
+CHECK_EXIT_UNCHECKED=3
+
+# is_unchecked STATUS — true for a tool no checker ever ran against. There is
+# deliberately no exemption: every checker that runs sets current, outdated or
+# error via set_latest, so "unchecked" only ever means a missing dispatch case.
+is_unchecked() {
+    [ "$1" = "unchecked" ]
+}
+
+# check_exit_code OUTDATED UNCHECKED — the process exit code for these counts.
+check_exit_code() {
+    if [ "$2" -gt 0 ]; then
+        echo "$CHECK_EXIT_UNCHECKED"
+    elif [ "$1" -gt 0 ]; then
+        echo "$CHECK_EXIT_OUTDATED"
+    else
+        echo 0
+    fi
+}
 
 # Print results in JSON format
 print_json_results() {
@@ -10,6 +39,8 @@ print_json_results() {
     local current=0
     local errors=0
     local manual=0
+    local unchecked=0
+    local unchecked_tools=()
 
     # Build JSON array
     echo "{"
@@ -30,6 +61,10 @@ print_json_results() {
             error) errors=$((errors + 1)) ;;
             manual) manual=$((manual + 1)) ;;
         esac
+        if is_unchecked "$status"; then
+            unchecked=$((unchecked + 1))
+            unchecked_tools+=("$tool")
+        fi
 
         # Print JSON object for this tool
         echo -n "    {"
@@ -54,17 +89,28 @@ print_json_results() {
     echo "    \"current\": $current,"
     echo "    \"outdated\": $outdated,"
     echo "    \"errors\": $errors,"
-    echo "    \"manual_check\": $manual"
+    echo "    \"manual_check\": $manual,"
+    echo "    \"unchecked\": $unchecked"
     echo "  },"
-    echo "  \"exit_code\": $([ $outdated -gt 0 ] && echo 1 || echo 0)"
+    # Tool names are simple identifiers from add_tool, so plain quoting is safe.
+    local names="" t
+    for t in "${unchecked_tools[@]}"; do
+        names+="${names:+,}\"$t\""
+    done
+    echo "  \"unchecked_tools\": [$names],"
+    local rc
+    rc=$(check_exit_code "$outdated" "$unchecked")
+    echo "  \"exit_code\": $rc"
     echo "}"
+    return "$rc"
 }
 
 # Print results in text table format
 print_results() {
     if [ "$OUTPUT_FORMAT" = "json" ]; then
-        print_json_results
-        return
+        local rc=0
+        print_json_results || rc=$?
+        exit "$rc"
     fi
 
     echo ""
@@ -78,6 +124,8 @@ print_results() {
     local current=0
     local errors=0
     local manual=0
+    local unchecked=0
+    local unchecked_tools=()
 
     for i in "${!TOOLS[@]}"; do
         local tool="${TOOLS[$i]}"
@@ -105,10 +153,15 @@ print_results() {
                     status_color="${BLUE}ℹ manual${NC}"
                     manual=$((manual + 1))
                 else
-                    status_color="unchecked"
+                    status_color="${RED}✗ unchecked${NC}"
                 fi
                 ;;
         esac
+
+        if is_unchecked "$status"; then
+            unchecked=$((unchecked + 1))
+            unchecked_tools+=("$tool")
+        fi
 
         printf "%-20s %-15s %-15s %-20s %b\n" "$tool" "$cur_ver" "$lat_ver" "$file" "$status_color"
     done
@@ -119,10 +172,19 @@ print_results() {
     echo -e "  Outdated: ${YELLOW}$outdated${NC}"
     echo -e "  Errors: ${RED}$errors${NC}"
     echo -e "  Manual Check: ${BLUE}$manual${NC}"
+    echo -e "  Unchecked: ${RED}$unchecked${NC}"
 
     if [ $outdated -gt 0 ]; then
         echo ""
         echo -e "${YELLOW}Note: $outdated tool(s) have newer versions available${NC}"
-        exit 1
     fi
+    if [ $unchecked -gt 0 ]; then
+        echo ""
+        echo -e "${RED}Error: $unchecked tool(s) have no checker case in bin/check-versions.sh: ${unchecked_tools[*]}${NC}"
+        echo -e "${RED}       They will stay at their current pins until a case is added (#991).${NC}"
+    fi
+
+    local rc
+    rc=$(check_exit_code "$outdated" "$unchecked")
+    [ "$rc" -eq 0 ] || exit "$rc"
 }
