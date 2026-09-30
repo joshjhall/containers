@@ -134,23 +134,27 @@ git push origin v4.0.1
 
 When you push a tag (e.g., `v4.0.1`), GitHub Actions will:
 
-1. **Build all container variants**:
+1. **Build the published container variants** (the `build` job matrix in
+   `.github/workflows/ci.yml`):
 
    - minimal
    - python-dev
    - node-dev
-   - cloud-ops
    - polyglot
-   - rust-golang
 
-1. **Push images to GitHub Container Registry**:
+   The heavier variants (cloud-ops, rust-golang, r-dev, java-dev, production)
+   are parked during the v5 transition (#508) and are not published. The
+   comment on that matrix explains how to re-enable one.
 
-   - `ghcr.io/joshjhall/containers:minimal-v4.0.1`
-   - `ghcr.io/joshjhall/containers:python-dev-v4.0.1`
-   - `ghcr.io/joshjhall/containers:node-dev-v4.0.1`
-   - `ghcr.io/joshjhall/containers:cloud-ops-v4.0.1`
-   - `ghcr.io/joshjhall/containers:polyglot-v4.0.1`
-   - `ghcr.io/joshjhall/containers:rust-golang-v4.0.1`
+1. **Push images to GitHub Container Registry**, tagged `<git-tag>-<variant>`:
+
+   - `ghcr.io/joshjhall/containers:v4.0.1-minimal`
+   - `ghcr.io/joshjhall/containers:v4.0.1-python-dev`
+   - `ghcr.io/joshjhall/containers:v4.0.1-node-dev`
+   - `ghcr.io/joshjhall/containers:v4.0.1-polyglot`
+
+   Pushes to `main` also update the rolling `<variant>-latest` tags, for
+   example `ghcr.io/joshjhall/containers:minimal-latest`.
 
 1. **Create GitHub Release**:
 
