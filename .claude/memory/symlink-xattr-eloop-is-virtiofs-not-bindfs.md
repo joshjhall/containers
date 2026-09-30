@@ -42,6 +42,12 @@ Two consequences worth remembering:
 - The overlay is applied at **entrypoint**, so the fix lands only on container
   **restart** and on images built after it. `workspace-fs-health`'s
   `check_symlink_xattr` names the condition for that gap; it repairs nothing.
+  Signature in that gap: `failed to xattr /workspace/containers/.codegraph: too
+  many levels of symbolic links` from `just test-feature`. **Workaround without
+  restarting:** build from an exported tree off the mount —
+  `git archive HEAD | tar -x -C "$(mktemp -d)"`, delete the `.codegraph` symlink
+  in the export, run `tests/test_feature.sh <feature>` there. `git archive HEAD`
+  omits uncommitted edits, so commit first or you are testing the old tree.
 - This is **not** the [[stale-symlink-attrs-virtiofs]] / #827 decay class. Those
   key on `nlink=0`/`size=0` and are fixed by relinking. These links are healthy
   (`nlink=1`), and a symlink created seconds ago fails identically — the

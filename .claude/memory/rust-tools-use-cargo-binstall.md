@@ -23,9 +23,22 @@ Key facts:
   (observed: taplo-cli, cargo-modules compile).
 - `tests/unit/cargo-install-policy.sh` enforces `--locked` + `@${VAR}` pinning
   across BOTH verbs and the wrapper call sites — update it if you add tools.
-- `CARGO_BINSTALL_VERSION` is pinned in BOTH rust.sh and rust-dev.sh and the
-  policy test checks they stay in sync (like CARGO_WATCH_VERSION/MDBOOK_VERSION).
+- `CARGO_BINSTALL_VERSION`, `CARGO_WATCH_VERSION` and `MDBOOK_VERSION` are
+  pinned in BOTH rust.sh and rust-dev.sh; `test_shared_version_vars_in_sync`
+  fails if they diverge.
+- **Dual-pin updater trap:** an updater case that writes to `$script_path`
+  rewrites only the file check-versions registered, so the first auto-patch bump
+  splits the pair and goes red. PR CI can't see it (nothing is bumped yet); it was
+  caught only by adversarial review (#992).
+
+**Why:** the sync test runs on the result of a bump, not on the updater, so
+a one-file updater case passes every check until the weekly sweep fires.
 
 **How to apply:** when adding a rust dev tool, add a `cargo_binstall_tool` line +
-a `CARGO_<TOOL>_VERSION` var, register it in `bin/check-versions.sh`, and add it
-to the symlink/verify loops. Related: [[cache-mounts-not-on-install-dirs]].
+a `CARGO_<TOOL>_VERSION` var, register it in `bin/check-versions.sh`, give it an
+updater case (and an update-checksums entry if a checksum is pinned — see
+[/unconsumed-default-status-fails-silently.md](/unconsumed-default-status-fails-silently.md)),
+and add it to the symlink/verify loops. Before writing any updater case,
+`grep -rn '<VAR>=' lib/features/`: more than one hit means the explicit
+two-`sed_inplace` pattern (the `cargo-watch)` / `mdbook)` cases), never
+`$script_path`. Related: [[cache-mounts-not-on-install-dirs]].

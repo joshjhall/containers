@@ -31,8 +31,7 @@ instruction maps to "wire it into check-versions.sh."
 
 Note: `jsonc-parser` is npm but checked via `check_github_release`
 (microsoft/node-jsonc-parser) since it mirrors a GH repo. agnix has no GH
-mirror → npm-registry check is correct. `hadolint`/`actionlint` are defined in
-dev-tools.sh + checked but have NO updater case (latent gap, not agnix's
-concern). Keep agnix in lockstep with the librarian consumers' `.agnix.toml`
+mirror → npm-registry check is correct. (`hadolint`/`actionlint` once lacked an
+updater case; both have one now.) Keep agnix in lockstep with the librarian consumers' `.agnix.toml`
 pin (joshjhall/librarian#398). See [[rust-toolchain-pin-sync]] for the general
 "pin lives in N places" pattern.

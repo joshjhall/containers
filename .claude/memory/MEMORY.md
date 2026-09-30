@@ -17,7 +17,7 @@
 - [known_hosts seeded system-wide](known-hosts-seeded-system-wide.md) — pinned github/gitlab host keys → /etc/ssh/ssh_known_hosts at build
 - [tmpfs uid can't be templated](tmpfs-uid-cannot-be-templated.md) — compose tmpfs uid=/gid= baked at mount time; mount neutral + reconcile at startup
 - [entrypoint UID-agnostic user](entrypoint-uid-agnostic-user-detection.md) — resolve runtime user by shape, not hardcoded UID
-- [Rust tools use cargo binstall](rust-tools-use-cargo-binstall.md) — rust.sh/rust-dev.sh install via cargo binstall (prebuilt), not cargo install
+- [Rust tools use cargo binstall](rust-tools-use-cargo-binstall.md) — rust.sh/rust-dev.sh install via cargo binstall; dual-pinned vars need a two-file updater case or auto-patch goes red
 - [R packages use PPM binaries](r-packages-use-ppm-binaries.md) — CRAN from Posit PPM binaries (x86_64 only; arm64 compiles); keep apt build-deps
 - [Cache mounts not on install dirs](cache-mounts-not-on-install-dirs.md) — no type=cache on /cache/cargo or /cache/r (runtime install locations)
 - [Auto-patch inline checksums](auto-patch-inline-checksums.md) — inline *_SHA256 pins in setup.sh need TOOL_CHECKSUM_REGISTRY_INLINE
@@ -122,5 +122,7 @@
 - [Ambient injection misses ordering](ambient-injection-tests-miss-ordering.md) — to pin an unset-after-source ordering, the hostile value must come from the sourced file
 - [mawk drops literal NUL in printf](mawk-drops-literal-nul-in-printf.md) — use `printf "%s%c", str, 0`; a generated command must be tested by running it
 - [Symlink xattr ELOOP is virtiofs, not bindfs](symlink-xattr-eloop-is-virtiofs-not-bindfs.md) — fixed by bindfs --xattr-none; only llistxattr discriminates
-- [PR-tier rerun keeps old labels](pr-tier-rerun-keeps-old-labels.md) — ci/full-build + `gh run rerun` still skips feature builds; push a new commit
+- [PR-tier rerun keeps old labels](pr-tier-rerun-keeps-old-labels.md) — label at create time, not rerun; even labeled, skip-listed rust-dev/java-dev never build on PR — test locally
 - [Node 25+ install deps](node-25-plus-install-deps.md) — no bundled corepack (≥25) + libatomic1 on Node 26 arm64; both exit 127
+- [Sourced lib set flags leak into caller](sourced-lib-set-flags-leak-into-caller.md) — a lib's `set -e` re-enables errexit in a no-`-e` sourcer; one empty grep killed check-versions with zero output
+- [Unconsumed default status fails silently](unconsumed-default-status-fails-silently.md) — registered-but-unhandled lands in `unchecked`, which no stage reads; cargo-binstall stale for months; add completeness tests per stage
