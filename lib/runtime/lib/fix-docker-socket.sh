@@ -28,7 +28,10 @@ configure_docker_socket() {
     local can_sudo=false
     if [ "$RUNNING_AS_ROOT" = "true" ]; then
         can_sudo=true
-    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    # One probe stands in for the whole step: the scoped CONTAINER_STARTUP
+    # alias (lib/base/sudoers.sh) grants this chown together with the chmod,
+    # groupadd and usermod below, so they are allowed or refused as a unit.
+    elif can_run_privileged chown root:docker /var/run/docker.sock; then
         can_sudo=true
     fi
 

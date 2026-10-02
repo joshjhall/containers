@@ -66,5 +66,10 @@
     }
   },
 
-  "remoteUser": "vscode"
+  "remoteUser": "vscode",
+
+  // Keep the image-native UID/GID instead of remapping to the host's (Zed adopts
+  // the host UID, e.g. 501 on macOS). See
+  // docs/troubleshooting/zed-devcontainer.md#uidgid-remapping.
+  "updateRemoteUserUID": false
 }

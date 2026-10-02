@@ -45,26 +45,29 @@ fix_cache_permissions() {
 
     echo "🔧 Aligning /cache ownership to ${USERNAME} (${target_uid}:${target_gid})..."
 
+    # The privileged command this step runs. Prefer the fixed-purpose wrapper
+    # (reconcile-cache-owner), the only /cache-chown path the command-scoped sudoers grant
+    # allows (ENABLE_PASSWORDLESS_SUDO=scoped); it hardcodes the /cache target so
+    # the wildcard sudoers rule can't be abused. Fall back to a direct chown for
+    # root / legacy NOPASSWD:ALL / images built before the wrapper existed. The
+    # probe below asks sudo about this exact command line (issue #996).
+    local cache_cmd
+    if command -v reconcile-cache-owner >/dev/null 2>&1; then
+        cache_cmd=(reconcile-cache-owner "${target_uid}" "${target_gid}")
+    else
+        cache_cmd=(chown -R "${target_uid}:${target_gid}" /cache)
+    fi
+
     local can_fix=false
     if [ "$RUNNING_AS_ROOT" = "true" ]; then
         can_fix=true
-    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    elif can_run_privileged "${cache_cmd[@]}"; then
         can_fix=true
     fi
 
     if [ "$can_fix" = "true" ]; then
-        # Prefer the fixed-purpose wrapper (reconcile-cache-owner), which is the
-        # only /cache-chown path the command-scoped sudoers grant allows
-        # (ENABLE_PASSWORDLESS_SUDO=scoped). It hardcodes the /cache target, so a
-        # wildcard sudoers rule can't be abused to chown an arbitrary path. Fall
-        # back to a direct chown for root / legacy NOPASSWD:ALL / images built
-        # before the wrapper existed.
         local cache_chown_ok=false
-        if command -v reconcile-cache-owner >/dev/null 2>&1; then
-            run_privileged reconcile-cache-owner "${target_uid}" "${target_gid}" 2>/dev/null && cache_chown_ok=true
-        else
-            run_privileged chown -R "${target_uid}:${target_gid}" /cache 2>/dev/null && cache_chown_ok=true
-        fi
+        run_privileged "${cache_cmd[@]}" 2>/dev/null && cache_chown_ok=true
         if [ "$cache_chown_ok" = "true" ]; then
             echo "✓ Cache directory ownership aligned"
         else

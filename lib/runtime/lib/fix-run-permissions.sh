@@ -47,25 +47,29 @@ fix_run_permissions() {
 
     echo "🔧 Aligning /run ownership to ${USERNAME} (${target_uid}:${target_gid})..."
 
+    # The privileged command this step runs. Prefer the fixed-purpose wrapper
+    # (reconcile-run-owner), the only /run-chown path the command-scoped sudoers grant
+    # allows (ENABLE_PASSWORDLESS_SUDO=scoped); it hardcodes the /run target so
+    # the wildcard sudoers rule can't be abused. Fall back to a direct chown for
+    # root / legacy NOPASSWD:ALL / images built before the wrapper existed. The
+    # probe below asks sudo about this exact command line (issue #996).
+    local run_cmd
+    if command -v reconcile-run-owner >/dev/null 2>&1; then
+        run_cmd=(reconcile-run-owner "${target_uid}" "${target_gid}")
+    else
+        run_cmd=(chown "${target_uid}:${target_gid}" /run)
+    fi
+
     local can_fix=false
     if [ "$RUNNING_AS_ROOT" = "true" ]; then
         can_fix=true
-    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    elif can_run_privileged "${run_cmd[@]}"; then
         can_fix=true
     fi
 
     if [ "$can_fix" = "true" ]; then
-        # Prefer the fixed-purpose wrapper (reconcile-run-owner), the only
-        # /run-chown path the command-scoped sudoers grant allows
-        # (ENABLE_PASSWORDLESS_SUDO=scoped); it hardcodes the /run target so the
-        # wildcard sudoers rule can't be abused. Fall back to a direct chown for
-        # root / legacy NOPASSWD:ALL / images built before the wrapper existed.
         local run_chown_ok=false
-        if command -v reconcile-run-owner >/dev/null 2>&1; then
-            run_privileged reconcile-run-owner "${target_uid}" "${target_gid}" 2>/dev/null && run_chown_ok=true
-        else
-            run_privileged chown "${target_uid}:${target_gid}" /run 2>/dev/null && run_chown_ok=true
-        fi
+        run_privileged "${run_cmd[@]}" 2>/dev/null && run_chown_ok=true
         if [ "$run_chown_ok" = "true" ]; then
             echo "✓ /run ownership aligned"
         else

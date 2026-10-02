@@ -583,6 +583,60 @@ test_probe_skips_listed_path() {
 
 # ============================================================================
 # Run all tests
+
+# ============================================================================
+# Scoped sudo (#996): the orchestrator's BINDFS_CAN_SUDO follows what sudo
+# actually permits for bindfs, not whether `sudo -n true` succeeds. Drives
+# setup_bindfs_overlays with stubbed findmnt/bindfs/sudo and a recording
+# apply_bindfs_overlay, then reads BINDFS_CAN_SUDO as the apply step saw it.
+# $1 = "allow" (scoped grant includes bindfs *) or "deny" (nothing allowed)
+# ============================================================================
+bindfs_can_sudo_under() {
+    local mode="$1" stub_dir
+    stub_dir=$(command mktemp -d)
+    command printf '#!/bin/bash\necho "/workspace/probe ext4"\n' >"$stub_dir/findmnt"
+    command printf '#!/bin/bash\nexit 0\n' >"$stub_dir/bindfs"
+    # `true` is always refused, as under the scoped grant.
+    command cat >"$stub_dir/sudo" <<EOF
+#!/bin/bash
+[ "\${1:-}" = "-n" ] && shift
+[ "\${1:-}" = "-l" ] && shift
+[ "$mode" = "allow" ] && [ "\${1:-}" = "bindfs" ] && exit 0
+exit 1
+EOF
+    command chmod +x "$stub_dir"/*
+    (
+        export BASH_ENV=""
+        export PATH="$stub_dir:$PATH"
+        # shellcheck source=/dev/null
+        source "$PROJECT_ROOT/lib/runtime/lib/privileged.sh"
+        source "$SOURCE_FILE"
+        # Read by the sourced orchestrator — shellcheck can't see across it.
+        # shellcheck disable=SC2034
+        RUNNING_AS_ROOT=false
+        # shellcheck disable=SC2034
+        USERNAME=$(/usr/bin/id -un)
+        probe_mount_needs_fix() { return 0; }
+        apply_bindfs_overlay() {
+            command printf 'can_sudo=%s\n' "$BINDFS_CAN_SUDO"
+            return 1
+        }
+        BINDFS_ENABLED=true FUSE_CLEANUP_BIN=/nonexistent setup_bindfs_overlays 2>/dev/null
+    ) | command grep -o 'can_sudo=[a-z]*'
+    command rm -rf "$stub_dir"
+}
+
+test_scoped_sudo_enables_bindfs() {
+    if [ ! -e /dev/fuse ]; then
+        skip_test "/dev/fuse not present; orchestrator never reaches the sudo probe"
+        return 0
+    fi
+    assert_equals "can_sudo=true" "$(bindfs_can_sudo_under allow)" \
+        "Scoped grant permitting bindfs enables the overlay (#996)"
+    assert_equals "can_sudo=false" "$(bindfs_can_sudo_under deny)" \
+        "No bindfs grant leaves the overlay disabled"
+}
+
 # ============================================================================
 
 # Static analysis
@@ -638,6 +692,7 @@ run_test test_boot_pass_unset_does_not_leak_to_caller "Neutralization does not l
 run_test test_overlay_passes_xattr_none "Overlay passes --xattr-none (#977)"
 run_test test_overlay_does_not_pass_xattr_ro "Overlay avoids the ineffective --xattr-ro (#977)"
 run_test test_overlay_keeps_permission_flags "Overlay keeps its permission flags (#977)"
+run_test test_scoped_sudo_enables_bindfs "Scoped sudo enables bindfs overlay (#996)"
 
 # Generate test report
 generate_report

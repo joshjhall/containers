@@ -149,6 +149,66 @@ test_compose_run_tmpfs_uid_agnostic() {
         "/cache/1password/secrets tmpfs must not hardcode uid="
 }
 
+# ============================================================================
+# Test: scoped sudo (#996) — the reconcile runs through the wrapper instead of
+# bailing on a `sudo -n true` probe. Stubs: `id` reports a target UID/GID that
+# differs from the real /run owner (forcing the fix branch), `sudo`
+# implements the scoped allowlist (wrapper allowed, `true` refused) and logs
+# what it ran, and the wrapper itself is a no-op. Fails on the pre-#996 probe.
+# ============================================================================
+test_run_scoped_sudo_runs_wrapper() {
+    if [ ! -d /run ]; then
+        skip_test "/run not present on this host"
+        return 0
+    fi
+    local stub_dir="$TEST_TEMP_DIR/scoped-stubs"
+    command mkdir -p "$stub_dir"
+    command cat >"$stub_dir/id" <<'EOF'
+#!/bin/bash
+case "${1:-}" in
+    -u) echo 424242 ;;
+    -g) echo 424243 ;;
+    *) exec /usr/bin/id "$@" ;;
+esac
+EOF
+    command cat >"$stub_dir/sudo" <<EOF
+#!/bin/bash
+[ "\${1:-}" = "-n" ] && shift
+list=false
+[ "\${1:-}" = "-l" ] && { list=true; shift; }
+case "\$1" in
+    reconcile-run-owner) ;;
+    *) exit 1 ;;
+esac
+\$list || printf '%s\n' "\$*" >>"$stub_dir/ran"
+exit 0
+EOF
+    command printf '#!/bin/bash\nexit 0\n' >"$stub_dir/reconcile-run-owner"
+    command chmod +x "$stub_dir"/*
+
+    local output
+    output=$(
+        export BASH_ENV=""
+        export PATH="$stub_dir:$PATH"
+        RUNNING_AS_ROOT=false
+        USERNAME=testuser
+        run_privileged() { sudo "$@"; }
+        unset _PRIVILEGED_LOADED
+        # shellcheck source=/dev/null
+        source "$PROJECT_ROOT/lib/runtime/lib/privileged.sh"
+        # shellcheck source=/dev/null
+        source "$PROJECT_ROOT/lib/runtime/lib/fix-run-permissions.sh"
+        fix_run_permissions 2>&1
+    )
+
+    assert_not_contains "$output" "no root access or sudo" \
+        "Scoped sudo is recognized (no warn-and-skip)"
+    local ran
+    ran=$(command cat "$stub_dir/ran" 2>/dev/null || true)
+    assert_contains "$ran" "reconcile-run-owner 424242 424243" \
+        "The reconcile wrapper ran via sudo with the target uid/gid"
+}
+
 # Run tests
 run_test test_fix_run_function_defined "Function is defined after sourcing"
 run_test test_fix_run_no_run_dir "Returns 0 when /run does not exist"
@@ -158,6 +218,7 @@ run_test test_fix_run_detects_foreign_owner "Detects foreign /run owner (regress
 run_test test_fix_run_no_sudo_message "Contains no-sudo warning message"
 run_test test_fix_run_prefers_wrapper "Prefers reconcile-run-owner wrapper"
 run_test test_compose_run_tmpfs_uid_agnostic "Compose /run tmpfs is UID-agnostic (regression)"
+run_test test_run_scoped_sudo_runs_wrapper "Scoped sudo runs the reconcile-run-owner wrapper (#996)"
 
 # Generate test report
 generate_report

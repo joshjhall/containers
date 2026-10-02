@@ -430,6 +430,37 @@ fn devcontainer_omits_zed_block_when_no_zed_extensions() {
 }
 
 #[test]
+fn devcontainer_disables_remote_user_uid_remap() {
+    // Issue #995: Zed (and VS Code on Linux) remap the remote user to the host
+    // UID unless told not to. The image's user is 1000:1000 and the runtime
+    // assumes that, so every generated devcontainer.json must opt out.
+    let reg = Registry::new();
+    let sel = resolve(&make_explicit(&["python"]), &reg);
+
+    let ctx = RenderContext::new(
+        ProjectConfig {
+            name: "test".into(),
+            username: "dev".into(),
+            base_image: "debian:trixie-slim".into(),
+            ..ProjectConfig::default()
+        },
+        "containers",
+        &sel,
+        &reg,
+        BTreeMap::new(),
+        AgentConfig::default(),
+    );
+
+    let renderer = Renderer::new().unwrap();
+    let output = renderer.render("devcontainer.json.tmpl", &ctx).unwrap();
+
+    assert!(
+        output.contains("\"updateRemoteUserUID\": false"),
+        "devcontainer.json must set \"updateRemoteUserUID\": false"
+    );
+}
+
+#[test]
 fn zed_extensions_empty_when_no_zed_aware_features() {
     let reg = Registry::new();
     // python_dev has no zed_extensions; expect empty aggregation.

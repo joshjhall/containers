@@ -638,7 +638,7 @@ test_docker_socket_sudo_support() {
     local script="$PROJECT_ROOT/lib/runtime/lib/fix-docker-socket.sh"
 
     # Should have sudo support for non-root users
-    if command grep -q "sudo -n true" "$script" && command grep -q "run_privileged" "$script"; then
+    if command grep -q "can_run_privileged" "$script" && command grep -q "run_privileged" "$script"; then
         assert_true true "Sudo support for non-root users exists"
     else
         assert_true false "Sudo support not found"

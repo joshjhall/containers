@@ -208,6 +208,66 @@ test_predicate_triggers_on_foreign_gid() {
     fi
 }
 
+# ============================================================================
+# Test: scoped sudo (#996) — the reconcile runs through the wrapper instead of
+# bailing on a `sudo -n true` probe. Stubs: `id` reports a target UID/GID that
+# differs from the real /cache owner (forcing the fix branch), `sudo`
+# implements the scoped allowlist (wrapper allowed, `true` refused) and logs
+# what it ran, and the wrapper itself is a no-op. Fails on the pre-#996 probe.
+# ============================================================================
+test_cache_scoped_sudo_runs_wrapper() {
+    if [ ! -d /cache ]; then
+        skip_test "/cache not present on this host"
+        return 0
+    fi
+    local stub_dir="$TEST_TEMP_DIR/scoped-stubs"
+    command mkdir -p "$stub_dir"
+    command cat >"$stub_dir/id" <<'EOF'
+#!/bin/bash
+case "${1:-}" in
+    -u) echo 424242 ;;
+    -g) echo 424243 ;;
+    *) exec /usr/bin/id "$@" ;;
+esac
+EOF
+    command cat >"$stub_dir/sudo" <<EOF
+#!/bin/bash
+[ "\${1:-}" = "-n" ] && shift
+list=false
+[ "\${1:-}" = "-l" ] && { list=true; shift; }
+case "\$1" in
+    reconcile-cache-owner) ;;
+    *) exit 1 ;;
+esac
+\$list || printf '%s\n' "\$*" >>"$stub_dir/ran"
+exit 0
+EOF
+    command printf '#!/bin/bash\nexit 0\n' >"$stub_dir/reconcile-cache-owner"
+    command chmod +x "$stub_dir"/*
+
+    local output
+    output=$(
+        export BASH_ENV=""
+        export PATH="$stub_dir:$PATH"
+        RUNNING_AS_ROOT=false
+        USERNAME=testuser
+        run_privileged() { sudo "$@"; }
+        unset _PRIVILEGED_LOADED
+        # shellcheck source=/dev/null
+        source "$PROJECT_ROOT/lib/runtime/lib/privileged.sh"
+        # shellcheck source=/dev/null
+        source "$PROJECT_ROOT/lib/runtime/lib/fix-cache-permissions.sh"
+        fix_cache_permissions 2>&1
+    )
+
+    assert_not_contains "$output" "no root access or sudo" \
+        "Scoped sudo is recognized (no warn-and-skip)"
+    local ran
+    ran=$(command cat "$stub_dir/ran" 2>/dev/null || true)
+    assert_contains "$ran" "reconcile-cache-owner 424242 424243" \
+        "The reconcile wrapper ran via sudo with the target uid/gid"
+}
+
 # Run tests
 run_test test_fix_cache_no_cache_dir "Returns 0 when /cache does not exist"
 run_test test_fix_cache_output_no_root "Handles missing /cache silently"
@@ -219,6 +279,7 @@ run_test test_fix_cache_function_defined "Function is defined after sourcing"
 run_test test_predicate_aligned_cache "Predicate silent on aligned cache"
 run_test test_predicate_triggers_on_foreign_uid "Predicate triggers on foreign UID (regression)"
 run_test test_predicate_triggers_on_foreign_gid "Predicate triggers on foreign GID"
+run_test test_cache_scoped_sudo_runs_wrapper "Scoped sudo runs the reconcile-cache-owner wrapper (#996)"
 
 # Generate test report
 generate_report

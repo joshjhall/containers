@@ -42,6 +42,12 @@
       ]
     }{% endif %}
   },
-  "remoteUser": "{{ username }}"
+  "remoteUser": "{{ username }}",
+  // Keep the image-native UID/GID (1000:1000). Left at its default (true),
+  // Zed remaps the user to the host UID (501 on macOS), which breaks anything
+  // that assumes the build-time owner. Rootless Podman: map the host user
+  // onto 1000 with `userns_mode: "keep-id:uid=1000,gid=1000"`. See
+  // docs/troubleshooting/zed-devcontainer.md#uidgid-remapping.
+  "updateRemoteUserUID": false
 }
 // === IGOR:END ===

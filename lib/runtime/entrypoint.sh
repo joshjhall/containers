@@ -179,6 +179,12 @@ run_startup_scripts() {
 # ============================================================================
 # Source Concern-Specific Sub-Modules
 # ============================================================================
+# Per-command privilege probe (can_run_privileged) shared by the fix-* and
+# bindfs modules below — issue #996.
+if [ -f "$_RUNTIME_LIB/privileged.sh" ]; then
+    # shellcheck source=/dev/null
+    source "$_RUNTIME_LIB/privileged.sh"
+fi
 if [ -f "$_RUNTIME_LIB/fix-docker-socket.sh" ]; then
     # shellcheck source=/dev/null
     source "$_RUNTIME_LIB/fix-docker-socket.sh"
