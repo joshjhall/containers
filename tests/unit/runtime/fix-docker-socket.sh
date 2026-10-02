@@ -143,7 +143,8 @@ _can_reconcile() {
     if [ "$(id -u)" -eq 0 ]; then
         return 0
     fi
-    command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null
+    command -v sudo >/dev/null 2>&1 &&
+        sudo -n -l chown root:docker /var/run/docker.sock >/dev/null 2>&1
 }
 
 # Run a privileged command the same way the tests stage sockets.
@@ -271,6 +272,74 @@ test_fix_cmd_reconciles_wrong_group() {
     _priv /bin/rm -rf "$(dirname "$sock")" 2>/dev/null || true
 }
 
+# --- Scoped sudo: reconciles instead of bailing on the `sudo -n true` probe ---
+# Issue #996. Under ENABLE_PASSWORDLESS_SUDO=scoped, `sudo -n true` is refused
+# but the pinned chown/chmod are allowed. Stubs stand in for the privileged
+# pieces so this runs anywhere: `id` reports non-root, `stat` reports the
+# root:root state Docker Desktop leaves, `getent` confirms the docker group,
+# and `sudo` implements the scoped allowlist while logging what it ran.
+test_fix_cmd_scoped_sudo_reconciles() {
+    local stub_dir sock_dir sock
+    stub_dir=$(command mktemp -d)
+    sock_dir=$(command mktemp -d)
+    sock="$sock_dir/docker.sock"
+    /usr/bin/python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$sock" 2>/dev/null
+    if [ ! -S "$sock" ]; then
+        command rm -rf "$stub_dir" "$sock_dir"
+        skip_test "Could not create a unix socket in a temp dir"
+        return 0
+    fi
+
+    command cat >"$stub_dir/id" <<'EOF'
+#!/bin/bash
+[ "${1:-}" = "-u" ] && { echo 1000; exit 0; }
+exec /usr/bin/id "$@"
+EOF
+    command cat >"$stub_dir/stat" <<'EOF'
+#!/bin/bash
+case "$2" in
+    %G | %U) echo root ;;
+    %a) echo 660 ;;
+esac
+EOF
+    command cat >"$stub_dir/getent" <<'EOF'
+#!/bin/bash
+[ "$1 $2" = "group docker" ] && { echo "docker:x:999:"; exit 0; }
+exit 2
+EOF
+    # Allowlist mirrors lib/base/sudoers.sh CONTAINER_STARTUP for the socket.
+    command cat >"$stub_dir/sudo" <<EOF
+#!/bin/bash
+[ "\${1:-}" = "-n" ] || exit 1
+shift
+list=false
+[ "\${1:-}" = "-l" ] && { list=true; shift; }
+case "\$*" in
+    "chown root:docker $sock" | "chmod 660 $sock") ;;
+    *) exit 1 ;;
+esac
+\$list || printf '%s\\n' "\$*" >>"$stub_dir/ran"
+exit 0
+EOF
+    command chmod +x "$stub_dir"/*
+
+    local output
+    output=$(
+        export BASH_ENV=""
+        export PATH="$stub_dir:$PATH"
+        DOCKER_SOCK_PATH="$sock" "$FIX_CMD" 2>&1
+    )
+
+    assert_not_contains "$output" "cannot reconcile" \
+        "Does not bail out when scoped sudo allows the needed commands"
+    local ran
+    ran=$(command cat "$stub_dir/ran" 2>/dev/null || true)
+    assert_contains "$ran" "chown root:docker $sock" "Ran the pinned chown via sudo"
+    assert_contains "$ran" "chmod 660 $sock" "Ran the pinned chmod via sudo"
+
+    command rm -rf "$stub_dir" "$sock_dir"
+}
+
 # --- Every-boot startup wrapper is wired correctly ---
 test_startup_wrapper_invokes_command() {
     local wrapper="$PROJECT_ROOT/lib/runtime/10-fix-docker-socket.sh"
@@ -299,6 +368,7 @@ run_test test_fix_cmd_honors_sock_override "Command honors DOCKER_SOCK_PATH over
 run_test test_fix_cmd_noop_when_absent "No-op when socket is absent"
 run_test test_fix_cmd_idempotent_when_correct "Idempotent when already root:docker"
 run_test test_fix_cmd_reconciles_wrong_group "Reconciles a root:root socket to docker"
+run_test test_fix_cmd_scoped_sudo_reconciles "Scoped sudo reconciles (no sudo -n true bail, #996)"
 run_test test_startup_wrapper_invokes_command "Every-boot wrapper invokes the command"
 
 # Generate test report

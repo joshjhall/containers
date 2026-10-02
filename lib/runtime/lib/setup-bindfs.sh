@@ -164,7 +164,7 @@ setup_bindfs_overlays() {
                 BINDFS_CAN_SUDO=false
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     BINDFS_CAN_SUDO=true
-                elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+                elif can_run_privileged bindfs --version; then
                     BINDFS_CAN_SUDO=true
                 fi
 

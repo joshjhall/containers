@@ -83,6 +83,39 @@ has well-known gaps versus VS Code. The ones that affect this build system:
   [Fix: recover-entrypoint](#fix-recover-entrypoint) for the replay
   mechanism that papers over this locally. Upstream bug:
   [zed-industries/zed#56357](https://github.com/zed-industries/zed/issues/56357).
+- **The remote user is remapped to the host UID** — unless told otherwise,
+  Zed rebuilds the image with the user moved to your host UID/GID (501:20 on
+  macOS). Generated configs opt out with `"updateRemoteUserUID": false`. See
+  [UID/GID remapping](#uidgid-remapping).
+
+## UID/GID remapping
+
+The devcontainer spec's `updateRemoteUserUID` (default `true`) tells an editor
+to rewrite the remote user's UID/GID to match the host user. VS Code applies it
+on Linux hosts only; Zed applies it everywhere, including macOS, by building an
+extra image layer. The same image then runs as 1000 under VS Code and 501 under
+Zed, and anything that assumed the build-time owner breaks — the healthcheck
+reported every Zed container unhealthy ([#995](https://github.com/joshjhall/containers/issues/995)).
+
+Generated `devcontainer.json` files (and this repo's `.devcontainer/`) set:
+
+```jsonc
+"remoteUser": "vscode",
+"updateRemoteUserUID": false
+```
+
+so the user keeps its image-native 1000:1000 in every editor. Do **not**
+hardcode a UID in compose (`user:`, `CONTAINER_UID`, or a `USER_UID` build arg
+set to your host's number) to work around a remap — turn the remap off.
+
+How bind-mounted files behave with the user fixed at 1000:
+
+| Host                          | Result                                                                                                                                                            |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Docker Desktop (macOS)        | Works. The file-sharing layer presents bind-mounted files as owned by the accessing UID.                                                                          |
+| Rootless Podman               | Works with `userns_mode: "keep-id:uid=1000,gid=1000"` on the service, which maps your host user onto container 1000.                                              |
+| Rootful Docker, host UID 1000 | Works — the IDs already match.                                                                                                                                    |
+| Rootful Docker, other UID     | Bind-mounted files show the host UID and are not writable by 1000. Set `"updateRemoteUserUID": true` for that project; the runtime resolves the user by shape. |
 
 ## Parity matrix
 

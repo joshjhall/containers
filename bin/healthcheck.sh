@@ -22,6 +22,7 @@ VERBOSE=false
 SPECIFIC_FEATURE=""
 EXIT_CODE=0
 CUSTOM_CHECKS_DIR="${HEALTHCHECK_CUSTOM_DIR:-/etc/healthcheck.d}"
+RUNTIME_LIB="${HEALTHCHECK_RUNTIME_LIB:-/opt/container-runtime/lib}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -90,16 +91,35 @@ log_warn() {
 check_core() {
     log_check "Checking core container health..."
 
-    # Check if container is initialized
-    USERNAME=$(getent passwd "${CONTAINER_UID:-1000}" | command cut -d: -f1 || echo "")
-    if [ -z "$USERNAME" ]; then
-        log_fail "No user with UID ${CONTAINER_UID:-1000} found (set CONTAINER_UID to override)"
+    # Resolve the container user without assuming a UID (issue #995). Editors
+    # may remap it (Zed adopts the host UID, e.g. 501 on macOS), so a fixed
+    # `getent passwd 1000` marked fully initialized containers unhealthy.
+    #   - Non-root (the Docker HEALTHCHECK runs as the image USER): the probe
+    #     process IS the container user.
+    #   - Root (`docker exec -u 0 ... healthcheck`): the same shared ladder the
+    #     entrypoint uses — CONTAINER_UID first, then the single regular user.
+    local username="" home=""
+    if [ "$(id -u)" -ne 0 ]; then
+        username=$(id -un 2>/dev/null) || username=""
+    elif [ -f "$RUNTIME_LIB/resolve-container-user.sh" ]; then
+        # shellcheck source=/dev/null
+        source "$RUNTIME_LIB/resolve-container-user.sh"
+        username=$(resolve_container_user) || username=""
+    elif [ -n "${CONTAINER_UID:-}" ]; then
+        # Resolver lib absent (script run outside the image): honor an explicit
+        # override only — never a hardcoded default UID.
+        username=$(getent passwd "$CONTAINER_UID" | command cut -d: -f1) || username=""
+    fi
+    if [ -z "$username" ]; then
+        log_fail "Could not determine the container user (set CONTAINER_UID to override)"
         return 1
     fi
-    log_pass "Container user: $USERNAME"
+    log_pass "Container user: $username"
 
-    # Check if first-time setup completed
-    if [ -f "/home/${USERNAME}/.container-initialized" ]; then
+    # Check if first-time setup completed. Read the home dir from passwd rather
+    # than assuming /home/<name>.
+    home=$(getent passwd "$username" | command cut -d: -f6) || home=""
+    if [ -f "${home:-/home/$username}/.container-initialized" ]; then
         log_pass "Container initialized"
     else
         log_warn "Container not yet initialized (first boot pending)"

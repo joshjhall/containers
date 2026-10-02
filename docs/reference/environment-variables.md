@@ -442,7 +442,7 @@ These variables can be set when running containers (via `docker run -e`):
 
 | Variable        | Default                  | Description                                      |
 | --------------- | ------------------------ | ------------------------------------------------ |
-| `CONTAINER_UID` | `1000`                   | UID to look up for the container user at runtime |
+| `CONTAINER_UID` | unset                    | Override the runtime container-user lookup (default: the single regular login user, any UID) |
 | `METRICS_DIR`   | `/tmp/container-metrics` | Directory for startup metrics                    |
 | `SKIP_GIT_SETUP` | `false`                 | Skip the every-boot `setup-git` startup script (git identity, SSH auth/signing keys) |
 

@@ -245,6 +245,72 @@ test_unknown_feature_exits_1() {
 }
 
 # ============================================================================
+# Container-user resolution (issue #995)
+# ============================================================================
+
+# Stub getent/id for a passwd whose only regular user is vscode at UID 501
+# (Zed's host-UID remap on macOS), then run `healthcheck --feature core
+# --verbose`. Echoes the output. $1 = uid the stub `id -u` reports; $2 = the
+# user's passwd home (the resolver's shape rule only accepts a /home/ home).
+run_core_with_uid501_passwd() {
+    local as_uid="$1"
+    local home="${2:-$TEST_TEMP_DIR/home/vscode}"
+    local stub_dir="$TEST_TEMP_DIR/stubs"
+    command mkdir -p "$stub_dir" "$TEST_TEMP_DIR/home/vscode"
+    command cat >"$TEST_TEMP_DIR/passwd" <<EOF
+root:x:0:0:root:/root:/bin/bash
+nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin
+vscode:x:501:20::$home:/bin/bash
+EOF
+    command touch "$TEST_TEMP_DIR/home/vscode/.container-initialized"
+    command cat >"$stub_dir/getent" <<EOF
+#!/bin/bash
+[ "\${1:-}" = "passwd" ] || exit 2
+if [ -n "\${2:-}" ]; then
+    /usr/bin/awk -F: -v k="\$2" '\$1 == k || \$3 == k { print; f=1 } END { exit !f }' "$TEST_TEMP_DIR/passwd"
+else
+    /usr/bin/cat "$TEST_TEMP_DIR/passwd"
+fi
+EOF
+    command cat >"$stub_dir/id" <<EOF
+#!/bin/bash
+case "\${1:-}" in
+    -u) echo $as_uid ;;
+    -un) echo vscode ;;
+    *) exec /usr/bin/id "\$@" ;;
+esac
+EOF
+    command chmod +x "$stub_dir/getent" "$stub_dir/id"
+    (
+        export BASH_ENV=""
+        export PATH="$stub_dir:$PATH"
+        unset CONTAINER_UID
+        export HEALTHCHECK_RUNTIME_LIB="$PROJECT_ROOT/lib/runtime/lib"
+        bash "$SOURCE_FILE" --feature core --verbose 2>&1
+    ) || true
+}
+
+# Test: root invocation resolves a non-1000 user via the shared resolver
+test_core_resolves_uid501_as_root() {
+    local output
+    output=$(run_core_with_uid501_passwd 0 /home/vscode)
+    assert_contains "$output" "Container user: vscode" \
+        "Resolves the UID-501 user by shape (no hardcoded 1000)"
+    assert_not_contains "$output" "No user with UID 1000" \
+        "Does not fail on the old hardcoded UID 1000 lookup"
+}
+
+# Test: non-root invocation (the Docker HEALTHCHECK) uses the running user
+test_core_resolves_uid501_as_user() {
+    local output
+    output=$(run_core_with_uid501_passwd 501)
+    assert_contains "$output" "Container user: vscode" \
+        "Non-root healthcheck identifies the running user"
+    assert_contains "$output" "Container initialized" \
+        "Finds the init marker in the user's passwd home dir"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 run_test_with_setup test_script_exists "Script exists and is executable"
@@ -275,6 +341,8 @@ run_test_with_setup test_help_flag_output "Help flag outputs usage information"
 run_test_with_setup test_help_flag_exit_code "Help flag exits with code 0"
 run_test_with_setup test_unknown_option_exits_1 "Unknown option returns exit 1"
 run_test_with_setup test_unknown_feature_exits_1 "Unknown feature returns exit 1"
+run_test_with_setup test_core_resolves_uid501_as_root "Root: resolves UID-501 user via shared resolver (#995)"
+run_test_with_setup test_core_resolves_uid501_as_user "Non-root: uses the running user (#995)"
 
 # Generate test report
 generate_report
