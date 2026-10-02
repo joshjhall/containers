@@ -353,6 +353,54 @@ test_core_no_lib_no_uid_fails() {
         "Does not silently default to UID 1000"
 }
 
+# Test: a genuinely root run ignores HEALTHCHECK_RUNTIME_LIB (#998)
+#
+# The override is a test seam; when root honored it, the environment chose a
+# file that root sources. The decoy lib below writes a marker the moment it is
+# sourced, then defers to the real resolver so the run still completes.
+#   - Control: non-root with `id -u` stubbed to 0 MUST source the decoy (proves
+#     the decoy is wired and the override is still a working test seam).
+#   - Real root via `sudo -n`: MUST NOT source it. EUID is read-only, so this is
+#     the one case the stubbed tests above cannot reach.
+test_core_real_root_ignores_runtime_lib_override() {
+    if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true 2>/dev/null; then
+        skip_test "needs passwordless sudo to run the healthcheck as real root"
+        return 0
+    fi
+
+    # mktemp under /tmp, not TEST_TEMP_DIR: root must be able to write the
+    # marker, and the repo scratch can sit on a mount root cannot write.
+    local decoy marker
+    decoy=$(command mktemp -d)
+    marker="$decoy/sourced"
+    command chmod 0777 "$decoy"
+    command cat >"$decoy/resolve-container-user.sh" <<EOF
+: >"$marker"
+# shellcheck source=/dev/null
+source "$PROJECT_ROOT/lib/runtime/lib/resolve-container-user.sh"
+EOF
+
+    # Control: stubbed root, real non-root process -> override honored.
+    run_core_with_uid501_passwd 0 /home/vscode >/dev/null
+    (
+        export BASH_ENV=""
+        export PATH="$TEST_TEMP_DIR/stubs:$PATH"
+        export HEALTHCHECK_RUNTIME_LIB="$decoy"
+        bash "$SOURCE_FILE" --feature core >/dev/null 2>&1
+    ) || true
+    assert_file_exists "$marker" \
+        "Control: non-root run sources the override (decoy is wired)"
+    command rm -f "$marker"
+
+    # Real root: override must be ignored.
+    sudo -n env BASH_ENV= HEALTHCHECK_RUNTIME_LIB="$decoy" \
+        bash "$SOURCE_FILE" --feature core >/dev/null 2>&1 || true
+    assert_file_not_exists "$marker" \
+        "Real root never sources an env-selected runtime lib"
+
+    sudo -n rm -rf "$decoy" 2>/dev/null || command rm -rf "$decoy"
+}
+
 # ============================================================================
 # Run all tests
 # ============================================================================
@@ -388,6 +436,7 @@ run_test_with_setup test_core_resolves_uid501_as_root "Root: resolves UID-501 us
 run_test_with_setup test_core_resolves_uid501_as_user "Non-root: uses the running user (#995)"
 run_test_with_setup test_core_no_lib_honors_container_uid "No resolver lib: honors CONTAINER_UID"
 run_test_with_setup test_core_no_lib_no_uid_fails "No resolver lib, no CONTAINER_UID: fails, no 1000 default (#995)"
+run_test_with_setup test_core_real_root_ignores_runtime_lib_override "Real root ignores HEALTHCHECK_RUNTIME_LIB (#998)"
 
 # Generate test report
 generate_report
