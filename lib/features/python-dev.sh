@@ -185,7 +185,9 @@ if [ "${SKIP_LSP_INSTALL}" != "true" ]; then
 
     # Install pyright (type checker and language server)
     # Required by the pyright-lsp Claude Code plugin for type checking integration.
-    # The pip package is a wrapper that bundles the pyright Node.js binary.
+    # The pip package wraps the pyright JS but not a Node runtime. The Dockerfile
+    # installs Node via node.sh whenever this LSP block runs; without it,
+    # pyright-python would download an unverified Node on first use.
     log_command "Installing pyright" \
         su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --no-warn-script-location --prefer-binary pyright"
 

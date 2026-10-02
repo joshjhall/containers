@@ -208,12 +208,18 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Node.js + Node.js development tools
 # Note: Installed early as it's a common dependency for other tools
+# Also installed for INCLUDE_PYTHON_DEV unless SKIP_LSP_INSTALL=true: pyright
+# needs a Node runtime and otherwise downloads an unverified one at runtime.
 ARG INCLUDE_NODE=false
 ARG INCLUDE_NODE_DEV=false
 ARG NODE_VERSION=22
+# Skip LSP server installation (for headless agent containers). Declared here,
+# before its first use, so the Node condition and every *_dev step see it.
+ARG SKIP_LSP_INSTALL=false
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_NODE}" = "true" ] || [ "${INCLUDE_NODE_DEV}" = "true" ]; then \
+    if [ "${INCLUDE_NODE}" = "true" ] || [ "${INCLUDE_NODE_DEV}" = "true" ] || \
+       { [ "${INCLUDE_PYTHON_DEV}" = "true" ] && [ "${SKIP_LSP_INSTALL}" != "true" ]; }; then \
     NODE_VERSION=${NODE_VERSION} /tmp/build-scripts/features/node.sh; \
     fi
 # Rust + Rust development tools
@@ -481,8 +487,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # ============================================================================
 
 # General development tools
-# Skip LSP server installation (for headless agent containers)
-ARG SKIP_LSP_INSTALL=false
 ARG INCLUDE_DEV_TOOLS=false
 # Extra Claude Code plugins to install (comma-separated, e.g., "stripe,posthog,vercel")
 ARG CLAUDE_EXTRA_PLUGINS=""
