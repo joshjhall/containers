@@ -101,10 +101,14 @@ jobs:
           # Skip-list: features that don't fit the PR-tier budget for
           # one of two reasons:
           #   (a) known-broken in isolation — each entry has a tracking issue
-          #   (b) build time exceeds the per-cell timeout even with warm
-          #       cache, making PR-tier feedback unreliable
-          # Skipped features are still exercised by the merge tier (ci.yml,
-          # which has no per-cell timeout cap). This list is the SINGLE source
+          #   (b) build time exceeds, or runs close enough to the per-cell
+          #       timeout that runner variance alone crosses it, making
+          #       PR-tier feedback unreliable
+          # Skipped features get NO automated build during the v5 transition:
+          # the merge-tier cells that used to cover them (ci.yml variant
+          # matrix) are parked (#508). Before relying on a change to one, build
+          # it manually — `just test-feature <name>` (e.g. `golang`) or
+          # `just test-integration-one <test>`. This list is the SINGLE source
           # of truth — it filters BOTH the foundational fallback cluster below
           # and the per-feature `changed` path, so a heavy build can never leak
           # onto PR tier via the foundational path (#671: a Dockerfile-only bump
@@ -113,7 +117,8 @@ jobs:
           #   rust-dev — even after #517 switched its cargo suite to
           #              `cargo binstall`, a fully cold PR build (base image +
           #              all prior layers, no gha cache) still approaches the
-          #              old 40min cap. Covered by merge-tier `rust-golang`.
+          #              old 40min cap. Its merge-tier `rust-golang` cell is
+          #              parked (#508), so it has no automated build.
           #              Tracked in #531 (deeper optimization / install less);
           #              largely moot once critical mass moves to v5.
           #   java-dev — apt/download-bound, not compile-bound: ~20min cold is
@@ -121,20 +126,30 @@ jobs:
           #              downloads (spring-boot-cli, jbang, mvnd,
           #              google-java-format). Nothing compiles at build time, so
           #              there is no cache to warm and it can't fit the tightened
-          #              PR-tier cap. Covered by the merge-tier `java-dev` cell
-          #              (ci.yml), added in #536 to close the coverage gap. (#531)
+          #              PR-tier cap. The merge-tier `java-dev` cell (ci.yml),
+          #              added in #536 to close the coverage gap, is parked
+          #              (#508), so it has no automated build. (#531)
+          #   golang-dev — a cold build (base image ~7min + golang-dev layers
+          #              ~8min) routinely uses ~60% of the 25min cap, so a slow
+          #              runner alone turns the tier red: on PR #1003 both
+          #              phases ran ~12min and the cell was cancelled at the
+          #              cap during post-build cleanup, after the image built
+          #              and its smoke test passed. Its merge-tier
+          #              `rust-golang` cell is parked (#508), so it has no
+          #              automated build. Not fixed by raising the cap. (#1006)
           # Note: r-dev was removed once #531 switched its CRAN set to Posit
           # Package Manager binary packages — no more from-source compile, so it
           # now fits the PR-tier cap.
-          SKIP_LIST='^(rust-dev|java-dev)$'
+          SKIP_LIST='^(rust-dev|java-dev|golang-dev)$'
 
           if printf '%s\n' "${OUT}" | grep -Fxq "ALL"; then
             # Foundational change (Dockerfile, lib/base, lib/runtime,
             # crates/*, etc.) — fall back to the merge-tier cluster so a
             # PR that breaks the base image fails fast on its own PR. The
-            # cluster is filtered through SKIP_LIST too: the skip-listed heavy
-            # builds are covered by the merge tier regardless, and their cold
-            # PR-tier build time is exactly what we're keeping off this tier.
+            # cluster is filtered through SKIP_LIST too: the skip-listed
+            # builds' cold PR-tier build time is exactly what we're keeping
+            # off this tier (and, with their merge-tier cells parked, they
+            # get no automated build — see the SKIP_LIST comment above).
             CLUSTER='python-dev
             node-dev
             rust-dev
@@ -172,7 +187,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
           if [ "${OUT}" != "${FILTERED}" ]; then
             SKIPPED=$(printf '%s\n' "${OUT}" | grep -E "${SKIP_LIST}" | paste -sd,)
-            echo "::notice::PR-tier skipped features (exceed the per-cell timeout; covered by the merge tier): ${SKIPPED}"
+            echo "::notice::PR-tier skipped features (too slow for the per-cell timeout; no automated build while merge-tier cells are parked (#508) — build manually with just test-feature): ${SKIPPED}"
           fi
           echo "::notice::PR-tier matrix: ${FEATURES}"
 
