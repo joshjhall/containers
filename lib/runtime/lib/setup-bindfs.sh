@@ -164,6 +164,10 @@ setup_bindfs_overlays() {
                 BINDFS_CAN_SUDO=false
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     BINDFS_CAN_SUDO=true
+                # Probed once, before any mount target is known, so it can't
+                # use apply_bindfs_overlay's real argv. `bindfs --version` asks
+                # about the same `bindfs *` rule (lib/base/sudoers.sh) the real
+                # call needs; if that rule is ever narrowed, probe per mount.
                 elif can_run_privileged bindfs --version; then
                     BINDFS_CAN_SUDO=true
                 fi
