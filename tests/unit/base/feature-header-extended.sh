@@ -240,6 +240,86 @@ test_debian_version_exported() {
     fi
 }
 
+# ============================================================================
+# install_feature_test_script Tests (#1001)
+# ============================================================================
+# Drives the real build-time install step a feature runs, then executes the
+# INSTALLED copy, so a broken __CHECK_LSP__ substitution (or one that ignores
+# SKIP_LSP_INSTALL) fails here rather than passing on a source-text pin.
+
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../framework/helpers/feature-test-script.sh"
+
+# Install the real python-dev script with check_lsp $1 into $TEST_TEMP_DIR/bin.
+# Echoes the install function's exit status.
+_install_python_dev_script() {
+    (
+        export BUILD_LOG_DIR="$TEST_TEMP_DIR"
+        # shellcheck source=/dev/null
+        source "$TEST_TEMP_DIR/feature-header-test.sh" >/dev/null 2>&1
+        log_feature_start "InstallTestScript" >/dev/null 2>&1
+        command mkdir -p "$TEST_TEMP_DIR/bin"
+        install_feature_test_script \
+            "$PROJECT_ROOT/lib/features/lib/python/test-python-dev.sh" \
+            test-python-dev "$1" "$TEST_TEMP_DIR/bin" >/dev/null 2>&1
+        echo "$?"
+    )
+}
+
+PY_DEV_REQUIRED=(ipython pytest black isort ruff flake8 mypy pylint bandit pip-audit tox jupyter pre-commit)
+
+test_install_feature_test_script_lsp_false() {
+    local rc out
+    rc=$(_install_python_dev_script false)
+    assert_equals "0" "$rc" "Install succeeds with check_lsp=false"
+    assert_true [ -x "$TEST_TEMP_DIR/bin/test-python-dev" ] "Installed copy is executable"
+    assert_file_contains "$TEST_TEMP_DIR/bin/test-python-dev" 'CHECK_LSP="false"' \
+        "SKIP_LSP_INSTALL=true bakes CHECK_LSP=false"
+    # Run the INSTALLED copy: no LSP tools present must still pass.
+    out=$(run_feature_test_script "$TEST_TEMP_DIR/bin/test-python-dev" keep "${PY_DEV_REQUIRED[@]}")
+    assert_contains "$out" "rc=0" "Installed copy skips the LSP check when built without LSP"
+}
+
+test_install_feature_test_script_lsp_true() {
+    local rc out
+    rc=$(_install_python_dev_script true)
+    assert_equals "0" "$rc" "Install succeeds with check_lsp=true"
+    assert_file_contains "$TEST_TEMP_DIR/bin/test-python-dev" 'CHECK_LSP="true"' \
+        "Default build bakes CHECK_LSP=true"
+    out=$(run_feature_test_script "$TEST_TEMP_DIR/bin/test-python-dev" keep "${PY_DEV_REQUIRED[@]}")
+    assert_contains "$out" "rc=1" "Installed copy requires the LSP tools when built with LSP"
+    assert_contains "$out" "✗ pylsp is not found" "And names the missing LSP tool"
+}
+
+test_install_feature_test_script_rejects_bad_input() {
+    local rc
+    rc=$(_install_python_dev_script maybe)
+    assert_not_equals "0" "$rc" "A check_lsp other than true/false fails the build"
+    assert_file_not_exists "$TEST_TEMP_DIR/bin/test-python-dev" \
+        "A rejected check_lsp leaves nothing installed"
+    rc=$(
+        export BUILD_LOG_DIR="$TEST_TEMP_DIR"
+        # shellcheck source=/dev/null
+        source "$TEST_TEMP_DIR/feature-header-test.sh" >/dev/null 2>&1
+        log_feature_start "InstallMissing" >/dev/null 2>&1
+        install_feature_test_script "$TEST_TEMP_DIR/no-such.sh" test-x "" "$TEST_TEMP_DIR" >/dev/null 2>&1
+        echo "$?"
+    )
+    assert_not_equals "0" "$rc" "A missing source script fails the build"
+    rc=$(
+        export BUILD_LOG_DIR="$TEST_TEMP_DIR"
+        # shellcheck source=/dev/null
+        source "$TEST_TEMP_DIR/feature-header-test.sh" >/dev/null 2>&1
+        log_feature_start "InstallNoPlaceholder" >/dev/null 2>&1
+        install_feature_test_script "$PROJECT_ROOT/lib/features/lib/rust/test-rust.sh" \
+            test-rust true "$TEST_TEMP_DIR" >/dev/null 2>&1
+        echo "$?"
+    )
+    assert_not_equals "0" "$rc" "check_lsp on a script with no placeholder fails the build"
+    assert_file_not_exists "$TEST_TEMP_DIR/test-rust" \
+        "A script missing its placeholder is not left installed"
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -258,6 +338,9 @@ run_test_with_setup test_create_symlink_missing_arguments "create_symlink with m
 run_test_with_setup test_create_secure_temp_dir_returns_valid_dir "create_secure_temp_dir returns valid dir with 755 perms"
 run_test_with_setup test_build_env_uid_priority "build-env ACTUAL_UID takes priority over defaults"
 run_test_with_setup test_debian_version_exported "DEBIAN_VERSION or UBUNTU_VERSION is exported"
+run_test_with_setup test_install_feature_test_script_lsp_false "install_feature_test_script bakes CHECK_LSP=false (#1001)"
+run_test_with_setup test_install_feature_test_script_lsp_true "install_feature_test_script bakes CHECK_LSP=true (#1001)"
+run_test_with_setup test_install_feature_test_script_rejects_bad_input "install_feature_test_script fails the build on bad input (#1001)"
 
 # Generate test report
 generate_report

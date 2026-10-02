@@ -378,6 +378,12 @@ log_message "Ensuring correct ownership of Rust directories..."
 log_command "Final ownership fix for cargo cache" \
     chown -R "${USER_UID}:${USER_GID}" "${CARGO_HOME}" "${RUSTUP_HOME}"
 
+# ============================================================================
+# Verification script
+# ============================================================================
+# Installs the `test-rust` command the summary below tells users to run (#1001).
+install_feature_test_script /tmp/build-scripts/features/lib/rust/test-rust.sh test-rust
+
 # Log feature summary
 # Export directory paths for feature summary (also defined in bashrc for runtime)
 export CARGO_HOME="/cache/cargo"

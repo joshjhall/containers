@@ -354,6 +354,54 @@ run_test_with_setup() {
 }
 
 # ============================================================================
+# test-rust verification script (#1001)
+# ============================================================================
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../framework/helpers/feature-test-script.sh"
+TEST_RUST_SCRIPT="$PROJECT_ROOT/lib/features/lib/rust/test-rust.sh"
+RUST_REQUIRED=(rustc cargo rustup cargo-watch mdbook)
+
+test_rust_script_installed() {
+    assert_file_exists "$TEST_RUST_SCRIPT" "test-rust source script exists"
+    # The exact call, with continuation lines joined: source path AND the
+    # command name it installs as, so a wrong name or source fails here.
+    local call
+    call=$(command sed -e ':a' -e '/\\$/N; s/\\\n//; ta' "$PROJECT_ROOT/lib/features/rust.sh" |
+        command grep -E '^install_feature_test_script ' | command tr -s ' ')
+    # Anchored on the name argument's end (EOL or the next argument) so a
+    # name that merely starts with test-rust cannot satisfy it.
+    if command printf '%s\n' "$call" | command grep -qE \
+        "^install_feature_test_script /tmp/build-scripts/features/lib/rust/test-rust\.sh test-rust( |$)"; then
+        pass_test
+    else
+        fail_test "rust.sh does not install lib/rust/test-rust.sh as test-rust at top level (got: $call)"
+    fi
+}
+
+test_rust_script_passes_when_all_tools_present() {
+    local out
+    out=$(run_feature_test_script "$TEST_RUST_SCRIPT" keep "${RUST_REQUIRED[@]}")
+    assert_contains "$out" "rc=0" "Exits 0 when every tool resolves"
+    assert_contains "$out" "rust-analyzer is not installed (optional)" \
+        "rust-analyzer is reported but optional"
+}
+
+test_rust_script_fails_on_missing_tool() {
+    local out
+    out=$(run_feature_test_script "$TEST_RUST_SCRIPT" keep rustc cargo rustup cargo-watch)
+    assert_contains "$out" "rc=1" "Exits 1 when a required tool is missing"
+    assert_contains "$out" "✗ mdbook is not found" "Names the missing tool"
+    assert_contains "$out" "✗ 1 required tool(s) missing" "Counts exactly the one missing tool"
+}
+
+test_rust_script_reports_rust_analyzer_when_present() {
+    local out
+    out=$(run_feature_test_script "$TEST_RUST_SCRIPT" keep "${RUST_REQUIRED[@]}" rust-analyzer)
+    assert_contains "$out" "rc=0" "Exits 0 with rust-analyzer present"
+    assert_contains "$out" "✓ rust-analyzer is installed" "Reports rust-analyzer when present"
+}
+
+# ============================================================================
 # Luggage Migration Tests (issue #407)
 # ============================================================================
 # Rust.sh delegates toolchain installation to `luggage install`. The bash
@@ -488,6 +536,10 @@ run_test test_toolchain_bin_fallback "rust.sh symlinks core toolchain via a CARG
 run_test test_no_inline_rustup_install "rust.sh strips inline rustup-init download/verify logic"
 run_test test_channel_routing "Channel names (stable/beta/nightly) route through --channel"
 run_test test_reconciler_profile_default "Pinned-toolchain reconciler installs with --profile default"
+run_test test_rust_script_installed "test-rust is installed (#1001)"
+run_test test_rust_script_passes_when_all_tools_present "test-rust exits 0 with all tools"
+run_test test_rust_script_fails_on_missing_tool "test-rust exits 1 on a missing tool"
+run_test test_rust_script_reports_rust_analyzer_when_present "test-rust reports rust-analyzer when present"
 
 # Generate test report
 generate_report

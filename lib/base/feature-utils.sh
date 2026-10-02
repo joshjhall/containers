@@ -4,6 +4,7 @@
 #
 # Functions: create_symlink(target, link_name, [description])
 #            create_secure_temp_dir() -> path
+#            install_feature_test_script(src, name, [check_lsp], [dest_dir])
 # Dependencies: logging functions + register_cleanup (sourced before this)
 # Include guard: _FEATURE_UTILS_LOADED
 
@@ -102,4 +103,53 @@ create_secure_temp_dir() {
     # Log to stderr so it doesn't interfere with command substitution
     log_message "Created secure temporary directory: $temp_dir" >&2
     echo "$temp_dir"
+}
+
+# ============================================================================
+# Verification Script Installation
+# ============================================================================
+
+# Install a feature's `test-<x>` verification script onto PATH (#1001).
+# Usage: install_feature_test_script <src> <name> [check_lsp] [dest_dir]
+#   src        source script (e.g. /tmp/build-scripts/features/lib/python/test-python-dev.sh)
+#   name       command name to install as (e.g. test-python-dev)
+#   check_lsp  "true"/"false": bakes the build-time SKIP_LSP_INSTALL decision
+#              into the script's __CHECK_LSP__ placeholder (the runtime never
+#              sees that build arg). Omit for scripts with no LSP gate.
+#   dest_dir   install directory (default /usr/local/bin; tests override it)
+# Returns non-zero, and fails the build, if the source is missing or the
+# placeholder is requested but absent.
+install_feature_test_script() {
+    local src="$1" name="$2" check_lsp="${3:-}" dest_dir="${4:-/usr/local/bin}"
+    local dest="${dest_dir}/${name}"
+
+    # Validate everything against the source BEFORE touching dest, so a bad
+    # call never leaves an unsubstituted script on PATH.
+    if [ ! -f "$src" ]; then
+        log_error "Verification script source not found: $src"
+        return 1
+    fi
+    if [ -n "$check_lsp" ]; then
+        case "$check_lsp" in
+            true | false) ;;
+            *)
+                log_error "install_feature_test_script: check_lsp must be true or false, got '$check_lsp'"
+                return 1
+                ;;
+        esac
+        if ! command grep -q '__CHECK_LSP__' "$src"; then
+            log_error "install_feature_test_script: $src has no __CHECK_LSP__ placeholder"
+            return 1
+        fi
+    fi
+
+    install -m 755 "$src" "$dest" || return 1
+    if [ -n "$check_lsp" ]; then
+        # check_lsp is validated as true/false above, so it is safe as a sed
+        # replacement. No rollback on failure: callers run under `set -e`, so
+        # the build aborts, and an unsubstituted copy checks the LSP tools
+        # anyway (the scripts' fail-safe default).
+        command sed -i "s/__CHECK_LSP__/${check_lsp}/" "$dest" || return 1
+    fi
+    log_message "Installed ${name} verification script"
 }
