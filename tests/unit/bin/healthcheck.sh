@@ -310,6 +310,15 @@ test_core_resolves_uid501_as_user() {
         "Finds the init marker in the user's passwd home dir"
 }
 
+# The no-lib tests point HEALTHCHECK_RUNTIME_LIB at a missing dir, which only
+# takes effect for a non-root process: real root always uses the image lib
+# (#998). Echoes a skip reason under a root runner, nothing otherwise.
+no_lib_premise_skip_reason() {
+    if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+        echo "no-lib premise needs a non-root runner (root ignores HEALTHCHECK_RUNTIME_LIB)"
+    fi
+}
+
 # Root, no resolver lib (script run outside the image). $1 = CONTAINER_UID
 # value or "" for unset. Reuses the UID-501 passwd stubs above.
 run_core_root_without_lib() {
@@ -326,6 +335,12 @@ run_core_root_without_lib() {
 
 # Test: without the resolver, an explicit CONTAINER_UID is honored
 test_core_no_lib_honors_container_uid() {
+    local why
+    why=$(no_lib_premise_skip_reason)
+    if [ -n "$why" ]; then
+        skip_test "$why"
+        return 0
+    fi
     local output
     output=$(run_core_root_without_lib 501)
     assert_contains "$output" "Container user: vscode" \
@@ -336,6 +351,12 @@ test_core_no_lib_honors_container_uid() {
 # than defaulting to UID 1000 (the #995 bug). A 1000 user exists in this
 # fixture precisely so a silent default would resolve and mask the failure.
 test_core_no_lib_no_uid_fails() {
+    local why
+    why=$(no_lib_premise_skip_reason)
+    if [ -n "$why" ]; then
+        skip_test "$why"
+        return 0
+    fi
     local output rc=0
     run_core_with_uid501_passwd 0 /home/vscode >/dev/null
     command printf 'olduser:x:1000:1000::/home/olduser:/bin/bash\n' >>"$TEST_TEMP_DIR/passwd"
@@ -363,6 +384,13 @@ test_core_no_lib_no_uid_fails() {
 #   - Real root via `sudo -n`: MUST NOT source it. EUID is read-only, so this is
 #     the one case the stubbed tests above cannot reach.
 test_core_real_root_ignores_runtime_lib_override() {
+    # The control leg must be a genuinely non-root process: under a root runner
+    # its "stubbed" root is real, the override is (correctly) ignored, and the
+    # control would fail as if the fix had regressed.
+    if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+        skip_test "control leg needs a non-root test runner (suite is running as root)"
+        return 0
+    fi
     if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true 2>/dev/null; then
         skip_test "needs passwordless sudo to run the healthcheck as real root"
         return 0
