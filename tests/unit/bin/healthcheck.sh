@@ -420,12 +420,11 @@ test_core_real_root_ignores_runtime_lib_override() {
         as_root=(sudo -n)
     fi
     # The real-root leg must prove it REACHED the user resolution, or an early
-    # failure would leave the marker absent and pass vacuously. That needs the
-    # image's own resolver at the hardcoded path.
-    if [ ! -r /opt/container-runtime/lib/resolve-container-user.sh ]; then
-        skip_test "no image runtime lib at /opt/container-runtime/lib (not running in the image)"
-        return 0
-    fi
+    # failure would leave the marker absent and pass vacuously. Passing the
+    # runner's own UID as CONTAINER_UID makes that work everywhere: in the image
+    # the hardcoded lib resolves it; outside (CI) check_core's no-lib branch does.
+    local runner_uid
+    runner_uid=$(/usr/bin/id -u)
 
     # mktemp under /tmp, not TEST_TEMP_DIR: root must be able to write the
     # marker, and the repo scratch can sit on a mount root cannot write.
@@ -461,9 +460,10 @@ EOF
 
     # Real root: must reach user resolution AND not source the override.
     output=$("${as_root[@]}" env BASH_ENV= HEALTHCHECK_RUNTIME_LIB="$decoy" \
+        CONTAINER_UID="$runner_uid" \
         bash "$SOURCE_FILE" --feature core --verbose 2>&1) || true
     assert_contains "$output" "Container user:" \
-        "Real root reached user resolution (via the image runtime lib)"
+        "Real root reached user resolution (image lib or CONTAINER_UID fallback)"
     assert_file_not_exists "$marker" \
         "Real root never sources an env-selected runtime lib"
 }
