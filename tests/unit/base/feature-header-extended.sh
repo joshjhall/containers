@@ -295,6 +295,8 @@ test_install_feature_test_script_rejects_bad_input() {
     local rc
     rc=$(_install_python_dev_script maybe)
     assert_not_equals "0" "$rc" "A check_lsp other than true/false fails the build"
+    assert_file_not_exists "$TEST_TEMP_DIR/bin/test-python-dev" \
+        "A rejected check_lsp leaves nothing installed"
     rc=$(
         export BUILD_LOG_DIR="$TEST_TEMP_DIR"
         # shellcheck source=/dev/null
@@ -314,6 +316,8 @@ test_install_feature_test_script_rejects_bad_input() {
         echo "$?"
     )
     assert_not_equals "0" "$rc" "check_lsp on a script with no placeholder fails the build"
+    assert_file_not_exists "$TEST_TEMP_DIR/test-rust" \
+        "A script missing its placeholder is not left installed"
 }
 
 # Run tests with setup/teardown

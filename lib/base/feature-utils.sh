@@ -123,12 +123,12 @@ install_feature_test_script() {
     local src="$1" name="$2" check_lsp="${3:-}" dest_dir="${4:-/usr/local/bin}"
     local dest="${dest_dir}/${name}"
 
+    # Validate everything against the source BEFORE touching dest, so a bad
+    # call never leaves an unsubstituted script on PATH.
     if [ ! -f "$src" ]; then
         log_error "Verification script source not found: $src"
         return 1
     fi
-    install -m 755 "$src" "$dest" || return 1
-
     if [ -n "$check_lsp" ]; then
         case "$check_lsp" in
             true | false) ;;
@@ -137,11 +137,20 @@ install_feature_test_script() {
                 return 1
                 ;;
         esac
-        if ! command grep -q '__CHECK_LSP__' "$dest"; then
+        if ! command grep -q '__CHECK_LSP__' "$src"; then
             log_error "install_feature_test_script: $src has no __CHECK_LSP__ placeholder"
             return 1
         fi
-        command sed -i "s/__CHECK_LSP__/${check_lsp}/" "$dest" || return 1
+    fi
+
+    install -m 755 "$src" "$dest" || return 1
+    if [ -n "$check_lsp" ]; then
+        # check_lsp is validated as true/false above, so it is safe as a sed
+        # replacement; on failure, remove the half-installed copy.
+        if ! command sed -i "s/__CHECK_LSP__/${check_lsp}/" "$dest"; then
+            command rm -f "$dest"
+            return 1
+        fi
     fi
     log_message "Installed ${name} verification script"
 }
