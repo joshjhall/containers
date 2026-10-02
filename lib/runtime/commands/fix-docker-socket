@@ -57,9 +57,11 @@ priv() {
 # Probe with the exact chown this script runs, not `sudo -n true`: under
 # ENABLE_PASSWORDLESS_SUDO=scoped only the pinned CONTAINER_STARTUP commands are
 # allowed, so `true` is refused while the chown/chmod we need are not (#996).
-# `sudo -n -l <cmd>` asks about that command line without running it. This
-# mirrors can_run_privileged() in lib/runtime/lib/privileged.sh, inlined because
-# this command must stay self-contained (see header).
+# `sudo -n -l <cmd>` asks about that command line without running it; the
+# scoped alias grants the chown and the chmod below together, so one probe
+# covers both. This mirrors can_run_privileged() in lib/runtime/lib/
+# privileged.sh, inlined because this command must stay self-contained (see
+# header).
 can_priv() {
     if [ "$(id -u)" -eq 0 ]; then
         return 0
