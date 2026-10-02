@@ -310,6 +310,49 @@ test_core_resolves_uid501_as_user() {
         "Finds the init marker in the user's passwd home dir"
 }
 
+# Root, no resolver lib (script run outside the image). $1 = CONTAINER_UID
+# value or "" for unset. Reuses the UID-501 passwd stubs above.
+run_core_root_without_lib() {
+    local cuid="$1"
+    run_core_with_uid501_passwd 0 /home/vscode >/dev/null
+    (
+        export BASH_ENV=""
+        export PATH="$TEST_TEMP_DIR/stubs:$PATH"
+        export HEALTHCHECK_RUNTIME_LIB="$TEST_TEMP_DIR/no-such-lib"
+        if [ -n "$cuid" ]; then export CONTAINER_UID="$cuid"; else unset CONTAINER_UID; fi
+        bash "$SOURCE_FILE" --feature core --verbose 2>&1
+    ) || true
+}
+
+# Test: without the resolver, an explicit CONTAINER_UID is honored
+test_core_no_lib_honors_container_uid() {
+    local output
+    output=$(run_core_root_without_lib 501)
+    assert_contains "$output" "Container user: vscode" \
+        "No-lib fallback resolves the explicit CONTAINER_UID"
+}
+
+# Test: without the resolver and without CONTAINER_UID, fail loudly rather
+# than defaulting to UID 1000 (the #995 bug). A 1000 user exists in this
+# fixture precisely so a silent default would resolve and mask the failure.
+test_core_no_lib_no_uid_fails() {
+    local output rc=0
+    run_core_with_uid501_passwd 0 /home/vscode >/dev/null
+    command printf 'olduser:x:1000:1000::/home/olduser:/bin/bash\n' >>"$TEST_TEMP_DIR/passwd"
+    output=$(
+        export BASH_ENV=""
+        export PATH="$TEST_TEMP_DIR/stubs:$PATH"
+        export HEALTHCHECK_RUNTIME_LIB="$TEST_TEMP_DIR/no-such-lib"
+        unset CONTAINER_UID
+        bash "$SOURCE_FILE" --feature core --verbose 2>&1
+    ) || rc=$?
+    assert_not_equals "0" "$rc" "Unresolvable user makes the healthcheck fail"
+    assert_contains "$output" "Could not determine the container user" \
+        "Reports the resolution failure"
+    assert_not_contains "$output" "Container user: olduser" \
+        "Does not silently default to UID 1000"
+}
+
 # ============================================================================
 # Run all tests
 # ============================================================================
@@ -343,6 +386,8 @@ run_test_with_setup test_unknown_option_exits_1 "Unknown option returns exit 1"
 run_test_with_setup test_unknown_feature_exits_1 "Unknown feature returns exit 1"
 run_test_with_setup test_core_resolves_uid501_as_root "Root: resolves UID-501 user via shared resolver (#995)"
 run_test_with_setup test_core_resolves_uid501_as_user "Non-root: uses the running user (#995)"
+run_test_with_setup test_core_no_lib_honors_container_uid "No resolver lib: honors CONTAINER_UID"
+run_test_with_setup test_core_no_lib_no_uid_fails "No resolver lib, no CONTAINER_UID: fails, no 1000 default (#995)"
 
 # Generate test report
 generate_report
