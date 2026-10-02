@@ -235,6 +235,21 @@ log_message "Ensuring correct ownership of Python directories..."
 log_command "Final ownership fix for Python cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${PIP_CACHE_DIR}" || true
 
+# ============================================================================
+# Verification script
+# ============================================================================
+# Installs the `test-python-dev` command the summary below tells users to run (#1001).
+# SKIP_LSP_INSTALL is a build arg the runtime never sees, so bake the LSP
+# decision into the installed copy.
+log_message "Installing test-python-dev verification script..."
+install -m 755 /tmp/build-scripts/features/lib/python/test-python-dev.sh \
+    /usr/local/bin/test-python-dev
+if [ "${SKIP_LSP_INSTALL}" = "true" ]; then
+    command sed -i 's/__CHECK_LSP__/false/' /usr/local/bin/test-python-dev
+else
+    command sed -i 's/__CHECK_LSP__/true/' /usr/local/bin/test-python-dev
+fi
+
 # Log feature summary
 # Export directory paths for feature summary (also defined in parent python.sh)
 export PIP_CACHE_DIR="/cache/pip"

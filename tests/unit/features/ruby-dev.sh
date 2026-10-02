@@ -256,6 +256,57 @@ EOF
     fi
 }
 
+# ============================================================================
+# test-ruby-dev verification script (#1001)
+# ============================================================================
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../framework/helpers/feature-test-script.sh"
+TEST_RUBY_DEV_SCRIPT="$PROJECT_ROOT/lib/features/lib/ruby/test-ruby-dev.sh"
+RUBY_DEV_REQUIRED=(rspec rubocop reek brakeman yard pry rails bundle-audit)
+RUBY_DEV_LSP=(solargraph)
+
+test_ruby_dev_script_installed() {
+    assert_file_exists "$TEST_RUBY_DEV_SCRIPT" "test-ruby-dev source script exists"
+    assert_file_contains "$PROJECT_ROOT/lib/features/ruby-dev.sh" "/usr/local/bin/test-ruby-dev" \
+        "ruby-dev.sh installs test-ruby-dev onto PATH"
+}
+
+test_ruby_dev_script_passes_when_all_tools_present() {
+    local out
+    out=$(run_feature_test_script "$TEST_RUBY_DEV_SCRIPT" true \
+        "${RUBY_DEV_REQUIRED[@]}" "${RUBY_DEV_LSP[@]}")
+    assert_contains "$out" "rc=0" "Exits 0 when every tool resolves"
+    assert_not_contains "$out" "✗" "Reports no missing tool"
+}
+
+test_ruby_dev_script_fails_on_missing_tool() {
+    local out tool
+    local -a present=()
+    for tool in "${RUBY_DEV_REQUIRED[@]}"; do
+        [ "$tool" = "rubocop" ] || present+=("$tool")
+    done
+    out=$(run_feature_test_script "$TEST_RUBY_DEV_SCRIPT" true \
+        "${present[@]}" "${RUBY_DEV_LSP[@]}")
+    assert_contains "$out" "rc=1" "Exits 1 when a required tool is missing"
+    assert_contains "$out" "✗ rubocop is not found" "Names the missing tool"
+}
+
+test_ruby_dev_script_skips_lsp_when_disabled() {
+    local out
+    out=$(run_feature_test_script "$TEST_RUBY_DEV_SCRIPT" false \
+        "${RUBY_DEV_REQUIRED[@]}")
+    assert_contains "$out" "rc=0" "Exits 0 without LSP tools when built with SKIP_LSP_INSTALL=true"
+    assert_contains "$out" "skipped (built with SKIP_LSP_INSTALL=true)" "Says the LSP check was skipped"
+}
+
+test_ruby_dev_script_checks_lsp_by_default() {
+    local out
+    # Unsubstituted placeholder: must still check LSP (err toward more checks).
+    out=$(run_feature_test_script "$TEST_RUBY_DEV_SCRIPT" keep \
+        "${RUBY_DEV_REQUIRED[@]}")
+    assert_contains "$out" "rc=1" "An unsubstituted placeholder still checks the LSP tools"
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -277,6 +328,11 @@ run_test_with_setup test_ruby_dev_aliases "Ruby dev aliases"
 run_test_with_setup test_pry_config "Pry configuration"
 run_test_with_setup test_bundler_audit "Bundler audit"
 run_test_with_setup test_ruby_dev_verification "Ruby dev verification"
+run_test_with_setup test_ruby_dev_script_installed "Ruby dev: test-ruby-dev is installed (#1001)"
+run_test_with_setup test_ruby_dev_script_passes_when_all_tools_present "Ruby dev: test-ruby-dev exits 0 with all tools"
+run_test_with_setup test_ruby_dev_script_fails_on_missing_tool "Ruby dev: test-ruby-dev exits 1 on a missing tool"
+run_test_with_setup test_ruby_dev_script_skips_lsp_when_disabled "Ruby dev: test-ruby-dev skips LSP when disabled"
+run_test_with_setup test_ruby_dev_script_checks_lsp_by_default "Ruby dev: test-ruby-dev checks LSP by default"
 
 # Generate test report
 generate_report

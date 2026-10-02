@@ -355,6 +355,36 @@ run_test_with_setup() {
 
 # ============================================================================
 # Luggage Migration Tests (issue #407)
+
+# ============================================================================
+# test-rust verification script (#1001)
+# ============================================================================
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../framework/helpers/feature-test-script.sh"
+TEST_RUST_SCRIPT="$PROJECT_ROOT/lib/features/lib/rust/test-rust.sh"
+RUST_REQUIRED=(rustc cargo rustup cargo-watch mdbook)
+
+test_rust_script_installed() {
+    assert_file_exists "$TEST_RUST_SCRIPT" "test-rust source script exists"
+    assert_file_contains "$PROJECT_ROOT/lib/features/rust.sh" "/usr/local/bin/test-rust" \
+        "rust.sh installs test-rust onto PATH"
+}
+
+test_rust_script_passes_when_all_tools_present() {
+    local out
+    out=$(run_feature_test_script "$TEST_RUST_SCRIPT" keep "${RUST_REQUIRED[@]}")
+    assert_contains "$out" "rc=0" "Exits 0 when every tool resolves"
+    assert_contains "$out" "rust-analyzer is not installed (optional)" \
+        "rust-analyzer is reported but optional"
+}
+
+test_rust_script_fails_on_missing_tool() {
+    local out
+    out=$(run_feature_test_script "$TEST_RUST_SCRIPT" keep rustc cargo rustup cargo-watch)
+    assert_contains "$out" "rc=1" "Exits 1 when a required tool is missing"
+    assert_contains "$out" "✗ mdbook is not found" "Names the missing tool"
+}
+
 # ============================================================================
 # Rust.sh delegates toolchain installation to `luggage install`. The bash
 # script no longer downloads rustup-init or runs the legacy 4-tier
@@ -488,6 +518,9 @@ run_test test_toolchain_bin_fallback "rust.sh symlinks core toolchain via a CARG
 run_test test_no_inline_rustup_install "rust.sh strips inline rustup-init download/verify logic"
 run_test test_channel_routing "Channel names (stable/beta/nightly) route through --channel"
 run_test test_reconciler_profile_default "Pinned-toolchain reconciler installs with --profile default"
+run_test test_rust_script_installed "test-rust is installed (#1001)"
+run_test test_rust_script_passes_when_all_tools_present "test-rust exits 0 with all tools"
+run_test test_rust_script_fails_on_missing_tool "test-rust exits 1 on a missing tool"
 
 # Generate test report
 generate_report

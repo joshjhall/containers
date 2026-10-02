@@ -68,6 +68,11 @@ test_python_dev_build() {
     assert_executable_in_path "$image" "pylsp"
     assert_executable_in_path "$image" "pyright"
 
+    # The verification command the feature summary tells users to run (#1001):
+    # on PATH, and it exits 0 because every tool above resolves.
+    assert_executable_in_path "$image" "test-python-dev"
+    assert_command_in_container "$image" "test-python-dev" "All Python development tools found"
+
     # Verify dev tools
     assert_executable_in_path "$image" "git"
     assert_executable_in_path "$image" "gh"

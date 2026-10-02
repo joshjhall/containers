@@ -247,6 +247,21 @@ log_message "Ensuring correct ownership of Ruby directories..."
 log_command "Final ownership fix for Ruby cache directories" \
     chown -R "${USER_UID}":"${USER_GID}" "${GEM_HOME}" "${BUNDLE_PATH:-/cache/ruby/bundle}" || true
 
+# ============================================================================
+# Verification script
+# ============================================================================
+# Installs the `test-ruby-dev` command the summary below tells users to run (#1001).
+# SKIP_LSP_INSTALL is a build arg the runtime never sees, so bake the LSP
+# decision into the installed copy.
+log_message "Installing test-ruby-dev verification script..."
+install -m 755 /tmp/build-scripts/features/lib/ruby/test-ruby-dev.sh \
+    /usr/local/bin/test-ruby-dev
+if [ "${SKIP_LSP_INSTALL}" = "true" ]; then
+    command sed -i 's/__CHECK_LSP__/false/' /usr/local/bin/test-ruby-dev
+else
+    command sed -i 's/__CHECK_LSP__/true/' /usr/local/bin/test-ruby-dev
+fi
+
 # Log feature summary
 # Export directory paths for feature summary (also defined in parent ruby.sh)
 export GEM_HOME="/cache/ruby/gems"
