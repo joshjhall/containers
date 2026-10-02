@@ -164,7 +164,7 @@ jobs:
               echo "mode=full"
               echo "features=${FEATURES}"
             } >> "${GITHUB_OUTPUT}"
-            echo "::notice::Foundational change detected — running merge-tier cluster (skip-listed heavy builds excluded): ${FEATURES}"
+            echo "::notice::Foundational change detected — running merge-tier cluster (skip-listed builds excluded; they get no automated build while merge-tier cells are parked, #508): ${FEATURES}"
             exit 0
           fi
 
@@ -204,13 +204,16 @@ jobs:
     # a *typical* single-feature change (most cells finish well under), but a
     # foundational change (Dockerfile / lib/base / a workflow edit) triggers a
     # full cold cluster, and the heaviest non-skip-listed cells need more than
-    # 15min cold: CI measured golang-dev at ~15m and python-dev at ~14m. 25min
-    # keeps those green with margin while still roughly halving the old cap.
+    # 15min cold: CI measured python-dev at ~14m. 25min keeps it green with
+    # margin while still roughly halving the old cap. golang-dev measured ~15m
+    # too, but a slow runner pushed it past 25min (#1006), so it is now
+    # SKIP_LISTed rather than raising this cap.
     # r-dev used to need ~25min compiling its CRAN set from source, but #531
     # switched it to Posit Package Manager binary packages so it now installs
-    # without compiling. The two cells that still can't fit are SKIP_LISTed
-    # above: rust-dev (cold cargo build, covered by merge-tier `rust-golang`)
-    # and java-dev (apt/download-bound; covered by merge-tier `java-dev`, #536).
+    # without compiling. The three cells that can't fit reliably are SKIP_LISTed
+    # above: rust-dev (cold cargo build), java-dev (apt/download-bound), and
+    # golang-dev (runner variance). Their merge-tier cells are parked (#508), so
+    # none of them gets an automated build.
     # See #517/#531 for the cold-build reductions.
     timeout-minutes: 25
     strategy:
