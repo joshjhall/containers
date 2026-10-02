@@ -386,7 +386,7 @@ EOF
     if ! command grep -qF 'DUF_VERSION="${DUF_VERSION:-0.8.1}"' lib/features/dev-tools.sh; then
         all_updated=false
     fi
-    if ! command grep -q 'DUA_VERSION="${DUA_VERSION:-2.37.0}"' lib/features/dev-tools.sh; then
+    if ! command grep -qF 'DUA_VERSION="${DUA_VERSION:-2.37.0}"' lib/features/dev-tools.sh; then
         all_updated=false
     fi
     if ! command grep -qF 'ENTR_VERSION="${ENTR_VERSION:-5.7}"' lib/features/dev-tools.sh; then
@@ -726,6 +726,62 @@ EOF
     fi
 }
 
+# Test: a bare VAR="X" pin is rewritten into the VAR="${VAR:-X}" override form.
+# Every real pin already uses the override form, so the other fixtures never
+# reach the updater's second (bare-pin) sed; this one pins that contract.
+test_bare_pin_rewritten_to_override_form() {
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    mkdir -p "$test_dir/lib/features"
+    command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
+#!/bin/bash
+LAZYGIT_VERSION="0.54.1"
+DIRENV_VERSION="2.37.1"
+EOF
+
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {
+      "tool": "lazygit",
+      "current": "0.54.1",
+      "latest": "0.54.2",
+      "file": "dev-tools.sh",
+      "status": "outdated"
+    }
+  ]
+}
+EOF
+
+    cd "$test_dir"
+    git init --quiet
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git add -A
+    git commit -m "Initial" --quiet
+
+    PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
+
+    local ok=true
+    command grep -qxF 'LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.54.2}"' lib/features/dev-tools.sh || ok=false
+    if command grep -qxF 'LAZYGIT_VERSION="0.54.1"' lib/features/dev-tools.sh; then ok=false; fi
+    # A bare pin the input did not name is left exactly as it was.
+    command grep -qxF 'DIRENV_VERSION="2.37.1"' lib/features/dev-tools.sh || ok=false
+
+    command rm -rf "$test_dir"
+
+    if [ "$ok" = true ]; then
+        return 0
+    else
+        command cat <<'EOF' >&2
+bare-pin rewrite contract broken: expected LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.54.2}"
+with no bare LAZYGIT line left and DIRENV_VERSION="2.37.1" untouched
+EOF
+        return 1
+    fi
+}
+
 # Run tests
 run_test test_help_output "Help output displays correctly"
 run_test test_dry_run_mode "Dry run mode doesn't modify files"
@@ -733,6 +789,7 @@ run_test test_version_update "Version updates are applied"
 run_test test_no_updates "Handles no updates needed"
 run_test test_invalid_input "Handles invalid input file"
 run_test test_shell_script_update "Updates shell script versions"
+run_test test_bare_pin_rewritten_to_override_form "Rewrites a bare VAR=\"X\" pin into the override form"
 run_test test_java_dev_tools_update "Updates Java dev tool versions"
 run_test test_duf_entr_update "Updates duf and entr versions"
 run_test test_just_rumdl_conform_update "Updates just, rumdl, and conform (incl. prerelease format)"
