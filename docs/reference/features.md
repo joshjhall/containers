@@ -78,6 +78,8 @@ These features have no dependencies and can be installed independently:
 - `ollama` - Local LLM runtime
 - `mise` - Polyglot runtime version manager (.mise.toml / .tool-versions)
 - `cron` - Cron daemon (auto-enabled with `rust-dev` or `dev-tools`)
+- `node` is auto-enabled with `python-dev` (pyright needs a Node runtime)
+  unless `SKIP_LSP_INSTALL=true`
 - `bindfs` - FUSE overlay for VirtioFS permission fixes (auto-enabled with
   `dev-tools`). Requires `--cap-add SYS_ADMIN --device /dev/fuse` at runtime.
 

@@ -262,6 +262,52 @@ EOF
     fi
 }
 
+# Evaluate the Dockerfile's Node RUN condition under the given env assignments
+# (e.g. "INCLUDE_PYTHON_DEV=true SKIP_LSP_INSTALL=false"); prints install|skip.
+# Runs the real extracted clause rather than grepping its text, so the test
+# fails if the precedence or the SKIP_LSP_INSTALL carve-out is wrong.
+eval_node_condition() {
+    local assignments="$1"
+    local clause
+    clause=$(command sed -n '/ARG INCLUDE_NODE=/,/node\.sh/p' "$PROJECT_ROOT/Dockerfile" |
+        command awk '/^ *if /{on=1} on{print} on && /; then/{exit}' |
+        command sed -e 's/\\$//' -e 's/; then *$//' -e 's/^ *if //' |
+        command tr '\n' ' ')
+    env -i INCLUDE_NODE=false INCLUDE_NODE_DEV=false INCLUDE_PYTHON_DEV=false \
+        SKIP_LSP_INSTALL=false $assignments \
+        /bin/sh -c "if $clause; then echo install; else echo skip; fi"
+}
+
+test_node_implied_by_python_dev() {
+    assert_equals "install" "$(eval_node_condition "INCLUDE_PYTHON_DEV=true")" \
+        "python-dev with LSPs installs Node (pyright needs it)"
+    assert_equals "skip" "$(eval_node_condition "INCLUDE_PYTHON_DEV=true SKIP_LSP_INSTALL=true")" \
+        "python-dev with SKIP_LSP_INSTALL=true does not pull in Node"
+    assert_equals "skip" "$(eval_node_condition "")" \
+        "no feature selected installs no Node"
+    assert_equals "skip" "$(eval_node_condition "SKIP_LSP_INSTALL=true")" \
+        "SKIP_LSP_INSTALL alone installs no Node"
+    assert_equals "install" "$(eval_node_condition "INCLUDE_NODE=true SKIP_LSP_INSTALL=true")" \
+        "explicit INCLUDE_NODE still wins over SKIP_LSP_INSTALL"
+}
+
+# A Dockerfile ARG is empty before its declaration, so SKIP_LSP_INSTALL must be
+# declared above both the Node condition and every *_dev step that forwards it.
+test_skip_lsp_arg_declared_before_use() {
+    local dockerfile="$PROJECT_ROOT/Dockerfile"
+    local arg_line first_use
+    arg_line=$(command grep -n '^ARG SKIP_LSP_INSTALL=' "$dockerfile" | command cut -d: -f1)
+    first_use=$(command grep -n '\${SKIP_LSP_INSTALL}' "$dockerfile" | command head -1 | command cut -d: -f1)
+
+    assert_equals "1" "$(command grep -c '^ARG SKIP_LSP_INSTALL=' "$dockerfile")" \
+        "SKIP_LSP_INSTALL is declared exactly once"
+    if [ -n "$arg_line" ] && [ -n "$first_use" ] && [ "$arg_line" -lt "$first_use" ]; then
+        assert_true true "ARG SKIP_LSP_INSTALL (line $arg_line) precedes first use (line $first_use)"
+    else
+        assert_true false "ARG SKIP_LSP_INSTALL (line ${arg_line:-none}) must precede first use (line ${first_use:-none})"
+    fi
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -283,6 +329,8 @@ run_test_with_setup test_ipython_config "IPython configuration"
 run_test_with_setup test_dev_aliases "Development aliases"
 run_test_with_setup test_jupyter_installation "Jupyter installation"
 run_test_with_setup test_python_dev_verification "Python dev verification"
+run_test_with_setup test_node_implied_by_python_dev "Node implied by python-dev unless SKIP_LSP_INSTALL"
+run_test_with_setup test_skip_lsp_arg_declared_before_use "SKIP_LSP_INSTALL ARG declared before use"
 
 # Generate test report
 generate_report
