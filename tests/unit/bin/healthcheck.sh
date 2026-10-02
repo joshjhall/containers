@@ -367,11 +367,20 @@ test_core_real_root_ignores_runtime_lib_override() {
         skip_test "needs passwordless sudo to run the healthcheck as real root"
         return 0
     fi
+    # The real-root leg must prove it REACHED the user resolution, or an early
+    # failure would leave the marker absent and pass vacuously. That needs the
+    # image's own resolver at the hardcoded path.
+    if [ ! -r /opt/container-runtime/lib/resolve-container-user.sh ]; then
+        skip_test "no image runtime lib at /opt/container-runtime/lib (not running in the image)"
+        return 0
+    fi
 
     # mktemp under /tmp, not TEST_TEMP_DIR: root must be able to write the
     # marker, and the repo scratch can sit on a mount root cannot write.
-    local decoy marker
+    local decoy marker output
     decoy=$(command mktemp -d)
+    # shellcheck disable=SC2064  # expand $decoy now; the local is gone at RETURN
+    trap "sudo -n rm -rf '$decoy' 2>/dev/null || command rm -rf '$decoy'; trap - RETURN" RETURN
     marker="$decoy/sourced"
     command chmod 0777 "$decoy"
     command cat >"$decoy/resolve-container-user.sh" <<EOF
@@ -380,25 +389,28 @@ test_core_real_root_ignores_runtime_lib_override() {
 source "$PROJECT_ROOT/lib/runtime/lib/resolve-container-user.sh"
 EOF
 
-    # Control: stubbed root, real non-root process -> override honored.
+    # Control: stubbed root, real non-root process -> override honored. The
+    # helper call only builds the getent/id stubs; its own run is discarded.
     run_core_with_uid501_passwd 0 /home/vscode >/dev/null
-    (
+    output=$(
         export BASH_ENV=""
         export PATH="$TEST_TEMP_DIR/stubs:$PATH"
         export HEALTHCHECK_RUNTIME_LIB="$decoy"
-        bash "$SOURCE_FILE" --feature core >/dev/null 2>&1
+        bash "$SOURCE_FILE" --feature core --verbose 2>&1
     ) || true
+    assert_contains "$output" "Container user:" \
+        "Control: the stubbed-root run reached user resolution"
     assert_file_exists "$marker" \
         "Control: non-root run sources the override (decoy is wired)"
     command rm -f "$marker"
 
-    # Real root: override must be ignored.
-    sudo -n env BASH_ENV= HEALTHCHECK_RUNTIME_LIB="$decoy" \
-        bash "$SOURCE_FILE" --feature core >/dev/null 2>&1 || true
+    # Real root: must reach user resolution AND not source the override.
+    output=$(sudo -n env BASH_ENV= HEALTHCHECK_RUNTIME_LIB="$decoy" \
+        bash "$SOURCE_FILE" --feature core --verbose 2>&1) || true
+    assert_contains "$output" "Container user:" \
+        "Real root reached user resolution (via the image runtime lib)"
     assert_file_not_exists "$marker" \
         "Real root never sources an env-selected runtime lib"
-
-    sudo -n rm -rf "$decoy" 2>/dev/null || command rm -rf "$decoy"
 }
 
 # ============================================================================
