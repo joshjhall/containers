@@ -366,11 +366,19 @@ RUST_REQUIRED=(rustc cargo rustup cargo-watch mdbook)
 
 test_rust_script_installed() {
     assert_file_exists "$TEST_RUST_SCRIPT" "test-rust source script exists"
-    assert_file_contains "$PROJECT_ROOT/lib/features/rust.sh" \
-        "install_feature_test_script /tmp/build-scripts/features/lib/" \
-        "rust.sh installs its verification script via install_feature_test_script"
-    assert_file_contains "$PROJECT_ROOT/lib/features/rust.sh" "test-rust.sh" \
-        "rust.sh installs test-rust from its source script"
+    # The exact call, with continuation lines joined: source path AND the
+    # command name it installs as, so a wrong name or source fails here.
+    local call
+    call=$(command sed -e ':a' -e '/\\$/N; s/\\\n//; ta' "$PROJECT_ROOT/lib/features/rust.sh" |
+        command grep -E '^install_feature_test_script ' | command tr -s ' ')
+    # Anchored on the name argument's end (EOL or the next argument) so a
+    # name that merely starts with test-rust cannot satisfy it.
+    if command printf '%s\n' "$call" | command grep -qE \
+        "^install_feature_test_script /tmp/build-scripts/features/lib/rust/test-rust\.sh test-rust( |$)"; then
+        pass_test
+    else
+        fail_test "rust.sh does not install lib/rust/test-rust.sh as test-rust at top level (got: $call)"
+    fi
 }
 
 test_rust_script_passes_when_all_tools_present() {

@@ -319,11 +319,19 @@ PYTHON_DEV_LSP=(pylsp pyright)
 
 test_python_dev_script_installed() {
     assert_file_exists "$TEST_PYTHON_DEV_SCRIPT" "test-python-dev source script exists"
-    assert_file_contains "$PROJECT_ROOT/lib/features/python-dev.sh" \
-        "install_feature_test_script /tmp/build-scripts/features/lib/" \
-        "python-dev.sh installs its verification script via install_feature_test_script"
-    assert_file_contains "$PROJECT_ROOT/lib/features/python-dev.sh" "test-python-dev.sh" \
-        "python-dev.sh installs test-python-dev from its source script"
+    # The exact call, with continuation lines joined: source path AND the
+    # command name it installs as, so a wrong name or source fails here.
+    local call
+    call=$(command sed -e ':a' -e '/\\$/N; s/\\\n//; ta' "$PROJECT_ROOT/lib/features/python-dev.sh" |
+        command grep -E '^install_feature_test_script ' | command tr -s ' ')
+    # Anchored on the name argument's end (EOL or the next argument) so a
+    # name that merely starts with test-python-dev cannot satisfy it.
+    if command printf '%s\n' "$call" | command grep -qE \
+        "^install_feature_test_script /tmp/build-scripts/features/lib/python/test-python-dev\.sh test-python-dev( |$)"; then
+        pass_test
+    else
+        fail_test "python-dev.sh does not install lib/python/test-python-dev.sh as test-python-dev at top level (got: $call)"
+    fi
 }
 
 test_python_dev_script_passes_when_all_tools_present() {
