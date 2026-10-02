@@ -21,8 +21,23 @@ QUICK_MODE=false
 VERBOSE=false
 SPECIFIC_FEATURE=""
 EXIT_CODE=0
+# A documented user feature (docs/healthcheck.md), honored at every EUID so a
+# root `docker exec ... healthcheck` runs the same custom checks as HEALTHCHECK.
 CUSTOM_CHECKS_DIR="${HEALTHCHECK_CUSTOM_DIR:-/etc/healthcheck.d}"
-RUNTIME_LIB="${HEALTHCHECK_RUNTIME_LIB:-/opt/container-runtime/lib}"
+
+# select_runtime_lib <euid> — print the runtime lib dir check_core sources when
+# run as root. HEALTHCHECK_RUNTIME_LIB is a unit-test seam only: a genuinely
+# privileged run always gets the image path, so the environment can never
+# choose code that root sources (#998). Callers pass bash's read-only EUID,
+# which unlike `id` cannot be stubbed via PATH.
+select_runtime_lib() {
+    if [ "$1" -eq 0 ]; then
+        echo "/opt/container-runtime/lib"
+    else
+        echo "${HEALTHCHECK_RUNTIME_LIB:-/opt/container-runtime/lib}"
+    fi
+}
+RUNTIME_LIB=$(select_runtime_lib "${EUID:-$(id -u)}")
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do

@@ -310,6 +310,15 @@ test_core_resolves_uid501_as_user() {
         "Finds the init marker in the user's passwd home dir"
 }
 
+# The no-lib tests point HEALTHCHECK_RUNTIME_LIB at a missing dir, which only
+# takes effect for a non-root process: real root always uses the image lib
+# (#998). Echoes a skip reason under a root runner, nothing otherwise.
+no_lib_premise_skip_reason() {
+    if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+        echo "no-lib premise needs a non-root runner (root ignores HEALTHCHECK_RUNTIME_LIB)"
+    fi
+}
+
 # Root, no resolver lib (script run outside the image). $1 = CONTAINER_UID
 # value or "" for unset. Reuses the UID-501 passwd stubs above.
 run_core_root_without_lib() {
@@ -326,6 +335,12 @@ run_core_root_without_lib() {
 
 # Test: without the resolver, an explicit CONTAINER_UID is honored
 test_core_no_lib_honors_container_uid() {
+    local why
+    why=$(no_lib_premise_skip_reason)
+    if [ -n "$why" ]; then
+        skip_test "$why"
+        return 0
+    fi
     local output
     output=$(run_core_root_without_lib 501)
     assert_contains "$output" "Container user: vscode" \
@@ -336,6 +351,12 @@ test_core_no_lib_honors_container_uid() {
 # than defaulting to UID 1000 (the #995 bug). A 1000 user exists in this
 # fixture precisely so a silent default would resolve and mask the failure.
 test_core_no_lib_no_uid_fails() {
+    local why
+    why=$(no_lib_premise_skip_reason)
+    if [ -n "$why" ]; then
+        skip_test "$why"
+        return 0
+    fi
     local output rc=0
     run_core_with_uid501_passwd 0 /home/vscode >/dev/null
     command printf 'olduser:x:1000:1000::/home/olduser:/bin/bash\n' >>"$TEST_TEMP_DIR/passwd"
@@ -351,6 +372,100 @@ test_core_no_lib_no_uid_fails() {
         "Reports the resolution failure"
     assert_not_contains "$output" "Container user: olduser" \
         "Does not silently default to UID 1000"
+}
+
+# Test: the RUNTIME_LIB selection itself, for both EUIDs (#998)
+#
+# Runs everywhere, CI included: select_runtime_lib takes the EUID as an
+# argument, so the root branch is exercised without real root. The end-to-end
+# real-root test below proves the script feeds it the read-only EUID.
+test_select_runtime_lib_by_euid() {
+    local func
+    func=$(command sed -n '/^select_runtime_lib()/,/^}/p' "$SOURCE_FILE")
+    assert_not_equals "" "$func" "select_runtime_lib is defined in healthcheck.sh"
+
+    local got
+    got=$(HEALTHCHECK_RUNTIME_LIB=/evil bash -c "$func; select_runtime_lib 0")
+    assert_equals "/opt/container-runtime/lib" "$got" \
+        "EUID 0 ignores HEALTHCHECK_RUNTIME_LIB"
+    got=$(HEALTHCHECK_RUNTIME_LIB=/evil bash -c "$func; select_runtime_lib 1000")
+    assert_equals "/evil" "$got" \
+        "Non-root honors HEALTHCHECK_RUNTIME_LIB (test seam)"
+    got=$(env -u HEALTHCHECK_RUNTIME_LIB bash -c "$func; select_runtime_lib 1000")
+    assert_equals "/opt/container-runtime/lib" "$got" \
+        "Non-root without the override uses the image path"
+}
+
+# Test: a genuinely root run ignores HEALTHCHECK_RUNTIME_LIB (#998)
+#
+# The override is a test seam; when root honored it, the environment chose a
+# file that root sources. The decoy lib below writes a marker the moment it is
+# sourced, then defers to the real resolver so the run still completes.
+#   - Control: non-root with `id -u` stubbed to 0 MUST source the decoy (proves
+#     the decoy is wired and the override is still a working test seam).
+#   - Real root via `sudo -n`: MUST NOT source it. EUID is read-only, so this is
+#     the one case the stubbed tests above cannot reach.
+test_core_real_root_ignores_runtime_lib_override() {
+    # Two ways to get a genuinely root healthcheck run:
+    #   - the suite already runs as root: run it directly. The control leg is
+    #     skipped (its "stubbed" root would be real, so the override is
+    #     correctly ignored), but the real-root assertion still executes.
+    #   - non-root with passwordless sudo: control leg, then root via sudo.
+    local as_root=()
+    if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+        if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true 2>/dev/null; then
+            skip_test "needs a root runner or passwordless sudo to run the healthcheck as real root"
+            return 0
+        fi
+        as_root=(sudo -n)
+    fi
+    # The real-root leg must prove it REACHED the user resolution, or an early
+    # failure would leave the marker absent and pass vacuously. Passing the
+    # runner's own UID as CONTAINER_UID makes that work everywhere: in the image
+    # the hardcoded lib resolves it; outside (CI) check_core's no-lib branch does.
+    local runner_uid
+    runner_uid=$(/usr/bin/id -u)
+
+    # mktemp under /tmp, not TEST_TEMP_DIR: root must be able to write the
+    # marker, and the repo scratch can sit on a mount root cannot write.
+    local decoy marker output
+    decoy=$(command mktemp -d)
+    # shellcheck disable=SC2064  # expand $decoy now; the local is gone at RETURN
+    trap "${as_root[*]} rm -rf '$decoy' 2>/dev/null || command rm -rf '$decoy'; trap - RETURN" RETURN
+    marker="$decoy/sourced"
+    command chmod 0777 "$decoy"
+    command cat >"$decoy/resolve-container-user.sh" <<EOF
+: >"$marker"
+# shellcheck source=/dev/null
+source "$PROJECT_ROOT/lib/runtime/lib/resolve-container-user.sh"
+EOF
+
+    # Control (non-root runner only): stubbed root, real non-root process ->
+    # override honored. The helper call only builds the getent/id stubs; its
+    # own run is discarded.
+    if [ ${#as_root[@]} -gt 0 ]; then
+        run_core_with_uid501_passwd 0 /home/vscode >/dev/null
+        output=$(
+            export BASH_ENV=""
+            export PATH="$TEST_TEMP_DIR/stubs:$PATH"
+            export HEALTHCHECK_RUNTIME_LIB="$decoy"
+            bash "$SOURCE_FILE" --feature core --verbose 2>&1
+        ) || true
+        assert_contains "$output" "Container user:" \
+            "Control: the stubbed-root run reached user resolution"
+        assert_file_exists "$marker" \
+            "Control: non-root run sources the override (decoy is wired)"
+        command rm -f "$marker"
+    fi
+
+    # Real root: must reach user resolution AND not source the override.
+    output=$("${as_root[@]}" env BASH_ENV= HEALTHCHECK_RUNTIME_LIB="$decoy" \
+        CONTAINER_UID="$runner_uid" \
+        bash "$SOURCE_FILE" --feature core --verbose 2>&1) || true
+    assert_contains "$output" "Container user:" \
+        "Real root reached user resolution (image lib or CONTAINER_UID fallback)"
+    assert_file_not_exists "$marker" \
+        "Real root never sources an env-selected runtime lib"
 }
 
 # ============================================================================
@@ -388,6 +503,8 @@ run_test_with_setup test_core_resolves_uid501_as_root "Root: resolves UID-501 us
 run_test_with_setup test_core_resolves_uid501_as_user "Non-root: uses the running user (#995)"
 run_test_with_setup test_core_no_lib_honors_container_uid "No resolver lib: honors CONTAINER_UID"
 run_test_with_setup test_core_no_lib_no_uid_fails "No resolver lib, no CONTAINER_UID: fails, no 1000 default (#995)"
+run_test_with_setup test_select_runtime_lib_by_euid "select_runtime_lib: EUID 0 ignores the override (#998)"
+run_test_with_setup test_core_real_root_ignores_runtime_lib_override "Real root ignores HEALTHCHECK_RUNTIME_LIB (#998)"
 
 # Generate test report
 generate_report
