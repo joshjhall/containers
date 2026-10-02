@@ -354,9 +354,6 @@ run_test_with_setup() {
 }
 
 # ============================================================================
-# Luggage Migration Tests (issue #407)
-
-# ============================================================================
 # test-rust verification script (#1001)
 # ============================================================================
 # shellcheck source=/dev/null
@@ -404,6 +401,8 @@ test_rust_script_reports_rust_analyzer_when_present() {
     assert_contains "$out" "✓ rust-analyzer is installed" "Reports rust-analyzer when present"
 }
 
+# ============================================================================
+# Luggage Migration Tests (issue #407)
 # ============================================================================
 # Rust.sh delegates toolchain installation to `luggage install`. The bash
 # script no longer downloads rustup-init or runs the legacy 4-tier
