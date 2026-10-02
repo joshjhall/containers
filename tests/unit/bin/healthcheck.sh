@@ -374,6 +374,28 @@ test_core_no_lib_no_uid_fails() {
         "Does not silently default to UID 1000"
 }
 
+# Test: the RUNTIME_LIB selection itself, for both EUIDs (#998)
+#
+# Runs everywhere, CI included: select_runtime_lib takes the EUID as an
+# argument, so the root branch is exercised without real root. The end-to-end
+# real-root test below proves the script feeds it the read-only EUID.
+test_select_runtime_lib_by_euid() {
+    local func
+    func=$(command sed -n '/^select_runtime_lib()/,/^}/p' "$SOURCE_FILE")
+    assert_not_equals "" "$func" "select_runtime_lib is defined in healthcheck.sh"
+
+    local got
+    got=$(HEALTHCHECK_RUNTIME_LIB=/evil bash -c "$func; select_runtime_lib 0")
+    assert_equals "/opt/container-runtime/lib" "$got" \
+        "EUID 0 ignores HEALTHCHECK_RUNTIME_LIB"
+    got=$(HEALTHCHECK_RUNTIME_LIB=/evil bash -c "$func; select_runtime_lib 1000")
+    assert_equals "/evil" "$got" \
+        "Non-root honors HEALTHCHECK_RUNTIME_LIB (test seam)"
+    got=$(env -u HEALTHCHECK_RUNTIME_LIB bash -c "$func; select_runtime_lib 1000")
+    assert_equals "/opt/container-runtime/lib" "$got" \
+        "Non-root without the override uses the image path"
+}
+
 # Test: a genuinely root run ignores HEALTHCHECK_RUNTIME_LIB (#998)
 #
 # The override is a test seam; when root honored it, the environment chose a
@@ -481,6 +503,7 @@ run_test_with_setup test_core_resolves_uid501_as_root "Root: resolves UID-501 us
 run_test_with_setup test_core_resolves_uid501_as_user "Non-root: uses the running user (#995)"
 run_test_with_setup test_core_no_lib_honors_container_uid "No resolver lib: honors CONTAINER_UID"
 run_test_with_setup test_core_no_lib_no_uid_fails "No resolver lib, no CONTAINER_UID: fails, no 1000 default (#995)"
+run_test_with_setup test_select_runtime_lib_by_euid "select_runtime_lib: EUID 0 ignores the override (#998)"
 run_test_with_setup test_core_real_root_ignores_runtime_lib_override "Real root ignores HEALTHCHECK_RUNTIME_LIB (#998)"
 
 # Generate test report
