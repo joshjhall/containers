@@ -146,11 +146,10 @@ install_feature_test_script() {
     install -m 755 "$src" "$dest" || return 1
     if [ -n "$check_lsp" ]; then
         # check_lsp is validated as true/false above, so it is safe as a sed
-        # replacement; on failure, remove the half-installed copy.
-        if ! command sed -i "s/__CHECK_LSP__/${check_lsp}/" "$dest"; then
-            command rm -f "$dest"
-            return 1
-        fi
+        # replacement. No rollback on failure: callers run under `set -e`, so
+        # the build aborts, and an unsubstituted copy checks the LSP tools
+        # anyway (the scripts' fail-safe default).
+        command sed -i "s/__CHECK_LSP__/${check_lsp}/" "$dest" || return 1
     fi
     log_message "Installed ${name} verification script"
 }
