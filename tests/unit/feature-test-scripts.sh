@@ -59,8 +59,11 @@ test_every_advertised_script_is_installed() {
     for entry in "${entries[@]}"; do
         f="${entry%%$'\t'*}"
         name="${entry#*$'\t'}"
-        # Join backslash-continued lines so a wrapped install call still matches.
+        # Join backslash-continued lines (so a wrapped install call still
+        # matches), then drop comment lines so a comment naming the path can't
+        # count as an install.
         hits=$(command sed -e ':a' -e '/\\$/N; s/\\\n//; ta' "$f" |
+            command grep -vE '^[[:space:]]*#' |
             command grep -cE "/usr/local/bin/${name}([^a-z0-9-]|$)|install_feature_test_script [^ ]+ +${name}([^a-z0-9-]|$)" || true)
         if [ "${hits:-0}" -eq 0 ]; then
             missing="${missing} $(basename "$f"):${name}"

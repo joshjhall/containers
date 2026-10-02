@@ -23,12 +23,14 @@ echo "=== Rust Installation Status ==="
 echo ""
 echo "Toolchain:"
 check_tools rustc cargo rustup
-if command -v rustc &>/dev/null; then
-    echo "  $(rustc --version 2>&1 | command head -1)"
-fi
-if command -v cargo &>/dev/null; then
-    echo "  $(cargo --version 2>&1 | command head -1)"
-fi
+# First line of each --version, read with the `read` builtin so the script
+# needs no external tool beyond the ones it is checking.
+for tool in rustc cargo; do
+    if command -v "$tool" &>/dev/null; then
+        IFS= read -r version < <("$tool" --version 2>&1)
+        echo "  ${version}"
+    fi
+done
 
 echo ""
 echo "Development and documentation tools:"

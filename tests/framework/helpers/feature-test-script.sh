@@ -35,18 +35,9 @@ run_feature_test_script() {
     else
         command sed "s/__CHECK_LSP__/${check_lsp}/" "$script" >"$dir/test-script"
     fi
-    # Only the stubs on PATH, plus the coreutils the script itself calls, so a
-    # tool installed on the test host can never satisfy a check. Resolve head
-    # from the host rather than assuming /usr/bin, and fail loudly without it:
-    # a dangling link would make the script fail for an unrelated reason.
-    local head_bin
-    head_bin=$(command -v head) || head_bin=""
-    if [ -z "$head_bin" ]; then
-        command printf 'harness error: head not found on PATH\nrc=harness-error\n'
-        command rm -rf "$dir"
-        return 0
-    fi
-    command ln -s "$head_bin" "$dir/bin/head"
+    # Only the stubs on PATH, so a tool installed on the test host can never
+    # satisfy a check. The scripts use bash builtins only, so nothing else is
+    # needed.
     BASH_ENV="" PATH="$dir/bin" /bin/bash "$dir/test-script" 2>&1 || rc=$?
     command printf 'rc=%s\n' "$rc"
     command rm -rf "$dir"
