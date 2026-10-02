@@ -106,3 +106,14 @@ actual cause was one killable process. Run `lsof +D` before concluding anything
 survives until restart, and never report "clears on container restart" without
 having done so: it implies an unbounded wait and ~200M pinned, when the real
 remedy is three commands.
+
+**Third shape (2026-10-02, #1000): `worktree-rm.sh` refuses "read unverifiable"
+but deregisters anyway.** It printed "Nothing was removed", yet afterwards the
+worktree was gone from `git worktree list` and `.git/worktrees/`, and the local
+branch survived. Trap: `git -C .worktrees/issue-N status` then walks up into the
+**main** checkout and reports *its* dirty files and HEAD. Don't read that as the
+worktree's state. The directory held one stale lowercase `dockerfile` entry: its
+own inode (not a case-shadow of the tracked `Dockerfile`, so safe to delete), it
+listed, but ENOENT on open. Clean finish: `git branch -D feature/issue-N` (the PR
+is MERGED), `git worktree prune`, `rm -rf .worktrees/issue-N`. The `rm` succeeded
+despite the ENOENT entry.

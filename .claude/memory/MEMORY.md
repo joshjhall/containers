@@ -99,7 +99,7 @@
 - [Unit suites share tests/results/](tests-share-results-dir.md) — fixed TEST_TEMP_DIR names collide, unique ones leak; both fixed (#817)
 - [tests/results/ is on an incoherent FUSE mount](results-dir-fuse-incoherent.md) — writes succeed, report success, then aren't readable
 - [Rebase before blaming your own change](rebase-before-blaming-your-change.md) — a CI failure in files your branch never touched usually means main
-- [FUSE scratch breaks write-then-read](fuse-scratch-breaks-write-then-read.md) — test scratch on the FUSE-mounted repo loses coherency ~0.75%/op
+- [FUSE scratch breaks write-then-read](fuse-scratch-breaks-write-then-read.md) — test scratch AND cargo target/ on the FUSE-mounted repo lose coherency; cold-worktree `just test` link-fails, use CARGO_TARGET_DIR=/tmp
 - [clap `env` attr breaks bool flags](clap-env-attr-breaks-bool-flags.md) — `#[arg(env=...)]` on a bool makes it value-taking
 - [git-env neutralization boundary](git-env-neutralization-boundary.md) — fs-health clears 8 git vars by measurement not name family
 - [Fixture state hides vectors](fixture-state-hides-vectors.md) — an exhaustive sweep in one fixture state missed two of its own members

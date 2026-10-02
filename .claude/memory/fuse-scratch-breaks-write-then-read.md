@@ -48,3 +48,12 @@ Two traps worth remembering:
 
 Related: [[stale-symlink-attrs-virtiofs]], [[case-insensitive-mount-shared-inode]],
 [[hermetic-fixture-tests-need-git-identity]], [[bash-env-breaks-path-stubs]].
+
+**Cargo `target/` hits it too, deterministically (2026-10-02, #1000).** In a
+fresh worktree (cold `target/` on the same FUSE mount), `just test` died at the
+link step 2/2 runs on the same test binary: `ld: .../version_styles-*.o: file too
+short` — rustc's just-written object read back truncated. Because the recipe runs
+`cargo test` first under `set -e`, **no shell suite runs at all**, so a red
+`just test` there says nothing about the change. Fix: `CARGO_TARGET_DIR=/tmp/...`
+(29/29 green, same tree). Note the background-job wrapper reported exit 0 —
+read the recipe's own exit line, not the job status.
