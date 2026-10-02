@@ -176,8 +176,8 @@ test_shell_script_update() {
     mkdir -p "$test_dir/lib/features"
     command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
 #!/bin/bash
-LAZYGIT_VERSION="0.54.1"
-DIRENV_VERSION="2.37.1"
+LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.54.1}"
+DIRENV_VERSION="${DIRENV_VERSION:-2.37.1}"
 EOF
 
     # Create mock JSON with shell script update
@@ -214,7 +214,7 @@ EOF
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
 
     # Check that file was modified
-    if command grep -q 'LAZYGIT_VERSION="0.54.2"' lib/features/dev-tools.sh; then
+    if command grep -qF 'LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.54.2}"' lib/features/dev-tools.sh; then
         command rm -rf "$test_dir"
         return 0
     else
@@ -233,10 +233,10 @@ test_java_dev_tools_update() {
     mkdir -p "$test_dir/lib/features"
     command cat >"$test_dir/lib/features/java-dev.sh" <<'EOF'
 #!/bin/bash
-SPRING_VERSION="3.4.2"
-JBANG_VERSION="0.121.0"
-    MVND_VERSION="1.0.2"
-GJF_VERSION="1.25.2"
+SPRING_VERSION="${SPRING_VERSION:-3.4.2}"
+JBANG_VERSION="${JBANG_VERSION:-0.121.0}"
+    MVND_VERSION="${MVND_VERSION:-1.0.2}"
+GJF_VERSION="${GJF_VERSION:-1.25.2}"
 EOF
 
     # Create mock JSON with Java tool updates
@@ -295,16 +295,16 @@ EOF
 
     # Check that all Java tools were updated
     local all_updated=true
-    if ! command grep -q 'SPRING_VERSION="3.5.4"' lib/features/java-dev.sh; then
+    if ! command grep -qF 'SPRING_VERSION="${SPRING_VERSION:-3.5.4}"' lib/features/java-dev.sh; then
         all_updated=false
     fi
-    if ! command grep -q 'JBANG_VERSION="0.129.0"' lib/features/java-dev.sh; then
+    if ! command grep -qF 'JBANG_VERSION="${JBANG_VERSION:-0.129.0}"' lib/features/java-dev.sh; then
         all_updated=false
     fi
-    if ! command grep -q 'MVND_VERSION="1.0.3"' lib/features/java-dev.sh; then
+    if ! command grep -qF 'MVND_VERSION="${MVND_VERSION:-1.0.3}"' lib/features/java-dev.sh; then
         all_updated=false
     fi
-    if ! command grep -q 'GJF_VERSION="1.28.0"' lib/features/java-dev.sh; then
+    if ! command grep -qF 'GJF_VERSION="${GJF_VERSION:-1.28.0}"' lib/features/java-dev.sh; then
         all_updated=false
     fi
 
@@ -327,9 +327,9 @@ test_duf_entr_update() {
     mkdir -p "$test_dir/lib/features"
     command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
 #!/bin/bash
-DUF_VERSION="0.8.0"
+DUF_VERSION="${DUF_VERSION:-0.8.0}"
 DUA_VERSION="${DUA_VERSION:-2.34.0}"
-ENTR_VERSION="5.5"
+ENTR_VERSION="${ENTR_VERSION:-5.5}"
 EOF
 
     # Create mock JSON with tool updates. dua sits next to duf and shares the
@@ -383,13 +383,13 @@ EOF
 
     # Check that both tools were updated
     local all_updated=true
-    if ! command grep -q 'DUF_VERSION="0.8.1"' lib/features/dev-tools.sh; then
+    if ! command grep -qF 'DUF_VERSION="${DUF_VERSION:-0.8.1}"' lib/features/dev-tools.sh; then
         all_updated=false
     fi
     if ! command grep -q 'DUA_VERSION="${DUA_VERSION:-2.37.0}"' lib/features/dev-tools.sh; then
         all_updated=false
     fi
-    if ! command grep -q 'ENTR_VERSION="5.7"' lib/features/dev-tools.sh; then
+    if ! command grep -qF 'ENTR_VERSION="${ENTR_VERSION:-5.7}"' lib/features/dev-tools.sh; then
         all_updated=false
     fi
 
@@ -673,7 +673,7 @@ test_update_zoxide_version() {
 
 echo "=== Installing zoxide ==="
 ARCH=$(dpkg --print-architecture)
-ZOXIDE_VERSION="0.9.0"
+ZOXIDE_VERSION="${ZOXIDE_VERSION:-0.9.0}"
 cd /tmp
 EOF
 
@@ -713,7 +713,7 @@ EOF
 
     # Check that zoxide was updated
     local updated=false
-    if command grep -q 'ZOXIDE_VERSION="0.9.8"' lib/base/setup.sh; then
+    if command grep -qF 'ZOXIDE_VERSION="${ZOXIDE_VERSION:-0.9.8}"' lib/base/setup.sh; then
         updated=true
     fi
 

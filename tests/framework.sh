@@ -476,11 +476,18 @@ run_test() {
     setup
 
     # Run the test
-    if $test_func; then
+    local tf_rt_rc=0
+    $test_func || tf_rt_rc=$?
+    if [ "$tf_rt_rc" -eq 0 ]; then
         # Only mark as passed if not already marked as skipped or failed
         if [ "$TEST_STATUS" != "skipped" ] && [ "$TEST_STATUS" != "failed" ]; then
             pass_test
         fi
+    elif [ -z "$TEST_STATUS" ]; then
+        # A non-zero return with no assertion called (a bare `return 1`, or an
+        # undefined helper exiting 127) used to record no verdict at all: the
+        # suite reported 0 failed and exited 0 (#1002). Count it as a failure.
+        fail_test "test returned $tf_rt_rc without recording a verdict"
     fi
 
     # Run teardown
@@ -593,6 +600,14 @@ generate_report() {
     echo
     echo "Report saved to: $report_file"
 
+    # Backstop for #1002: every test_case must end in exactly one verdict. A gap
+    # means a test escaped run_test's accounting (a test_case with no verdict, or
+    # a path that bypasses run_test) — fail the suite rather than report green.
+    local tf_gr_unaccounted=$((TESTS_RUN - TESTS_PASSED - TESTS_FAILED - TESTS_SKIPPED))
+    if [ "$tf_gr_unaccounted" -ne 0 ]; then
+        echo "ERROR: $tf_gr_unaccounted test(s) recorded no verdict (Total != Passed + Failed + Skipped)" >&2
+    fi
+
     # Return non-zero if any tests failed.
     #
     # This MUST be the last command: suites run under `set -e` with
@@ -601,7 +616,7 @@ generate_report() {
     # hiccup exit non-zero while the report itself reads 0 failed — the exact
     # "5 passed, 0 failed" suite the harness recorded as an ERROR that
     # prompted this fix.
-    [ $TESTS_FAILED -eq 0 ]
+    [ $TESTS_FAILED -eq 0 ] && [ "$tf_gr_unaccounted" -eq 0 ]
 }
 
 # Export framework core functions

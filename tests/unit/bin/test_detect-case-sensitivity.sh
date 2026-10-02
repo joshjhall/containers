@@ -42,7 +42,7 @@ test_detect_script_exists() {
     if [ -f "$DETECT_SCRIPT" ]; then
         return 0
     else
-        fail "detect-case-sensitivity.sh not found at $DETECT_SCRIPT"
+        fail_test "detect-case-sensitivity.sh not found at $DETECT_SCRIPT"
     fi
 }
 
@@ -50,7 +50,7 @@ test_detect_script_executable() {
     if [ -x "$DETECT_SCRIPT" ]; then
         return 0
     else
-        fail "detect-case-sensitivity.sh is not executable"
+        fail_test "detect-case-sensitivity.sh is not executable"
     fi
 }
 
@@ -66,7 +66,7 @@ test_detect_with_valid_directory() {
             # Case-insensitive filesystem (valid result)
             return 0
         else
-            fail "Unexpected exit code: $exit_code"
+            fail_test "Unexpected exit code: $exit_code"
         fi
     fi
 }
@@ -74,7 +74,7 @@ test_detect_with_valid_directory() {
 test_detect_with_nonexistent_directory() {
     # Test with non-existent directory
     if QUIET=true "$DETECT_SCRIPT" "/nonexistent/path" >/dev/null 2>&1; then
-        fail "Should fail with non-existent directory"
+        fail_test "Should fail with non-existent directory"
     else
         local exit_code=$?
         assert_equals 2 "$exit_code" "Should exit with code 2 for non-existent path"
@@ -89,7 +89,7 @@ test_detect_with_readonly_directory() {
 
     # Test with read-only directory
     if QUIET=true "$DETECT_SCRIPT" "$readonly_dir" >/dev/null 2>&1; then
-        fail "Should fail with read-only directory"
+        fail_test "Should fail with read-only directory"
     else
         local exit_code=$?
         assert_equals 2 "$exit_code" "Should exit with code 2 for read-only directory"
@@ -111,7 +111,7 @@ test_quiet_mode_suppresses_output() {
     if [ -z "$output" ]; then
         return 0
     else
-        fail "Quiet mode should suppress output, but got: $output"
+        fail_test "Quiet mode should suppress output, but got: $output"
     fi
 }
 
@@ -123,7 +123,7 @@ test_verbose_mode_shows_output() {
     if [ -n "$output" ]; then
         return 0
     else
-        fail "Verbose mode should show output"
+        fail_test "Verbose mode should show output"
     fi
 }
 
@@ -135,7 +135,7 @@ test_output_includes_path_info() {
     if echo "$output" | command grep -q "$TEST_DIR"; then
         return 0
     else
-        fail "Output should include the tested path"
+        fail_test "Output should include the tested path"
     fi
 }
 
@@ -189,11 +189,11 @@ test_default_path_is_workspace() {
         if echo "$output" | command grep -q "/workspace"; then
             return 0
         else
-            fail "Default should be /workspace"
+            fail_test "Default should be /workspace"
         fi
     else
         # Skip test if /workspace doesn't exist or isn't writable
-        skip "Test requires writable /workspace directory"
+        skip_test "Test requires writable /workspace directory"
     fi
 }
 
@@ -211,7 +211,7 @@ test_handles_path_with_spaces() {
             # Case-insensitive (valid result)
             return 0
         else
-            fail "Should handle paths with spaces"
+            fail_test "Should handle paths with spaces"
         fi
     fi
 }
@@ -230,7 +230,7 @@ test_handles_deep_nested_path() {
             # Case-insensitive (valid result)
             return 0
         else
-            fail "Should handle deeply nested paths"
+            fail_test "Should handle deeply nested paths"
         fi
     fi
 }
@@ -249,7 +249,7 @@ test_exit_code_0_for_case_sensitive() {
     if [ "$exit_code" -eq 0 ] || [ "$exit_code" -eq 1 ]; then
         return 0
     else
-        fail "Exit code should be 0 or 1, got: $exit_code"
+        fail_test "Exit code should be 0 or 1, got: $exit_code"
     fi
 }
 

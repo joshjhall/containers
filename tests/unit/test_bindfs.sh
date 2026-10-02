@@ -418,7 +418,7 @@ test_dockerfile_cron_bindfs_trigger() {
     # Extract the cron RUN block and verify INCLUDE_BINDFS is in its condition
     local cron_block
     cron_block=$(command sed -n '/INCLUDE_CRON/,/cron\.sh/p' "$DOCKERFILE")
-    assert_true echo "$cron_block" | command grep -q 'INCLUDE_BINDFS' \
+    assert_contains "$cron_block" "INCLUDE_BINDFS" \
         "Dockerfile cron auto-trigger condition includes INCLUDE_BINDFS"
 }
 
