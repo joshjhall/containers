@@ -384,16 +384,18 @@ test_core_no_lib_no_uid_fails() {
 #   - Real root via `sudo -n`: MUST NOT source it. EUID is read-only, so this is
 #     the one case the stubbed tests above cannot reach.
 test_core_real_root_ignores_runtime_lib_override() {
-    # The control leg must be a genuinely non-root process: under a root runner
-    # its "stubbed" root is real, the override is (correctly) ignored, and the
-    # control would fail as if the fix had regressed.
-    if [ "${EUID:-$(id -u)}" -eq 0 ]; then
-        skip_test "control leg needs a non-root test runner (suite is running as root)"
-        return 0
-    fi
-    if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true 2>/dev/null; then
-        skip_test "needs passwordless sudo to run the healthcheck as real root"
-        return 0
+    # Two ways to get a genuinely root healthcheck run:
+    #   - the suite already runs as root: run it directly. The control leg is
+    #     skipped (its "stubbed" root would be real, so the override is
+    #     correctly ignored), but the real-root assertion still executes.
+    #   - non-root with passwordless sudo: control leg, then root via sudo.
+    local as_root=()
+    if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+        if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true 2>/dev/null; then
+            skip_test "needs a root runner or passwordless sudo to run the healthcheck as real root"
+            return 0
+        fi
+        as_root=(sudo -n)
     fi
     # The real-root leg must prove it REACHED the user resolution, or an early
     # failure would leave the marker absent and pass vacuously. That needs the
@@ -408,7 +410,7 @@ test_core_real_root_ignores_runtime_lib_override() {
     local decoy marker output
     decoy=$(command mktemp -d)
     # shellcheck disable=SC2064  # expand $decoy now; the local is gone at RETURN
-    trap "sudo -n rm -rf '$decoy' 2>/dev/null || command rm -rf '$decoy'; trap - RETURN" RETURN
+    trap "${as_root[*]} rm -rf '$decoy' 2>/dev/null || command rm -rf '$decoy'; trap - RETURN" RETURN
     marker="$decoy/sourced"
     command chmod 0777 "$decoy"
     command cat >"$decoy/resolve-container-user.sh" <<EOF
@@ -417,23 +419,26 @@ test_core_real_root_ignores_runtime_lib_override() {
 source "$PROJECT_ROOT/lib/runtime/lib/resolve-container-user.sh"
 EOF
 
-    # Control: stubbed root, real non-root process -> override honored. The
-    # helper call only builds the getent/id stubs; its own run is discarded.
-    run_core_with_uid501_passwd 0 /home/vscode >/dev/null
-    output=$(
-        export BASH_ENV=""
-        export PATH="$TEST_TEMP_DIR/stubs:$PATH"
-        export HEALTHCHECK_RUNTIME_LIB="$decoy"
-        bash "$SOURCE_FILE" --feature core --verbose 2>&1
-    ) || true
-    assert_contains "$output" "Container user:" \
-        "Control: the stubbed-root run reached user resolution"
-    assert_file_exists "$marker" \
-        "Control: non-root run sources the override (decoy is wired)"
-    command rm -f "$marker"
+    # Control (non-root runner only): stubbed root, real non-root process ->
+    # override honored. The helper call only builds the getent/id stubs; its
+    # own run is discarded.
+    if [ ${#as_root[@]} -gt 0 ]; then
+        run_core_with_uid501_passwd 0 /home/vscode >/dev/null
+        output=$(
+            export BASH_ENV=""
+            export PATH="$TEST_TEMP_DIR/stubs:$PATH"
+            export HEALTHCHECK_RUNTIME_LIB="$decoy"
+            bash "$SOURCE_FILE" --feature core --verbose 2>&1
+        ) || true
+        assert_contains "$output" "Container user:" \
+            "Control: the stubbed-root run reached user resolution"
+        assert_file_exists "$marker" \
+            "Control: non-root run sources the override (decoy is wired)"
+        command rm -f "$marker"
+    fi
 
     # Real root: must reach user resolution AND not source the override.
-    output=$(sudo -n env BASH_ENV= HEALTHCHECK_RUNTIME_LIB="$decoy" \
+    output=$("${as_root[@]}" env BASH_ENV= HEALTHCHECK_RUNTIME_LIB="$decoy" \
         bash "$SOURCE_FILE" --feature core --verbose 2>&1) || true
     assert_contains "$output" "Container user:" \
         "Real root reached user resolution (via the image runtime lib)"
