@@ -5,7 +5,8 @@
 # --next-steps and log_feature_instructions). #1001 found three features naming
 # a test-<x> script that nothing installed: test-python-dev, test-ruby-dev and
 # test-rust. This suite fails if any feature advertises a test-<x> it does not
-# itself install to /usr/local/bin/test-<x> (by `install`, `cp` or `cat >`).
+# itself install: either to the literal /usr/local/bin/test-<x> (by `install`,
+# `cp` or `cat >`) or via install_feature_test_script ... test-<x>.
 
 set -euo pipefail
 
@@ -58,7 +59,9 @@ test_every_advertised_script_is_installed() {
     for entry in "${entries[@]}"; do
         f="${entry%%$'\t'*}"
         name="${entry#*$'\t'}"
-        hits=$(command grep -cE "/usr/local/bin/${name}([^a-z0-9-]|$)" "$f" || true)
+        # Join backslash-continued lines so a wrapped install call still matches.
+        hits=$(command sed -e ':a' -e '/\\$/N; s/\\\n//; ta' "$f" |
+            command grep -cE "/usr/local/bin/${name}([^a-z0-9-]|$)|install_feature_test_script [^ ]+ +${name}([^a-z0-9-]|$)" || true)
         if [ "${hits:-0}" -eq 0 ]; then
             missing="${missing} $(basename "$f"):${name}"
         fi

@@ -382,9 +382,7 @@ log_command "Final ownership fix for cargo cache" \
 # Verification script
 # ============================================================================
 # Installs the `test-rust` command the summary below tells users to run (#1001).
-log_message "Installing test-rust verification script..."
-install -m 755 /tmp/build-scripts/features/lib/rust/test-rust.sh \
-    /usr/local/bin/test-rust
+install_feature_test_script /tmp/build-scripts/features/lib/rust/test-rust.sh test-rust
 
 # Log feature summary
 # Export directory paths for feature summary (also defined in bashrc for runtime)

@@ -366,8 +366,11 @@ RUST_REQUIRED=(rustc cargo rustup cargo-watch mdbook)
 
 test_rust_script_installed() {
     assert_file_exists "$TEST_RUST_SCRIPT" "test-rust source script exists"
-    assert_file_contains "$PROJECT_ROOT/lib/features/rust.sh" "/usr/local/bin/test-rust" \
-        "rust.sh installs test-rust onto PATH"
+    assert_file_contains "$PROJECT_ROOT/lib/features/rust.sh" \
+        "install_feature_test_script /tmp/build-scripts/features/lib/" \
+        "rust.sh installs its verification script via install_feature_test_script"
+    assert_file_contains "$PROJECT_ROOT/lib/features/rust.sh" "test-rust.sh" \
+        "rust.sh installs test-rust from its source script"
 }
 
 test_rust_script_passes_when_all_tools_present() {
@@ -383,6 +386,14 @@ test_rust_script_fails_on_missing_tool() {
     out=$(run_feature_test_script "$TEST_RUST_SCRIPT" keep rustc cargo rustup cargo-watch)
     assert_contains "$out" "rc=1" "Exits 1 when a required tool is missing"
     assert_contains "$out" "✗ mdbook is not found" "Names the missing tool"
+    assert_contains "$out" "✗ 1 required tool(s) missing" "Counts exactly the one missing tool"
+}
+
+test_rust_script_reports_rust_analyzer_when_present() {
+    local out
+    out=$(run_feature_test_script "$TEST_RUST_SCRIPT" keep "${RUST_REQUIRED[@]}" rust-analyzer)
+    assert_contains "$out" "rc=0" "Exits 0 with rust-analyzer present"
+    assert_contains "$out" "✓ rust-analyzer is installed" "Reports rust-analyzer when present"
 }
 
 # ============================================================================
@@ -521,6 +532,7 @@ run_test test_reconciler_profile_default "Pinned-toolchain reconciler installs w
 run_test test_rust_script_installed "test-rust is installed (#1001)"
 run_test test_rust_script_passes_when_all_tools_present "test-rust exits 0 with all tools"
 run_test test_rust_script_fails_on_missing_tool "test-rust exits 1 on a missing tool"
+run_test test_rust_script_reports_rust_analyzer_when_present "test-rust reports rust-analyzer when present"
 
 # Generate test report
 generate_report

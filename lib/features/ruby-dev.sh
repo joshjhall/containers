@@ -253,14 +253,13 @@ log_command "Final ownership fix for Ruby cache directories" \
 # Installs the `test-ruby-dev` command the summary below tells users to run (#1001).
 # SKIP_LSP_INSTALL is a build arg the runtime never sees, so bake the LSP
 # decision into the installed copy.
-log_message "Installing test-ruby-dev verification script..."
-install -m 755 /tmp/build-scripts/features/lib/ruby/test-ruby-dev.sh \
-    /usr/local/bin/test-ruby-dev
 if [ "${SKIP_LSP_INSTALL}" = "true" ]; then
-    command sed -i 's/__CHECK_LSP__/false/' /usr/local/bin/test-ruby-dev
+    TEST_RUBY_DEV_CHECK_LSP=false
 else
-    command sed -i 's/__CHECK_LSP__/true/' /usr/local/bin/test-ruby-dev
+    TEST_RUBY_DEV_CHECK_LSP=true
 fi
+install_feature_test_script /tmp/build-scripts/features/lib/ruby/test-ruby-dev.sh \
+    test-ruby-dev "${TEST_RUBY_DEV_CHECK_LSP}"
 
 # Log feature summary
 # Export directory paths for feature summary (also defined in parent ruby.sh)
