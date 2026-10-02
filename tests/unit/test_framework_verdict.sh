@@ -139,11 +139,53 @@ test_report_backstop_fails_unaccounted_tests() {
         "Total != Passed + Failed + Skipped must fail the suite"
 }
 
+# Backstop in a mixed suite: a pass alongside an unaccounted test_case must not
+# mask the gap — the unaccounted count is computed across the whole suite.
+test_report_backstop_mixed_with_pass() {
+    local out
+    out=$(run_suite_in_child '
+        t_ok() { assert_true true "ok"; }
+        run_test t_ok "passing case"
+        test_case "no verdict ever recorded" >/dev/null
+    ')
+    assert_contains "$out" "Total Tests: 2" \
+        "both the passing test and the bare test_case were run"
+    assert_contains "$out" "Passed:      1" \
+        "the passing test must still be counted as passed"
+    assert_contains "$out" "Failed:      0" \
+        "the unaccounted test must not be reclassified as failed"
+    assert_contains "$out" "1 test(s) recorded no verdict" \
+        "the report must name exactly the one unaccounted test"
+    assert_contains "$out" "CHILD_EXIT=1" \
+        "a passing test must not mask an unaccounted one"
+}
+
+# Backstop alongside a real failure: both conditions are reported and the
+# suite fails, with neither counter absorbing the other.
+test_report_backstop_with_failure() {
+    local out
+    out=$(run_suite_in_child '
+        t_bad() { assert_true false "deliberate failure"; }
+        run_test t_bad "failing case"
+        test_case "no verdict ever recorded" >/dev/null
+    ')
+    assert_contains "$out" "Total Tests: 2" \
+        "both the failing test and the bare test_case were run"
+    assert_contains "$out" "Failed:      1" \
+        "the failing test must be counted exactly once"
+    assert_contains "$out" "1 test(s) recorded no verdict" \
+        "the unaccounted test must still be reported next to a failure"
+    assert_contains "$out" "CHILD_EXIT=1" \
+        "a suite with a failure and an unaccounted test must exit 1"
+}
+
 run_test test_bare_nonzero_return_counts_as_failed "bare non-zero return counts as failed"
 run_test test_undefined_helper_counts_as_failed "undefined helper (127) counts as failed"
 run_test test_skip_then_nonzero_stays_skipped "skip then non-zero stays skipped"
 run_test test_assertion_failure_is_not_double_counted "assertion failure is not double-counted"
 run_test test_passing_test_unaffected "passing test is unaffected"
 run_test test_report_backstop_fails_unaccounted_tests "report backstop fails unaccounted tests"
+run_test test_report_backstop_mixed_with_pass "report backstop holds with a passing test alongside"
+run_test test_report_backstop_with_failure "report backstop holds alongside a real failure"
 
 generate_report
