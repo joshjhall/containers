@@ -126,3 +126,4 @@
 - [Node 25+ install deps](node-25-plus-install-deps.md) — no bundled corepack (≥25) + libatomic1 on Node 26 arm64; both exit 127
 - [Sourced lib set flags leak into caller](sourced-lib-set-flags-leak-into-caller.md) — a lib's `set -e` re-enables errexit in a no-`-e` sourcer; one empty grep killed check-versions with zero output
 - [Unconsumed default status fails silently](unconsumed-default-status-fails-silently.md) — registered-but-unhandled lands in `unchecked`, which no stage reads; cargo-binstall stale for months; add completeness tests per stage
+- [Container UID fixed, not remapped](container-uid-fixed-not-remapped.md) — updateRemoteUserUID:false keeps 1000:1000; runtime remap rejected (no root in container, rootless hosts)
