@@ -761,25 +761,22 @@ EOF
     git add -A
     git commit -m "Initial" --quiet
 
-    PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
+    local rc=0
+    PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1 || rc=$?
 
-    local ok=true
-    command grep -qxF 'LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.54.2}"' lib/features/dev-tools.sh || ok=false
-    if command grep -qxF 'LAZYGIT_VERSION="0.54.1"' lib/features/dev-tools.sh; then ok=false; fi
-    # A bare pin the input did not name is left exactly as it was.
-    command grep -qxF 'DIRENV_VERSION="2.37.1"' lib/features/dev-tools.sh || ok=false
+    # Compare the whole file: the lazygit line must be rewritten in place, and
+    # the bare pin the input did not name must be left exactly as it was.
+    local expected actual
+    expected='#!/bin/bash
+LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.54.2}"
+DIRENV_VERSION="2.37.1"'
+    actual=$(command cat lib/features/dev-tools.sh)
 
     command rm -rf "$test_dir"
 
-    if [ "$ok" = true ]; then
-        return 0
-    else
-        command cat <<'EOF' >&2
-bare-pin rewrite contract broken: expected LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.54.2}"
-with no bare LAZYGIT line left and DIRENV_VERSION="2.37.1" untouched
-EOF
-        return 1
-    fi
+    assert_equals 0 "$rc" "update-versions.sh must exit 0 on a bare-pin rewrite"
+    assert_equals "$expected" "$actual" \
+        "a bare LAZYGIT_VERSION pin must become the override form; DIRENV untouched"
 }
 
 # Run tests
