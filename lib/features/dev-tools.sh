@@ -236,6 +236,8 @@ write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "dev tools bashrc configurati
 # ============================================================================
 # Binary Tool Installations
 # ============================================================================
+# npm registry-signature classifier, used by the agnix install below
+source /tmp/build-scripts/features/lib/npm-audit-verdict.sh
 source /tmp/build-scripts/features/lib/dev-tools/install-binary-tools.sh
 
 log_message "Installing additional development tools..."

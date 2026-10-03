@@ -652,6 +652,54 @@ EOF
     assert_equals "99.1.0 outdated" "$row" "cargo-binstall is checked against GitHub releases (v stripped)"
 }
 
+test_npm_tools_resolve_via_registry() {
+    # #985: agnix and corepack are the only check_npm consumers. Drive them
+    # through the real extraction -> main() dispatch -> output path: the stub
+    # answers ONLY their two registry documents and fails everything else, so
+    # a missing/renamed dispatch arm or a broken COREPACK_VERSION extraction
+    # from node.sh shows up as a wrong row, not a pass.
+    local dir rc rows pin
+    dir=$(command mktemp -d)
+    command mkdir -p "$dir/stub"
+    command cat >"$dir/stub/curl" <<'EOF'
+#!/bin/sh
+for a in "$@"; do
+    case "$a" in
+        https://registry.npmjs.org/corepack)
+            printf '{"dist-tags":{"latest":"99.0.1"}}'
+            exit 0
+            ;;
+        https://registry.npmjs.org/agnix)
+            printf '{"dist-tags":{"latest":"99.0.2"}}'
+            exit 0
+            ;;
+    esac
+done
+exit 22
+EOF
+    command chmod +x "$dir/stub/curl"
+    env -u BASH_ENV -u GITHUB_TOKEN PATH="$dir/stub:$PATH" XDG_CACHE_HOME="$dir/cache" \
+        "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache >"$dir/out.json" 2>/dev/null || rc=$?
+    rows=$(jq -r '.tools[] | select(.tool == "corepack" or .tool == "agnix")
+        | "\(.tool) \(.current) \(.latest) \(.status)"' "$dir/out.json" 2>/dev/null | command sort)
+    command rm -rf "$dir"
+
+    # The expected current values are read from the pinned sources, so this
+    # pins the extraction, not today's version numbers.
+    pin=$(command sed -n 's/^COREPACK_VERSION="\${COREPACK_VERSION:-\([^}]*\)}"$/\1/p' \
+        "$PROJECT_ROOT/lib/features/node.sh")
+    local agnix_pin
+    agnix_pin=$(command sed -n 's/^AGNIX_VERSION="\${AGNIX_VERSION:-\([^}]*\)}"$/\1/p' \
+        "$PROJECT_ROOT/lib/features/dev-tools.sh")
+    if [ -z "$pin" ] || [ -z "$agnix_pin" ]; then
+        assert_true false "could not read the corepack/agnix pins (corepack='$pin' agnix='$agnix_pin')"
+        return
+    fi
+    assert_equals "agnix $agnix_pin 99.0.2 outdated
+corepack $pin 99.0.1 outdated" "$rows" \
+        "agnix and corepack are checked against the npm registry with their pinned versions"
+}
+
 run_test test_exit_code_current "Exit code is 0 when all versions current"
 run_test test_exit_code_outdated "Exit code is 1 when versions outdated"
 run_test test_unchecked_tool_is_loud_json "Unchecked tool exits 3 and is named in JSON"
@@ -660,6 +708,7 @@ run_test test_offline_sweep_survives_failed_fetches "Sweep survives failed fetch
 run_test test_every_registered_tool_has_a_checker "Every registered tool has a checker case"
 run_test test_unregistered_checker_trips_gate "Tool with no checker case trips the gate (via main)"
 run_test test_cargo_binstall_resolves_outdated "cargo-binstall resolves via GitHub releases"
+run_test test_npm_tools_resolve_via_registry "agnix and corepack resolve via the npm registry"
 
 # ============================================================================
 # Test: Mock-based check function tests
@@ -829,6 +878,43 @@ test_check_crates_io_mock() {
     assert_equals "0.25.15" "${LATEST_VERSIONS[0]}" "crates.io version extracted correctly"
 }
 
+test_check_npm_mock() {
+    setup_check_env
+
+    add_tool "corepack" "0.36.0" "node.sh"
+    add_tool "renamed-tool" "1.0.0" "dev-tools.sh"
+
+    # Answer per URL so a wrong package name in the request reads as an error
+    # row instead of borrowing another package's document.
+    fetch_url() {
+        case "$1" in
+            https://registry.npmjs.org/corepack) echo '{"dist-tags":{"latest":"0.37.0","next":"0.38.0-rc.1"}}' ;;
+            https://registry.npmjs.org/real-package) echo '{"dist-tags":{"latest":"2.1.0"}}' ;;
+            *) echo '{}' ;;
+        esac
+    }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_npm "corepack"
+    check_npm "renamed-tool" "real-package"
+
+    assert_equals "0.37.0" "${LATEST_VERSIONS[0]}" "npm dist-tags.latest extracted (not another tag)"
+    assert_equals "outdated" "${VERSION_STATUS[0]}" "older pin is reported outdated"
+    assert_equals "2.1.0" "${LATEST_VERSIONS[1]}" "two-arg form queries the package name, not the tool name"
+}
+
+test_check_npm_missing_latest_is_error() {
+    setup_check_env
+
+    add_tool "corepack" "0.36.0" "node.sh"
+    fetch_url() { echo '{"error":"Not found"}'; }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_npm "corepack"
+
+    assert_equals "error" "${VERSION_STATUS[0]}" "a registry document with no dist-tags.latest is an error, not current"
+}
+
 test_check_rubygems_mock() {
     setup_check_env
 
@@ -917,6 +1003,8 @@ run_test test_check_github_release_prerelease_mock "check_github_release_prerele
 run_test test_check_github_release_prerelease_skips_drafts "check_github_release_prerelease skips draft releases"
 run_test test_check_gitlab_release_mock "check_gitlab_release with mock API response"
 run_test test_check_crates_io_mock "check_crates_io with mock API response"
+run_test test_check_npm_mock "check_npm with mock API response"
+run_test test_check_npm_missing_latest_is_error "check_npm with no dist-tags.latest reports error"
 run_test test_check_rubygems_mock "check_rubygems with mock API response"
 run_test test_check_rubygems_missing_gem "check_rubygems falls back to null on an empty response"
 run_test test_check_maven_central_mock "check_maven_central with mock API response"

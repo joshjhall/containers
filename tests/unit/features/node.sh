@@ -238,77 +238,211 @@ test_node_permissions() {
 
 # _run_ensure_corepack MODE - run ensure_corepack against PATH stubs
 #
-# The helper runs under `env -i` with PATH holding only the stub dir, so the
-# host's own node/corepack can't satisfy it and BASH_ENV can't rebuild PATH.
-# MODE picks what the npm stub does on `install`:
-#   bundled   - corepack already present; npm must never run
-#   installs  - npm exits 0 and links corepack onto PATH
-#   fails     - npm exits 1
-#   off-path  - npm exits 0 but links nothing onto PATH
+# The helper runs under `env -i` with PATH holding only the stub dir plus a
+# tools dir of symlinks to the real coreutils/jq the audit classifier calls, so
+# the host's own node/corepack can't satisfy it and BASH_ENV can't rebuild PATH.
+# MODE picks what the npm stub does on the global `install -g`:
+#   bundled     - corepack already present; npm must never run
+#   installs    - npm exits 0 and links corepack onto PATH
+#   fails       - npm exits 1
+#   off-path    - npm exits 0 but links nothing onto PATH
+#   fetch-fails - the scratch (non-global) install exits 1
 # PIN (optional, default 0.36.0) becomes COREPACK_VERSION; "" leaves it empty.
-# Prints the helper's exit code; npm's argv (one per line) lands in npm.argv.
+# AUDIT (env, default clean) picks the `npm audit signatures --json` stdout:
+#   clean | mismatch | outage | empty | unsigned | no-missing | null-missing
+#   | noisy-clean (a clean body wrapped in npm notice prose)
+# NO_SCRATCH (env, non-empty) makes create_secure_temp_dir fail.
+# VERSION_RC (env, default 0) is the installed corepack's `--version` exit.
+#
+# Prints the helper's exit code. Each npm call lands as one line in npm.calls
+# (args space-joined); log_message/log_error output lands in ensure.log. The
+# scratch dir is always $TEST_TEMP_DIR/scratch, so a test can check it is gone.
 _run_ensure_corepack() {
     local mode="$1"
     local pin="${2-0.36.0}"
+    local audit="${AUDIT:-clean}"
+    local version_rc="${VERSION_RC:-0}"
     local stub_bin="$TEST_TEMP_DIR/stub-bin"
-    mkdir -p "$stub_bin"
-    : >"$TEST_TEMP_DIR/npm.argv"
+    local tools="$TEST_TEMP_DIR/tools"
+    local scratch="$TEST_TEMP_DIR/scratch"
+    mkdir -p "$stub_bin" "$tools"
+    : >"$TEST_TEMP_DIR/npm.calls"
+    : >"$TEST_TEMP_DIR/ensure.log"
 
-    local corepack_stub='#!/bin/bash
-echo 0.36.0'
+    local tool
+    for tool in jq grep cut tail sed head rm mkdir chmod cat; do
+        ln -sf "$(command -v "$tool")" "$tools/$tool"
+    done
+
+    local corepack_stub="#!/bin/bash
+[ \"\$1\" = --version ] && { [ $version_rc -eq 0 ] && echo 0.36.0; exit $version_rc; }
+exit 0"
     if [ "$mode" = "bundled" ]; then
         printf '%s\n' "$corepack_stub" >"$stub_bin/corepack"
         chmod +x "$stub_bin/corepack"
     fi
 
-    local install_action
+    local global_action fetch_action="exit 0" audit_out
     case "$mode" in
-        installs) install_action="printf '%s\\n' '$corepack_stub' >'$stub_bin/corepack'; /bin/chmod +x '$stub_bin/corepack'; exit 0" ;;
-        fails) install_action="exit 1" ;;
-        *) install_action="exit 0" ;;
+        installs) global_action="printf '%s\\n' '$corepack_stub' >'$stub_bin/corepack'; chmod +x '$stub_bin/corepack'; exit 0" ;;
+        fails) global_action="exit 1" ;;
+        fetch-fails)
+            global_action="exit 0"
+            fetch_action="exit 1"
+            ;;
+        *) global_action="exit 0" ;;
     esac
+    case "$audit" in
+        clean) audit_out='{"invalid":[],"missing":[]}' ;;
+        mismatch) audit_out='{"invalid":[{"name":"corepack","version":"0.36.0"}],"missing":[]}' ;;
+        outage) audit_out='{"error":{"code":"ECONNREFUSED","summary":"request failed"}}' ;;
+        empty) audit_out='' ;;
+        unsigned) audit_out='{"invalid":[],"missing":[{"name":"corepack","version":"0.36.0"}]}' ;;
+        no-missing) audit_out='{"invalid":[]}' ;;
+        null-missing) audit_out='{"invalid":[],"missing":null}' ;;
+        noisy-clean) audit_out='npm notice update available
+{"invalid":[],"missing":[]}
+npm notice bye' ;;
+    esac
+
     command cat >"$stub_bin/npm" <<STUB
 #!/bin/bash
-printf '%s\n' "\$@" >>'$TEST_TEMP_DIR/npm.argv'
-if [ "\$1" = "install" ]; then $install_action; fi
+printf '%s\n' "\$*" >>'$TEST_TEMP_DIR/npm.calls'
+case "\$1" in
+    install)
+        case " \$* " in
+            *" -g "*) $global_action ;;
+            *) $fetch_action ;;
+        esac
+        ;;
+    audit) printf '%s' '$audit_out'; exit 1 ;;
+esac
 exit 0
 STUB
     chmod +x "$stub_bin/npm"
 
     local rc=0
-    env -i PATH="$stub_bin" COREPACK_VERSION="$pin" /bin/bash -c '
-        log_message() { :; }
-        log_error() { :; }
+    env -i PATH="$stub_bin:$tools" COREPACK_VERSION="$pin" SCRATCH="$scratch" \
+        NO_SCRATCH="${NO_SCRATCH:-}" \
+        LOG="$TEST_TEMP_DIR/ensure.log" /bin/bash -c '
+        log_message() { printf "MSG: %s\n" "$*" >>"$LOG"; }
+        log_error() { printf "ERR: %s\n" "$*" >>"$LOG"; }
         log_command() { shift; "$@"; }
+        create_secure_temp_dir() {
+            [ -n "$NO_SCRATCH" ] && return 1
+            mkdir -p "$SCRATCH" && printf "%s\n" "$SCRATCH"
+        }
         source "$1"
+        source "$2"
         ensure_corepack
-    ' _ "$PROJECT_ROOT/lib/features/lib/node/ensure-corepack.sh" >/dev/null 2>&1 || rc=$?
+    ' _ "$PROJECT_ROOT/lib/features/lib/npm-audit-verdict.sh" \
+        "$PROJECT_ROOT/lib/features/lib/node/ensure-corepack.sh" >/dev/null 2>&1 || rc=$?
     echo "$rc"
+}
+
+# _npm_global_installs - the `npm install -g` lines from the last run
+_npm_global_installs() {
+    command grep -E '^install( .*)? -g( |$)' "$TEST_TEMP_DIR/npm.calls" || true
 }
 
 test_corepack_bundled_skips_npm() {
     local rc
     rc=$(_run_ensure_corepack bundled)
     assert_equals "0" "$rc" "ensure_corepack succeeds when corepack is bundled"
-    assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.argv")" \
+    assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.calls")" \
         "npm is not invoked when corepack is bundled"
 }
 
-test_corepack_missing_installs_pinned() {
-    local rc
+# A clean audit installs the AUDITED directory, never a fresh resolve of the
+# name, and every npm call keeps its cache inside the scratch dir (#985).
+test_corepack_missing_installs_verified() {
+    local rc scratch="$TEST_TEMP_DIR/scratch"
     rc=$(_run_ensure_corepack installs)
-    assert_equals "0" "$rc" "ensure_corepack succeeds after installing corepack"
-    assert_equals "install
--g
---ignore-scripts
-corepack@0.36.0" "$(command cat "$TEST_TEMP_DIR/npm.argv")" \
-        "npm installs exactly the pinned corepack globally"
+    assert_equals "0" "$rc" "ensure_corepack succeeds after a clean audit"
+    assert_equals "install --prefix $scratch --cache $scratch/.npm-cache --ignore-scripts corepack@0.36.0
+audit signatures --json --cache $scratch/.npm-cache
+install -g --cache $scratch/.npm-cache --ignore-scripts --install-links $scratch/node_modules/corepack" \
+        "$(command cat "$TEST_TEMP_DIR/npm.calls")" \
+        "fetch to scratch, audit it, then install -g from the audited dir"
+    assert_false "[ -e '$scratch' ]" "the scratch dir (and its npm cache) is removed"
+    assert_file_contains "$TEST_TEMP_DIR/ensure.log" "corepack 0.36.0 installed (registry signature verified)" \
+        "success is logged with the verified version"
+}
+
+test_corepack_signature_mismatch_is_fatal() {
+    local rc
+    rc=$(AUDIT=mismatch _run_ensure_corepack installs)
+    assert_equals "1" "$rc" "ensure_corepack fails on a signature mismatch"
+    assert_equals "" "$(_npm_global_installs)" "nothing is installed globally after a mismatch"
+    assert_file_contains "$TEST_TEMP_DIR/ensure.log" "signature verification FAILED" \
+        "a mismatch gets its own supply-chain error"
+    assert_false "[ -e '$TEST_TEMP_DIR/scratch' ]" "the scratch dir is removed on failure too"
+}
+
+# corepack is required, so unlike agnix an audit that could not run is fatal
+# rather than skipped — and must not be reported as tampering.
+test_corepack_unverifiable_audit_is_fatal() {
+    local rc audit
+    for audit in outage empty; do
+        rc=$(AUDIT=$audit _run_ensure_corepack installs)
+        assert_equals "1" "$rc" "ensure_corepack fails when the audit is '$audit'"
+        assert_equals "" "$(_npm_global_installs)" "nothing is installed globally when the audit is '$audit'"
+        assert_file_contains "$TEST_TEMP_DIR/ensure.log" "signature could not be verified" \
+            "an '$audit' audit is reported as unverifiable"
+        assert_file_not_contains "$TEST_TEMP_DIR/ensure.log" "verification FAILED" \
+            "an '$audit' audit is not reported as a mismatch"
+    done
+}
+
+# A package served with no registry signature lands in missing[], not
+# invalid[]; the shared classifier alone would read that as clean (#985 review).
+# An absent or null missing[] is not evidence of a signature either: jq reads
+# `null | length` as 0, so only the type check keeps those from installing.
+test_corepack_unsigned_is_fatal() {
+    local rc audit
+    for audit in unsigned no-missing null-missing; do
+        rc=$(AUDIT=$audit _run_ensure_corepack installs)
+        assert_equals "1" "$rc" "ensure_corepack fails when the audit is '$audit'"
+        assert_equals "" "$(_npm_global_installs)" "nothing is installed globally when the audit is '$audit'"
+        assert_file_contains "$TEST_TEMP_DIR/ensure.log" "Refusing to install unsigned" \
+            "an '$audit' audit is refused as unsigned"
+    done
+}
+
+# The unsigned check reads the same selected body as the classifier, so npm
+# prose around a clean audit must not turn into a false refusal.
+test_corepack_noisy_clean_audit_installs() {
+    local rc
+    rc=$(AUDIT=noisy-clean _run_ensure_corepack installs)
+    assert_equals "0" "$rc" "a clean audit wrapped in npm notices still installs"
+    assert_file_not_contains "$TEST_TEMP_DIR/ensure.log" "Refusing" \
+        "notice prose is not mistaken for an unsigned package"
+}
+
+test_corepack_scratch_dir_failure_is_fatal() {
+    local rc
+    rc=$(NO_SCRATCH=1 _run_ensure_corepack installs)
+    assert_equals "1" "$rc" "ensure_corepack fails when no scratch dir can be created"
+    assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.calls")" \
+        "npm is not invoked without a scratch dir"
+    assert_file_contains "$TEST_TEMP_DIR/ensure.log" "Could not create a scratch directory" \
+        "the scratch-dir failure is logged"
+}
+
+test_corepack_fetch_failure_is_fatal() {
+    local rc
+    rc=$(_run_ensure_corepack fetch-fails)
+    assert_equals "1" "$rc" "ensure_corepack fails when the scratch fetch fails"
+    assert_file_not_contains "$TEST_TEMP_DIR/npm.calls" "audit" \
+        "no audit runs when there is nothing fetched to audit"
+    assert_equals "" "$(_npm_global_installs)" "nothing is installed globally"
 }
 
 test_corepack_install_failure_is_fatal() {
     local rc
     rc=$(_run_ensure_corepack fails)
-    assert_equals "1" "$rc" "ensure_corepack fails when npm install fails"
+    assert_equals "1" "$rc" "ensure_corepack fails when npm install -g fails"
+    assert_false "[ -e '$TEST_TEMP_DIR/scratch' ]" "the scratch dir is removed on failure"
 }
 
 test_corepack_install_off_path_is_fatal() {
@@ -317,23 +451,50 @@ test_corepack_install_off_path_is_fatal() {
     assert_equals "1" "$rc" "ensure_corepack fails when corepack is still not on PATH"
 }
 
+# The success line asks corepack for its version; a corepack that cannot answer
+# is still installed, and the line falls back to the pin.
+test_corepack_version_query_failure_logs_pin() {
+    local rc
+    rc=$(VERSION_RC=1 _run_ensure_corepack installs)
+    assert_equals "0" "$rc" "a failing 'corepack --version' does not fail the install"
+    assert_file_contains "$TEST_TEMP_DIR/ensure.log" "corepack 0.36.0 installed" \
+        "the success line falls back to COREPACK_VERSION"
+}
+
 test_corepack_missing_without_pin_is_fatal() {
     local rc
     rc=$(_run_ensure_corepack installs "")
     assert_equals "1" "$rc" "ensure_corepack fails when corepack is missing and no pin is set"
-    assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.argv")" \
+    assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.calls")" \
         "npm is not invoked without a pin (no unpinned install)"
 }
 
 test_corepack_non_exact_pin_is_fatal() {
     local rc pin
     for pin in latest "^0.36.0" "0.36" "0.36.0 --foo"; do
-        : >"$TEST_TEMP_DIR/npm.argv"
         rc=$(_run_ensure_corepack installs "$pin")
         assert_equals "1" "$rc" "ensure_corepack rejects COREPACK_VERSION='$pin'"
-        assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.argv")" \
+        assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.calls")" \
             "npm is not invoked for COREPACK_VERSION='$pin'"
     done
+}
+
+# libatomic1 (#983): node 26's arm64 binary links libatomic.so.1 and exits 127
+# without it. Run the real install_node_system_deps against a recording
+# apt_install rather than grepping node.sh for the package name.
+test_node_system_deps_include_libatomic() {
+    local requested
+    requested=$(env -i PATH=/usr/bin:/bin /bin/bash -c '
+        apt_install() { printf "%s\n" "$@"; }
+        source "$1"
+        install_node_system_deps
+    ' _ "$PROJECT_ROOT/lib/features/lib/node/system-deps.sh")
+    assert_equals "curl
+ca-certificates
+xz-utils
+libatomic1" "$requested" "install_node_system_deps requests libatomic1 with the download deps"
+    assert_file_contains "$PROJECT_ROOT/lib/features/node.sh" "^install_node_system_deps$" \
+        "node.sh calls install_node_system_deps"
 }
 
 # The pin must use the override pattern: bin/check-versions.sh reads it and
@@ -440,12 +601,20 @@ run_test_with_setup test_npm_cache_configuration "NPM cache configuration"
 run_test_with_setup test_node_bashrc_setup "Node bashrc configuration"
 run_test_with_setup test_node_permissions "Node permission handling"
 run_test_with_setup test_corepack_bundled_skips_npm "Bundled corepack is used as-is"
-run_test_with_setup test_corepack_missing_installs_pinned "Missing corepack is installed at the pin"
+run_test_with_setup test_corepack_missing_installs_verified "Missing corepack is audited, then installed from the audited dir"
+run_test_with_setup test_corepack_signature_mismatch_is_fatal "corepack signature mismatch fails the build"
+run_test_with_setup test_corepack_unverifiable_audit_is_fatal "Unverifiable corepack audit fails the build"
+run_test_with_setup test_corepack_unsigned_is_fatal "Unsigned corepack (missing[]) fails the build"
+run_test_with_setup test_corepack_noisy_clean_audit_installs "Clean audit wrapped in npm notices installs"
+run_test_with_setup test_corepack_scratch_dir_failure_is_fatal "Scratch-dir creation failure fails the build"
+run_test_with_setup test_corepack_fetch_failure_is_fatal "corepack scratch fetch failure fails the build"
 run_test_with_setup test_corepack_install_failure_is_fatal "corepack install failure fails the build"
 run_test_with_setup test_corepack_install_off_path_is_fatal "corepack not on PATH after install fails the build"
+run_test_with_setup test_corepack_version_query_failure_logs_pin "Failing corepack --version falls back to the pin in the log"
 run_test_with_setup test_corepack_missing_without_pin_is_fatal "Missing corepack with no pin fails without installing"
 run_test_with_setup test_corepack_non_exact_pin_is_fatal "Non-exact COREPACK_VERSION is rejected before npm runs"
 run_test_with_setup test_corepack_pinned "COREPACK_VERSION pinned with an override default"
+run_test_with_setup test_node_system_deps_include_libatomic "System deps include libatomic1 (behavioral)"
 run_test_with_setup test_node_version_verification "Node version verification script"
 run_test_with_setup test_node_path_configuration "Node PATH configuration"
 run_test_with_setup test_node_helper_functions "Node helper functions"
