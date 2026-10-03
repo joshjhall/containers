@@ -22,6 +22,7 @@ All language package managers are configured to use consistent cache paths under
 | [BuildKit Cache Mounts](caching/buildkit-cache-mounts.md)                   | Build-time vs runtime caches, APT cache mounts, cache mount limitations    |
 | [Language Caches](caching/language-caches.md)                               | Per-language cache directories, environment variables, directory structure |
 | [Runtime Volumes](caching/runtime-volumes.md)                               | Volume mounts for persistent caching, Docker Compose patterns              |
+| [Build Artifacts](caching/build-artifacts.md)                               | Per-checkout venv/target/build/node_modules dirs on `/cache` volumes       |
 | [Invalidation & Best Practices](caching/invalidation-and-best-practices.md) | When caches invalidate, clearing caches, 7 best practices                  |
 | [Troubleshooting & Advanced](caching/troubleshooting-and-advanced.md)       | Permission errors, stale caches, sizing, cache warming, multi-stage builds |
 
