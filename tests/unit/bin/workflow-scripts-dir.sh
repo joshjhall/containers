@@ -322,6 +322,35 @@ test_distrusted_opt_librarian_falls_through_to_cache() {
     teardown
 }
 
+# The shipped default candidate path must be where the build actually extracts
+# librarian. Every other test overrides WORKFLOW_OPT_LIBRARIAN, so this one runs
+# the resolver with it UNSET and reads the path it really probed from the
+# "Looked in" guidance (nothing else resolves, so the guidance always prints),
+# then ties it to LIBRARIAN_DIR as claude-code-setup.sh extracts it.
+test_opt_librarian_default_matches_build_install() {
+    setup
+    local repo_root librarian_dir err
+    repo_root="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
+    librarian_dir="$(command sed -n 's/^LIBRARIAN_DIR="\(.*\)"$/\1/p' \
+        "$repo_root/lib/features/claude-code-setup.sh")"
+    assert_not_empty "$librarian_dir" "claude-code-setup.sh defines LIBRARIAN_DIR"
+
+    err="$(env -i PATH="$PATH" HOME="$TEST_DIR/empty-home" \
+        WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" \
+        WORKFLOW_SCRIPTS_DIR="$TEST_DIR/no-override" \
+        bash "$SCRIPT" 2>&1 >/dev/null || true)"
+    # On a machine where the real install is trusted the resolver succeeds and
+    # prints no guidance; that is the one environment this check cannot read.
+    if [[ "$err" != *"Looked in:"* ]]; then
+        skip_test "the real $librarian_dir/plugins/workflow/scripts resolved here; default path not observable"
+        teardown
+        return 0
+    fi
+    assert_contains "$err" "\$CLAUDE_PLUGIN_ROOT/scripts, $librarian_dir/plugins/workflow/scripts," \
+        "the default /opt/librarian candidate is the build's extracted scripts dir"
+    teardown
+}
+
 # ---------------------------------------------------------------------------
 # 4i. Ownership half of the trust rule (#1020). These need a fixture owned by
 #     ANOTHER uid, which only root can create: they run as root or via
@@ -493,6 +522,7 @@ run_test test_untrusted_dev_mount_refused
 run_test test_opt_librarian_resolves
 run_test test_opt_librarian_ranks_between_plugin_root_and_cache
 run_test test_distrusted_opt_librarian_falls_through_to_cache
+run_test test_opt_librarian_default_matches_build_install
 run_test test_root_owned_dir_accepted
 run_test test_root_owned_group_writable_refused
 run_test test_other_user_owned_dir_refused
