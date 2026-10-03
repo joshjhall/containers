@@ -706,7 +706,8 @@ run_test test_agnix_signature_failure_is_fatal "agnix signature mismatch is fata
 # teach operators to re-run past the message that matters. This test runs the
 # classifier against real captured npm output shapes and asserts the verdict.
 test_agnix_audit_classifier_behavior() {
-    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    # The classifier lives in a shared lib since #985 (corepack uses it too).
+    local install_file="$PROJECT_ROOT/lib/features/lib/npm-audit-verdict.sh"
 
     # Mirror of the classifier in install-binary-tools.sh (#817: jq over the
     # audit's STDOUT, which is pure JSON once stderr is captured separately).
@@ -726,7 +727,7 @@ test_agnix_audit_classifier_behavior() {
             unset BASH_ENV
             # shellcheck source=/dev/null
             source "$install_file"
-            _agnix_audit_verdict "$1"
+            npm_audit_verdict "$1"
         )
     }
 
@@ -866,7 +867,7 @@ npm notice bye')" \
 
     # The mirror above is only meaningful if the source still uses these exact
     # predicates — assert them against a comment-stripped copy.
-    local code_only="$TEST_TEMP_DIR/install-binary-tools.classifier.sh"
+    local code_only="$TEST_TEMP_DIR/npm-audit-verdict.classifier.sh"
     command sed 's/^[[:space:]]*#.*$//' "$install_file" >"$code_only"
     # `-s` is asserted at the source level, not behaviorally: without it the
     # `map()` filter receives a bare object and matches nothing, but pass 2
@@ -894,13 +895,17 @@ npm notice bye')" \
         "source checks invalid[] is an ARRAY before its length (outage != clean)"
     assert_file_contains "$code_only" '(.invalid | length) > 0' \
         "source treats a populated invalid[] as the mismatch signal"
-    assert_file_not_contains "$code_only" 'npm audit signatures --json 2>&1' \
+    # The two below pin the agnix CALL SITE, not the shared classifier.
+    local call_site="$TEST_TEMP_DIR/install-binary-tools.callsite.sh"
+    command sed 's/^[[:space:]]*#.*$//' \
+        "$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh" >"$call_site"
+    assert_file_not_contains "$call_site" 'npm audit signatures --json 2>&1' \
         "audit stdout and stderr must stay separate, or the JSON is unparsable"
     # Empty stdout is short-circuited before jq runs. Behaviorally this is
     # belt-and-braces (the empty-verdict fallback below it catches the same
     # case), so assert it at the SOURCE — a behavior-only assertion cannot
     # tell the two paths apart and would stay green if the guard vanished.
-    assert_file_contains "$code_only" 'if \[ -z "$agnix_audit_json" \]' \
+    assert_file_contains "$call_site" 'if \[ -z "$agnix_audit_json" \]' \
         "empty audit stdout is decided before jq, not left to the parser"
 }
 

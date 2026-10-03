@@ -9,7 +9,7 @@
 #   - Node.js runtime from nodejs.org
 #   - npm (included with Node.js)
 #   - yarn and pnpm (via corepack; installed from npm on Node 25+, whose
-#     tarballs no longer bundle it)
+#     tarballs no longer bundle it, after an npm registry-signature audit)
 #   - Automatic dependency detection and installation
 #   - Cache optimization for containerized environments
 #
@@ -56,7 +56,12 @@ source /tmp/build-scripts/base/cache-utils.sh
 # Source path utilities for secure PATH management
 source /tmp/build-scripts/base/path-utils.sh
 
-# Source corepack provisioning (Node 25+ tarballs no longer bundle it)
+# Source the apt prerequisites (curl, xz-utils, libatomic1, ...)
+source /tmp/build-scripts/features/lib/node/system-deps.sh
+
+# Source corepack provisioning (Node 25+ tarballs no longer bundle it); the
+# npm install it falls back to is signature-verified via npm_audit_verdict
+source /tmp/build-scripts/features/lib/npm-audit-verdict.sh
 source /tmp/build-scripts/features/lib/node/ensure-corepack.sh
 
 # ============================================================================
@@ -107,14 +112,8 @@ log_message "Installing Node.js build dependencies..."
 # Update package lists with retry logic
 apt_update
 
-# Install Node.js dependencies with retry logic
-# libatomic1: newer Node.js binaries (26.x on arm64, #983) link libatomic.so.1,
-# which the slim base image does not ship; without it `node` exits 127.
-apt_install \
-    curl \
-    ca-certificates \
-    xz-utils \
-    libatomic1
+# Install Node.js dependencies with retry logic (incl. libatomic1, #983)
+install_node_system_deps
 
 # ============================================================================
 # Node.js Installation from Source
