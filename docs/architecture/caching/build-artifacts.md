@@ -184,8 +184,10 @@ artifact-dir prune myproj--issue-569 --dry-run   # list
 artifact-dir prune myproj--issue-569             # remove /cache/*/myproj--issue-569
 ```
 
-`prune` only accepts linked-worktree names (ones containing `--`). It never
-removes the main checkout's artifacts or a shared cache.
+`prune` only accepts linked-worktree names (ones containing `--`), and only
+removes `/cache/<kind>/<name>` leaves, never a shared cache. Run it from inside
+the project: it then also refuses the main checkout's own name, which matters
+if your project directory name itself contains `--`.
 
 `just worktree-rm N` runs this check after removing the worktree. If it finds
 dirs for `<project>--issue-N`, it lists them. On a TTY it asks before removing

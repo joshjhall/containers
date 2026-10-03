@@ -29,8 +29,10 @@
 #   artifact-dir [-C <path>] --project          print <project> (main checkout name) only
 #   artifact-dir prune <checkout> [--dry-run]   remove /cache/*/<checkout>
 #
-# prune only accepts a linked-worktree name (one containing "--"), so it can
-# never remove the main checkout's artifacts or a shared cache dir.
+# prune only accepts a linked-worktree-shaped name (one containing "--") and,
+# when run inside a repo, refuses that repo's main-checkout name (which can
+# itself contain "--"). It only removes /cache/<kind>/<name> leaves, never a
+# shared cache root. Run it from inside the project so the second guard applies.
 #
 # ARTIFACT_CACHE_ROOT overrides /cache (used by tests).
 #
@@ -107,6 +109,14 @@ prune() {
             exit 2
             ;;
     esac
+    # A project whose own name contains "--" passes the shape check above, so
+    # also refuse the current repo's main-checkout name. Outside a repo there
+    # is nothing to compare against and the shape check is the only guard.
+    local project
+    if project="$(checkout_name "$PWD" project 2>/dev/null)" && [ "$name" = "$project" ]; then
+        command echo "artifact-dir prune: refusing '$name' — that is the main checkout's artifact dir" >&2
+        exit 2
+    fi
 
     local d found=0
     for d in "$CACHE_ROOT"/*/"$name"; do

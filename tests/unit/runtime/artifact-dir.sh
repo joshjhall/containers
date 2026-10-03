@@ -190,6 +190,44 @@ test_project_name_with_double_dash() {
     assert_equals "my--proj--issue-9" "$OUT" "--name keeps an embedded --"
 }
 
+# A main checkout named with "--" passes prune's shape check; run from inside
+# that repo, prune must still refuse its own main-checkout name. A sibling
+# worktree name of the same project stays prunable.
+test_prune_refuses_double_dash_main_checkout() {
+    local rc=0
+    command mkdir -p "$S/my--proj" "$S/cache/venvs/my--proj" "$S/cache/venvs/my--proj--issue-9"
+    command git -C "$S/my--proj" init -q -b main
+    command git -C "$S/my--proj" commit -q --allow-empty -m init
+    (builtin cd "$S/my--proj" && "$CMD" prune my--proj >/dev/null 2>&1) || rc=$?
+    assert_equals "2" "$rc" "main-checkout name refused from inside the repo"
+    assert_dir_exists "$S/cache/venvs/my--proj"
+    rc=0
+    (builtin cd "$S/my--proj" && "$CMD" prune my--proj--issue-9 >/dev/null 2>&1) || rc=$?
+    assert_equals "0" "$rc" "worktree name still prunable"
+    assert_dir_not_exists "$S/cache/venvs/my--proj--issue-9"
+}
+
+# Bare repo: the common dir is <project>.git, so the .git suffix is stripped.
+test_bare_repo_names() {
+    command git init -q --bare -b main "$S/bareproj.git"
+    command git -C "$S/myproj" push -q "$S/bareproj.git" main
+    command git -C "$S/bareproj.git" worktree add -q "$S/wt-bare" main
+    run_cmd -C "$S/wt-bare" --project
+    assert_equals "bareproj" "$OUT" "--project strips .git"
+    run_cmd -C "$S/wt-bare" --name
+    assert_equals "bareproj--wt-bare" "$OUT" "--name in a bare repo's worktree"
+}
+
+test_arg_parsing_errors() {
+    local args
+    for args in "-C" "--name x" "--project x" "--no-create" "-x" "--help" "venvs extra"; do
+        # shellcheck disable=SC2086 # word-splitting the case is intended
+        run_cmd -C "$S/myproj" $args
+        assert_equals "2" "$RC" "'$args' is a usage error"
+    done
+    assert_equals "" "$(command ls -A "$S/cache")" "nothing created under the cache root"
+}
+
 test_prune_dry_run_deletes_nothing() {
     command mkdir -p "$S/cache/venvs/myproj--issue-7"
     run_cmd prune myproj--issue-7 --dry-run
@@ -228,6 +266,9 @@ run_test_with_setup test_prune_real_run_output "prune reports each removed dir"
 run_test_with_setup test_prune_unknown_flag_fails_closed "prune fails closed on an unknown flag"
 run_test_with_setup test_project_from_worktree "--project from a worktree → <project>"
 run_test_with_setup test_project_name_with_double_dash "project names containing -- are kept intact"
+run_test_with_setup test_prune_refuses_double_dash_main_checkout "prune refuses a --named main checkout from inside it"
+run_test_with_setup test_bare_repo_names "bare repo worktree naming"
+run_test_with_setup test_arg_parsing_errors "malformed arguments are usage errors"
 run_test_with_setup test_prune_dry_run_deletes_nothing "prune --dry-run deletes nothing"
 run_test_with_setup test_prune_refuses_main_checkout_name "prune refuses a main-checkout name"
 run_test_with_setup test_prune_refuses_bad_names "prune refuses empty/dot/slash/dash names"
