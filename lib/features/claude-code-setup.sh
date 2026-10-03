@@ -191,8 +191,11 @@ if ! tar -xzf "${librarian_tmp}/${librarian_tarball}" \
     rm -rf "$librarian_tmp" "$LIBRARIAN_DIR"
     exit 1
 fi
-# World-readable so the runtime user can register + install from it.
-chmod -R a+rX "$LIBRARIAN_DIR"
+# World-readable so the runtime user can register + install from it, and NOT
+# group/world-writable: root's `tar -x` keeps the archive's own modes (775/664),
+# and bin/workflow-scripts-dir.sh's #667 trust gate refuses a writable scripts
+# dir. The plugin cache install copies these modes, so it inherits 755/644 (#1020).
+chmod -R a+rX,go-w "$LIBRARIAN_DIR"
 rm -rf "$librarian_tmp"
 log_message "✓ librarian verified + installed to ${LIBRARIAN_DIR} @ ${LIBRARIAN_REF}"
 

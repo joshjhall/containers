@@ -4,9 +4,10 @@
 #
 # `just` runs outside Claude Code, where ${CLAUDE_PLUGIN_ROOT} is unset, so the
 # thin-wrapper recipes resolve the bundled scripts through this helper. The
-# resolution order (override > CLAUDE_PLUGIN_ROOT > newest installed cache > dev
-# mount), and the "must actually contain config.sh" validity rule, are the
-# contract these tests pin.
+# resolution order (override > CLAUDE_PLUGIN_ROOT > /opt/librarian > newest
+# installed cache > dev mount), the "must actually contain config.sh" validity
+# rule, and the #667/#1020 trust rule (owned by root or the invoking user, never
+# group/world-writable) are the contract these tests pin.
 
 set -euo pipefail
 
@@ -44,14 +45,16 @@ make_scripts_dir() {
 # Run the resolver with a clean, fully-controlled environment so a real
 # CLAUDE_PLUGIN_ROOT / dev mount / HOME on the test machine never leaks in.
 # Pass `VAR=value` assignments as args; HOME defaults to an empty TEST_DIR subdir
-# so the installed-cache probe finds nothing, and WORKFLOW_DEV_MOUNT is pointed
-# at a non-existent path so the last-resort dev-mount probe can't match a real
-# /workspace/librarian checkout on the test machine — unless a test opts in.
+# so the installed-cache probe finds nothing, and WORKFLOW_DEV_MOUNT /
+# WORKFLOW_OPT_LIBRARIAN are pointed at non-existent paths so neither a real
+# /workspace/librarian checkout nor the baked /opt/librarian install on the test
+# machine can match — unless a test opts in.
 run_resolver() {
     env -i \
         PATH="$PATH" \
         HOME="$TEST_DIR/empty-home" \
         WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" \
+        WORKFLOW_OPT_LIBRARIAN="$TEST_DIR/no-opt-librarian" \
         "$@" \
         bash "$SCRIPT"
 }
@@ -131,7 +134,7 @@ test_installed_cache_newest_wins() {
     # otherwise satisfy the step-4 fallback if the cache probe failed (e.g. a
     # platform lacking `sort -V`), masking the assertion.
     local got
-    got="$(env -i PATH="$PATH" HOME="$home" WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" bash "$SCRIPT")"
+    got="$(env -i PATH="$PATH" WORKFLOW_OPT_LIBRARIAN="$TEST_DIR/no-opt-librarian" HOME="$home" WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" bash "$SCRIPT")"
     assert_equals "$base/0.10.0/scripts" "$got" \
         "newest installed version is selected"
     teardown
@@ -149,7 +152,7 @@ test_installed_cache_skips_invalid_version() {
     make_scripts_dir "$base/0.2.0/scripts"  # next-highest, valid
 
     local got
-    got="$(env -i PATH="$PATH" HOME="$home" WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" bash "$SCRIPT")"
+    got="$(env -i PATH="$PATH" WORKFLOW_OPT_LIBRARIAN="$TEST_DIR/no-opt-librarian" HOME="$home" WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" bash "$SCRIPT")"
     assert_equals "$base/0.2.0/scripts" "$got" \
         "a version dir without config.sh is skipped for the next valid one"
     teardown
@@ -167,7 +170,7 @@ test_dev_mount_fallback() {
 
     # Empty HOME so the cache probe finds nothing; no override, no plugin root.
     local got
-    got="$(env -i PATH="$PATH" HOME="$TEST_DIR/empty-home" WORKFLOW_DEV_MOUNT="$d" bash "$SCRIPT")"
+    got="$(env -i PATH="$PATH" WORKFLOW_OPT_LIBRARIAN="$TEST_DIR/no-opt-librarian" HOME="$TEST_DIR/empty-home" WORKFLOW_DEV_MOUNT="$d" bash "$SCRIPT")"
     assert_equals "$d" "$got" "valid WORKFLOW_DEV_MOUNT is accepted as the last resort"
     teardown
 }
@@ -222,7 +225,7 @@ test_distrusted_source_falls_through_to_trusted() {
     command chmod 0777 "$root/scripts" # distrusted -> must be skipped
 
     local got
-    got="$(env -i PATH="$PATH" HOME="$home" \
+    got="$(env -i PATH="$PATH" WORKFLOW_OPT_LIBRARIAN="$TEST_DIR/no-opt-librarian" HOME="$home" \
         CLAUDE_PLUGIN_ROOT="$root" \
         WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" bash "$SCRIPT")"
     assert_equals "$base/0.3.0/scripts" "$got" \
@@ -244,7 +247,7 @@ test_installed_cache_skips_untrusted_version() {
     make_scripts_dir "$base/0.2.0/scripts"    # next-highest, trusted
 
     local got
-    got="$(env -i PATH="$PATH" HOME="$home" WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" bash "$SCRIPT")"
+    got="$(env -i PATH="$PATH" WORKFLOW_OPT_LIBRARIAN="$TEST_DIR/no-opt-librarian" HOME="$home" WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" bash "$SCRIPT")"
     assert_equals "$base/0.2.0/scripts" "$got" \
         "an untrusted (writable) version dir is skipped for the next trusted one"
     teardown
@@ -261,9 +264,181 @@ test_untrusted_dev_mount_refused() {
     command chmod 0775 "$d" # group-writable shared mount -> distrusted
 
     local rc=0
-    env -i PATH="$PATH" HOME="$TEST_DIR/empty-home" WORKFLOW_DEV_MOUNT="$d" \
+    env -i PATH="$PATH" WORKFLOW_OPT_LIBRARIAN="$TEST_DIR/no-opt-librarian" HOME="$TEST_DIR/empty-home" WORKFLOW_DEV_MOUNT="$d" \
         bash "$SCRIPT" >/dev/null 2>&1 || rc=$?
     assert_not_equals "0" "$rc" "group-writable dev mount is refused"
+    teardown
+}
+
+# ---------------------------------------------------------------------------
+# 4h. The pinned container install (/opt/librarian, #608) is a candidate that
+#     ranks below CLAUDE_PLUGIN_ROOT and above the installed cache (#1020).
+# ---------------------------------------------------------------------------
+test_opt_librarian_resolves() {
+    setup
+    local opt="$TEST_DIR/opt-librarian/scripts"
+    make_scripts_dir "$opt"
+
+    local got
+    got="$(run_resolver "WORKFLOW_OPT_LIBRARIAN=$opt")"
+    assert_equals "$opt" "$got" "/opt/librarian candidate is resolved when nothing ranks above it"
+    teardown
+}
+
+test_opt_librarian_ranks_between_plugin_root_and_cache() {
+    setup
+    local opt="$TEST_DIR/opt-librarian/scripts"
+    make_scripts_dir "$opt"
+    local home="$TEST_DIR/home-rank"
+    make_scripts_dir "$home/.claude/plugins/cache/librarian/workflow/9.9.9/scripts"
+    local root="$TEST_DIR/plugin-rank"
+    make_scripts_dir "$root/scripts"
+
+    local got
+    got="$(run_resolver "HOME=$home" "WORKFLOW_OPT_LIBRARIAN=$opt")"
+    assert_equals "$opt" "$got" "/opt/librarian beats the installed cache"
+
+    got="$(run_resolver "HOME=$home" "WORKFLOW_OPT_LIBRARIAN=$opt" "CLAUDE_PLUGIN_ROOT=$root")"
+    assert_equals "$root/scripts" "$got" "CLAUDE_PLUGIN_ROOT beats /opt/librarian"
+    teardown
+}
+
+# ---------------------------------------------------------------------------
+# 4i. Ownership half of the trust rule (#1020). These need a fixture owned by
+#     ANOTHER uid, which only root can create: they run as root or via
+#     passwordless `sudo -n` (GitHub-hosted runners have it, so CI exercises
+#     them) and otherwise SKIP visibly — never pass silently.
+#
+# Root-owned fixtures live under $TEST_SCRATCH_BASE (not the suite's mktemp
+# TEST_DIR) so the privileged cleanup can be fenced to the framework's scratch
+# tree: guarded_privileged_rm refuses any path that is empty, contains a `..`
+# component, or does not sit strictly under $TEST_SCRATCH_BASE (#746).
+# ---------------------------------------------------------------------------
+as_root=()
+have_root() {
+    if [ "$(/usr/bin/id -u)" = "0" ]; then
+        as_root=()
+        return 0
+    fi
+    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+        as_root=(sudo -n)
+        return 0
+    fi
+    return 1
+}
+
+guarded_privileged_rm() {
+    local path="${1:-}"
+    if [ -z "$path" ] || [ -z "${TEST_SCRATCH_BASE:-}" ]; then
+        command echo "guarded_privileged_rm: refusing empty path or unset TEST_SCRATCH_BASE" >&2
+        return 1
+    fi
+    case "/$path/" in
+        */../*)
+            command echo "guarded_privileged_rm: refusing path with '..': $path" >&2
+            return 1
+            ;;
+    esac
+    case "$path" in
+        "$TEST_SCRATCH_BASE"/?*) ;;
+        *)
+            command echo "guarded_privileged_rm: refusing $path — not under $TEST_SCRATCH_BASE" >&2
+            return 1
+            ;;
+    esac
+    "${as_root[@]}" /usr/bin/rm -rf -- "$path"
+}
+
+# Create a scripts dir under the scratch base owned by $1 with mode $2; prints
+# the fixture root (the thing to hand to guarded_privileged_rm).
+make_owned_scripts_dir() {
+    local owner="$1" mode="$2" fixture
+    command mkdir -p "$TEST_SCRATCH_BASE"
+    fixture="$(command mktemp -d "$TEST_SCRATCH_BASE/wsd-owned.XXXXXX")"
+    command chmod 0755 "$fixture"
+    make_scripts_dir "$fixture/scripts"
+    "${as_root[@]}" /usr/bin/chown -R "$owner" "$fixture/scripts"
+    "${as_root[@]}" /usr/bin/chmod "$mode" "$fixture/scripts"
+    command printf '%s\n' "$fixture"
+}
+
+test_root_owned_dir_accepted() {
+    setup
+    if ! have_root; then
+        skip_test "needs a root runner or passwordless sudo to create a root-owned fixture"
+        teardown
+        return 0
+    fi
+    local fixture got
+    fixture="$(make_owned_scripts_dir 0:0 0755)"
+    got="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts")"
+    assert_equals "$fixture/scripts" "$got" "a root-owned 0755 scripts dir is trusted"
+    guarded_privileged_rm "$fixture"
+    teardown
+}
+
+test_root_owned_group_writable_refused() {
+    setup
+    if ! have_root; then
+        skip_test "needs a root runner or passwordless sudo to create a root-owned fixture"
+        teardown
+        return 0
+    fi
+    local fixture rc=0 err
+    fixture="$(make_owned_scripts_dir 0:0 0775)"
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a root-owned but group-writable dir is still refused"
+    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "refusing $fixture/scripts" "stderr names the refused root-owned dir"
+    guarded_privileged_rm "$fixture"
+    teardown
+}
+
+test_other_user_owned_dir_refused() {
+    setup
+    if ! have_root; then
+        skip_test "needs a root runner or passwordless sudo to create another user's fixture"
+        teardown
+        return 0
+    fi
+    local other
+    if /usr/bin/id nobody >/dev/null 2>&1 && [ "$(/usr/bin/id -u nobody)" != "$(/usr/bin/id -u)" ]; then
+        other="$(/usr/bin/id -u nobody):$(/usr/bin/id -g nobody)"
+    else
+        skip_test "no 'nobody' account distinct from the invoking user"
+        teardown
+        return 0
+    fi
+    local fixture rc=0 err
+    fixture="$(make_owned_scripts_dir "$other" 0755)"
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a 0755 dir owned by another non-root user is refused"
+    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "refusing $fixture/scripts" "stderr names the refused other-user dir"
+    guarded_privileged_rm "$fixture"
+    teardown
+}
+
+# The cleanup fence itself: it must refuse anything outside the scratch tree
+# BEFORE invoking rm, so it is exercised with no privilege at all.
+test_guarded_privileged_rm_refuses_outside_scratch() {
+    setup
+    local victim="$TEST_DIR/outside-scratch"
+    command mkdir -p "$victim"
+    local rc
+    for bad in "" "$victim" "$TEST_SCRATCH_BASE" "$TEST_SCRATCH_BASE/../x" "/"; do
+        rc=0
+        (
+            as_root=()
+            guarded_privileged_rm "$bad"
+        ) 2>/dev/null || rc=$?
+        assert_not_equals "0" "$rc" "guarded_privileged_rm refuses '${bad}'"
+    done
+    if [ -d "$victim" ]; then
+        pass_test "out-of-scratch directory survived the refused removal"
+    else
+        fail_test "guarded_privileged_rm deleted a directory outside the scratch base"
+    fi
     teardown
 }
 
@@ -296,6 +471,12 @@ run_test test_world_writable_override_refused
 run_test test_distrusted_source_falls_through_to_trusted
 run_test test_installed_cache_skips_untrusted_version
 run_test test_untrusted_dev_mount_refused
+run_test test_opt_librarian_resolves
+run_test test_opt_librarian_ranks_between_plugin_root_and_cache
+run_test test_root_owned_dir_accepted
+run_test test_root_owned_group_writable_refused
+run_test test_other_user_owned_dir_refused
+run_test test_guarded_privileged_rm_refuses_outside_scratch
 run_test test_not_found
 
 generate_report

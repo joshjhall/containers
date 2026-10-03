@@ -3220,6 +3220,38 @@ test_librarian_grant_is_gated() {
     fi
 }
 
+# Test (behavioral, #1020): the post-extraction mode normalization leaves the
+# baked librarian tree with no group/world-write bit. Root's `tar -x` keeps the
+# archive's 775/664 modes, and bin/workflow-scripts-dir.sh's #667 trust gate
+# refuses a writable scripts dir, so every golem `just` recipe failed. EXECUTES
+# the shipped chmod line against a fixture tree carrying those archive modes,
+# rather than grepping it for `go-w`.
+test_librarian_tree_not_group_world_writable() {
+    local line
+    line="$(command grep -E '^chmod -R [^ ]+ "\$LIBRARIAN_DIR"$' \
+        "$PROJECT_ROOT/lib/features/claude-code-setup.sh")"
+    if [ -z "$line" ] || [ "$(command printf '%s\n' "$line" | command wc -l)" -ne 1 ]; then
+        fail_test "expected exactly one post-extraction 'chmod -R … \"\$LIBRARIAN_DIR\"' line"
+        return
+    fi
+
+    local tree
+    tree="$(command mktemp -d)"
+    command mkdir -p "$tree/plugins/workflow/scripts"
+    command touch "$tree/plugins/workflow/scripts/config.sh"
+    command chmod 0775 "$tree" "$tree/plugins" "$tree/plugins/workflow" "$tree/plugins/workflow/scripts"
+    command chmod 0664 "$tree/plugins/workflow/scripts/config.sh"
+
+    LIBRARIAN_DIR="$tree" bash -c "$line"
+
+    local writable unreadable
+    writable="$(command find "$tree" -perm /022)"
+    unreadable="$(command find "$tree" ! -perm -0444)"
+    command rm -rf "$tree"
+    assert_equals "" "$writable" "no group/world-writable entries remain after normalization"
+    assert_equals "" "$unreadable" "every entry stays world-readable (a+rX kept)"
+}
+
 # Test: DEFAULT_PERMISSIONS carries a Read rule for the real librarian install
 # path, and that path agrees with LIBRARIAN_DIR as defined in
 # claude-plugin-lib.sh. This is the drift guard for the deliberate literal in
@@ -3263,6 +3295,7 @@ run_test test_librarian_grant_writes_and_reruns_clean "Librarian grant: present 
 run_test test_librarian_grant_handles_malformed_settings "Librarian grant: malformed settings.json warns, cleans up, preserves"
 run_test test_librarian_grant_composes_with_host_event_hooks "Librarian grant: composes with the host-event hook writer"
 run_test test_default_permissions_has_librarian_read "Librarian grant: DEFAULT_PERMISSIONS reads the real install path"
+run_test test_librarian_tree_not_group_world_writable "Librarian tree: post-extraction chmod strips group/world write (#1020)"
 
 # Generate test report
 generate_report
