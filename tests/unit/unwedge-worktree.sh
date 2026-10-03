@@ -19,14 +19,17 @@
 # below therefore goes through an assert_* / fail_test call, which is what
 # actually increments the failure counter.
 #
-# The EBADF condition itself cannot be manufactured on a normal filesystem (it
-# takes a host virtiofsd that has dropped an inode mapping), so the wedged case
-# is not simulated here. What IS tested is the property that makes the command
-# work on a wedged tree: it never needs to open, stat, or unlink the CHILDREN,
-# only rename the parent. A rewrite that reintroduced a recursive delete would
-# still pass a "did the path get freed" check on clean fixtures, so
-# test_does_not_delete_contents pins the contents as SURVIVING the move —
-# that is the assertion a delete-based implementation fails.
+# Neither observed wedge can be manufactured on a normal filesystem: the EBADF
+# variant takes a host virtiofsd that has dropped an inode mapping, and the
+# ENOENT variant (#1004) a case-insensitive mount that still lists a case-folded
+# alias (`.venv/Lib`) of entries already unlinked. So the wedge itself is not
+# simulated here. What IS tested is the property that makes the command work on
+# either: it never needs to open, stat, or unlink the CHILDREN, only rename the
+# parent. A rewrite that reintroduced a recursive delete would still pass a "did
+# the path get freed" check on clean fixtures, so test_does_not_delete_contents
+# pins the contents as SURVIVING the move — that is the assertion a delete-based
+# implementation fails — and test_frees_path_when_contents_refuse_deletion
+# gives the command a child that `rm -rf` genuinely cannot remove.
 
 set -euo pipefail
 
@@ -84,6 +87,47 @@ test_does_not_delete_contents() {
     assert_file_exists "$quarantined/target/debug/a.o"
     assert_equals "payload" "$(command cat "$quarantined/target/debug/a.o")" \
         "quarantined content is intact"
+}
+
+# The closest a normal filesystem gets to a wedge: a child that `rm -rf` cannot
+# remove. A non-writable directory refuses the unlink of its entries, so the
+# delete fails on it exactly where a wedged `Lib` refuses it — while the PARENT
+# still renames, which is the property both wedge variants preserve. The fixture
+# first proves `rm -rf` really fails, so the test cannot pass on a fixture that
+# was never stuck. Root ignores the permission bit, so the fixture cannot be
+# built there and the test says so rather than passing vacuously.
+test_frees_path_when_contents_refuse_deletion() {
+    local s quarantined
+    if [ "$(command id -u)" -eq 0 ]; then
+        skip_test "running as root: chmod cannot make a child undeletable"
+        return 0
+    fi
+    s="$(new_scratch)"
+    command mkdir -p "$s/issue-7/demo/.venv/Lib"
+    command touch "$s/issue-7/demo/.venv/Lib/stuck"
+    command chmod 555 "$s/issue-7/demo/.venv/Lib"
+
+    if command rm -rf "$s/issue-7" 2>/dev/null; then
+        fail_test "fixture is not stuck: rm -rf removed it"
+        return 0
+    fi
+
+    assert_true "\"$CMD\" \"$s/issue-7\" >/dev/null" "command succeeds on a tree rm -rf refused"
+    assert_dir_not_exists "$s/issue-7"
+
+    quarantined="$(command find "$s" -maxdepth 1 -name '.wedged-issue-7-*' | command head -n1)"
+    assert_not_empty "$quarantined" "stuck tree was moved to a quarantine path"
+    assert_file_exists "$quarantined/demo/.venv/Lib/stuck"
+
+    # Restore write access wherever the stuck dir ended up, so the scratch dir
+    # can be cleaned up afterwards even when the command under test failed to
+    # move it (the regression this test exists to catch).
+    if [ -n "$quarantined" ] && [ -d "$quarantined/demo/.venv/Lib" ]; then
+        command chmod 755 "$quarantined/demo/.venv/Lib"
+    fi
+    if [ -d "$s/issue-7/demo/.venv/Lib" ]; then
+        command chmod 755 "$s/issue-7/demo/.venv/Lib"
+    fi
 }
 
 # Teardown callers run this unconditionally, so an absent path is the state they
@@ -203,6 +247,11 @@ test_output_does_not_claim_reclaimed_space() {
     command mkdir -p "$s/issue-6"
     out="$("$CMD" "$s/issue-6")"
     assert_contains "$out" "no reclaimable space" "states that no space is freed"
+    # The cause must hold for BOTH wedge variants. "no reachable inodes" was true
+    # only of EBADF; the ENOENT phantom (#1004) still stats, so that wording
+    # would misdescribe it.
+    assert_contains "$out" "cannot be removed from inside it" "states a cause true of both variants"
+    assert_not_contains "$out" "no reachable inodes" "does not claim an EBADF-only cause"
 }
 
 test_installed_by_dockerfile() {
@@ -220,6 +269,7 @@ test_installed_by_dockerfile() {
 run_test test_command_is_executable "command exists and is executable"
 run_test test_frees_the_path_for_reuse "frees the worktree path for reuse"
 run_test test_does_not_delete_contents "moves contents aside rather than deleting them"
+run_test test_frees_path_when_contents_refuse_deletion "frees the path when rm -rf cannot empty the tree"
 run_test test_absent_path_is_success "absent path is a successful no-op"
 run_test test_repeated_quarantine_does_not_collide "repeated quarantine does not nest"
 run_test test_refuses_symlink "refuses a symlink"

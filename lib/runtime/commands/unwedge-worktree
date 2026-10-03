@@ -9,22 +9,39 @@
 # entries failing IDENTICALLY on the bare virtiofs beneath, and a freshly
 # established `mount -t virtiofs` fails the same way — so it is not a
 # container-side dentry cache either (`drop_caches` is unavailable; /proc/sys is
-# read-only). The host virtiofsd has lost the inode mapping: the name survives
-# in `readdir` while `stat`/`unlink`/`rename` on it all return EBADF. No
-# in-container call can repair that, which is why this command does not try to
-# delete the entries at all.
+# read-only). No in-container call can repair it, which is why this command
+# does not try to delete the entries at all.
 #
-# WHAT STILL WORKS is the whole basis for this command: only the PRE-EXISTING
-# entries are wedged. The containing directory renames fine, and new files can
-# be created and removed inside it normally. So the tree can always be moved
-# aside, which frees the `issue-N` path for immediate reuse — the outcome a
-# caller actually needs — even though the bytes are not reclaimed here.
+# TWO VARIANTS HAVE BEEN OBSERVED, and they fail with DIFFERENT errnos, so an
+# operator matching on the error text must know both:
+#
+#   EBADF (#849/#850) — the host virtiofsd has lost the inode mapping: the name
+#     survives in `readdir` while `stat`/`unlink`/`rename` on it all return
+#     EBADF.
+#
+#   ENOENT (#1004) — a case-folded PHANTOM. A uv virtualenv holds `lib/` plus
+#     the symlink `lib64 -> lib`; after teardown unlinked both, the
+#     case-insensitive mount still listed a `Lib` that is neither. `readdir`
+#     lists it and even `stat` resolves it (as a directory), but `rmdir`,
+#     `rename` and `unlink` on it return ENOENT. Because `stat` succeeds, no
+#     read-only probe can tell this entry from a healthy one — only an attempted
+#     removal exposes it, which is why detection belongs to the teardown that
+#     attempts the removal (joshjhall/librarian#1088), not to a health scan.
+#
+# WHAT STILL WORKS is the whole basis for this command, and it held for BOTH
+# variants: only the PRE-EXISTING entries are wedged. The containing directory
+# renames fine, and new files can be created and removed inside it normally. So
+# the tree can always be moved aside, which frees the `issue-N` path for
+# immediate reuse — the outcome a caller actually needs — even though the bytes
+# are not reclaimed here. #1004 confirmed the rename freed both remnants.
 #
 # NOTHING IS RECLAIMED BY THIS COMMAND, and it must not imply otherwise.
-# Summing live file sizes across both observed remnants gives 0 bytes: every
+# Summing live file sizes across the #849/#850 remnants gives 0 bytes: every
 # wedged entry is a name with no reachable inode. The multi-GB figure operators
 # see is host-side space that only a host unlink or a Docker Desktop VM restart
-# releases. This command frees a PATH, not disk.
+# releases. The ENOENT phantom is no better: its real `lib`/`lib64` were already
+# unlinked, and the alias left behind cannot be removed from in here either.
+# This command frees a PATH, not disk.
 #
 # Usage:
 #   unwedge-worktree <path>          rename <path> aside, print the new location
@@ -133,6 +150,6 @@ fi
 command echo "unwedge-worktree: moved $target -> $dest"
 command echo "  $target is free for reuse."
 command echo "  The quarantined tree holds no reclaimable space in this container:"
-command echo "  its entries have no reachable inodes (a host-side virtiofs fault)."
+command echo "  its stuck entries cannot be removed from inside it (a host-side virtiofs fault)."
 command echo "  Host disk is released by removing it on the host, or by restarting the Docker VM."
 exit 0

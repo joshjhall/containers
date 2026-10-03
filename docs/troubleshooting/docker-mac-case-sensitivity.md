@@ -150,6 +150,35 @@ colima start --vm-type vz --mount-type virtiofs
 - ✅ Better POSIX compliance
 - ❌ Requires newer Docker Desktop (4.6+)
 
+### Undeletable worktree leftovers (wedged entries)
+
+Sometimes a worktree directory under `.worktrees/` can't be removed after
+teardown. `rm -rf` fails with `Directory not empty` on an entry that `ls` still
+lists. Two variants have been observed, each with a different errno:
+
+- **EBADF**: `stat`, `unlink` and `rename` on the entry all return
+  `Bad file descriptor`. The host virtiofsd has lost the inode mapping.
+- **ENOENT** (#1004): a case-folded **phantom** such as `.venv/Lib` in a uv
+  virtualenv, left after the real `lib/` and its `lib64 -> lib` symlink were
+  unlinked. `ls` lists it and `stat` even resolves it, but `rmdir`, `rename`
+  and `unlink` all return `No such file or directory`.
+
+No in-container call repairs either variant. Move the tree aside so the path
+can be reused:
+
+```bash
+unwedge-worktree .worktrees/issue-N     # frees the path for worktree-new
+unwedge-worktree --list .worktrees      # show quarantined .wedged-* trees
+```
+
+This frees the **path**, not disk space. The quarantined tree's space is
+released only by deleting it on the host or by restarting the Docker Desktop
+VM. Automatic fallback to this from workflow teardown is tracked in
+[joshjhall/librarian#1088](https://github.com/joshjhall/librarian/issues/1088),
+and keeping per-worktree venvs off this mount (which prevents the ENOENT
+variant) in
+[joshjhall/librarian#1091](https://github.com/joshjhall/librarian/issues/1091).
+
 ## When This Matters
 
 ### High Impact
