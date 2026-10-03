@@ -303,6 +303,25 @@ test_opt_librarian_ranks_between_plugin_root_and_cache() {
     teardown
 }
 
+# A distrusted /opt/librarian (the exact pre-#1020 shape: a group-writable baked
+# tree) is skipped, and a trusted installed cache further down still wins.
+test_distrusted_opt_librarian_falls_through_to_cache() {
+    setup
+    local opt="$TEST_DIR/opt-librarian-gw/scripts"
+    make_scripts_dir "$opt"
+    command chmod 0775 "$opt" # group-writable -> distrusted
+    local home="$TEST_DIR/home-optft"
+    make_scripts_dir "$home/.claude/plugins/cache/librarian/workflow/1.0.0/scripts"
+
+    local got err
+    got="$(run_resolver "HOME=$home" "WORKFLOW_OPT_LIBRARIAN=$opt" 2>/dev/null)"
+    assert_equals "$home/.claude/plugins/cache/librarian/workflow/1.0.0/scripts" "$got" \
+        "a group-writable /opt/librarian is skipped for the trusted cache"
+    err="$(run_resolver "HOME=$home" "WORKFLOW_OPT_LIBRARIAN=$opt" 2>&1 >/dev/null)"
+    assert_contains "$err" "refusing $opt" "stderr names the refused /opt/librarian dir"
+    teardown
+}
+
 # ---------------------------------------------------------------------------
 # 4i. Ownership half of the trust rule (#1020). These need a fixture owned by
 #     ANOTHER uid, which only root can create: they run as root or via
@@ -473,6 +492,7 @@ run_test test_installed_cache_skips_untrusted_version
 run_test test_untrusted_dev_mount_refused
 run_test test_opt_librarian_resolves
 run_test test_opt_librarian_ranks_between_plugin_root_and_cache
+run_test test_distrusted_opt_librarian_falls_through_to_cache
 run_test test_root_owned_dir_accepted
 run_test test_root_owned_group_writable_refused
 run_test test_other_user_owned_dir_refused

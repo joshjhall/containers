@@ -3229,7 +3229,7 @@ test_librarian_grant_is_gated() {
 test_librarian_tree_not_group_world_writable() {
     local line
     line="$(command grep -E '^chmod -R [^ ]+ "\$LIBRARIAN_DIR"$' \
-        "$PROJECT_ROOT/lib/features/claude-code-setup.sh")"
+        "$PROJECT_ROOT/lib/features/claude-code-setup.sh" || true)"
     if [ -z "$line" ] || [ "$(command printf '%s\n' "$line" | command wc -l)" -ne 1 ]; then
         fail_test "expected exactly one post-extraction 'chmod -R … \"\$LIBRARIAN_DIR\"' line"
         return
