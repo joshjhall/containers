@@ -81,6 +81,9 @@ test_xattr_report_workaround_survives_a_path_with_spaces() {
     # reverted in some other way, and would pass on a one-liner that was
     # whitespace-safe but otherwise wrong (grep-pin-is-not-behavioral-
     # coverage.md).
+    #
+    # Every step below mutates PROJECT_ROOT, so refuse before the first one.
+    assert_in_fixture_repo || return 0
     seed_symlinks
     command ln -s realfile.txt "$PROJECT_ROOT/spaced name.link"
     git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
@@ -99,8 +102,7 @@ test_xattr_report_workaround_survives_a_path_with_spaces() {
     assert_contains "$emitted" "ls-files" \
         "The emitted workaround line is recoverable from the report"
 
-    # Run it for real, from the fixture repo — and only from there.
-    assert_in_fixture_repo || return 0
+    # Run it for real, from the fixture repo.
     (cd "$PROJECT_ROOT" && eval "$emitted") >/dev/null 2>&1
 
     assert_file_not_exists "$PROJECT_ROOT/spaced name.link" \
@@ -151,6 +153,7 @@ test_xattr_docs_workaround_survives_a_path_with_spaces() {
     # The docs copy run for real against the same spaced-symlink fixture as the
     # emitted copy above. This is what catches a docs-only regression such as
     # the mawk `printf "%s\0"` trap, which removes nothing and says nothing.
+    assert_in_fixture_repo || return 0
     seed_symlinks
     command ln -s realfile.txt "$PROJECT_ROOT/spaced name.link"
     git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
@@ -162,7 +165,6 @@ test_xattr_docs_workaround_survives_a_path_with_spaces() {
     assert_equals "1" "$(command printf '%s\n' "$docs_line" | /usr/bin/grep -c 'ls-files')" \
         "build-issues.md carries exactly one workaround line (issue #981)"
 
-    assert_in_fixture_repo || return 0
     (cd "$PROJECT_ROOT" && eval "$docs_line") >/dev/null 2>&1
 
     assert_file_not_exists "$PROJECT_ROOT/spaced name.link" \
