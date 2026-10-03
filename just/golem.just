@@ -59,6 +59,27 @@ worktree-rm N:
         bash "{{ justfile_directory() }}/bin/sync-host.sh" || \
             echo "  (sync-host refresh skipped — run 'just sync-host' manually)" >&2
     fi
+    # Per-checkout build artifacts (#1005) live at /cache/<kind>/<project>--issue-N,
+    # off the worktree, so removing the worktree orphans them. Offer to prune them:
+    # ask on a TTY, otherwise only print the command — never delete unprompted.
+    # Best-effort; never fails the teardown.
+    _ad="$(command -v artifact-dir || echo "{{ justfile_directory() }}/lib/runtime/commands/artifact-dir")"
+    # --project is the main checkout's name even when run from inside another
+    # worktree (and even if the project name itself contains "--").
+    _proj="$(bash "$_ad" --project 2>/dev/null)" || exit 0
+    _name="$_proj--issue-$_n"
+    _hits="$(bash "$_ad" prune "$_name" --dry-run 2>/dev/null | command grep '^would remove: ')" || exit 0
+    command echo "Build-artifact dirs left by issue-$_n:"
+    command echo "$_hits" | command sed 's/^would remove: /  /'
+    if [ -t 0 ] && [ -t 1 ]; then
+        read -r -p "Remove them? [y/N] " _ans || _ans=""
+        case "$_ans" in
+            [yY]*) bash "$_ad" prune "$_name" || true ;;
+            *) command echo "  kept — remove later with: artifact-dir prune $_name" ;;
+        esac
+    else
+        command echo "  remove with: artifact-dir prune $_name"
+    fi
 
 # Show the central golem status table + which golems are BLOCKED (TTY-free).
 golems:

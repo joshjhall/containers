@@ -47,6 +47,8 @@ Design decisions and technical analysis:
     cache directories and structure
   - [Runtime Volumes](architecture/caching/runtime-volumes.md) - Persistent
     volume mounts
+  - [Build Artifacts](architecture/caching/build-artifacts.md) - Per-checkout
+    build-artifact dirs on `/cache` volumes
   - [Invalidation & Best Practices](architecture/caching/invalidation-and-best-practices.md) -
     Cache management
   - [Troubleshooting & Advanced](architecture/caching/troubleshooting-and-advanced.md) -
