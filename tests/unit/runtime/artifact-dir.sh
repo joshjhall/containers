@@ -207,6 +207,38 @@ test_prune_refuses_double_dash_main_checkout() {
     assert_dir_not_exists "$S/cache/venvs/my--proj--issue-9"
 }
 
+# One undeletable tree must not stop the other kinds being pruned. A read-only
+# entry inside venvs/<name> makes that rm -rf fail for real (no stub), the way a
+# #1004 phantom entry would; target/<name> must still be removed, the failure
+# reported, and the exit non-zero.
+test_prune_continues_past_a_failed_remove() {
+    if [ "$(command id -u)" -eq 0 ]; then
+        skip_test "root ignores directory write permission"
+        return 0
+    fi
+    local rc=0 err
+    command mkdir -p "$S/cache/venvs/myproj--issue-7/locked" "$S/cache/target/myproj--issue-7"
+    command touch "$S/cache/venvs/myproj--issue-7/locked/f"
+    command chmod 555 "$S/cache/venvs/myproj--issue-7/locked"
+    err="$("$CMD" -C "$S/myproj" prune myproj--issue-7 2>&1 >/dev/null)" || rc=$?
+    command chmod 755 "$S/cache/venvs/myproj--issue-7/locked"
+    assert_equals "1" "$rc" "non-zero exit when a tree could not be removed"
+    assert_dir_not_exists "$S/cache/target/myproj--issue-7"
+    assert_contains "$err" "failed to remove: $S/cache/venvs/myproj--issue-7" "failure reported"
+}
+
+# A symlinked <kind> dir is skipped: rm -rf through it would delete outside
+# the cache root.
+test_prune_skips_symlinked_kind_dir() {
+    command mkdir -p "$S/outside/myproj--issue-7"
+    command touch "$S/outside/myproj--issue-7/keep"
+    command ln -s "$S/outside" "$S/cache/evil"
+    run_cmd -C "$S/myproj" prune myproj--issue-7
+    assert_equals "0" "$RC" "exit status"
+    assert_file_exists "$S/outside/myproj--issue-7/keep"
+    assert_equals "artifact-dir prune: nothing under $S/cache/*/myproj--issue-7" "$OUT" "nothing pruned"
+}
+
 # Fail closed outside a checkout: with no project to scope to, refuse rather
 # than fall back to a bare shape check (a "foo--bar" name could be another
 # project's main checkout).
@@ -302,6 +334,8 @@ run_test_with_setup test_prune_unknown_flag_fails_closed "prune fails closed on 
 run_test_with_setup test_project_from_worktree "--project from a worktree → <project>"
 run_test_with_setup test_project_name_with_double_dash "project names containing -- are kept intact"
 run_test_with_setup test_prune_refuses_double_dash_main_checkout "prune refuses a --named main checkout from inside it"
+run_test_with_setup test_prune_continues_past_a_failed_remove "prune continues past a failed remove and reports it"
+run_test_with_setup test_prune_skips_symlinked_kind_dir "prune skips a symlinked <kind> dir"
 run_test_with_setup test_prune_refuses_outside_a_repo "prune refuses outside a checkout (fail closed)"
 run_test_with_setup test_prune_refuses_other_projects "prune refuses other projects' dirs"
 run_test_with_setup test_prune_from_linked_worktree "prune from a linked worktree scopes to the main project"

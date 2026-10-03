@@ -122,19 +122,29 @@ prune() {
             ;;
     esac
 
-    local d found=0
+    # Neither the leaf nor its <kind> parent may be a symlink: rm -rf through a
+    # symlinked <kind> dir would delete outside the cache root.
+    local d found=0 rc=0
     for d in "$CACHE_ROOT"/*/"$name"; do
         [ -d "$d" ] || continue
         [ -L "$d" ] && continue
+        [ -L "$(command dirname "$d")" ] && continue
         found=1
         if [ "$dry_run" = true ]; then
             command echo "would remove: $d"
         else
             command echo "removing: $d"
-            command rm -rf -- "$d"
+            # Keep going on failure (a phantom entry, #1004, can make one tree
+            # undeletable) so the other kinds still get pruned; report and
+            # exit non-zero at the end.
+            if ! command rm -rf -- "$d"; then
+                command echo "artifact-dir prune: failed to remove: $d" >&2
+                rc=1
+            fi
         fi
     done
     [ "$found" -eq 1 ] || command echo "artifact-dir prune: nothing under $CACHE_ROOT/*/$name"
+    return "$rc"
 }
 
 main() {
