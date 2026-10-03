@@ -97,7 +97,7 @@ test_xattr_report_workaround_survives_a_path_with_spaces() {
     # "git -C <root> ls-files" marker, with the log prefix stripped.
     emitted=$(command printf '%s\n' "$output" |
         /usr/bin/grep -F 'ls-files -s |' |
-        /usr/bin/sed 's/^.*\] *//')
+        /usr/bin/sed 's/^[^]]*\] *//')
 
     assert_contains "$emitted" "ls-files" \
         "The emitted workaround line is recoverable from the report"
@@ -192,7 +192,7 @@ test_xattr_docs_and_emitted_workaround_agree() {
         run_fs_health_stderr sensitive)
     emitted=$(command printf '%s\n' "$output" |
         /usr/bin/grep -F 'ls-files -s |' |
-        /usr/bin/sed 's/^.*\] *//')
+        /usr/bin/sed 's/^[^]]*\] *//')
     docs_line=$(docs_workaround_lines)
 
     # Guard the comparison against agreeing on nothing: an empty or missing
