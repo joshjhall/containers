@@ -27,12 +27,12 @@
 #   artifact-dir [-C <path>] --no-create <kind> print only
 #   artifact-dir [-C <path>] --name             print <checkout> only
 #   artifact-dir [-C <path>] --project          print <project> (main checkout name) only
-#   artifact-dir prune <checkout> [--dry-run]   remove /cache/*/<checkout>
+#   artifact-dir [-C <path>] prune <checkout> [--dry-run]   remove /cache/*/<checkout>
 #
-# prune only accepts a linked-worktree-shaped name (one containing "--") and,
-# when run inside a repo, refuses that repo's main-checkout name (which can
-# itself contain "--"). It only removes /cache/<kind>/<name> leaves, never a
-# shared cache root. Run it from inside the project so the second guard applies.
+# prune is scoped to one project, resolved from the cwd or -C: it accepts only
+# "<project>--<worktree>" names, so it can never remove the main checkout's
+# leaf (even if the project name contains "--"), another project's dirs, or a
+# shared cache root. Outside a checkout it refuses rather than guess.
 #
 # ARTIFACT_CACHE_ROOT overrides /cache (used by tests).
 #
@@ -49,7 +49,7 @@ Usage:
   artifact-dir [-C <path>] --no-create <kind> print the path without creating it
   artifact-dir [-C <path>] --name             print the <checkout> name only
   artifact-dir [-C <path>] --project          print the <project> (main checkout) name only
-  artifact-dir prune <checkout> [--dry-run]   remove /cache/*/<checkout> (worktree names only)
+  artifact-dir [-C <path>] prune <checkout> [--dry-run]   remove /cache/*/<checkout> (this project's worktree names only)
 EOF
     exit 2
 }
@@ -89,6 +89,8 @@ checkout_name() {
 }
 
 prune() {
+    local dir="$1"
+    shift
     local name="${1:-}" dry_run=false
     [ $# -le 2 ] || usage
     # Fail closed: an unrecognised flag (e.g. a typo of --dry-run) must not
@@ -102,21 +104,23 @@ prune() {
         command echo "artifact-dir prune: invalid checkout name: '$name'" >&2
         exit 2
     fi
+    # Fail closed: prune is scoped to ONE project, resolved from the checkout
+    # (cwd or -C). Only "<project>--<worktree>" with a non-empty worktree part
+    # is accepted, which excludes the main checkout's own leaf (even when the
+    # project name itself contains "--") and every other project's dirs. With
+    # no resolvable project there is nothing safe to compare against: refuse.
+    local project
+    project="$(checkout_name "$dir" project)" || {
+        command echo "artifact-dir prune: run inside the project (or pass -C <path>) so the name can be checked" >&2
+        exit 2
+    }
     case "$name" in
-        *--*) ;;
+        "$project"--?*) ;;
         *)
-            command echo "artifact-dir prune: refusing '$name' — only linked-worktree names (<project>--<worktree>) can be pruned" >&2
+            command echo "artifact-dir prune: refusing '$name' — only this project's linked-worktree names ($project--<worktree>) can be pruned" >&2
             exit 2
             ;;
     esac
-    # A project whose own name contains "--" passes the shape check above, so
-    # also refuse the current repo's main-checkout name. Outside a repo there
-    # is nothing to compare against and the shape check is the only guard.
-    local project
-    if project="$(checkout_name "$PWD" project 2>/dev/null)" && [ "$name" = "$project" ]; then
-        command echo "artifact-dir prune: refusing '$name' — that is the main checkout's artifact dir" >&2
-        exit 2
-    fi
 
     local d found=0
     for d in "$CACHE_ROOT"/*/"$name"; do
@@ -137,14 +141,14 @@ main() {
     local dir="$PWD" create=true
 
     [ $# -ge 1 ] || usage
-    if [ "$1" = "prune" ]; then
-        shift
-        prune "$@"
-        return
-    fi
 
     while [ $# -gt 0 ]; do
         case "$1" in
+            prune)
+                shift
+                prune "$dir" "$@"
+                return
+                ;;
             -C)
                 [ $# -ge 2 ] || usage
                 dir="$2"

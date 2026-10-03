@@ -122,7 +122,7 @@ test_prune_removes_only_matching() {
         "$S/cache/venvs/myproj" \
         "$S/cache/venvs/myproj--issue-8" \
         "$S/cache/venvs/other/myproj--issue-7"
-    run_cmd prune myproj--issue-7
+    run_cmd -C "$S/myproj" prune myproj--issue-7
     assert_equals "0" "$RC" "exit status"
     assert_dir_not_exists "$S/cache/venvs/myproj--issue-7"
     assert_dir_not_exists "$S/cache/target/myproj--issue-7"
@@ -139,7 +139,7 @@ test_prune_skips_symlink() {
     command mkdir -p "$S/elsewhere" "$S/cache/venvs"
     command touch "$S/elsewhere/keep"
     command ln -s "$S/elsewhere" "$S/cache/venvs/myproj--issue-7"
-    run_cmd prune myproj--issue-7
+    run_cmd -C "$S/myproj" prune myproj--issue-7
     assert_equals "0" "$RC" "exit status"
     assert_true "[ -L \"$S/cache/venvs/myproj--issue-7\" ]" "symlink left in place"
     assert_file_exists "$S/elsewhere/keep"
@@ -147,14 +147,14 @@ test_prune_skips_symlink() {
 }
 
 test_prune_nothing_found() {
-    run_cmd prune myproj--issue-7
+    run_cmd -C "$S/myproj" prune myproj--issue-7
     assert_equals "0" "$RC" "exit status"
     assert_equals "artifact-dir prune: nothing under $S/cache/*/myproj--issue-7" "$OUT" "nothing-found report"
 }
 
 test_prune_real_run_output() {
     command mkdir -p "$S/cache/venvs/myproj--issue-7"
-    run_cmd prune myproj--issue-7
+    run_cmd -C "$S/myproj" prune myproj--issue-7
     assert_equals "removing: $S/cache/venvs/myproj--issue-7" "$OUT" "real-run output"
     assert_dir_not_exists "$S/cache/venvs/myproj--issue-7"
 }
@@ -164,10 +164,10 @@ test_prune_unknown_flag_fails_closed() {
     local f
     command mkdir -p "$S/cache/venvs/myproj--issue-7"
     for f in "--dryrun" "-n" "--dry_run"; do
-        run_cmd prune myproj--issue-7 "$f"
+        run_cmd -C "$S/myproj" prune myproj--issue-7 "$f"
         assert_equals "2" "$RC" "prune with '$f' is a usage error"
     done
-    run_cmd prune myproj--issue-7 --dry-run extra
+    run_cmd -C "$S/myproj" prune myproj--issue-7 --dry-run extra
     assert_equals "2" "$RC" "extra arg after --dry-run is a usage error"
     assert_dir_exists "$S/cache/venvs/myproj--issue-7"
 }
@@ -207,6 +207,41 @@ test_prune_refuses_double_dash_main_checkout() {
     assert_dir_not_exists "$S/cache/venvs/my--proj--issue-9"
 }
 
+# Fail closed outside a checkout: with no project to scope to, refuse rather
+# than fall back to a bare shape check (a "foo--bar" name could be another
+# project's main checkout).
+test_prune_refuses_outside_a_repo() {
+    local rc=0
+    command mkdir -p "$S/plain" "$S/cache/venvs/myproj--issue-7"
+    GIT_CEILING_DIRECTORIES="$S" "$CMD" -C "$S/plain" prune myproj--issue-7 >/dev/null 2>&1 || rc=$?
+    assert_equals "2" "$rc" "prune outside a checkout refused"
+    assert_dir_exists "$S/cache/venvs/myproj--issue-7"
+}
+
+# Scoped to the resolved project: another project's dirs are refused, including
+# the colliding case where project "myproj--issue" has its own main leaf that
+# looks like a worktree name of "myproj".
+test_prune_refuses_other_projects() {
+    command mkdir -p "$S/cache/venvs/otherproj--issue-7" "$S/cache/venvs/myproj"
+    run_cmd -C "$S/myproj" prune otherproj--issue-7
+    assert_equals "2" "$RC" "another project's worktree dir refused"
+    assert_dir_exists "$S/cache/venvs/otherproj--issue-7"
+    run_cmd -C "$S/myproj" prune myproj--
+    assert_equals "2" "$RC" "empty worktree part refused"
+}
+
+# Run from a linked worktree, the project still resolves to the main checkout,
+# so a sibling worktree's dir is prunable and the main leaf is not.
+test_prune_from_linked_worktree() {
+    command mkdir -p "$S/cache/venvs/myproj--issue-8" "$S/cache/venvs/myproj"
+    run_cmd -C "$S/myproj/.worktrees/issue-7" prune myproj--issue-8
+    assert_equals "0" "$RC" "sibling worktree dir prunable"
+    assert_dir_not_exists "$S/cache/venvs/myproj--issue-8"
+    run_cmd -C "$S/myproj/.worktrees/issue-7" prune myproj
+    assert_equals "2" "$RC" "main leaf refused from a worktree"
+    assert_dir_exists "$S/cache/venvs/myproj"
+}
+
 # Bare repo: the common dir is <project>.git, so the .git suffix is stripped.
 test_bare_repo_names() {
     command git init -q --bare -b main "$S/bareproj.git"
@@ -230,7 +265,7 @@ test_arg_parsing_errors() {
 
 test_prune_dry_run_deletes_nothing() {
     command mkdir -p "$S/cache/venvs/myproj--issue-7"
-    run_cmd prune myproj--issue-7 --dry-run
+    run_cmd -C "$S/myproj" prune myproj--issue-7 --dry-run
     assert_equals "0" "$RC" "exit status"
     assert_equals "would remove: $S/cache/venvs/myproj--issue-7" "$OUT" "dry-run output"
     assert_dir_exists "$S/cache/venvs/myproj--issue-7"
@@ -238,7 +273,7 @@ test_prune_dry_run_deletes_nothing() {
 
 test_prune_refuses_main_checkout_name() {
     command mkdir -p "$S/cache/venvs/myproj"
-    run_cmd prune myproj
+    run_cmd -C "$S/myproj" prune myproj
     assert_equals "2" "$RC" "name without -- refused"
     assert_dir_exists "$S/cache/venvs/myproj"
 }
@@ -246,7 +281,7 @@ test_prune_refuses_main_checkout_name() {
 test_prune_refuses_bad_names() {
     local n
     for n in "" "." ".." "a--b/c" "--x"; do
-        run_cmd prune "$n"
+        run_cmd -C "$S/myproj" prune "$n"
         assert_equals "2" "$RC" "prune '$n' refused"
     done
 }
@@ -267,6 +302,9 @@ run_test_with_setup test_prune_unknown_flag_fails_closed "prune fails closed on 
 run_test_with_setup test_project_from_worktree "--project from a worktree → <project>"
 run_test_with_setup test_project_name_with_double_dash "project names containing -- are kept intact"
 run_test_with_setup test_prune_refuses_double_dash_main_checkout "prune refuses a --named main checkout from inside it"
+run_test_with_setup test_prune_refuses_outside_a_repo "prune refuses outside a checkout (fail closed)"
+run_test_with_setup test_prune_refuses_other_projects "prune refuses other projects' dirs"
+run_test_with_setup test_prune_from_linked_worktree "prune from a linked worktree scopes to the main project"
 run_test_with_setup test_bare_repo_names "bare repo worktree naming"
 run_test_with_setup test_arg_parsing_errors "malformed arguments are usage errors"
 run_test_with_setup test_prune_dry_run_deletes_nothing "prune --dry-run deletes nothing"
