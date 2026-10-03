@@ -1,0 +1,160 @@
+#!/bin/bash
+# artifact-dir — print (and create) the per-checkout build-artifact directory
+# for this git checkout under /cache, so venvs, target/ dirs, CMake build trees,
+# and node_modules live on a named volume instead of the bind-mounted workspace.
+#
+# WHY OFF THE WORKSPACE: on a macOS host /workspace is case-insensitive
+# (APFS -> virtiofs -> bindfs) and compose cannot change that. Artifact trees
+# carry case-colliding names and symlinks (a uv venv's lib/lib64), and deleting
+# them there can leave undeletable phantom entries (#1004). They are also the
+# trees with the most small files, so every metadata call pays the FUSE cost.
+# A volume under /cache avoids both, and fix_cache_permissions already
+# re-owns /cache at startup, so no privilege wiring is needed.
+#
+# WHY PER CHECKOUT: parallel worktrees (golems) building into one shared
+# target/ or .venv corrupt each other. Each checkout gets its own leaf:
+#   main checkout     -> <project>
+#   linked worktree   -> <project>--<worktree-dir-basename>
+# A linked worktree is detected by --git-dir != --git-common-dir, which does
+# not depend on where the worktree lives. <project> is the main checkout's
+# directory name; PROJECT_NAME is a build ARG only and is not set at runtime.
+#
+# Content-addressed caches (uv/pip/cargo registry, Go module cache) are safe to
+# share across checkouts and do NOT belong here — only per-checkout outputs.
+#
+# Usage:
+#   artifact-dir [-C <path>] <kind>             create + print /cache/<kind>/<checkout>
+#   artifact-dir [-C <path>] --no-create <kind> print only
+#   artifact-dir [-C <path>] --name             print <checkout> only
+#   artifact-dir prune <checkout> [--dry-run]   remove /cache/*/<checkout>
+#
+# prune only accepts a linked-worktree name (one containing "--"), so it can
+# never remove the main checkout's artifacts or a shared cache dir.
+#
+# ARTIFACT_CACHE_ROOT overrides /cache (used by tests).
+#
+# Exit: 0 ok, 1 not in a git checkout, 2 usage error.
+
+set -euo pipefail
+
+CACHE_ROOT="${ARTIFACT_CACHE_ROOT:-/cache}"
+
+usage() {
+    command cat >&2 <<'EOF'
+Usage:
+  artifact-dir [-C <path>] <kind>             create + print /cache/<kind>/<checkout>
+  artifact-dir [-C <path>] --no-create <kind> print the path without creating it
+  artifact-dir [-C <path>] --name             print the <checkout> name only
+  artifact-dir prune <checkout> [--dry-run]   remove /cache/*/<checkout> (worktree names only)
+EOF
+    exit 2
+}
+
+# A single path segment: no slashes, not "." or "..", no leading dash.
+valid_segment() {
+    [[ "$1" =~ ^[A-Za-z0-9._][A-Za-z0-9._-]*$ ]] && [ "$1" != "." ] && [ "$1" != ".." ]
+}
+
+checkout_name() {
+    local dir="$1" git_dir common_dir top project
+    git_dir="$(builtin cd "$dir" && command git rev-parse --git-dir 2>/dev/null)" || {
+        command echo "artifact-dir: not a git checkout: $dir" >&2
+        exit 1
+    }
+    common_dir="$(builtin cd "$dir" && command git rev-parse --git-common-dir)"
+    # Resolve both to physical absolute paths (rev-parse may return relative).
+    git_dir="$(builtin cd "$dir" && builtin cd "$git_dir" && pwd -P)"
+    common_dir="$(builtin cd "$dir" && builtin cd "$common_dir" && pwd -P)"
+
+    # Non-bare repo: common dir is <project>/.git. Bare repo: it is the repo
+    # dir itself, conventionally <project>.git or <project>.
+    if [ "$(command basename "$common_dir")" = ".git" ]; then
+        project="$(command basename "$(command dirname "$common_dir")")"
+    else
+        project="$(command basename "$common_dir" .git)"
+    fi
+
+    if [ "$git_dir" = "$common_dir" ]; then
+        printf '%s\n' "$project"
+    else
+        top="$(builtin cd "$dir" && command git rev-parse --show-toplevel)"
+        printf '%s--%s\n' "$project" "$(command basename "$top")"
+    fi
+}
+
+prune() {
+    local name="${1:-}" dry_run=false
+    [ "${2:-}" = "--dry-run" ] && dry_run=true
+    [ $# -le 2 ] || usage
+    if [ -z "$name" ] || ! valid_segment "$name"; then
+        command echo "artifact-dir prune: invalid checkout name: '$name'" >&2
+        exit 2
+    fi
+    case "$name" in
+        *--*) ;;
+        *)
+            command echo "artifact-dir prune: refusing '$name' — only linked-worktree names (<project>--<worktree>) can be pruned" >&2
+            exit 2
+            ;;
+    esac
+
+    local d found=0
+    for d in "$CACHE_ROOT"/*/"$name"; do
+        [ -d "$d" ] || continue
+        [ -L "$d" ] && continue
+        found=1
+        if [ "$dry_run" = true ]; then
+            command echo "would remove: $d"
+        else
+            command echo "removing: $d"
+            command rm -rf -- "$d"
+        fi
+    done
+    [ "$found" -eq 1 ] || command echo "artifact-dir prune: nothing under $CACHE_ROOT/*/$name"
+}
+
+main() {
+    local dir="$PWD" create=true
+
+    [ $# -ge 1 ] || usage
+    if [ "$1" = "prune" ]; then
+        shift
+        prune "$@"
+        return
+    fi
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -C)
+                [ $# -ge 2 ] || usage
+                dir="$2"
+                shift 2
+                ;;
+            --no-create)
+                create=false
+                shift
+                ;;
+            --name)
+                [ $# -eq 1 ] || usage
+                checkout_name "$dir"
+                return
+                ;;
+            -h | --help) usage ;;
+            -*) usage ;;
+            *) break ;;
+        esac
+    done
+
+    [ $# -eq 1 ] || usage
+    local kind="$1" name path
+    if ! valid_segment "$kind"; then
+        command echo "artifact-dir: invalid kind: '$kind'" >&2
+        exit 2
+    fi
+    name="$(checkout_name "$dir")"
+    path="$CACHE_ROOT/$kind/$name"
+    [ "$create" = true ] && command mkdir -p "$path"
+    printf '%s\n' "$path"
+}
+
+main "$@"
