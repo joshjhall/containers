@@ -262,6 +262,15 @@ EOF
     fi
 }
 
+# Print the Dockerfile's Node RUN condition as one line (the shell test between
+# `if` and `; then`). Format-coupled: a reformat of that RUN yields empty output.
+extract_node_clause() {
+    command sed -n '/ARG INCLUDE_NODE=/,/node\.sh/p' "$1" |
+        command awk '/^ *if /{on=1} on{print} on && /; then/{exit}' |
+        command sed -e 's/\\$//' -e 's/; then *$//' -e 's/^ *if //' |
+        command tr '\n' ' '
+}
+
 # Evaluate the Dockerfile's Node RUN condition under the given env assignments
 # (e.g. "INCLUDE_PYTHON_DEV=true SKIP_LSP_INSTALL=false"); prints install|skip.
 # Runs the real extracted clause rather than grepping its text, so the test
@@ -269,16 +278,15 @@ EOF
 eval_node_condition() {
     local assignments="$1"
     local clause
-    clause=$(command sed -n '/ARG INCLUDE_NODE=/,/node\.sh/p' "$PROJECT_ROOT/Dockerfile" |
-        command awk '/^ *if /{on=1} on{print} on && /; then/{exit}' |
-        command sed -e 's/\\$//' -e 's/; then *$//' -e 's/^ *if //' |
-        command tr '\n' ' ')
+    clause=$(extract_node_clause "$PROJECT_ROOT/Dockerfile")
     env -i INCLUDE_NODE=false INCLUDE_NODE_DEV=false INCLUDE_PYTHON_DEV=false \
         SKIP_LSP_INSTALL=false $assignments \
         /bin/sh -c "if $clause; then echo install; else echo skip; fi"
 }
 
 test_node_implied_by_python_dev() {
+    assert_not_empty "$(extract_node_clause "$PROJECT_ROOT/Dockerfile")" \
+        "Node RUN condition extracted from Dockerfile (extraction is format-coupled; check extract_node_clause)"
     assert_equals "install" "$(eval_node_condition "INCLUDE_PYTHON_DEV=true")" \
         "python-dev with LSPs installs Node (pyright needs it)"
     assert_equals "skip" "$(eval_node_condition "INCLUDE_PYTHON_DEV=true SKIP_LSP_INSTALL=true")" \
@@ -291,14 +299,49 @@ test_node_implied_by_python_dev() {
         "explicit INCLUDE_NODE still wins over SKIP_LSP_INSTALL"
 }
 
-# A Dockerfile ARG is empty before its declaration, so SKIP_LSP_INSTALL must be
-# declared above both the Node condition and every *_dev step that forwards it.
-test_skip_lsp_arg_declared_before_use() {
+# Print the ARG names the Node RUN condition reads, sorted, space-separated.
+node_condition_vars() {
+    extract_node_clause "$1" |
+        command grep -o '\${[A-Z_][A-Z0-9_]*}' |
+        command sed -e 's/^\${//' -e 's/}$//' |
+        command sort -u |
+        command tr '\n' ' ' |
+        command sed 's/ $//'
+}
+
+# Print one line per ARG the Node RUN condition reads that is NOT declared
+# between the RUN's stage FROM and the RUN itself (where it would expand empty);
+# prints nothing when every ARG is in scope.
+node_condition_arg_order_errors() {
+    local dockerfile="$1"
+    local run_line stage_start var decls
+    run_line=$(command awk '/^ARG INCLUDE_NODE=/{seen=1} seen && /^RUN /{print NR; exit}' "$dockerfile")
+    stage_start=$(command awk -v run="${run_line:-0}" 'NR < run && /^FROM /{last=NR} END{print last+0}' "$dockerfile")
+    for var in $(node_condition_vars "$dockerfile"); do
+        if ! command awk -v lo="$stage_start" -v hi="${run_line:-0}" -v re="^ARG ${var}(=|$)" \
+            'NR > lo && NR < hi && $0 ~ re {found=1} END{exit !found}' "$dockerfile"; then
+            decls=$(command grep -nE "^ARG ${var}(=|$)" "$dockerfile" | command cut -d: -f1 | command tr '\n' ' ' | command sed 's/ $//')
+            echo "${var}: declared at line(s) ${decls:-none}, Node RUN at line ${run_line:-none} (stage FROM at line ${stage_start})"
+        fi
+    done
+}
+
+# A Dockerfile ARG is empty before its declaration, so every ARG the Node
+# condition reads must be declared in its stage above that RUN, and
+# SKIP_LSP_INSTALL also above every *_dev step that forwards it.
+test_node_condition_args_declared_before_use() {
     local dockerfile="$PROJECT_ROOT/Dockerfile"
     local arg_line first_use
+
+    # Pin the derived list so the ordering check below cannot go vacuous.
+    assert_equals "INCLUDE_NODE INCLUDE_NODE_DEV INCLUDE_PYTHON_DEV SKIP_LSP_INSTALL" \
+        "$(node_condition_vars "$dockerfile")" \
+        "Node RUN condition reads exactly the expected ARGs"
+    assert_equals "" "$(node_condition_arg_order_errors "$dockerfile")" \
+        "Every ARG the Node RUN condition reads is declared in-stage before it"
+
     arg_line=$(command grep -n '^ARG SKIP_LSP_INSTALL=' "$dockerfile" | command cut -d: -f1)
     first_use=$(command grep -n '\${SKIP_LSP_INSTALL}' "$dockerfile" | command head -1 | command cut -d: -f1)
-
     assert_equals "1" "$(command grep -c '^ARG SKIP_LSP_INSTALL=' "$dockerfile")" \
         "SKIP_LSP_INSTALL is declared exactly once"
     if [ -n "$arg_line" ] && [ -n "$first_use" ] && [ "$arg_line" -lt "$first_use" ]; then
@@ -306,6 +349,28 @@ test_skip_lsp_arg_declared_before_use() {
     else
         assert_true false "ARG SKIP_LSP_INSTALL (line ${arg_line:-none}) must precede first use (line ${first_use:-none})"
     fi
+}
+
+# Negative control: moving ARG INCLUDE_PYTHON_DEV below the Node RUN must be
+# reported, and only that ARG.
+test_arg_order_check_catches_moved_include_python_dev() {
+    local mutated="$TEST_TEMP_DIR/Dockerfile.moved"
+    local errors
+    command awk '
+        /^ARG INCLUDE_PYTHON_DEV=/ { held=$0; next }
+        { print }
+        /node\.sh; \\$/ { in_node=1 }
+        in_node && /^ *fi$/ { print held; in_node=0 }
+    ' "$PROJECT_ROOT/Dockerfile" >"$mutated"
+
+    if command cmp -s "$PROJECT_ROOT/Dockerfile" "$mutated"; then
+        assert_true false "Mutation did not change the Dockerfile copy"
+    fi
+    errors=$(node_condition_arg_order_errors "$mutated")
+    assert_contains "$errors" "INCLUDE_PYTHON_DEV: declared at line" \
+        "Moved ARG INCLUDE_PYTHON_DEV is reported"
+    assert_not_contains "$errors" "SKIP_LSP_INSTALL" "Unmoved SKIP_LSP_INSTALL is not reported"
+    assert_not_contains "$errors" "INCLUDE_NODE" "Unmoved INCLUDE_NODE* ARGs are not reported"
 }
 
 # ============================================================================
@@ -412,7 +477,8 @@ run_test_with_setup test_dev_aliases "Development aliases"
 run_test_with_setup test_jupyter_installation "Jupyter installation"
 run_test_with_setup test_python_dev_verification "Python dev verification"
 run_test_with_setup test_node_implied_by_python_dev "Node implied by python-dev unless SKIP_LSP_INSTALL"
-run_test_with_setup test_skip_lsp_arg_declared_before_use "SKIP_LSP_INSTALL ARG declared before use"
+run_test_with_setup test_node_condition_args_declared_before_use "Node RUN condition ARGs declared before use"
+run_test_with_setup test_arg_order_check_catches_moved_include_python_dev "ARG-order check catches moved INCLUDE_PYTHON_DEV"
 run_test_with_setup test_python_dev_script_installed "Python dev: test-python-dev is installed (#1001)"
 run_test_with_setup test_python_dev_script_passes_when_all_tools_present "Python dev: test-python-dev exits 0 with all tools"
 run_test_with_setup test_python_dev_script_fails_on_missing_tool "Python dev: test-python-dev exits 1 on a missing tool"
