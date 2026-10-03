@@ -119,9 +119,14 @@ test_frees_path_when_contents_refuse_deletion() {
     assert_not_empty "$quarantined" "stuck tree was moved to a quarantine path"
     assert_file_exists "$quarantined/demo/.venv/Lib/stuck"
 
-    # Restore write access so the scratch dir can be cleaned up afterwards.
-    if [ -n "$quarantined" ]; then
+    # Restore write access wherever the stuck dir ended up, so the scratch dir
+    # can be cleaned up afterwards even when the command under test failed to
+    # move it (the regression this test exists to catch).
+    if [ -n "$quarantined" ] && [ -d "$quarantined/demo/.venv/Lib" ]; then
         command chmod 755 "$quarantined/demo/.venv/Lib"
+    fi
+    if [ -d "$s/issue-7/demo/.venv/Lib" ]; then
+        command chmod 755 "$s/issue-7/demo/.venv/Lib"
     fi
 }
 
