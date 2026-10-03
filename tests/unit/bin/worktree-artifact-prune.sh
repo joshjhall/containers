@@ -197,6 +197,25 @@ test_tty_empty_answer_keeps() {
     assert_dir_exists "$S/cache/node/myproj--issue-7" "node dir kept on empty answer"
 }
 
+# Both streams must be TTYs to prompt: `just worktree-rm N | tee log` keeps a
+# TTY on stdin but pipes stdout, and must stay print-only even when a 'y' sits
+# on stdin. Pins `&&` in the gate — an `||` would prompt, read 'y', and delete.
+test_half_tty_stdout_piped_deletes_nothing() {
+    if ! have_util_linux_script; then
+        skip_test "util-linux script not installed — TTY path not exercised"
+        return 0
+    fi
+    seed_issue7
+    RC=0
+    OUT="$(cd "$S/myproj" && command printf 'y\n' |
+        command script -q -e -c "bash '$SCRIPT' 7 | command cat" /dev/null 2>/dev/null)" || RC=$?
+    assert_equals "0" "$RC" "exit status"
+    assert_not_contains "$OUT" "Remove them?" "no prompt when stdout is not a TTY"
+    assert_contains "$OUT" "remove with: artifact-dir prune myproj--issue-7" "print-only hint"
+    assert_dir_exists "$S/cache/cargo/myproj--issue-7" "cargo dir survives a half-TTY run"
+    assert_dir_exists "$S/cache/node/myproj--issue-7" "node dir survives a half-TTY run"
+}
+
 # A confirmed prune that fails (a phantom entry, #1004) must not fail the
 # teardown. The stub delegates everything but a real prune to artifact-dir.
 test_tty_yes_failed_prune_exits_zero() {
@@ -258,6 +277,7 @@ run_test_with_setup test_invalid_n_exits_two "Invalid N exits 2"
 run_test_with_setup test_tty_yes_prunes "TTY 'y' prunes the dirs"
 run_test_with_setup test_tty_no_keeps "TTY 'n' keeps the dirs and prints the hint"
 run_test_with_setup test_tty_empty_answer_keeps "TTY empty answer keeps the dirs (default N)"
+run_test_with_setup test_half_tty_stdout_piped_deletes_nothing "Half-TTY (stdout piped) never prompts or deletes"
 run_test_with_setup test_tty_yes_failed_prune_exits_zero "TTY 'y' with a failing prune still exits 0"
 run_test_with_setup test_fallback_resolves_in_repo_artifact_dir "No override + no PATH copy falls back to in-repo artifact-dir"
 run_test_with_setup test_recipe_invokes_script "worktree-rm recipe invokes the script"
