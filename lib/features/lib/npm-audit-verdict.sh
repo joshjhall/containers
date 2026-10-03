@@ -8,17 +8,24 @@
 #
 # Usage:
 #   source /tmp/build-scripts/features/lib/npm-audit-verdict.sh
-#   verdict=$(npm_audit_verdict "$audit_stdout")
+#   verdict=$(npm_audit_verdict "$audit_stdout")          # agnix
+#   verdict=$(npm_audit_verdict "$audit_stdout" strict)   # corepack
 #
 # Requirements:
 #   - jq (installed by lib/base/setup.sh)
 
 # npm_audit_verdict — classify `npm audit signatures --json` stdout.
 #
-# Echoes exactly one of: fatal | install | skip
+# Echoes exactly one of: fatal | install | skip | unsigned
 #   fatal   — the audit RAN and reported a signature mismatch (populated
 #             invalid[]). The tarball is not what its publisher signed.
-#   install — the audit ran and found nothing invalid.
+#   install — the audit ran and found nothing invalid (in strict mode: and
+#             nothing missing either).
+#   unsigned — strict mode only: the audit ran, nothing invalid, but missing[]
+#             is non-empty or not an array — the registry served the package
+#             with NO signature, so there was nothing to verify. Decided on the
+#             same selected body as the other verdicts, so prose around the JSON
+#             cannot turn a clean audit into a refusal (#985 review).
 #   skip    — the audit could not be read (outage, nothing auditable,
 #             unparsable output). UNVERIFIABLE, which is not the same as
 #             tampering and must never be reported as such.
@@ -47,7 +54,9 @@
 # impossible by construction. Of the audit-shaped values the LAST wins: npm's
 # real result terminates stdout.
 npm_audit_verdict() {
-    local raw="$1" verdict brace_line candidate
+    local raw="$1" mode="${2:-}" verdict brace_line candidate
+    local strict=false
+    [ "$mode" = "strict" ] && strict=true
     local filter='
         map(select(type == "object"
             and ((.invalid | type) == "array"
@@ -56,6 +65,8 @@ npm_audit_verdict() {
           else (last
             | if (.invalid | type) != "array" then "skip"
               elif (.invalid | length) > 0 then "fatal"
+              elif $strict and ((.missing | type) != "array"
+                                or (.missing | length) > 0) then "unsigned"
               else "install" end)
           end'
 
@@ -78,9 +89,9 @@ npm_audit_verdict() {
     # end-of-input to `jq -s` directly is all-or-nothing and was the actual bug:
     # every candidate carried the trailing junk along with the body.
     verdict=$(command printf '%s' "$raw" | command jq -c . 2>/dev/null |
-        command jq -s -r "$filter" 2>/dev/null || true)
+        command jq -s -r --argjson strict "$strict" "$filter" 2>/dev/null || true)
     case "$verdict" in
-        fatal | install)
+        fatal | install | unsigned)
             command echo "$verdict"
             return 0
             ;;
@@ -95,9 +106,9 @@ npm_audit_verdict() {
         candidate=$(command printf '%s' "$raw" |
             command tail -n "+${brace_line}" | command sed '1s/^[^{]*//')
         verdict=$(command printf '%s' "$candidate" | command jq -c . 2>/dev/null |
-            command jq -s -r "$filter" 2>/dev/null || true)
+            command jq -s -r --argjson strict "$strict" "$filter" 2>/dev/null || true)
         case "$verdict" in
-            fatal | install)
+            fatal | install | unsigned)
                 command echo "$verdict"
                 return 0
                 ;;

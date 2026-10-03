@@ -250,6 +250,7 @@ test_node_permissions() {
 # PIN (optional, default 0.36.0) becomes COREPACK_VERSION; "" leaves it empty.
 # AUDIT (env, default clean) picks the `npm audit signatures --json` stdout:
 #   clean | mismatch | outage | empty | unsigned | no-missing | null-missing
+#   | noisy-clean (a clean body wrapped in npm notice prose)
 # NO_SCRATCH (env, non-empty) makes create_secure_temp_dir fail.
 # VERSION_RC (env, default 0) is the installed corepack's `--version` exit.
 #
@@ -299,6 +300,9 @@ exit 0"
         unsigned) audit_out='{"invalid":[],"missing":[{"name":"corepack","version":"0.36.0"}]}' ;;
         no-missing) audit_out='{"invalid":[]}' ;;
         null-missing) audit_out='{"invalid":[],"missing":null}' ;;
+        noisy-clean) audit_out='npm notice update available
+{"invalid":[],"missing":[]}
+npm notice bye' ;;
     esac
 
     command cat >"$stub_bin/npm" <<STUB
@@ -403,6 +407,16 @@ test_corepack_unsigned_is_fatal() {
         assert_file_contains "$TEST_TEMP_DIR/ensure.log" "Refusing to install unsigned" \
             "an '$audit' audit is refused as unsigned"
     done
+}
+
+# The unsigned check reads the same selected body as the classifier, so npm
+# prose around a clean audit must not turn into a false refusal.
+test_corepack_noisy_clean_audit_installs() {
+    local rc
+    rc=$(AUDIT=noisy-clean _run_ensure_corepack installs)
+    assert_equals "0" "$rc" "a clean audit wrapped in npm notices still installs"
+    assert_file_not_contains "$TEST_TEMP_DIR/ensure.log" "Refusing" \
+        "notice prose is not mistaken for an unsigned package"
 }
 
 test_corepack_scratch_dir_failure_is_fatal() {
@@ -591,6 +605,7 @@ run_test_with_setup test_corepack_missing_installs_verified "Missing corepack is
 run_test_with_setup test_corepack_signature_mismatch_is_fatal "corepack signature mismatch fails the build"
 run_test_with_setup test_corepack_unverifiable_audit_is_fatal "Unverifiable corepack audit fails the build"
 run_test_with_setup test_corepack_unsigned_is_fatal "Unsigned corepack (missing[]) fails the build"
+run_test_with_setup test_corepack_noisy_clean_audit_installs "Clean audit wrapped in npm notices installs"
 run_test_with_setup test_corepack_scratch_dir_failure_is_fatal "Scratch-dir creation failure fails the build"
 run_test_with_setup test_corepack_fetch_failure_is_fatal "corepack scratch fetch failure fails the build"
 run_test_with_setup test_corepack_install_failure_is_fatal "corepack install failure fails the build"

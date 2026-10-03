@@ -727,9 +727,31 @@ test_agnix_audit_classifier_behavior() {
             unset BASH_ENV
             # shellcheck source=/dev/null
             source "$install_file"
-            npm_audit_verdict "$1"
+            npm_audit_verdict "$@"
         )
     }
+
+    # Strict mode (corepack, #985): an empty invalid[] is not enough — an
+    # unsigned package (non-empty, absent, or null missing[]) is refused.
+    # Default mode (agnix) must keep treating those as installable.
+    assert_equals "install" \
+        "$(classify_agnix_audit '{"invalid":[],"missing":[]}' strict)" \
+        "strict: a fully clean audit installs"
+    assert_equals "unsigned" \
+        "$(classify_agnix_audit '{"invalid":[],"missing":[{"name":"corepack"}]}' strict)" \
+        "strict: a package in missing[] is unsigned"
+    assert_equals "unsigned" \
+        "$(classify_agnix_audit '{"invalid":[]}' strict)" \
+        "strict: an absent missing[] is not evidence of a signature"
+    assert_equals "fatal" \
+        "$(classify_agnix_audit '{"invalid":[{"name":"x"}],"missing":[{"name":"y"}]}' strict)" \
+        "strict: a mismatch still outranks unsigned"
+    assert_equals "unsigned" \
+        "$(classify_agnix_audit 'npm notice x {"invalid":[],"missing":[{"name":"c"}]}' strict)" \
+        "strict: unsigned is decided on the selected body, prose and all"
+    assert_equals "install" \
+        "$(classify_agnix_audit '{"invalid":[],"missing":[{"name":"agnix"}]}')" \
+        "default mode is unchanged: missing[] alone does not block agnix"
 
     # Clean audit — real output from `npm audit signatures --json`.
     # This is also the fail-CLOSED guard: several plausible edits (dropping the

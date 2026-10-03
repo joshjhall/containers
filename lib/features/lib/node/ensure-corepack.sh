@@ -104,18 +104,10 @@ _install_verified_corepack() {
     # which is non-zero for both a mismatch and an audit that could not run.
     audit_json=$(cd "$scratch" &&
         npm audit signatures --json --cache "$cache" 2>"$audit_err" || true)
-    verdict=$(npm_audit_verdict "$audit_json")
-
-    # The shared classifier keys only on invalid[]: a package the registry
-    # serves with NO signature lands in missing[] instead and would read as
-    # "install". agnix tolerates that (optional tool); corepack requires
-    # positive evidence, so a non-empty missing[] — or a body whose missing[]
-    # cannot be read cleanly — is treated as unverified.
-    if [ "$verdict" = "install" ] && ! command printf '%s' "$audit_json" |
-        command jq -e '(.missing | type) == "array" and (.missing | length) == 0' \
-            >/dev/null 2>&1; then
-        verdict="unsigned"
-    fi
+    # strict: an empty invalid[] is not enough for a required tool — a
+    # package the registry serves with NO signature lands in missing[], and
+    # the default (agnix) mode would read that as "install".
+    verdict=$(npm_audit_verdict "$audit_json" strict)
 
     case "$verdict" in
         install) ;;
