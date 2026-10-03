@@ -197,6 +197,28 @@ test_tty_empty_answer_keeps() {
     assert_dir_exists "$S/cache/node/myproj--issue-7" "node dir kept on empty answer"
 }
 
+# A confirmed prune that fails (a phantom entry, #1004) must not fail the
+# teardown. The stub delegates everything but a real prune to artifact-dir.
+test_tty_yes_failed_prune_exits_zero() {
+    if ! have_util_linux_script; then
+        skip_test "util-linux script not installed — TTY path not exercised"
+        return 0
+    fi
+    seed_issue7
+    command cat >"$S/failing-artifact-dir" <<EOF_STUB
+#!/usr/bin/env bash
+if [ "\$1" = prune ] && [ "\${3:-}" != --dry-run ]; then exit 1; fi
+exec bash "$WORKTREE_PRUNE_ARTIFACT_DIR_BIN" "\$@"
+EOF_STUB
+    RC=0
+    OUT="$(cd "$S/myproj" && command printf 'y\n' |
+        WORKTREE_PRUNE_ARTIFACT_DIR_BIN="$S/failing-artifact-dir" \
+            command script -q -e -c "bash '$SCRIPT' 7" /dev/null 2>/dev/null)" || RC=$?
+    assert_contains "$OUT" "Remove them? [y/N]" "TTY run prompts"
+    assert_equals "0" "$RC" "a failed prune never fails the teardown"
+    assert_dir_exists "$S/cache/cargo/myproj--issue-7" "stub prune removed nothing"
+}
+
 # `just worktree-rm` sets no override and PATH may lack artifact-dir, so the
 # repo-relative fallback (derived from the script's own location) is the path
 # actually taken; a wrong $_repo would make the tail silently print nothing.
@@ -236,6 +258,7 @@ run_test_with_setup test_invalid_n_exits_two "Invalid N exits 2"
 run_test_with_setup test_tty_yes_prunes "TTY 'y' prunes the dirs"
 run_test_with_setup test_tty_no_keeps "TTY 'n' keeps the dirs and prints the hint"
 run_test_with_setup test_tty_empty_answer_keeps "TTY empty answer keeps the dirs (default N)"
+run_test_with_setup test_tty_yes_failed_prune_exits_zero "TTY 'y' with a failing prune still exits 0"
 run_test_with_setup test_fallback_resolves_in_repo_artifact_dir "No override + no PATH copy falls back to in-repo artifact-dir"
 run_test_with_setup test_recipe_invokes_script "worktree-rm recipe invokes the script"
 
