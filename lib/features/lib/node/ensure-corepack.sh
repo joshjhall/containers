@@ -106,10 +106,25 @@ _install_verified_corepack() {
         npm audit signatures --json --cache "$cache" 2>"$audit_err" || true)
     verdict=$(npm_audit_verdict "$audit_json")
 
+    # The shared classifier keys only on invalid[]: a package the registry
+    # serves with NO signature lands in missing[] instead and would read as
+    # "install". agnix tolerates that (optional tool); corepack requires
+    # positive evidence, so a non-empty missing[] — or a body whose missing[]
+    # cannot be read cleanly — is treated as unverified.
+    if [ "$verdict" = "install" ] && ! command printf '%s' "$audit_json" |
+        command jq -e '(.missing | type) == "array" and (.missing | length) == 0' \
+            >/dev/null 2>&1; then
+        verdict="unsigned"
+    fi
+
     case "$verdict" in
         install) ;;
         fatal)
             log_error "corepack signature verification FAILED for ${COREPACK_VERSION} — npm served a tarball that does not match its published registry signature. Refusing to install. Audit output: ${audit_json}"
+            return 1
+            ;;
+        unsigned)
+            log_error "corepack@${COREPACK_VERSION} has no registry signature to verify (npm audit reported it under missing[]). Refusing to install unsigned. Audit output: ${audit_json}"
             return 1
             ;;
         *)

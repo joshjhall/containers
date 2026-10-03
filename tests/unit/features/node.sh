@@ -249,7 +249,8 @@ test_node_permissions() {
 #   fetch-fails - the scratch (non-global) install exits 1
 # PIN (optional, default 0.36.0) becomes COREPACK_VERSION; "" leaves it empty.
 # AUDIT (env, default clean) picks the `npm audit signatures --json` stdout:
-#   clean | mismatch | outage | empty
+#   clean | mismatch | outage | empty | unsigned
+# NO_SCRATCH (env, non-empty) makes create_secure_temp_dir fail.
 # VERSION_RC (env, default 0) is the installed corepack's `--version` exit.
 #
 # Prints the helper's exit code. Each npm call lands as one line in npm.calls
@@ -295,6 +296,7 @@ exit 0"
         mismatch) audit_out='{"invalid":[{"name":"corepack","version":"0.36.0"}],"missing":[]}' ;;
         outage) audit_out='{"error":{"code":"ECONNREFUSED","summary":"request failed"}}' ;;
         empty) audit_out='' ;;
+        unsigned) audit_out='{"invalid":[],"missing":[{"name":"corepack","version":"0.36.0"}]}' ;;
     esac
 
     command cat >"$stub_bin/npm" <<STUB
@@ -315,11 +317,15 @@ STUB
 
     local rc=0
     env -i PATH="$stub_bin:$tools" COREPACK_VERSION="$pin" SCRATCH="$scratch" \
+        NO_SCRATCH="${NO_SCRATCH:-}" \
         LOG="$TEST_TEMP_DIR/ensure.log" /bin/bash -c '
         log_message() { printf "MSG: %s\n" "$*" >>"$LOG"; }
         log_error() { printf "ERR: %s\n" "$*" >>"$LOG"; }
         log_command() { shift; "$@"; }
-        create_secure_temp_dir() { mkdir -p "$SCRATCH" && printf "%s\n" "$SCRATCH"; }
+        create_secure_temp_dir() {
+            [ -n "$NO_SCRATCH" ] && return 1
+            mkdir -p "$SCRATCH" && printf "%s\n" "$SCRATCH"
+        }
         source "$1"
         source "$2"
         ensure_corepack
@@ -380,6 +386,27 @@ test_corepack_unverifiable_audit_is_fatal() {
         assert_file_not_contains "$TEST_TEMP_DIR/ensure.log" "verification FAILED" \
             "an '$audit' audit is not reported as a mismatch"
     done
+}
+
+# A package served with no registry signature lands in missing[], not
+# invalid[]; the shared classifier alone would read that as clean (#985 review).
+test_corepack_unsigned_is_fatal() {
+    local rc
+    rc=$(AUDIT=unsigned _run_ensure_corepack installs)
+    assert_equals "1" "$rc" "ensure_corepack fails when corepack has no registry signature"
+    assert_equals "" "$(_npm_global_installs)" "nothing is installed globally when unsigned"
+    assert_file_contains "$TEST_TEMP_DIR/ensure.log" "Refusing to install unsigned" \
+        "an unsigned package gets its own error"
+}
+
+test_corepack_scratch_dir_failure_is_fatal() {
+    local rc
+    rc=$(NO_SCRATCH=1 _run_ensure_corepack installs)
+    assert_equals "1" "$rc" "ensure_corepack fails when no scratch dir can be created"
+    assert_equals "" "$(command cat "$TEST_TEMP_DIR/npm.calls")" \
+        "npm is not invoked without a scratch dir"
+    assert_file_contains "$TEST_TEMP_DIR/ensure.log" "Could not create a scratch directory" \
+        "the scratch-dir failure is logged"
 }
 
 test_corepack_fetch_failure_is_fatal() {
@@ -557,6 +584,8 @@ run_test_with_setup test_corepack_bundled_skips_npm "Bundled corepack is used as
 run_test_with_setup test_corepack_missing_installs_verified "Missing corepack is audited, then installed from the audited dir"
 run_test_with_setup test_corepack_signature_mismatch_is_fatal "corepack signature mismatch fails the build"
 run_test_with_setup test_corepack_unverifiable_audit_is_fatal "Unverifiable corepack audit fails the build"
+run_test_with_setup test_corepack_unsigned_is_fatal "Unsigned corepack (missing[]) fails the build"
+run_test_with_setup test_corepack_scratch_dir_failure_is_fatal "Scratch-dir creation failure fails the build"
 run_test_with_setup test_corepack_fetch_failure_is_fatal "corepack scratch fetch failure fails the build"
 run_test_with_setup test_corepack_install_failure_is_fatal "corepack install failure fails the build"
 run_test_with_setup test_corepack_install_off_path_is_fatal "corepack not on PATH after install fails the build"
