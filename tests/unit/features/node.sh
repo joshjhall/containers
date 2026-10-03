@@ -249,7 +249,7 @@ test_node_permissions() {
 #   fetch-fails - the scratch (non-global) install exits 1
 # PIN (optional, default 0.36.0) becomes COREPACK_VERSION; "" leaves it empty.
 # AUDIT (env, default clean) picks the `npm audit signatures --json` stdout:
-#   clean | mismatch | outage | empty | unsigned
+#   clean | mismatch | outage | empty | unsigned | no-missing | null-missing
 # NO_SCRATCH (env, non-empty) makes create_secure_temp_dir fail.
 # VERSION_RC (env, default 0) is the installed corepack's `--version` exit.
 #
@@ -297,6 +297,8 @@ exit 0"
         outage) audit_out='{"error":{"code":"ECONNREFUSED","summary":"request failed"}}' ;;
         empty) audit_out='' ;;
         unsigned) audit_out='{"invalid":[],"missing":[{"name":"corepack","version":"0.36.0"}]}' ;;
+        no-missing) audit_out='{"invalid":[]}' ;;
+        null-missing) audit_out='{"invalid":[],"missing":null}' ;;
     esac
 
     command cat >"$stub_bin/npm" <<STUB
@@ -390,13 +392,17 @@ test_corepack_unverifiable_audit_is_fatal() {
 
 # A package served with no registry signature lands in missing[], not
 # invalid[]; the shared classifier alone would read that as clean (#985 review).
+# An absent or null missing[] is not evidence of a signature either: jq reads
+# `null | length` as 0, so only the type check keeps those from installing.
 test_corepack_unsigned_is_fatal() {
-    local rc
-    rc=$(AUDIT=unsigned _run_ensure_corepack installs)
-    assert_equals "1" "$rc" "ensure_corepack fails when corepack has no registry signature"
-    assert_equals "" "$(_npm_global_installs)" "nothing is installed globally when unsigned"
-    assert_file_contains "$TEST_TEMP_DIR/ensure.log" "Refusing to install unsigned" \
-        "an unsigned package gets its own error"
+    local rc audit
+    for audit in unsigned no-missing null-missing; do
+        rc=$(AUDIT=$audit _run_ensure_corepack installs)
+        assert_equals "1" "$rc" "ensure_corepack fails when the audit is '$audit'"
+        assert_equals "" "$(_npm_global_installs)" "nothing is installed globally when the audit is '$audit'"
+        assert_file_contains "$TEST_TEMP_DIR/ensure.log" "Refusing to install unsigned" \
+            "an '$audit' audit is refused as unsigned"
+    done
 }
 
 test_corepack_scratch_dir_failure_is_fatal() {
