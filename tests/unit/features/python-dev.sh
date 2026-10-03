@@ -373,6 +373,32 @@ test_arg_order_check_catches_moved_include_python_dev() {
     assert_not_contains "$errors" "INCLUDE_NODE" "Unmoved INCLUDE_NODE* ARGs are not reported"
 }
 
+# Negative control: an ARG declared only before the stage FROM (in an earlier
+# stage) does not carry across FROM, so it must be reported too.
+test_arg_order_check_catches_cross_stage_arg() {
+    local mutated="$TEST_TEMP_DIR/Dockerfile.prevstage"
+    local errors
+    command awk '
+        /^ARG INCLUDE_PYTHON_DEV=/ { held=$0; next }
+        { lines[NR]=$0 }
+        END {
+            for (i = 1; i <= NR; i++) {
+                if (lines[i] ~ /^FROM .* AS base$/) print held
+                if (i in lines) print lines[i]
+            }
+        }
+    ' "$PROJECT_ROOT/Dockerfile" >"$mutated"
+
+    if ! command grep -B1 '^FROM .* AS base$' "$mutated" | command grep -q '^ARG INCLUDE_PYTHON_DEV='; then
+        assert_true false "Mutation did not move ARG INCLUDE_PYTHON_DEV above the stage FROM"
+    fi
+    errors=$(node_condition_arg_order_errors "$mutated")
+    assert_contains "$errors" "INCLUDE_PYTHON_DEV: declared at line" \
+        "ARG INCLUDE_PYTHON_DEV declared only in an earlier stage is reported"
+    assert_not_contains "$errors" "SKIP_LSP_INSTALL" "Unmoved SKIP_LSP_INSTALL is not reported"
+    assert_not_contains "$errors" "INCLUDE_NODE" "Unmoved INCLUDE_NODE* ARGs are not reported"
+}
+
 # ============================================================================
 # test-python-dev verification script (#1001)
 # ============================================================================
@@ -479,6 +505,7 @@ run_test_with_setup test_python_dev_verification "Python dev verification"
 run_test_with_setup test_node_implied_by_python_dev "Node implied by python-dev unless SKIP_LSP_INSTALL"
 run_test_with_setup test_node_condition_args_declared_before_use "Node RUN condition ARGs declared before use"
 run_test_with_setup test_arg_order_check_catches_moved_include_python_dev "ARG-order check catches moved INCLUDE_PYTHON_DEV"
+run_test_with_setup test_arg_order_check_catches_cross_stage_arg "ARG-order check catches an ARG from an earlier stage"
 run_test_with_setup test_python_dev_script_installed "Python dev: test-python-dev is installed (#1001)"
 run_test_with_setup test_python_dev_script_passes_when_all_tools_present "Python dev: test-python-dev exits 0 with all tools"
 run_test_with_setup test_python_dev_script_fails_on_missing_tool "Python dev: test-python-dev exits 1 on a missing tool"
