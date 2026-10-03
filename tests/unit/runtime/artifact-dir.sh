@@ -131,13 +131,63 @@ test_prune_removes_only_matching() {
     assert_dir_exists "$S/cache/venvs/other/myproj--issue-7"
 }
 
-# A symlinked entry is not followed into: its target must survive.
+# A symlinked entry is skipped outright. `rm -rf` on a bare symlink path would
+# only unlink the link (never the target), so "target survives" alone passes
+# without the guard; the LINK surviving and the nothing-found report are what
+# fail if the [ -L ] guard is removed.
 test_prune_skips_symlink() {
     command mkdir -p "$S/elsewhere" "$S/cache/venvs"
     command touch "$S/elsewhere/keep"
     command ln -s "$S/elsewhere" "$S/cache/venvs/myproj--issue-7"
     run_cmd prune myproj--issue-7
+    assert_equals "0" "$RC" "exit status"
+    assert_true "[ -L \"$S/cache/venvs/myproj--issue-7\" ]" "symlink left in place"
     assert_file_exists "$S/elsewhere/keep"
+    assert_equals "artifact-dir prune: nothing under $S/cache/*/myproj--issue-7" "$OUT" "reports nothing pruned"
+}
+
+test_prune_nothing_found() {
+    run_cmd prune myproj--issue-7
+    assert_equals "0" "$RC" "exit status"
+    assert_equals "artifact-dir prune: nothing under $S/cache/*/myproj--issue-7" "$OUT" "nothing-found report"
+}
+
+test_prune_real_run_output() {
+    command mkdir -p "$S/cache/venvs/myproj--issue-7"
+    run_cmd prune myproj--issue-7
+    assert_equals "removing: $S/cache/venvs/myproj--issue-7" "$OUT" "real-run output"
+    assert_dir_not_exists "$S/cache/venvs/myproj--issue-7"
+}
+
+# A mistyped preview flag must fail closed — usage error, nothing deleted.
+test_prune_unknown_flag_fails_closed() {
+    local f
+    command mkdir -p "$S/cache/venvs/myproj--issue-7"
+    for f in "--dryrun" "-n" "--dry_run"; do
+        run_cmd prune myproj--issue-7 "$f"
+        assert_equals "2" "$RC" "prune with '$f' is a usage error"
+    done
+    run_cmd prune myproj--issue-7 --dry-run extra
+    assert_equals "2" "$RC" "extra arg after --dry-run is a usage error"
+    assert_dir_exists "$S/cache/venvs/myproj--issue-7"
+}
+
+test_project_from_worktree() {
+    run_cmd -C "$S/myproj/.worktrees/issue-7" --project
+    assert_equals "0" "$RC" "exit status"
+    assert_equals "myproj" "$OUT" "--project from a worktree is the main checkout name"
+}
+
+# A project name that itself contains "--" must survive intact.
+test_project_name_with_double_dash() {
+    command mkdir -p "$S/my--proj"
+    command git -C "$S/my--proj" init -q -b main
+    command git -C "$S/my--proj" commit -q --allow-empty -m init
+    command git -C "$S/my--proj" worktree add -q -b feature/issue-9 "$S/my--proj/.worktrees/issue-9"
+    run_cmd -C "$S/my--proj/.worktrees/issue-9" --project
+    assert_equals "my--proj" "$OUT" "--project keeps an embedded --"
+    run_cmd -C "$S/my--proj/.worktrees/issue-9" --name
+    assert_equals "my--proj--issue-9" "$OUT" "--name keeps an embedded --"
 }
 
 test_prune_dry_run_deletes_nothing() {
@@ -172,7 +222,12 @@ run_test_with_setup test_invalid_kind_rejected "invalid kinds are usage errors"
 run_test_with_setup test_not_a_git_checkout "outside a git checkout exits 1"
 run_test_with_setup test_no_args_is_usage_error "no args is a usage error"
 run_test_with_setup test_prune_removes_only_matching "prune removes only /cache/*/<name>"
-run_test_with_setup test_prune_skips_symlink "prune does not follow a symlinked entry"
+run_test_with_setup test_prune_skips_symlink "prune skips a symlinked entry"
+run_test_with_setup test_prune_nothing_found "prune with no matches reports and exits 0"
+run_test_with_setup test_prune_real_run_output "prune reports each removed dir"
+run_test_with_setup test_prune_unknown_flag_fails_closed "prune fails closed on an unknown flag"
+run_test_with_setup test_project_from_worktree "--project from a worktree → <project>"
+run_test_with_setup test_project_name_with_double_dash "project names containing -- are kept intact"
 run_test_with_setup test_prune_dry_run_deletes_nothing "prune --dry-run deletes nothing"
 run_test_with_setup test_prune_refuses_main_checkout_name "prune refuses a main-checkout name"
 run_test_with_setup test_prune_refuses_bad_names "prune refuses empty/dot/slash/dash names"

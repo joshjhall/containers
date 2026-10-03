@@ -26,6 +26,7 @@
 #   artifact-dir [-C <path>] <kind>             create + print /cache/<kind>/<checkout>
 #   artifact-dir [-C <path>] --no-create <kind> print only
 #   artifact-dir [-C <path>] --name             print <checkout> only
+#   artifact-dir [-C <path>] --project          print <project> (main checkout name) only
 #   artifact-dir prune <checkout> [--dry-run]   remove /cache/*/<checkout>
 #
 # prune only accepts a linked-worktree name (one containing "--"), so it can
@@ -45,6 +46,7 @@ Usage:
   artifact-dir [-C <path>] <kind>             create + print /cache/<kind>/<checkout>
   artifact-dir [-C <path>] --no-create <kind> print the path without creating it
   artifact-dir [-C <path>] --name             print the <checkout> name only
+  artifact-dir [-C <path>] --project          print the <project> (main checkout) name only
   artifact-dir prune <checkout> [--dry-run]   remove /cache/*/<checkout> (worktree names only)
 EOF
     exit 2
@@ -55,8 +57,10 @@ valid_segment() {
     [[ "$1" =~ ^[A-Za-z0-9._][A-Za-z0-9._-]*$ ]] && [ "$1" != "." ] && [ "$1" != ".." ]
 }
 
+# Prints the checkout name, or with $2=project just <project> (the main
+# checkout's name, regardless of which checkout $1 is in).
 checkout_name() {
-    local dir="$1" git_dir common_dir top project
+    local dir="$1" want="${2:-checkout}" git_dir common_dir top project
     git_dir="$(builtin cd "$dir" && command git rev-parse --git-dir 2>/dev/null)" || {
         command echo "artifact-dir: not a git checkout: $dir" >&2
         exit 1
@@ -74,7 +78,7 @@ checkout_name() {
         project="$(command basename "$common_dir" .git)"
     fi
 
-    if [ "$git_dir" = "$common_dir" ]; then
+    if [ "$want" = project ] || [ "$git_dir" = "$common_dir" ]; then
         printf '%s\n' "$project"
     else
         top="$(builtin cd "$dir" && command git rev-parse --show-toplevel)"
@@ -84,8 +88,14 @@ checkout_name() {
 
 prune() {
     local name="${1:-}" dry_run=false
-    [ "${2:-}" = "--dry-run" ] && dry_run=true
     [ $# -le 2 ] || usage
+    # Fail closed: an unrecognised flag (e.g. a typo of --dry-run) must not
+    # fall through to a real delete.
+    case "${2:-}" in
+        '') ;;
+        --dry-run) dry_run=true ;;
+        *) usage ;;
+    esac
     if [ -z "$name" ] || ! valid_segment "$name"; then
         command echo "artifact-dir prune: invalid checkout name: '$name'" >&2
         exit 2
@@ -137,6 +147,11 @@ main() {
             --name)
                 [ $# -eq 1 ] || usage
                 checkout_name "$dir"
+                return
+                ;;
+            --project)
+                [ $# -eq 1 ] || usage
+                checkout_name "$dir" project
                 return
                 ;;
             -h | --help) usage ;;

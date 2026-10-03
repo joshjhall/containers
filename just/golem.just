@@ -64,10 +64,10 @@ worktree-rm N:
     # ask on a TTY, otherwise only print the command — never delete unprompted.
     # Best-effort; never fails the teardown.
     _ad="$(command -v artifact-dir || echo "{{ justfile_directory() }}/lib/runtime/commands/artifact-dir")"
-    # --name is the CURRENT checkout's name; strip any "--<worktree>" suffix so
-    # running this from inside another worktree still yields the project.
-    _proj="$(bash "$_ad" --name 2>/dev/null)" || exit 0
-    _name="${_proj%%--*}--issue-$_n"
+    # --project is the main checkout's name even when run from inside another
+    # worktree (and even if the project name itself contains "--").
+    _proj="$(bash "$_ad" --project 2>/dev/null)" || exit 0
+    _name="$_proj--issue-$_n"
     _hits="$(bash "$_ad" prune "$_name" --dry-run 2>/dev/null | command grep '^would remove: ')" || exit 0
     command echo "Build-artifact dirs left by issue-$_n:"
     command echo "$_hits" | command sed 's/^would remove: /  /'

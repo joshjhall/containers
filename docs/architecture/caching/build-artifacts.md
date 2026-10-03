@@ -41,6 +41,7 @@ The image ships the `artifact-dir` command so projects don't re-implement this:
 artifact-dir venvs              # mkdir -p + print /cache/venvs/<checkout>
 artifact-dir --no-create target # print only
 artifact-dir --name             # print <checkout> only
+artifact-dir --project          # print <project> (the main checkout's name)
 artifact-dir -C path/to/repo venvs
 ```
 
