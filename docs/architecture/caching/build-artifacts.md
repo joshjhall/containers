@@ -187,9 +187,17 @@ artifact-dir prune myproj--issue-569             # remove /cache/*/myproj--issue
 `prune` is scoped to one project, which it resolves from the current
 directory (or `-C <path>`). It only accepts that project's linked-worktree
 names, `<project>--<worktree>`, and only removes `/cache/<kind>/<name>`
-leaves. It never removes the main checkout's artifacts, another project's, or a
-shared cache, even if the project directory name itself contains `--`. Outside
-a checkout it refuses to run.
+leaves. It never removes this project's main-checkout artifacts or a shared
+cache, even if the project directory name itself contains `--`. Outside a
+checkout it refuses to run.
+
+Known limit: the check is a name prefix. If two projects share a cache volume
+and one is named as the other's name plus `--<x>` (`app` and `app--x`), then
+`app--x`'s main-checkout leaf looks like worktree `x` of `app`. Avoid that
+naming.
+
+Kinds starting with `.` are rejected, because prune's `/cache/*/<name>` glob
+could never match them.
 
 `just worktree-rm N` runs this check after removing the worktree. If it finds
 dirs for `<project>--issue-N`, it lists them. On a TTY it asks before removing

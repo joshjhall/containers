@@ -93,7 +93,7 @@ test_no_create_does_not_create() {
 
 test_invalid_kind_rejected() {
     local k
-    for k in ".." "." "a/b" "-x" ""; do
+    for k in ".." "." "a/b" "-x" "" ".venv"; do
         run_cmd -C "$S/myproj" "$k"
         assert_equals "2" "$RC" "kind '$k' is a usage error"
     done

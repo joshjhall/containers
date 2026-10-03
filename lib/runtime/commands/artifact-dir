@@ -30,9 +30,12 @@
 #   artifact-dir [-C <path>] prune <checkout> [--dry-run]   remove /cache/*/<checkout>
 #
 # prune is scoped to one project, resolved from the cwd or -C: it accepts only
-# "<project>--<worktree>" names, so it can never remove the main checkout's
-# leaf (even if the project name contains "--"), another project's dirs, or a
-# shared cache root. Outside a checkout it refuses rather than guess.
+# "<project>--<worktree>" names, so it never removes this project's main leaf
+# (even if the project name contains "--") or a shared cache root, and outside
+# a checkout it refuses rather than guess. KNOWN LIMIT: it is a prefix check,
+# so if an unrelated project is itself named "<project>--<x>", that project's
+# main leaf is indistinguishable from this project's worktree <x>. Avoid
+# naming one project as another's name plus "--".
 #
 # ARTIFACT_CACHE_ROOT overrides /cache (used by tests).
 #
@@ -186,7 +189,9 @@ main() {
 
     [ $# -eq 1 ] || usage
     local kind="$1" name path
-    if ! valid_segment "$kind"; then
+    # No leading dot: prune's /cache/*/<name> glob does not match dot-dirs, so a
+    # ".venv" kind would create dirs prune could never clean up.
+    if ! valid_segment "$kind" || [ "${kind#.}" != "$kind" ]; then
         command echo "artifact-dir: invalid kind: '$kind'" >&2
         exit 2
     fi
