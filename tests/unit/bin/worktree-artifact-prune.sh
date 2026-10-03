@@ -253,17 +253,33 @@ test_fallback_resolves_in_repo_artifact_dir() {
     assert_dir_exists "$S/cache/cargo/myproj--issue-7" "nothing deleted"
 }
 
-# The recipe must call this script, not an inline copy that could drift untested.
-test_recipe_invokes_script() {
+# Runs the REAL worktree-rm recipe (a scratch copy of justfile + just/, so
+# justfile_directory() resolves bin/ to a stub prune script that exits 1) and
+# requires the teardown to stay green: fails if the recipe's `|| true` is
+# dropped, or if it stops calling the script with N — an inline copy of the
+# tail never writes prune-arg (#1019). The stubs are
+# scaffolding — no tests of their own (discriminate-rule-has-no-fixed-point).
+test_recipe_survives_failing_prune() {
     if ! command -v just >/dev/null 2>&1; then
-        skip_test "just not installed — recipe wiring not checked"
+        skip_test "just not installed — recipe wiring not exercised"
         return 0
     fi
-    local shown
-    shown="$(command just --justfile "$PROJECT_ROOT/justfile" --working-directory "$PROJECT_ROOT" \
-        --show worktree-rm 2>&1)" || true
-    assert_contains "$shown" '/bin/worktree-artifact-prune.sh" "$_n"' "worktree-rm runs the tested script"
-    assert_not_contains "$shown" "prune \"\$_name\" --dry-run" "no inline copy of the tail left in the recipe"
+    command mkdir -p "$S/jf/bin" "$S/wf"
+    command cp "$PROJECT_ROOT/justfile" "$S/jf/"
+    command cp -R "$PROJECT_ROOT/just" "$S/jf/"
+    command cp "$PROJECT_ROOT/bin/workflow-scripts-dir.sh" "$S/jf/bin/"
+    command printf '#!/usr/bin/env bash\nprintf "%%s" "$1" >"%s/prune-arg"\nexit 1\n' "$S" \
+        >"$S/jf/bin/worktree-artifact-prune.sh"
+    # workflow-scripts-dir.sh accepts a dir holding config.sh, owned by us and
+    # not group/world-writable.
+    command chmod 700 "$S/wf"
+    : >"$S/wf/config.sh"
+    command printf 'exit 0\n' >"$S/wf/worktree-rm.sh"
+    RC=0
+    (cd "$S/jf" && WORKFLOW_SCRIPTS_DIR="$S/wf" command just --justfile "$S/jf/justfile" \
+        --working-directory "$S/jf" worktree-rm 7 </dev/null >/dev/null 2>&1) || RC=$?
+    assert_equals "0" "$RC" "a failing prune never fails just worktree-rm"
+    assert_equals "7" "$(command cat "$S/prune-arg" 2>/dev/null)" "recipe called the prune script with N"
 }
 
 # ---------------------------------------------------------------------------
@@ -280,6 +296,6 @@ run_test_with_setup test_tty_empty_answer_keeps "TTY empty answer keeps the dirs
 run_test_with_setup test_half_tty_stdout_piped_deletes_nothing "Half-TTY (stdout piped) never prompts or deletes"
 run_test_with_setup test_tty_yes_failed_prune_exits_zero "TTY 'y' with a failing prune still exits 0"
 run_test_with_setup test_fallback_resolves_in_repo_artifact_dir "No override + no PATH copy falls back to in-repo artifact-dir"
-run_test_with_setup test_recipe_invokes_script "worktree-rm recipe invokes the script"
+run_test_with_setup test_recipe_survives_failing_prune "worktree-rm recipe stays green when the prune script fails"
 
 generate_report
