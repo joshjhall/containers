@@ -78,6 +78,24 @@ run_tty() {
         command script -q -e -c "bash '$SCRIPT' 7" /dev/null 2>/dev/null)" || RC=$?
 }
 
+# run_tty needs util-linux `script` (-q -e -c); BSD/busybox `script` takes other
+# flags, so presence alone is not enough to run rather than skip.
+have_util_linux_script() {
+    command script --version 2>&1 | command grep -q util-linux
+}
+
+# PATH with every entry holding an `artifact-dir` dropped, so the script must
+# fall back to the in-repo copy.
+path_without_artifact_dir() {
+    local out="" p
+    local IFS=:
+    for p in $PATH; do
+        [ -x "$p/artifact-dir" ] && continue
+        out="${out:+$out:}$p"
+    done
+    command printf '%s' "$out"
+}
+
 # ---------------------------------------------------------------------------
 
 # The core guarantee: no TTY means list + hint, and nothing is deleted. Fails if
@@ -140,7 +158,7 @@ test_invalid_n_exits_two() {
 }
 
 test_tty_yes_prunes() {
-    if ! command -v script >/dev/null 2>&1; then
+    if ! have_util_linux_script; then
         skip_test "util-linux script not installed — TTY path not exercised"
         return 0
     fi
@@ -153,7 +171,7 @@ test_tty_yes_prunes() {
 }
 
 test_tty_no_keeps() {
-    if ! command -v script >/dev/null 2>&1; then
+    if ! have_util_linux_script; then
         skip_test "util-linux script not installed — TTY path not exercised"
         return 0
     fi
@@ -163,6 +181,35 @@ test_tty_no_keeps() {
     assert_contains "$OUT" "kept — remove later with: artifact-dir prune myproj--issue-7" "'n' keeps and hints"
     assert_dir_exists "$S/cache/cargo/myproj--issue-7" "cargo dir kept on 'n'"
     assert_dir_exists "$S/cache/node/myproj--issue-7" "node dir kept on 'n'"
+}
+
+# Enter / EOF is the default answer and must keep the dirs: [y/N] defaults to N.
+test_tty_empty_answer_keeps() {
+    if ! have_util_linux_script; then
+        skip_test "util-linux script not installed — TTY path not exercised"
+        return 0
+    fi
+    seed_issue7
+    run_tty "$S/myproj" ""
+    assert_equals "0" "$RC" "exit status"
+    assert_contains "$OUT" "kept — remove later with: artifact-dir prune myproj--issue-7" "empty answer keeps and hints"
+    assert_dir_exists "$S/cache/cargo/myproj--issue-7" "cargo dir kept on empty answer"
+    assert_dir_exists "$S/cache/node/myproj--issue-7" "node dir kept on empty answer"
+}
+
+# `just worktree-rm` sets no override and PATH may lack artifact-dir, so the
+# repo-relative fallback (derived from the script's own location) is the path
+# actually taken; a wrong $_repo would make the tail silently print nothing.
+test_fallback_resolves_in_repo_artifact_dir() {
+    seed_issue7
+    local clean_path
+    clean_path="$(path_without_artifact_dir)"
+    RC=0
+    OUT="$(cd "$S/myproj" && env -u WORKTREE_PRUNE_ARTIFACT_DIR_BIN PATH="$clean_path" \
+        bash "$SCRIPT" 7 </dev/null 2>/dev/null)" || RC=$?
+    assert_equals "0" "$RC" "exit status"
+    assert_contains "$OUT" "  remove with: artifact-dir prune myproj--issue-7" "fallback artifact-dir found the dirs"
+    assert_dir_exists "$S/cache/cargo/myproj--issue-7" "nothing deleted"
 }
 
 # The recipe must call this script, not an inline copy that could drift untested.
@@ -188,6 +235,8 @@ run_test_with_setup test_missing_artifact_dir_exits_zero "Unresolvable artifact-
 run_test_with_setup test_invalid_n_exits_two "Invalid N exits 2"
 run_test_with_setup test_tty_yes_prunes "TTY 'y' prunes the dirs"
 run_test_with_setup test_tty_no_keeps "TTY 'n' keeps the dirs and prints the hint"
+run_test_with_setup test_tty_empty_answer_keeps "TTY empty answer keeps the dirs (default N)"
+run_test_with_setup test_fallback_resolves_in_repo_artifact_dir "No override + no PATH copy falls back to in-repo artifact-dir"
 run_test_with_setup test_recipe_invokes_script "worktree-rm recipe invokes the script"
 
 generate_report
