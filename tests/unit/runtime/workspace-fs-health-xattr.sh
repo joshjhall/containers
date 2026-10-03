@@ -81,6 +81,9 @@ test_xattr_report_workaround_survives_a_path_with_spaces() {
     # reverted in some other way, and would pass on a one-liner that was
     # whitespace-safe but otherwise wrong (grep-pin-is-not-behavioral-
     # coverage.md).
+    #
+    # Every step below mutates PROJECT_ROOT, so refuse before the first one.
+    assert_in_fixture_repo || return 0
     seed_symlinks
     command ln -s realfile.txt "$PROJECT_ROOT/spaced name.link"
     git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
@@ -94,7 +97,7 @@ test_xattr_report_workaround_survives_a_path_with_spaces() {
     # "git -C <root> ls-files" marker, with the log prefix stripped.
     emitted=$(command printf '%s\n' "$output" |
         /usr/bin/grep -F 'ls-files -s |' |
-        /usr/bin/sed 's/^.*\] *//')
+        /usr/bin/sed 's/^[^]]*\] *//')
 
     assert_contains "$emitted" "ls-files" \
         "The emitted workaround line is recoverable from the report"
@@ -112,6 +115,95 @@ test_xattr_report_workaround_survives_a_path_with_spaces() {
     git -C "$PROJECT_ROOT" checkout -- . >/dev/null 2>&1
     assert_file_exists "$PROJECT_ROOT/spaced name.link" \
         "git checkout -- . restores the spaced symlink (issue #977)"
+}
+
+# The same workaround is also a copy-paste snippet in the build troubleshooting
+# doc. Two hand-maintained copies drift (issue #981), and the docs copy is the
+# one a user pastes mid-outage, so it gets the same treatment as the emitted
+# one: executed, and compared against the emitted line.
+BUILD_ISSUES_DOC="$(dirname "${BASH_SOURCE[0]}")/../../../docs/troubleshooting/build-issues.md"
+
+# The workaround deletes every tracked symlink and the restore step is
+# `git checkout -- .`, which discards uncommitted work. Pointed at the real
+# checkout, either would be destructive, so refuse unless PROJECT_ROOT is the
+# scratch fixture: non-empty, under TEST_TEMP_DIR, its own git toplevel, and
+# not the repository this test file lives in.
+assert_in_fixture_repo() {
+    local real_top fixture_top
+    real_top=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null || true)
+    fixture_top=$(git -C "${PROJECT_ROOT:-/nonexistent}" rev-parse --show-toplevel 2>/dev/null || true)
+
+    if [ -z "${TEST_TEMP_DIR:-}" ] || [ -z "${PROJECT_ROOT:-}" ] ||
+        [ "${PROJECT_ROOT#"$TEST_TEMP_DIR"/}" = "$PROJECT_ROOT" ] ||
+        [ -z "$fixture_top" ] ||
+        [ "$(cd "$PROJECT_ROOT" && pwd -P)" != "$(cd "$fixture_top" && pwd -P)" ] ||
+        [ "$fixture_top" = "$real_top" ]; then
+        fail_test "Refusing to run the workaround outside the scratch fixture repo (PROJECT_ROOT='${PROJECT_ROOT:-}')"
+        return 1
+    fi
+}
+
+# Every line of the doc that carries the workaround. Callers assert there is
+# exactly one, so a second snippet fails loudly instead of being picked at random.
+docs_workaround_lines() {
+    /usr/bin/grep -F 'ls-files -s |' "$BUILD_ISSUES_DOC" || true
+}
+
+test_xattr_docs_workaround_survives_a_path_with_spaces() {
+    # The docs copy run for real against the same spaced-symlink fixture as the
+    # emitted copy above. This is what catches a docs-only regression such as
+    # the mawk `printf "%s\0"` trap, which removes nothing and says nothing.
+    assert_in_fixture_repo || return 0
+    seed_symlinks
+    command ln -s realfile.txt "$PROJECT_ROOT/spaced name.link"
+    git -C "$PROJECT_ROOT" add -A >/dev/null 2>&1
+    git -C "$PROJECT_ROOT" commit -qm "spaced symlink" >/dev/null 2>&1
+
+    local docs_line
+    docs_line=$(docs_workaround_lines)
+
+    assert_equals "1" "$(command printf '%s\n' "$docs_line" | /usr/bin/grep -c 'ls-files')" \
+        "build-issues.md carries exactly one workaround line (issue #981)"
+
+    (cd "$PROJECT_ROOT" && eval "$docs_line") >/dev/null 2>&1
+
+    assert_file_not_exists "$PROJECT_ROOT/spaced name.link" \
+        "The documented workaround removes a tracked symlink whose path has a space (issue #981)"
+    assert_file_not_exists "$PROJECT_ROOT/good.link" \
+        "The documented workaround removes the ordinary tracked symlinks too (issue #981)"
+
+    git -C "$PROJECT_ROOT" checkout -- . >/dev/null 2>&1
+    assert_file_exists "$PROJECT_ROOT/spaced name.link" \
+        "The documented restore step puts the spaced symlink back (issue #981)"
+}
+
+test_xattr_docs_and_emitted_workaround_agree() {
+    # Executing each copy proves each works today; this proves they are the SAME
+    # command, so a fix applied to one copy for some quirk the fixture does not
+    # exercise cannot leave the other behind. The two lines differ on purpose in
+    # exactly two places — the script adds `-C <root>` and spells awk as
+    # `command awk` rather than `/usr/bin/awk` — and both sit before the awk
+    # invocation word. Stripping through that word leaves the field separator,
+    # the awk program and the xargs stage, which must match byte for byte.
+    seed_symlinks
+
+    local output emitted docs_line
+    output=$(FS_HEALTH_XATTR_PROBE="$(xattr_probe_stub 1)" \
+        run_fs_health_stderr sensitive)
+    emitted=$(command printf '%s\n' "$output" |
+        /usr/bin/grep -F 'ls-files -s |' |
+        /usr/bin/sed 's/^[^]]*\] *//')
+    docs_line=$(docs_workaround_lines)
+
+    # Guard the comparison against agreeing on nothing: an empty or missing
+    # line on both sides would otherwise compare equal.
+    assert_contains "$emitted" "ls-files -s | command awk " \
+        "The emitted workaround line is recoverable from the report (issue #981)"
+    assert_contains "$docs_line" "ls-files -s | /usr/bin/awk " \
+        "The documented workaround line is recoverable from build-issues.md (issue #981)"
+
+    assert_equals "${emitted#*awk }" "${docs_line#*awk }" \
+        "The documented and emitted workarounds run the same awk/xargs pipeline (issue #981)"
 }
 
 test_xattr_healthy_is_silent() {
@@ -285,6 +377,8 @@ test_xattr_probe_skipped_without_tracked_symlinks() {
 run_test_with_setup test_xattr_eloop_is_reported "ELOOP probe result names the condition (#977)"
 run_test_with_setup test_xattr_eloop_report_carries_workaround "ELOOP report carries restart + workaround (#977)"
 run_test_with_setup test_xattr_report_workaround_survives_a_path_with_spaces "The emitted workaround handles a spaced path (#977)"
+run_test_with_setup test_xattr_docs_workaround_survives_a_path_with_spaces "The documented workaround handles a spaced path (#981)"
+run_test_with_setup test_xattr_docs_and_emitted_workaround_agree "Documented and emitted workarounds agree (#981)"
 run_test_with_setup test_xattr_healthy_is_silent "Healthy xattr probe stays silent (#977)"
 run_test_with_setup test_xattr_indeterminate_is_silent "Indeterminate xattr probe stays silent (#977)"
 run_test_with_setup test_xattr_probe_does_not_repair "ELOOP diagnostic repairs nothing (#977)"
