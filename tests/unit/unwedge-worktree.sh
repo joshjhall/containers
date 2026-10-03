@@ -108,7 +108,6 @@ test_frees_path_when_contents_refuse_deletion() {
     command chmod 555 "$s/issue-7/demo/.venv/Lib"
 
     if command rm -rf "$s/issue-7" 2>/dev/null; then
-        command chmod 755 "$s/issue-7/demo/.venv/Lib" 2>/dev/null
         fail_test "fixture is not stuck: rm -rf removed it"
         return 0
     fi
@@ -243,6 +242,11 @@ test_output_does_not_claim_reclaimed_space() {
     command mkdir -p "$s/issue-6"
     out="$("$CMD" "$s/issue-6")"
     assert_contains "$out" "no reclaimable space" "states that no space is freed"
+    # The cause must hold for BOTH wedge variants. "no reachable inodes" was true
+    # only of EBADF; the ENOENT phantom (#1004) still stats, so that wording
+    # would misdescribe it.
+    assert_contains "$out" "cannot be removed from inside it" "states a cause true of both variants"
+    assert_not_contains "$out" "no reachable inodes" "does not claim an EBADF-only cause"
 }
 
 test_installed_by_dockerfile() {
