@@ -198,7 +198,10 @@ test_env_cannot_widen_pin() {
         "The pin stays at setup.sh's install location"
 }
 
-# The pinned location is the literal path lib/base/setup.sh installs to.
+# The pinned location is the literal path lib/base/setup.sh installs to. The
+# first assertion is behavioral (the value the sourced helper actually holds).
+# The second is only a source-text tripwire on setup.sh: it catches the install
+# line moving away from /usr/local/bin/cosign, not every way it could drift.
 test_pin_matches_setup_install_target() {
     local pinned
     pinned=$(bash -c "
