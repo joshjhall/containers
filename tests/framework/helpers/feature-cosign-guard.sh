@@ -146,6 +146,8 @@ test_cosign_shadowed_exits_feature() {
         "$name exits 1 when a non-base cosign shadows the base install"
     assert_contains "$out" "not the base install" \
         "the exit comes from the #940 resolved-path check"
+    assert_not_contains "$out" "PAST_GUARD" \
+        "$name does not continue past the cosign guard"
 }
 
 test_cosign_present_passes_guard() {
