@@ -341,9 +341,12 @@ test_collection_stops_at_all() {
         return 0
     fi
 
-    out=$(command printf '%s\n' bin/check-versions.sh tests/framework.sh | map_changed_files)
-    assert_equals "ALL" "$(command printf '%s\n' "$out" | command tail -1)" \
-        "a foundational file must end the collection with ALL"
+    # Foundational file FIRST, a mappable one after: collection must stop at
+    # ALL. With ALL last, removing the early return would still leave ALL as
+    # the final line and the test would prove nothing.
+    out=$(command printf '%s\n' tests/framework.sh bin/check-versions.sh | map_changed_files)
+    assert_equals "ALL" "$out" \
+        "a foundational file must end the collection with ALL and nothing after"
 }
 
 run_test test_runner_exports_flag "Pre-push runner exports SKIP_NETWORK_TESTS"
