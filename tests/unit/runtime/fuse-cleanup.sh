@@ -629,18 +629,20 @@ test_handles_spaces_in_path() {
 
 # Hold FILE open from a background process, and return only once fuser actually
 # sees the holder. Sets HOLDER_PID. Same readiness-poll shape as hold_lock: a
-# fixed sleep would let a slow runner sweep the file before the fd is open, and
-# the test would fail for the wrong reason.
+# fixed sleep would let a slow runner sweep the file before the fd is open.
+# Returns 1 if fuser never sees the holder, so the caller can fail as a setup
+# error rather than on a misleading count.
 hold_open() {
     local file="$1"
-    bash -c 'exec 3<"$1"; sleep 30' _ "$file" >/dev/null 2>&1 &
+    command bash -c 'exec 3<"$1"; command sleep 30' _ "$file" >/dev/null 2>&1 &
     HOLDER_PID=$!
     local waited=0
-    until fuser "$file" >/dev/null 2>&1; do
-        sleep 0.1
+    until command fuser "$file" >/dev/null 2>&1; do
+        command sleep 0.1
         waited=$((waited + 1))
-        [ "$waited" -gt 100 ] && break
+        [ "$waited" -gt 100 ] && return 1
     done
+    return 0
 }
 
 # The holder's `sleep` is a child that inherits fd 3, so kill it first (see
@@ -664,7 +666,11 @@ test_skips_file_held_open() {
     : >"$held"
     : >"$free"
 
-    hold_open "$held"
+    if ! hold_open "$held"; then
+        release_open "$HOLDER_PID"
+        fail_test "Setup: fuser never saw the background holder of $held"
+        return 0
+    fi
     local count
     count=$(run_cleanup "$TEST_TEMP_DIR")
     release_open "$HOLDER_PID"
