@@ -171,6 +171,11 @@ test_cosign_guard_mutant_is_detected() {
         "with the guard's exit no-op'd, $name continues past it"
     assert_not_equals "rc=1" "$(_cosign_guard_rc "$out")" \
         "the absent-cosign exit status discriminates the mutant"
+    out=$(run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" shadowed --mutate)
+    assert_contains "$out" "PAST_GUARD" \
+        "with the guard's exit no-op'd, a shadowed cosign also continues past it"
+    assert_not_equals "rc=1" "$(_cosign_guard_rc "$out")" \
+        "the shadowed-cosign exit status discriminates the mutant"
 }
 
 # register_cosign_guard_tests <feature-script>
