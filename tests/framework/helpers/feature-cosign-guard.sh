@@ -28,12 +28,27 @@
 #     verify_download_or_fail, ...) into a successful no-op that drains its
 #     stdin — a stub that never reads would SIGPIPE the writer of an
 #     `echo ... | tee` pipeline under pipefail. The build steps
-#     before the guard therefore run inert: no network, no root, no writes.
-#     This holds only while those steps invoke tools by bare name (or via
-#     `command`): a command written as an absolute path (/usr/bin/curl) is not
-#     a lookup and would run for real, so keep that out of the pre-guard code.
-#   - The copy is truncated after the guard's closing brace and ends with
+#     before the guard therefore run without network access.
+#   - The inner shell starts under `env -i`: the test framework `export -f`s
+#     ~90 functions (setup, run_test, assert_*, ...), and inheriting them
+#     would let a pre-guard call resolve to a real framework function instead
+#     of the no-op.
+#   - The copy is truncated at the guard's closing brace, which must be a
+#     column-0 `}` within 3 lines of `require_cosign ||` — anything looser
+#     could end at an unrelated `}` further down. It ends with
 #     `echo PAST_GUARD; exit 0`, so nothing after the guard runs on the host.
+#
+# What it does NOT neutralize, and therefore refuses or relies on:
+#   - Redirections. bash opens a `>`/`>>` target BEFORE resolving the command,
+#     so `command tee >/etc/x` creates /etc/x even though tee is a no-op. Every
+#     executed file (the copy and the copied guard) is scanned, and any write
+#     redirection whose target is not /dev/null or an fd (`2>&1`) is refused.
+#   - Running as root. The scan is the only thing between a missed write and
+#     a real system path, so uid 0 is refused outright.
+#   - Residual, not scanned: an absolute-path command (/usr/bin/curl is not a
+#     lookup and runs for real), `.`/`source` of a host file, `cd`, and
+#     `printf -v`/`read` into variables. None writes outside the sandbox today;
+#     keep the pre-guard code to bare-name tool calls.
 
 # run_feature_cosign_guard <feature-script> <mode> [--mutate]
 #
@@ -61,6 +76,12 @@ run_feature_cosign_guard() {
     # script on the test host is not an option.
     if ! command grep -q '^require_cosign ||' "$script"; then
         command printf 'guard not found in: %s\nrc=missing\n' "$script"
+        return 0
+    fi
+    # The redirection scan below is the only barrier between a missed write
+    # and a real system path; as root nothing else would stop it.
+    if [ "$(command id -u)" = "0" ]; then
+        command printf 'refusing to run as root: %s\nrc=missing\n' "$script"
         return 0
     fi
     dir=$(command mktemp -d)
@@ -97,30 +118,43 @@ STUB
         command chmod +x "$dir/bin/$helper"
     done
 
-    # Copy up to the guard's closing brace (the first column-0 `}` after
-    # `require_cosign ||`), optionally no-op its exit, then mark the far side.
-    # awk stops printing rather than exiting: an early exit would close the
-    # pipe on a still-writing sed, and SIGPIPE fails the caller's pipefail.
+    # Copy up to the guard's closing brace, optionally no-op its exit, then
+    # mark the far side. The brace must be a column-0 `}` within 3 lines of
+    # `require_cosign ||`; past that the guard is not the expected shape and
+    # the next column-0 `}` could belong to unrelated post-guard code. awk
+    # stops printing rather than exiting: an early exit would close the pipe on
+    # a still-writing sed, and SIGPIPE fails the caller's pipefail.
     command sed "s|/tmp/build-scripts/|$dir/build-scripts/|g" "$script" |
         command awk -v mutate="$mutate" '
-            done { next }
-            /^require_cosign \|\|/ { in_guard = 1 }
+            done || bad { next }
+            /^require_cosign \|\|/ { in_guard = 1; start = NR }
+            in_guard && NR - start > 3 { bad = 1; next }
             in_guard && mutate == "--mutate" { sub(/exit 1/, ":") }
             { print }
             in_guard && /^}/ { done = 1 }
             END { exit !done }
         ' >"$dir/feature-script" || {
-        # No column-0 `}` closed the guard (a one-line `require_cosign ||
-        # exit 1`, or an indented brace): the copy would run the whole script
-        # on the host. Refuse, with a status no assertion expects.
+        # No column-0 `}` closed the guard within 3 lines (a one-line
+        # `require_cosign || exit 1`, an indented brace, a longer block): the
+        # copy could run code past the guard on the host. Refuse, with a
+        # status no assertion expects.
         command printf 'guard not truncatable in: %s\nrc=missing\n' "$script"
         command rm -rf "$dir"
         return 0
     }
     echo 'echo PAST_GUARD; exit 0' >>"$dir/feature-script"
 
+    # Refuse any write redirection to a real path: bash opens the target
+    # before command lookup, so the no-op handler cannot stop it.
+    if ! _cosign_guard_redirects_safe "$dir/feature-script" \
+        "$dir/build-scripts/base/cosign-require.sh" 2>&1; then
+        command printf 'unsafe redirection in: %s\nrc=missing\n' "$script"
+        command rm -rf "$dir"
+        return 0
+    fi
+
     # shellcheck disable=SC2016 # expanded by the inner bash, not here
-    BASH_ENV="" PATH="$dir/bin" USERNAME="testuser" /bin/bash -c '
+    /usr/bin/env -i HOME="$dir" PATH="$dir/bin" USERNAME="testuser" /bin/bash -c '
         command_not_found_handle() {
             local _line
             while IFS= read -r _line; do :; done
@@ -130,6 +164,26 @@ STUB
     ' feature-script "$dir/feature-script" </dev/null 2>&1 || rc=$?
     command printf 'rc=%s\n' "$rc"
     command rm -rf "$dir"
+}
+
+# _cosign_guard_redirects_safe <file>...
+#
+# Succeeds when no non-comment line in the given files redirects output to
+# anything but /dev/null or an fd duplication (`2>&1`, `>&2`). Prints each
+# offending line to stderr. Deliberately coarse: a `>` inside a string or
+# `[ a > b ]` also trips it, which is a refusal, never a missed write.
+_cosign_guard_redirects_safe() {
+    ! command awk '
+        /^[[:space:]]*#/ { next }
+        {
+            line = $0
+            # Drop the benign forms, then look for any write redirection left.
+            gsub(/[0-9]*>>?[[:space:]]*\/dev\/null/, "", line)
+            gsub(/[0-9]*>&[0-9-]+/, "", line)
+            if (line ~ />/) { print FILENAME ":" FNR ": " $0 > "/dev/stderr"; bad = 1 }
+        }
+        END { exit !bad }
+    ' "$@"
 }
 
 # Last line of run_feature_cosign_guard output is "rc=<exit status>".
@@ -208,6 +262,77 @@ test_cosign_guard_untruncatable_is_refused() {
         "the refusal names the truncation, not a missing guard"
 }
 
+# The guard indented, plus a later column-0 `}` (a function past the guard):
+# an unbounded "first column-0 } after the guard" match would stop at that
+# later brace and run the post-guard code between them. Must be refused.
+test_cosign_guard_far_brace_is_refused() {
+    local out scratch
+    scratch=$(command mktemp)
+    command awk '
+        /^require_cosign \|\|/ { g = 1 }
+        g && /^}/ {
+            print "    }"
+            print "echo POST_GUARD_RAN"
+            print "post_guard_fn() {"
+            print "    :"
+            print "}"
+            g = 0; next
+        }
+        { print }
+    ' "$COSIGN_GUARD_SCRIPT" >"$scratch"
+    out=$(run_feature_cosign_guard "$scratch" absent)
+    command rm -f "$scratch"
+    assert_equals "rc=missing" "$(_cosign_guard_rc "$out")" \
+        "a guard closed only by a distant column-0 } is refused"
+    assert_contains "$out" "guard not truncatable" \
+        "the refusal names the truncation bound"
+    assert_not_contains "$out" "POST_GUARD_RAN" \
+        "no code past the guard ran"
+}
+
+# bash opens a redirection target before command lookup, so a write to a real
+# path in pre-guard code would land even with every tool a no-op. Inject one
+# into a scratch copy, pointed at a path inside a fresh temp dir so a failure
+# of the scan is observable (the file appears) rather than destructive.
+test_cosign_guard_unsafe_redirect_is_refused() {
+    local out scratch probe
+    scratch=$(command mktemp)
+    probe="$(command mktemp -d)/written-by-feature-script"
+    command awk -v probe="$probe" '
+        /^require_cosign \|\|/ && !done { print "command tee >" probe " </dev/null"; done = 1 }
+        { print }
+    ' "$COSIGN_GUARD_SCRIPT" >"$scratch"
+    out=$(run_feature_cosign_guard "$scratch" absent)
+    command rm -f "$scratch"
+    assert_equals "rc=missing" "$(_cosign_guard_rc "$out")" \
+        "a pre-guard write redirection to a real path is refused"
+    assert_contains "$out" "unsafe redirection" \
+        "the refusal names the redirection scan"
+    if [ -e "$probe" ]; then
+        assert_equals "absent" "present" "the redirection target was never created"
+    else
+        assert_equals "absent" "absent" "the redirection target was never created"
+    fi
+    command rm -rf "$(command dirname "$probe")"
+}
+
+# The redirection scan itself: benign forms pass, every write form trips it.
+test_cosign_guard_redirect_scan() {
+    local f
+    f=$(command mktemp)
+    command printf '%s\n' 'cmd 2>/dev/null' 'cmd >/dev/null 2>&1' \
+        'cmd >&2' '# echo x >/etc/comment-only' >"$f"
+    _cosign_guard_redirects_safe "$f" 2>/dev/null
+    assert_equals "0" "$?" "/dev/null, fd duplication and comments are allowed"
+    for line in 'cmd >/etc/x' 'cmd >>/etc/x' 'cmd 2>/tmp/x' 'cmd >"$VAR"' \
+        'cmd &>/etc/x' 'cmd >/dev/null >/etc/x'; do
+        command printf '%s\n' "$line" >"$f"
+        _cosign_guard_redirects_safe "$f" 2>/dev/null
+        assert_equals "1" "$?" "write redirection refused: $line"
+    done
+    command rm -f "$f"
+}
+
 # register_cosign_guard_tests <feature-script>
 #
 # Runs the tests above against <feature-script> in the calling suite.
@@ -218,4 +343,7 @@ register_cosign_guard_tests() {
     run_test test_cosign_present_passes_guard "Cosign present: feature passes guard"
     run_test test_cosign_guard_mutant_is_detected "Cosign guard mutant detected"
     run_test test_cosign_guard_untruncatable_is_refused "Cosign guard: untruncatable copy refused"
+    run_test test_cosign_guard_far_brace_is_refused "Cosign guard: distant closing brace refused"
+    run_test test_cosign_guard_unsafe_redirect_is_refused "Cosign guard: unsafe redirection refused"
+    run_test test_cosign_guard_redirect_scan "Cosign guard: redirection scan"
 }
