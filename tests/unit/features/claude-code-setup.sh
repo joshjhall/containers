@@ -3307,6 +3307,55 @@ test_librarian_escaping_symlinks_pruned() {
     assert_equals "yes" "$outside_intact" "rm removed the link, never followed it"
 }
 
+# Run the prune block with stub dir $1 prepended to PATH, LIBRARIAN_DIR=$2.
+# env -u BASH_ENV is required (#618): /etc/bash_env rebuilds PATH on
+# non-interactive bash, which would silently drop the stub.
+_run_symlink_prune_stubbed() {
+    local block
+    block="$(_extract_symlink_prune)"
+    env -u BASH_ENV PATH="$1:$PATH" LIBRARIAN_DIR="$2" bash -c '
+        log_message() { :; }
+        log_error() { command printf "%s\n" "$*" >&2; }
+        '"$block"
+}
+
+# Test (#973): the two fail-closed branches. A failing find must exit 1 and
+# prune nothing (not end the loop silently with a partial prune), and a link
+# realpath cannot resolve must exit 1 rather than fall through to delete. The
+# escaping link survives in both, so a regression to either fail-open shape
+# (partial prune, or delete on empty) is caught.
+test_librarian_symlink_prune_fails_closed() {
+    local scratch tree stubs rc out still real_realpath
+    scratch="$(command mktemp -d)"
+    tree="$scratch/librarian"
+    stubs="$scratch/stubs"
+    command mkdir -p "$tree" "$stubs" "$scratch/outside"
+    command ln -s "$scratch/outside" "$tree/.codegraph"
+
+    # find exits non-zero after listing the link: the prune must not act on it.
+    command printf '#!/bin/sh\ncommand printf "%%s\\0" "%s/.codegraph"\nexit 1\n' "$tree" >"$stubs/find"
+    command chmod +x "$stubs/find"
+    rc=0
+    out="$(_run_symlink_prune_stubbed "$stubs" "$tree" 2>&1)" || rc=$?
+    still="$([ -L "$tree/.codegraph" ] && command printf yes || command printf no)"
+    assert_equals "1" "$rc" "find failure exits 1"
+    assert_contains "$out" "find failed" "find failure is named"
+    assert_equals "yes" "$still" "find failure prunes nothing"
+
+    # realpath resolves the root but prints nothing for `-m` on a link.
+    command rm -f "$stubs/find"
+    real_realpath="$(command -v realpath)"
+    command printf '#!/bin/sh\n[ "$1" = "-m" ] && exit 1\nexec %s "$@"\n' "$real_realpath" >"$stubs/realpath"
+    command chmod +x "$stubs/realpath"
+    rc=0
+    out="$(_run_symlink_prune_stubbed "$stubs" "$tree" 2>&1)" || rc=$?
+    still="$([ -L "$tree/.codegraph" ] && command printf yes || command printf no)"
+    command rm -rf "$scratch"
+    assert_equals "1" "$rc" "unresolvable link exits 1"
+    assert_contains "$out" "cannot resolve" "unresolvable link is named"
+    assert_equals "yes" "$still" "unresolvable link is not deleted"
+}
+
 # Test (#973): the prune runs as root, so an empty or relative LIBRARIAN_DIR
 # must fail the build instead of walking an arbitrary tree.
 test_librarian_symlink_prune_refuses_bad_dir() {
@@ -3372,6 +3421,7 @@ run_test test_default_permissions_has_librarian_read "Librarian grant: DEFAULT_P
 run_test test_librarian_tree_not_group_world_writable "Librarian tree: post-extraction chmod strips group/world write (#1020)"
 run_test test_librarian_escaping_symlinks_pruned "Librarian tree: symlinks escaping the tree are pruned, in-tree kept (#973)"
 run_test test_librarian_symlink_prune_refuses_bad_dir "Librarian tree: prune refuses an empty/relative LIBRARIAN_DIR (#973)"
+run_test test_librarian_symlink_prune_fails_closed "Librarian tree: prune fails closed on find/realpath failure (#973)"
 
 # Generate test report
 generate_report
