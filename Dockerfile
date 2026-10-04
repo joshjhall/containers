@@ -549,7 +549,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Cron daemon for scheduled tasks
 # Automatically installed when INCLUDE_RUST_DEV, INCLUDE_DEV_TOOLS, or INCLUDE_BINDFS is enabled
+# INCLUDE_BINDFS is declared HERE, not with the bindfs RUN below: an ARG expands
+# empty before its declaration, so declaring it after this RUN silently dropped
+# cron from bindfs-only images and left /etc/cron.d/fuse-cleanup with no daemon
+# (#976). Guarded by tests/unit/features/cron.sh.
 ARG INCLUDE_CRON=false
+ARG INCLUDE_BINDFS=false
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_CRON}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ] || \
@@ -560,7 +565,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Bindfs FUSE overlay for host bind mount permission fixes
 # Automatically installed when INCLUDE_DEV_TOOLS is enabled
 # Fixes macOS VirtioFS permission issues; requires --cap-add SYS_ADMIN --device /dev/fuse at runtime
-ARG INCLUDE_BINDFS=false
+# (ARG INCLUDE_BINDFS is declared above the cron RUN, which also reads it.)
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_BINDFS}" = "true" ] || [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \

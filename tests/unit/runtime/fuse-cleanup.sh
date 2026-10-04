@@ -620,6 +620,101 @@ test_handles_spaces_in_path() {
 }
 
 # ============================================================================
+# fuser held-open skip and findmnt-discovered roots (issue #976)
+# ============================================================================
+#
+# test_checks_fuser above only pins the word "fuser" in the source; deleting the
+# `&& continue` after it would leave that green while yanking files out from
+# under live readers. These drive the branch for real.
+
+# Hold FILE open from a background process, and return only once fuser actually
+# sees the holder. Sets HOLDER_PID. Same readiness-poll shape as hold_lock: a
+# fixed sleep would let a slow runner sweep the file before the fd is open, and
+# the test would fail for the wrong reason.
+hold_open() {
+    local file="$1"
+    bash -c 'exec 3<"$1"; sleep 30' _ "$file" >/dev/null 2>&1 &
+    HOLDER_PID=$!
+    local waited=0
+    until fuser "$file" >/dev/null 2>&1; do
+        sleep 0.1
+        waited=$((waited + 1))
+        [ "$waited" -gt 100 ] && break
+    done
+}
+
+# The holder's `sleep` is a child that inherits fd 3, so kill it first (see
+# release_lock for the same trap).
+release_open() {
+    local pid="$1"
+    command pkill -P "$pid" 2>/dev/null || true
+    command kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+}
+
+test_skips_file_held_open() {
+    if ! command -v fuser >/dev/null 2>&1; then
+        skip_test "fuser not installed; the held-open skip cannot be exercised"
+        return 0
+    fi
+
+    command mkdir -p "$TEST_TEMP_DIR/held" "$TEST_TEMP_DIR/free"
+    local held="$TEST_TEMP_DIR/held/.fuse_hiddenHELD"
+    local free="$TEST_TEMP_DIR/free/.fuse_hiddenFREE"
+    : >"$held"
+    : >"$free"
+
+    hold_open "$held"
+    local count
+    count=$(run_cleanup "$TEST_TEMP_DIR")
+    release_open "$HOLDER_PID"
+
+    # The free file is what makes this discriminate: a GC that removes nothing
+    # also leaves the held file, but cannot report 1 or remove the free one.
+    assert_equals "1" "$count" "Counts only the file nobody holds open"
+    assert_file_exists "$held" "Leaves a .fuse_hidden file a live process holds open"
+    assert_file_not_exists "$free" "Still removes the unheld file in the same sweep"
+}
+
+# A findmnt stub that reports ROOT as the one FUSE mount. Echoes the stub path.
+stub_findmnt_reporting() {
+    local root="$1"
+    local stub_dir="$TEST_TEMP_DIR/stub-bin"
+    command mkdir -p "$stub_dir"
+    command printf '%s\n' '#!/bin/bash' "printf '%s\\n' $(printf '%q' "$root")" \
+        >"$stub_dir/findmnt"
+    command chmod +x "$stub_dir/findmnt"
+    echo "$stub_dir/findmnt"
+}
+
+test_sweeps_findmnt_discovered_root() {
+    # The production path: no ROOTS override, roots come from findmnt. Every
+    # other behavioral test bypasses discovery via FUSE_CLEANUP_ROOTS, and
+    # stub_findmnt only ever reports no mounts, so a discovery bug would pass.
+    local mount="$TEST_TEMP_DIR/mount"
+    local fallback="$TEST_TEMP_DIR/fallback"
+    command mkdir -p "$mount/a/b/c" "$fallback"
+    local discovered="$mount/a/b/c/.fuse_hiddenDISC"
+    local fallback_file="$fallback/.fuse_hiddenFALLBACK"
+    : >"$discovered"
+    : >"$fallback_file"
+
+    local stub
+    stub=$(stub_findmnt_reporting "$mount")
+
+    local count
+    count=$(FUSE_CLEANUP_FINDMNT="$stub" FUSE_CLEANUP_FALLBACK_ROOT="$fallback" \
+        FUSE_CLEANUP_LOCK="$TEST_TEMP_DIR/sweep.lock" bash "$SOURCE_FILE")
+
+    assert_equals "1" "$count" "Reports the file found under the discovered root"
+    assert_file_not_exists "$discovered" "Sweeps a root discovered via findmnt"
+    # Discovery outranks the fallback: with a live mount found, the fallback
+    # root is not swept.
+    assert_file_exists "$fallback_file" \
+        "Does not sweep the fallback root when findmnt reports a mount"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 
@@ -660,6 +755,10 @@ run_test_with_setup test_sweeps_after_lock_released "Sweeps once the lock is rel
 run_test_with_setup test_symlinked_lock_path_still_sweeps "Symlinked lock path degrades to unlocked"
 run_test_with_setup test_unopenable_lock_path_still_sweeps "Unopenable lock path degrades to unlocked"
 run_test_with_setup test_lock_is_non_blocking "Lock is non-blocking, not queueing"
+
+# Held-open skip and findmnt discovery (#976)
+run_test_with_setup test_skips_file_held_open "Skips a file a live process holds open (#976)"
+run_test_with_setup test_sweeps_findmnt_discovered_root "Sweeps a findmnt-discovered root (#976)"
 
 # Generate test report
 generate_report
