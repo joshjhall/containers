@@ -399,5 +399,14 @@ run_test_with_setup test_download_verification "Download verification functions"
 run_test_with_setup test_cosign_requirement_reference "Cosign availability guard referenced"
 run_test_with_setup test_sources_download_verify "Sources download-verify.sh"
 
+# ============================================================================
+# Cosign guard — runtime exit path (#941)
+# ============================================================================
+# test_cosign_requirement_reference proves the guard is written; these run the
+# real kubernetes.sh as a process and prove it terminates there.
+source "$(dirname "${BASH_SOURCE[0]}")/../../framework/helpers/feature-cosign-guard.sh"
+
+register_cosign_guard_tests "$PROJECT_ROOT/lib/features/kubernetes.sh"
+
 # Generate test report
 generate_report

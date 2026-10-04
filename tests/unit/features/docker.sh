@@ -468,5 +468,14 @@ run_test test_docker_gpg_fingerprint_defined "Docker GPG fingerprint constant de
 run_test test_docker_gpg_fingerprint_mismatch_handling "Docker GPG fingerprint mismatch handling"
 run_test test_docker_gpg_keyring_verification "Docker GPG keyring verification method"
 
+# ============================================================================
+# Cosign guard — runtime exit path (#941)
+# ============================================================================
+# test_cosign_requirement_reference proves the guard is written; these run the
+# real docker.sh as a process and prove it terminates there.
+source "$(dirname "${BASH_SOURCE[0]}")/../../framework/helpers/feature-cosign-guard.sh"
+
+register_cosign_guard_tests "$PROJECT_ROOT/lib/features/docker.sh"
+
 # Generate test report
 generate_report
