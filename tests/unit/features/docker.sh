@@ -472,60 +472,10 @@ run_test test_docker_gpg_keyring_verification "Docker GPG keyring verification m
 # Cosign guard — runtime exit path (#941)
 # ============================================================================
 # test_cosign_requirement_reference proves the guard is written; these run the
-# real docker.sh as a process and prove it terminates there. The --mutate case
-# no-ops the guard's `exit 1` in a scratch copy: if the absent-cosign test
-# could pass against that mutant it would not be testing the exit path.
+# real docker.sh as a process and prove it terminates there.
 source "$(dirname "${BASH_SOURCE[0]}")/../../framework/helpers/feature-cosign-guard.sh"
 
-COSIGN_GUARD_SCRIPT="$PROJECT_ROOT/lib/features/docker.sh"
-
-# Last line of run_feature_cosign_guard output is "rc=<exit status>".
-_cosign_guard_rc() {
-    command printf '%s\n' "$1" | command tail -n 1
-}
-
-test_cosign_absent_exits_feature() {
-    local out
-    out=$(run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" absent)
-    assert_equals "rc=1" "$(_cosign_guard_rc "$out")" \
-        "docker.sh exits 1 when cosign is absent"
-    assert_contains "$out" "cosign not found on PATH" \
-        "the exit comes from the cosign guard, not an earlier failure"
-    assert_not_contains "$out" "PAST_GUARD" \
-        "docker.sh does not continue past the cosign guard"
-}
-
-test_cosign_shadowed_exits_feature() {
-    local out
-    out=$(run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" shadowed)
-    assert_equals "rc=1" "$(_cosign_guard_rc "$out")" \
-        "docker.sh exits 1 when a non-base cosign shadows the base install"
-    assert_contains "$out" "not the base install" \
-        "the exit comes from the #940 resolved-path check"
-}
-
-test_cosign_present_passes_guard() {
-    local out
-    out=$(run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" present)
-    assert_equals "rc=0" "$(_cosign_guard_rc "$out")" \
-        "docker.sh runs through the guard when the base cosign is present"
-    assert_contains "$out" "PAST_GUARD" \
-        "harness reaches the far side of the guard (positive control)"
-}
-
-test_cosign_guard_mutant_is_detected() {
-    local out
-    out=$(run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" absent --mutate)
-    assert_contains "$out" "PAST_GUARD" \
-        "with the guard's exit no-op'd, docker.sh continues past it"
-    assert_not_equals "rc=1" "$(_cosign_guard_rc "$out")" \
-        "the absent-cosign exit status discriminates the mutant"
-}
-
-run_test test_cosign_absent_exits_feature "Cosign absent: feature exits 1"
-run_test test_cosign_shadowed_exits_feature "Cosign shadowed: feature exits 1"
-run_test test_cosign_present_passes_guard "Cosign present: feature passes guard"
-run_test test_cosign_guard_mutant_is_detected "Cosign guard mutant detected"
+register_cosign_guard_tests "$PROJECT_ROOT/lib/features/docker.sh"
 
 # Generate test report
 generate_report

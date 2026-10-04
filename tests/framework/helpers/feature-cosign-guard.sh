@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Shared harness that drives a feature script's require_cosign guard at runtime.
 #
-# SOURCE-ONLY: defines no tests. It lives under tests/framework/ so that
+# SOURCE-ONLY: defines test functions but runs none until a suite calls
+# register_cosign_guard_tests. It lives under tests/framework/ so that
 # run_unit_tests.sh (which discovers suites under tests/unit/) never runs it.
 #
-# Sourced by tests/unit/features/{docker,kubernetes}.sh. Both feature scripts
+# Sourced by tests/unit/features/{docker,kubernetes}.sh, which call
+# register_cosign_guard_tests. Both feature scripts
 # end their cosign section with
 #
 #     require_cosign || {
@@ -114,4 +116,65 @@ STUB
     ' feature-script "$dir/feature-script" </dev/null 2>&1 || rc=$?
     command printf 'rc=%s\n' "$rc"
     command rm -rf "$dir"
+}
+
+# Last line of run_feature_cosign_guard output is "rc=<exit status>".
+_cosign_guard_rc() {
+    command printf '%s\n' "$1" | command tail -n 1
+}
+
+# The four runtime tests, against $COSIGN_GUARD_SCRIPT. The --mutate case
+# no-ops the guard's `exit 1` in a scratch copy: if the absent-cosign test
+# could pass against that mutant it would not be testing the exit path.
+test_cosign_absent_exits_feature() {
+    local out name
+    name=$(command basename "$COSIGN_GUARD_SCRIPT")
+    out=$(run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" absent)
+    assert_equals "rc=1" "$(_cosign_guard_rc "$out")" \
+        "$name exits 1 when cosign is absent"
+    assert_contains "$out" "cosign not found on PATH" \
+        "the exit comes from the cosign guard, not an earlier failure"
+    assert_not_contains "$out" "PAST_GUARD" \
+        "$name does not continue past the cosign guard"
+}
+
+test_cosign_shadowed_exits_feature() {
+    local out name
+    name=$(command basename "$COSIGN_GUARD_SCRIPT")
+    out=$(run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" shadowed)
+    assert_equals "rc=1" "$(_cosign_guard_rc "$out")" \
+        "$name exits 1 when a non-base cosign shadows the base install"
+    assert_contains "$out" "not the base install" \
+        "the exit comes from the #940 resolved-path check"
+}
+
+test_cosign_present_passes_guard() {
+    local out name
+    name=$(command basename "$COSIGN_GUARD_SCRIPT")
+    out=$(run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" present)
+    assert_equals "rc=0" "$(_cosign_guard_rc "$out")" \
+        "$name runs through the guard when the base cosign is present"
+    assert_contains "$out" "PAST_GUARD" \
+        "harness reaches the far side of the guard (positive control)"
+}
+
+test_cosign_guard_mutant_is_detected() {
+    local out name
+    name=$(command basename "$COSIGN_GUARD_SCRIPT")
+    out=$(run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" absent --mutate)
+    assert_contains "$out" "PAST_GUARD" \
+        "with the guard's exit no-op'd, $name continues past it"
+    assert_not_equals "rc=1" "$(_cosign_guard_rc "$out")" \
+        "the absent-cosign exit status discriminates the mutant"
+}
+
+# register_cosign_guard_tests <feature-script>
+#
+# Runs the four tests above against <feature-script> in the calling suite.
+register_cosign_guard_tests() {
+    COSIGN_GUARD_SCRIPT="$1"
+    run_test test_cosign_absent_exits_feature "Cosign absent: feature exits 1"
+    run_test test_cosign_shadowed_exits_feature "Cosign shadowed: feature exits 1"
+    run_test test_cosign_present_passes_guard "Cosign present: feature passes guard"
+    run_test test_cosign_guard_mutant_is_detected "Cosign guard mutant detected"
 }
