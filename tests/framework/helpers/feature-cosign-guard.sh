@@ -99,12 +99,15 @@ STUB
 
     # Copy up to the guard's closing brace (the first column-0 `}` after
     # `require_cosign ||`), optionally no-op its exit, then mark the far side.
+    # awk stops printing rather than exiting: an early exit would close the
+    # pipe on a still-writing sed, and SIGPIPE fails the caller's pipefail.
     command sed "s|/tmp/build-scripts/|$dir/build-scripts/|g" "$script" |
         command awk -v mutate="$mutate" '
+            done { next }
             /^require_cosign \|\|/ { in_guard = 1 }
             in_guard && mutate == "--mutate" { sub(/exit 1/, ":") }
             { print }
-            in_guard && /^}/ { exit }
+            in_guard && /^}/ { done = 1 }
         ' >"$dir/feature-script"
     echo 'echo PAST_GUARD; exit 0' >>"$dir/feature-script"
 
