@@ -324,9 +324,8 @@ test_distrusted_opt_librarian_falls_through_to_cache() {
 
 # The shipped default candidate path must be where the build actually extracts
 # librarian. Every other test overrides WORKFLOW_OPT_LIBRARIAN, so this one runs
-# the resolver with it UNSET and reads the path it really probed from the
-# "Looked in" guidance (nothing else resolves, so the guidance always prints),
-# then ties it to LIBRARIAN_DIR as claude-code-setup.sh extracts it.
+# the resolver with it UNSET and reads the path it really probed, then ties it
+# to LIBRARIAN_DIR as claude-code-setup.sh extracts it.
 test_opt_librarian_default_matches_build_install() {
     setup
     local repo_root librarian_dir err
@@ -335,19 +334,23 @@ test_opt_librarian_default_matches_build_install() {
         "$repo_root/lib/features/claude-code-setup.sh")"
     assert_not_empty "$librarian_dir" "claude-code-setup.sh defines LIBRARIAN_DIR"
 
-    err="$(env -i PATH="$PATH" HOME="$TEST_DIR/empty-home" \
+    local out rc=0
+    out="$(env -i PATH="$PATH" HOME="$TEST_DIR/empty-home" \
         WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" \
         WORKFLOW_SCRIPTS_DIR="$TEST_DIR/no-override" \
-        bash "$SCRIPT" 2>&1 >/dev/null || true)"
-    # On a machine where the real install is trusted the resolver succeeds and
-    # prints no guidance; that is the one environment this check cannot read.
-    if [[ "$err" != *"Looked in:"* ]]; then
-        skip_test "the real $librarian_dir/plugins/workflow/scripts resolved here; default path not observable"
-        teardown
-        return 0
+        bash "$SCRIPT" 2>"$TEST_DIR/stderr")" || rc=$?
+    err="$(command cat "$TEST_DIR/stderr")"
+    # Every other source is neutralized, so the default candidate is the only
+    # thing that can resolve. Either branch exposes the path it probed: on a
+    # machine where the real install is trusted (a fixed image) it is the
+    # resolved stdout; elsewhere it is named in the "Looked in" guidance.
+    if [ "$rc" -eq 0 ]; then
+        assert_equals "$librarian_dir/plugins/workflow/scripts" "$out" \
+            "the resolved default /opt/librarian candidate is the build's extracted scripts dir"
+    else
+        assert_contains "$err" "\$CLAUDE_PLUGIN_ROOT/scripts, $librarian_dir/plugins/workflow/scripts," \
+            "the default /opt/librarian candidate is the build's extracted scripts dir"
     fi
-    assert_contains "$err" "\$CLAUDE_PLUGIN_ROOT/scripts, $librarian_dir/plugins/workflow/scripts," \
-        "the default /opt/librarian candidate is the build's extracted scripts dir"
     teardown
 }
 
@@ -412,8 +415,15 @@ make_owned_scripts_dir() {
 
 test_root_owned_dir_accepted() {
     setup
+    # Run as root, the fixture's owner IS the invoking user, so it would be
+    # accepted by the owned-by-us clause and never exercise `-user 0`.
+    if [ "$(/usr/bin/id -u)" = "0" ]; then
+        skip_test "running as root: the root-owner clause is indistinguishable from owned-by-us; needs a non-root user with passwordless sudo"
+        teardown
+        return 0
+    fi
     if ! have_root; then
-        skip_test "needs a root runner or passwordless sudo to create a root-owned fixture"
+        skip_test "needs passwordless sudo to create a root-owned fixture"
         teardown
         return 0
     fi
