@@ -163,6 +163,38 @@ update_luggage_catalog() {
     "$luggage_bin" catalog add-version "${tool}@${version}" --catalog "$catalog"
 }
 
+# sync_rust_minor_pins - Rewrite every X.Y-granularity Rust toolchain pin.
+#
+# Arguments:
+#   $1 - full Rust version (X.Y.Z); only its X.Y prefix is written
+#
+# Description:
+#   tests/unit/rust-version-sync.sh requires these to equal the Dockerfile
+#   RUST_VERSION's X.Y: the luggage-builder base image tag, Cargo.toml
+#   rust-version (MSRV), clippy.toml msrv, and every explicit CI
+#   `toolchain: "X.Y"` pin. A patch bump leaves them unchanged (same X.Y).
+#   Writes go through sed_inplace, so a dry run touches nothing.
+sync_rust_minor_pins() {
+    local minor
+    minor="$(printf '%s' "$1" | command grep -oE '^[0-9]+\.[0-9]+')"
+    [ -n "$minor" ] || return 1
+
+    sed_inplace "s/^FROM rust:[0-9][0-9.]*-/FROM rust:$minor-/" "$PROJECT_ROOT/Dockerfile" || return 1
+    if [ -f "$PROJECT_ROOT/Cargo.toml" ]; then
+        sed_inplace "s/^rust-version = \"[0-9][^\"]*\"/rust-version = \"$minor\"/" "$PROJECT_ROOT/Cargo.toml" || return 1
+    fi
+    if [ -f "$PROJECT_ROOT/clippy.toml" ]; then
+        sed_inplace "s/^msrv = \"[0-9][^\"]*\"/msrv = \"$minor\"/" "$PROJECT_ROOT/clippy.toml" || return 1
+    fi
+
+    local wf
+    for wf in "$PROJECT_ROOT"/.github/workflows/*.yml "$PROJECT_ROOT"/.github/workflows/*.yaml; do
+        [ -f "$wf" ] || continue
+        command grep -qE '^[[:space:]]*toolchain: *"?[0-9]+\.[0-9]+' "$wf" || continue
+        sed_inplace "s/^\([[:space:]]*toolchain: *\"\{0,1\}\)[0-9][0-9]*\.[0-9][0-9]*/\1$minor/" "$wf" || return 1
+    done
+}
+
 # Function to update a version in a file
 update_version() {
     local tool="$1"
@@ -223,12 +255,14 @@ update_version() {
                     # The devcontainer pins the same full X.Y.Z toolchain. It is
                     # asserted against the Dockerfile ARG by
                     # tests/unit/rust-version-sync.sh, so leaving it out made every
-                    # Rust bump fail that suite until fixed by hand. The X.Y-only
-                    # pins (CI toolchain, Cargo.toml MSRV, clippy.toml, the
-                    # luggage-builder image tag) are deliberately NOT touched here:
-                    # a patch bump does not change them, and a minor bump needs a
-                    # human to review MSRV implications.
+                    # Rust bump fail that suite until fixed by hand.
                     sed_inplace "s/RUST_VERSION: \"[0-9][^\"]*\"/RUST_VERSION: \"$latest\"/" "$PROJECT_ROOT/.devcontainer/docker-compose.yml"
+                    # The X.Y-only pins are asserted by the same suite, so a minor
+                    # bump that skipped them red-lit the whole auto-patch branch and
+                    # stranded every other tool's update with it (1.98 -> 1.99).
+                    # Sync them here; a moved MSRV is routed to human review by
+                    # auto-patch.yml instead of by a failing test.
+                    sync_rust_minor_pins "$latest" || return "$RC_UPDATE_FAILED"
                     ;;
                 Ruby)
                     sed_inplace "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"

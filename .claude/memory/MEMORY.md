@@ -70,7 +70,7 @@
 - [Stale base re-adds bin/igor, breaks typos](stale-base-typos-bin-igor.md) — worktree cut before #690 carries deleted bin/igor in push range
 - [dist profile scoping](dist-profile-scoping.md) — stibbons size tuning lives in [profile.dist] not workspace-wide [profile.release]
 - [aarch64 release native not cross](aarch64-release-native-not-cross.md) — release-binaries aarch64 leg builds native on ubuntu-24.04-arm
-- [Rust toolchain pin sync](rust-toolchain-pin-sync.md) — toolchain pinned in ~8 places (full X.Y.Z vs minor X.Y)
+- [Rust toolchain pin sync](rust-toolchain-pin-sync.md) — toolchain pinned in ~8 places (X.Y.Z vs X.Y); auto-patch syncs all, MSRV move holds the PR
 - [cargo missing from non-login/shebang shells](cargo-path-missing-luggage-rust.md) — luggage rust: /cache/cargo/bin empty, /usr/local/bin/cargo
 - [Review harness destructive rm (#746)](review-harness-destructive-rm-746.md) — ship-issue pre-PR review subagent ran `rm -rf` with unresolved `..`
 - [Host activity line shows pipeline phase](host-activity-line-shows-pipeline-phase.md) — golem host activity line sources from next-issue phase
