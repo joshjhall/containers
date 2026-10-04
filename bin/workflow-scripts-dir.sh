@@ -17,10 +17,13 @@
 # Resolution order (first hit wins):
 #   1. $WORKFLOW_SCRIPTS_DIR        explicit override (testing / unusual layouts)
 #   2. $CLAUDE_PLUGIN_ROOT/scripts  when a recipe is run from within Claude Code
-#   3. newest installed cache       ~/.claude/plugins/cache/librarian/workflow/*/scripts
+#   3. pinned container install     /opt/librarian/plugins/workflow/scripts
+#                                   (the signed tarball baked at build — #608/#671;
+#                                   root-owned, so the runtime user cannot modify it)
+#   4. newest installed cache       ~/.claude/plugins/cache/librarian/workflow/*/scripts
 #                                   (highest version dir wins; this is where the
 #                                   pinned local-marketplace install lands — #608)
-#   4. dev mount                    /workspace/librarian/plugins/workflow/scripts
+#   5. dev mount                    /workspace/librarian/plugins/workflow/scripts
 #                                   (the temporary ../../librarian compose mount
 #                                   used until librarian has its own devcontainer)
 #
@@ -29,8 +32,11 @@
 # empty dir never shadows a real one further down the list.
 #
 # Trust boundary (#667): the justfile `exec bash`es the scripts in the resolved
-# dir, so a resolved dir is accepted only when it is TRUSTED — owned by the
-# invoking user AND not group/world-writable. That closes the theme surfaced by
+# dir, so a resolved dir is accepted only when it is TRUSTED — owned by root or
+# the invoking user AND not group/world-writable. A root-owned tree (the
+# build-baked /opt/librarian) is at least as trustworthy as a user-owned one,
+# since the non-root user cannot modify it; any OTHER owner, or a group/world
+# write bit, is refused (#1020). That closes the theme surfaced by
 # #609's review: a cache "version" dir, an env-override, or a shared dev mount
 # that an attacker can write into would otherwise be exec'd. A distrusted source
 # does not hard-fail; it is skipped so a trusted source further down the list
@@ -47,8 +53,8 @@ is_scripts_dir() {
     [ -n "${1:-}" ] && [ -f "$1/config.sh" ]
 }
 
-# A candidate is trusted only if it is owned by the invoking user and is not
-# group- or world-writable — otherwise another principal could plant/replace the
+# A candidate is trusted only if it is owned by root or the invoking user and is
+# not group- or world-writable — otherwise another principal could plant/replace the
 # scripts the justfile is about to exec. `find -user`/`find -perm -MODE` are used
 # deliberately: the resolver runs on macOS BSD + Alpine busybox too, where
 # `stat`'s formatting flags differ (`-c` GNU vs `-f` BSD), while these `find`
@@ -58,8 +64,9 @@ is_trusted_dir() {
     local dir="${1:-}" owner
     [ -n "$dir" ] && [ -d "$dir" ] || return 1
     owner="$(/usr/bin/id -un)"
-    # Owned by us?
-    [ -n "$(/usr/bin/find "$dir" -maxdepth 0 -user "$owner" 2>/dev/null)" ] || return 1
+    # Owned by root or by us? (`-user 0` takes the numeric uid, so it holds even
+    # where root's account name differs.)
+    [ -n "$(/usr/bin/find "$dir" -maxdepth 0 \( -user 0 -o -user "$owner" \) 2>/dev/null)" ] || return 1
     # Group- or world-writable? (any match ⇒ not trusted)
     [ -z "$(/usr/bin/find "$dir" -maxdepth 0 \( -perm -0020 -o -perm -0002 \) 2>/dev/null)" ]
 }
@@ -71,7 +78,7 @@ accept() {
     local dir="${1:-}"
     is_scripts_dir "$dir" || return 1
     if ! is_trusted_dir "$dir"; then
-        command echo "workflow-scripts-dir: refusing $dir — not owned by $(/usr/bin/id -un) or is group/world-writable; skipping (#667)." >&2
+        command echo "workflow-scripts-dir: refusing $dir — not owned by root or $(/usr/bin/id -un), or is group/world-writable; skipping (#667)." >&2
         return 1
     fi
     return 0
@@ -89,7 +96,15 @@ if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && accept "$CLAUDE_PLUGIN_ROOT/scripts"; the
     exit 0
 fi
 
-# 3. Newest installed marketplace cache. Versions are sortable dirs (e.g.
+# 3. Pinned container install (#608). Path overridable via WORKFLOW_OPT_LIBRARIAN
+#    (mainly so tests can keep the real /opt/librarian out of a hermetic run).
+opt_librarian="${WORKFLOW_OPT_LIBRARIAN:-/opt/librarian/plugins/workflow/scripts}"
+if accept "$opt_librarian"; then
+    /usr/bin/printf '%s\n' "$opt_librarian"
+    exit 0
+fi
+
+# 4. Newest installed marketplace cache. Versions are sortable dirs (e.g.
 #    0.1.0); pick the highest so an upgraded install wins. `sort -V` is the
 #    natural fit but is a GNU coreutils extension absent from macOS BSD sort and
 #    busybox (Alpine) — and this resolver's whole point is to run on a host Mac
@@ -113,7 +128,7 @@ if [ -d "$cache_base" ]; then
     done < <(/usr/bin/ls -1 "$cache_base" 2>/dev/null | "${version_sort[@]}")
 fi
 
-# 4. Temporary dev mount (until librarian ships its own devcontainer — #607).
+# 5. Temporary dev mount (until librarian ships its own devcontainer — #607).
 #    Path overridable via WORKFLOW_DEV_MOUNT (mainly so tests can point the
 #    last-resort probe at a controlled location); defaults to the compose mount.
 dev_mount="${WORKFLOW_DEV_MOUNT:-/workspace/librarian/plugins/workflow/scripts}"
@@ -123,8 +138,8 @@ if accept "$dev_mount"; then
 fi
 
 command echo "workflow-scripts-dir: could not locate a trusted librarian 'workflow' plugin scripts dir." >&2
-command echo "  Looked in: \$WORKFLOW_SCRIPTS_DIR, \$CLAUDE_PLUGIN_ROOT/scripts," >&2
+command echo "  Looked in: \$WORKFLOW_SCRIPTS_DIR, \$CLAUDE_PLUGIN_ROOT/scripts, $opt_librarian," >&2
 command echo "  $cache_base/*/scripts, and $dev_mount." >&2
-command echo "  A candidate must contain config.sh AND be owned by $(/usr/bin/id -un) and not group/world-writable (#667)." >&2
+command echo "  A candidate must contain config.sh AND be owned by root or $(/usr/bin/id -un) and not group/world-writable (#667)." >&2
 command echo "  Install the librarian marketplace (see docs/claude-code/) or set WORKFLOW_SCRIPTS_DIR." >&2
 exit 1
