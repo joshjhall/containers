@@ -317,6 +317,23 @@ test_collection_keeps_each_sibling_suite() {
         "every sibling suite of both changed scripts must be collected"
 }
 
+# A bin script with no suite must collect nothing — neither a bogus exact path
+# nor a stray glob match (an unmatched `<stem>-*.sh` glob stays literal, so the
+# -f guard in the bin arm is what keeps it out).
+test_bin_unmatched_collects_nothing() {
+    local out
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+
+    out=$(map_to_test "bin/no-such-tool-1024.sh")
+    assert_empty "$out" "an uncovered bin script must map to no test path"
+
+    out=$(command printf '%s\n' bin/no-such-tool-1024.sh | map_changed_files)
+    assert_empty "$out" "an uncovered bin script must collect no test path"
+}
+
 test_collection_stops_at_all() {
     local out
     if ! _load_map_changed_files; then
@@ -346,6 +363,7 @@ run_test test_runtime_mapping_no_duplicate_paths "runtime mapping emits no dupli
 run_test test_bin_mapping_emits_all_siblings "bin mapping emits every sibling suite (#1024)"
 run_test test_collection_keeps_each_sibling_suite "runner collection keeps each sibling suite as its own path (#1024)"
 run_test test_collection_stops_at_all "runner collection ends with ALL for a foundational file"
+run_test test_bin_unmatched_collects_nothing "uncovered bin script maps to and collects no test path (#1024)"
 
 # Generate test report
 generate_report
