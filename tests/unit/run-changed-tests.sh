@@ -254,6 +254,91 @@ test_runtime_mapping_unmatched_is_silent() {
     assert_empty "$out" "an uncovered runtime script must map to no test path"
 }
 
+# The bin arm fans out to <stem>-*.sh siblings for the same reason the runtime
+# arm does: check-versions.sh was split (#1024), and a changed
+# bin/check-versions.sh must still run the moved checker-mock suite at push time.
+test_bin_mapping_emits_all_siblings() {
+    local out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # The exact set, not a count: a count of 2 passes if a sibling is swapped
+    # for some other existing suite or duplicated in place of one.
+    out=$(map_to_test "bin/check-versions.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
+$TESTS_DIR/unit/bin/check-versions.sh" "$out" \
+        "exactly the exact-match suite and its split sibling must be mapped (#1024)"
+}
+
+# The runner's own collection loop, not just map_to_test. #832's sibling fanout
+# was pinned only at the map_to_test level, while the loop that consumed it
+# joined a multi-path result with `| xargs` into one non-file key that the -f
+# filter then dropped — so a split suite ran NOTHING at push time, and no test
+# noticed. Drive the loop with a changed bin script and a changed runtime
+# script and require every emitted line to be one real suite.
+_load_map_changed_files() {
+    local body
+    _load_map_to_test || return 1
+    body=$(/usr/bin/awk '/^map_changed_files\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$RUNNER")
+    [ -n "$body" ] || return 1
+    eval "$body"
+}
+
+test_collection_keeps_each_sibling_suite() {
+    local out
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+
+    # The exact sorted set, each on its own line: a joined line (the xargs bug),
+    # a dropped sibling, a duplicate, or a substituted suite all change it.
+    out=$(command printf '%s\n' bin/check-versions.sh \
+        lib/runtime/42-workspace-fs-health.sh | map_changed_files | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
+$TESTS_DIR/unit/bin/check-versions.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health-cron-entry.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health-submodules.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health-worktrees.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health-xattr.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health.sh" "$out" \
+        "every sibling suite of both changed scripts, each once, must be collected"
+}
+
+# A bin script with no suite must collect nothing — neither a bogus exact path
+# nor a stray glob match (an unmatched `<stem>-*.sh` glob stays literal, so the
+# -f guard in the bin arm is what keeps it out).
+test_bin_unmatched_collects_nothing() {
+    local out
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+
+    out=$(map_to_test "bin/no-such-tool-1024.sh")
+    assert_empty "$out" "an uncovered bin script must map to no test path"
+
+    out=$(command printf '%s\n' bin/no-such-tool-1024.sh | map_changed_files)
+    assert_empty "$out" "an uncovered bin script must collect no test path"
+}
+
+test_collection_stops_at_all() {
+    local out
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+
+    # Foundational file FIRST, a mappable one after: collection must stop at
+    # ALL. With ALL last, removing the early return would still leave ALL as
+    # the final line and the test would prove nothing.
+    out=$(command printf '%s\n' tests/framework.sh bin/check-versions.sh | map_changed_files)
+    assert_equals "ALL" "$out" \
+        "a foundational file must end the collection with ALL and nothing after"
+}
+
 run_test test_runner_exports_flag "Pre-push runner exports SKIP_NETWORK_TESTS"
 run_test test_framework_defines_helper "framework.sh defines network_tests_disabled"
 run_test test_framework_exports_helper "framework.sh exports network_tests_disabled"
@@ -268,6 +353,10 @@ run_test test_runtime_mapping_emits_all_siblings "runtime mapping emits every si
 run_test test_runtime_mapping_unmatched_is_silent "uncovered runtime script maps to no test path (#832)"
 run_test test_runtime_mapping_keeps_prefixed_suites "runtime mapping finds suites that keep the NN- prefix (#832)"
 run_test test_runtime_mapping_no_duplicate_paths "runtime mapping emits no duplicate test paths (#832)"
+run_test test_bin_mapping_emits_all_siblings "bin mapping emits every sibling suite (#1024)"
+run_test test_collection_keeps_each_sibling_suite "runner collection keeps each sibling suite as its own path (#1024)"
+run_test test_collection_stops_at_all "runner collection ends with ALL for a foundational file"
+run_test test_bin_unmatched_collects_nothing "uncovered bin script maps to and collects no test path (#1024)"
 
 # Generate test report
 generate_report
