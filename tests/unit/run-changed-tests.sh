@@ -281,6 +281,54 @@ test_bin_mapping_emits_all_siblings() {
         "exactly the two known check-versions suites must be mapped"
 }
 
+# The runner's own collection loop, not just map_to_test. #832's sibling fanout
+# was pinned only at the map_to_test level, while the loop that consumed it
+# joined a multi-path result with `| xargs` into one non-file key that the -f
+# filter then dropped — so a split suite ran NOTHING at push time, and no test
+# noticed. Drive the loop with a changed bin script and a changed runtime
+# script and require every emitted line to be one real suite.
+_load_map_changed_files() {
+    local body
+    _load_map_to_test || return 1
+    body=$(/usr/bin/awk '/^map_changed_files\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$RUNNER")
+    [ -n "$body" ] || return 1
+    eval "$body"
+}
+
+test_collection_keeps_each_sibling_suite() {
+    local out count path
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+
+    out=$(command printf '%s\n' bin/check-versions.sh \
+        lib/runtime/42-workspace-fs-health.sh | map_changed_files)
+
+    count=0
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        count=$((count + 1))
+        assert_file_exists "$path" "each collected line must be ONE existing suite: $path"
+    done <<<"$out"
+
+    # 2 check-versions suites + 5 workspace-fs-health suites.
+    assert_equals "7" "$count" \
+        "every sibling suite of both changed scripts must be collected"
+}
+
+test_collection_stops_at_all() {
+    local out
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+
+    out=$(command printf '%s\n' bin/check-versions.sh tests/framework.sh | map_changed_files)
+    assert_equals "ALL" "$(command printf '%s\n' "$out" | command tail -1)" \
+        "a foundational file must end the collection with ALL"
+}
+
 run_test test_runner_exports_flag "Pre-push runner exports SKIP_NETWORK_TESTS"
 run_test test_framework_defines_helper "framework.sh defines network_tests_disabled"
 run_test test_framework_exports_helper "framework.sh exports network_tests_disabled"
@@ -296,6 +344,8 @@ run_test test_runtime_mapping_unmatched_is_silent "uncovered runtime script maps
 run_test test_runtime_mapping_keeps_prefixed_suites "runtime mapping finds suites that keep the NN- prefix (#832)"
 run_test test_runtime_mapping_no_duplicate_paths "runtime mapping emits no duplicate test paths (#832)"
 run_test test_bin_mapping_emits_all_siblings "bin mapping emits every sibling suite (#1024)"
+run_test test_collection_keeps_each_sibling_suite "runner collection keeps each sibling suite as its own path (#1024)"
+run_test test_collection_stops_at_all "runner collection ends with ALL for a foundational file"
 
 # Generate test report
 generate_report

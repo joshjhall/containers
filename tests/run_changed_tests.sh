@@ -238,6 +238,31 @@ map_to_test() {
     # No mapping found — no tests to run for this file
 }
 
+# map_changed_files - read changed paths on stdin, print one mapped test path
+# per line (or a single "ALL" and stop). The main block dedupes the result.
+#
+# map_to_test emits one path PER LINE — several when a suite is split into
+# siblings (#832, #1024). Each line must stay its own entry: the old loop
+# trimmed the result with `| xargs`, which joined a multi-path result into one
+# space-separated string that is not a file, so the -f check dropped it and a
+# split suite ran NOTHING at push time. Kept as a function so
+# tests/unit/run-changed-tests.sh can drive this loop, not just map_to_test.
+map_changed_files() {
+    local file result path
+    while IFS= read -r file; do
+        [ -z "$file" ] && continue
+        result=$(map_to_test "$file")
+        while IFS= read -r path; do
+            # Trim surrounding whitespace; skip empty lines
+            path="${path#"${path%%[![:space:]]*}"}"
+            path="${path%"${path##*[![:space:]]}"}"
+            [ -z "$path" ] && continue
+            command echo "$path"
+            [ "$path" = "ALL" ] && return 0
+        done <<<"$result"
+    done
+}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -263,20 +288,13 @@ echo ""
 RUN_ALL=false
 declare -A TEST_FILES_MAP # associative array for deduplication
 
-while IFS= read -r file; do
-    [ -z "$file" ] && continue
-    result=$(map_to_test "$file")
-    # Skip files with no mapped test (empty result or whitespace-only)
-    result=$(echo "$result" | command xargs) # trim whitespace
-    [ -z "$result" ] && continue
-
-    if [ "$result" = "ALL" ]; then
+while IFS= read -r path; do
+    if [ "$path" = "ALL" ]; then
         RUN_ALL=true
         break
     fi
-
-    TEST_FILES_MAP["$result"]=1
-done < <(echo "$CHANGED_FILES" | command sort -u)
+    TEST_FILES_MAP["$path"]=1
+done < <(echo "$CHANGED_FILES" | command sort -u | map_changed_files)
 
 # If foundational file changed, fall back to full suite
 if [ "$RUN_ALL" = true ]; then
