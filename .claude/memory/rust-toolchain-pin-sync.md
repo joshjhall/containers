@@ -1,6 +1,6 @@
 ---
 name: rust-toolchain-pin-sync
-description: "Rust toolchain lives in many pins; auto-patch only bumps the RUST_VERSION default, stranding the rest — sync all + guard test"
+description: "Rust toolchain lives in many pins; auto-patch syncs all X.Y + X.Y.Z pins; a moved MSRV holds the PR for review"
 metadata:
   node_type: memory
   type: project
@@ -19,12 +19,13 @@ Dockerfile `ARG RUST_VERSION` (full `X.Y.Z`) is the single source of truth.
   pins (ci/release-binaries/security-scan/evidence-run workflows),
   `Cargo.toml` rust-version (MSRV), `clippy.toml` msrv.
 
-**The auto-patch trap:** the weekly auto-patch only bumps the `RUST_VERSION`
-default, so it moves the Dockerfile ARG / luggage image / compose / rust.sh
-but leaves CI `toolchain:`, Cargo MSRV, and clippy msrv stranded on the old
-version — a silent half-bump (the 1.94/1.95/1.97 split #736 describes). When
-finishing a rust-bump PR, always re-check the CI/MSRV pins on `main`; they may
-be behind even if the Dockerfile looks done.
+**Auto-patch now syncs every pin.** The updater's Rust arm
+(`sync_rust_minor_pins` in `bin/lib/update-versions/updaters.sh`) rewrites the
+X.Y pins too. Previously it deliberately skipped them "for MSRV review", which
+made every minor Rust release fail `rust-version-sync` and strand the whole
+auto-patch batch (2026-10-04, 1.98 -> 1.99). MSRV review now happens via the
+`hold/review-required` gate: auto-patch.yml detects a moved Cargo.toml
+`rust-version` and holds the PR instead of auto-merging.
 
 `tests/unit/rust-version-sync.sh` (added in #737) now fails the build if any
 pin diverges from the Dockerfile ARG — run it after any bump; it names every

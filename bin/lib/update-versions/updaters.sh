@@ -163,6 +163,11 @@ update_luggage_catalog() {
     "$luggage_bin" catalog add-version "${tool}@${version}" --catalog "$catalog"
 }
 
+# sync_rust_minor_pins lives in its own module to keep this file under the
+# file-size ceiling (tests/unit/file-size-ceiling.sh).
+# shellcheck source=bin/lib/update-versions/rust-pins.sh
+source "$(dirname "${BASH_SOURCE[0]}")/rust-pins.sh"
+
 # Function to update a version in a file
 update_version() {
     local tool="$1"
@@ -223,12 +228,14 @@ update_version() {
                     # The devcontainer pins the same full X.Y.Z toolchain. It is
                     # asserted against the Dockerfile ARG by
                     # tests/unit/rust-version-sync.sh, so leaving it out made every
-                    # Rust bump fail that suite until fixed by hand. The X.Y-only
-                    # pins (CI toolchain, Cargo.toml MSRV, clippy.toml, the
-                    # luggage-builder image tag) are deliberately NOT touched here:
-                    # a patch bump does not change them, and a minor bump needs a
-                    # human to review MSRV implications.
+                    # Rust bump fail that suite until fixed by hand.
                     sed_inplace "s/RUST_VERSION: \"[0-9][^\"]*\"/RUST_VERSION: \"$latest\"/" "$PROJECT_ROOT/.devcontainer/docker-compose.yml"
+                    # The X.Y-only pins are asserted by the same suite, so a minor
+                    # bump that skipped them red-lit the whole auto-patch branch and
+                    # stranded every other tool's update with it (1.98 -> 1.99).
+                    # Sync them here; a moved MSRV is routed to human review by
+                    # auto-patch.yml instead of by a failing test.
+                    sync_rust_minor_pins "$latest" || return "$RC_UPDATE_FAILED"
                     ;;
                 Ruby)
                     sed_inplace "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"

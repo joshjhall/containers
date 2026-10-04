@@ -1384,6 +1384,114 @@ EOF
 }
 
 # ============================================================================
+# Test: a minor Rust bump syncs every X.Y toolchain pin
+# ============================================================================
+# tests/unit/rust-version-sync.sh asserts the luggage-builder image tag, the
+# Cargo.toml / clippy.toml MSRV, and every CI `toolchain:` pin equal the
+# Dockerfile RUST_VERSION's X.Y. The Rust arm used to skip them, so the 1.99.0
+# release red-lit the whole auto-patch branch and stranded ~20 unrelated bumps.
+# Assert file content: sed exits 0 even when its pattern matches nothing.
+test_rust_minor_bump_syncs_minor_pins() {
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    mkdir -p "$test_dir/lib/features" "$test_dir/.devcontainer" "$test_dir/.github/workflows"
+    command cat >"$test_dir/Dockerfile" <<'EOF'
+FROM rust:1.98-slim-trixie AS luggage-builder
+FROM debian:13-slim AS base
+ARG RUST_VERSION=1.98.1
+EOF
+    command cat >"$test_dir/lib/features/rust.sh" <<'EOF'
+#!/bin/bash
+RUST_VERSION="${RUST_VERSION:-1.98.1}"
+EOF
+    command cat >"$test_dir/.devcontainer/docker-compose.yml" <<'EOF'
+        RUST_VERSION: "1.98.1"
+EOF
+    command cat >"$test_dir/Cargo.toml" <<'EOF'
+[workspace.package]
+rust-version = "1.98"
+EOF
+    command cat >"$test_dir/clippy.toml" <<'EOF'
+msrv = "1.98"
+EOF
+    # Two pins in one file, plus an evidence-matrix `default:` input that is
+    # data, not the build toolchain, and must be left alone.
+    command cat >"$test_dir/.github/workflows/ci.yml" <<'EOF'
+        with:
+          toolchain: "1.98"
+        with:
+          toolchain: "1.98"
+        default: "1.95.0"
+EOF
+    command cat >"$test_dir/.github/workflows/other.yml" <<'EOF'
+          toolchain: stable
+EOF
+    command cat >"$test_dir/luggage-stub" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    command chmod +x "$test_dir/luggage-stub"
+
+    local rc=0
+    (
+        source "$PROJECT_ROOT/bin/lib/common.sh"
+        source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+        source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+
+        # shellcheck disable=SC2030,SC2034 # consumed by update_version() from the sourced module
+        PROJECT_ROOT="$test_dir"
+        # shellcheck disable=SC2030,SC2034 # ditto
+        DRY_RUN=false
+        # shellcheck disable=SC2030,SC2034 # ditto
+        LUGGAGE_BIN="$test_dir/luggage-stub"
+
+        update_version "Rust" "1.98.1" "1.99.0" "Dockerfile" >/dev/null 2>&1
+    ) || rc=$?
+
+    local ok=true
+    [ "$rc" -eq 0 ] || {
+        echo "    update_version: expected 0, got $rc"
+        ok=false
+    }
+    command grep -q '^FROM rust:1.99-slim-trixie AS luggage-builder$' "$test_dir/Dockerfile" || {
+        echo "    luggage-builder base image was not rewritten to rust:1.99"
+        ok=false
+    }
+    command grep -q '^FROM debian:13-slim AS base$' "$test_dir/Dockerfile" || {
+        echo "    an unrelated FROM line was disturbed"
+        ok=false
+    }
+    command grep -q '^rust-version = "1.99"$' "$test_dir/Cargo.toml" || {
+        echo "    Cargo.toml rust-version was not rewritten to 1.99"
+        ok=false
+    }
+    command grep -q '^msrv = "1.99"$' "$test_dir/clippy.toml" || {
+        echo "    clippy.toml msrv was not rewritten to 1.99"
+        ok=false
+    }
+    [ "$(command grep -c 'toolchain: "1.99"' "$test_dir/.github/workflows/ci.yml")" -eq 2 ] || {
+        echo "    ci.yml: expected both toolchain pins rewritten to 1.99"
+        ok=false
+    }
+    command grep -q 'default: "1.95.0"' "$test_dir/.github/workflows/ci.yml" || {
+        echo "    ci.yml: the evidence-matrix default input was disturbed"
+        ok=false
+    }
+    command grep -q 'toolchain: stable' "$test_dir/.github/workflows/other.yml" || {
+        echo "    other.yml: a floating toolchain was disturbed"
+        ok=false
+    }
+    command grep -q 'RUST_VERSION: "1.99.0"' "$test_dir/.devcontainer/docker-compose.yml" || {
+        echo "    devcontainer RUST_VERSION was not rewritten to 1.99.0"
+        ok=false
+    }
+
+    command rm -rf "$test_dir"
+    assert_true "$ok" "A minor Rust bump syncs every X.Y toolchain pin and nothing else"
+}
+
+# ============================================================================
 # Test: the three new cases actually rewrite their pins
 # ============================================================================
 # Exit status alone cannot prove a rewrite happened: sed_inplace runs `sed -i`,
@@ -1690,6 +1798,7 @@ run_test test_gemfile_case_rewrites_triage_pin "gitlab-triage rewrites the Gemfi
 run_test test_unknown_gemfile_tool_returns_no_updater_case "unknown Gemfile tool reports a missing updater case"
 run_test test_failed_rewrite_exits_three "Failed rewrite exits 3 (fatal), not 2 (tolerated)"
 run_test test_luggage_catalog_failure_exits_three "Failed luggage catalog update returns RC_UPDATE_FAILED and exits 3"
+run_test test_rust_minor_bump_syncs_minor_pins "A minor Rust bump syncs every X.Y toolchain pin"
 run_test test_failure_summary_separates_causes "Failure summary separates causes and names the tools"
 
 # Generate report
