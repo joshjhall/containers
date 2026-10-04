@@ -63,11 +63,19 @@ test_fuse_conf() {
     assert_command_in_container "$image" "grep -c user_allow_other /etc/fuse.conf" "1"
 }
 
-# Test: Entrypoint contains bindfs logic
+# Test: Entrypoint wires in the bindfs logic
+#
+# The BINDFS_ENABLED logic moved out of entrypoint.sh into the sourced
+# lib/runtime/lib/setup-bindfs.sh in #108; this test kept grepping the
+# entrypoint and failed from then on, unnoticed because no CI tier runs this
+# suite (#976, #1027). Pin both halves: the module ships with the logic in it,
+# AND the entrypoint sources it — either alone would pass with bindfs dead.
 test_entrypoint_has_bindfs() {
     local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
 
-    assert_command_in_container "$image" "grep -c BINDFS_ENABLED /usr/local/bin/entrypoint" ""
+    assert_command_in_container "$image" \
+        'command grep -q BINDFS_ENABLED /opt/container-runtime/lib/setup-bindfs.sh && command grep -q "source \"\$_RUNTIME_LIB/setup-bindfs.sh\"" /usr/local/bin/entrypoint && echo bindfs-wired' \
+        "bindfs-wired"
 }
 
 # Test: fuse-cleanup-cron wrapper script exists and is executable
@@ -113,6 +121,25 @@ test_fuse_cleanup_shared_script_runs() {
     assert_command_in_container "$image" \
         'out=$(/usr/local/bin/fuse-cleanup); rc=$?; [ "$rc" -eq 0 ] && [ "$out" = "0" ] && echo cleaned-none' \
         "cleaned-none"
+}
+
+# Test: the INSTALLED shared GC actually sweeps stale files (issue #976)
+#
+# The two assertions above only ever run the GC with nothing to clean, so a
+# shipped copy that always printed 0 — the invisible stranded-files shape of
+# #948 — would pass them. This seeds a top-level and a 4-deep .fuse_hidden file
+# under a scratch root (via the FUSE_CLEANUP_ROOTS test seam, so no live mount
+# is touched) and requires exit 0, an exact count of 2, AND both files gone.
+# Compared in-container for the substring reason given in
+# test_no_bindfs_without_flag. The walk logic itself, the fuser held-open skip
+# and findmnt discovery are covered in tests/unit/runtime/fuse-cleanup.sh; this
+# pins that the binary the image ships is that logic.
+test_fuse_cleanup_sweeps_seeded_files() {
+    local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
+
+    assert_command_in_container "$image" \
+        'r=$(mktemp -d); mkdir -p "$r/a/b/c"; : >"$r/.fuse_hiddenTOP"; : >"$r/a/b/c/.fuse_hiddenDEEP"; out=$(FUSE_CLEANUP_ROOTS="$r" FUSE_CLEANUP_LOCK="$r.lock" /usr/local/bin/fuse-cleanup); rc=$?; [ "$rc" -eq 0 ] && [ "$out" = "2" ] && [ ! -e "$r/.fuse_hiddenTOP" ] && [ ! -e "$r/a/b/c/.fuse_hiddenDEEP" ] && echo swept-two' \
+        "swept-two"
 }
 
 # Test: fuse-cleanup-cron wrapper exits cleanly with no FUSE mounts
@@ -183,6 +210,7 @@ run_test test_fuse_cleanup_cron_job "fuse-cleanup cron job has correct permissio
 run_test test_cron_installed "Cron daemon auto-installed with bindfs"
 run_test test_fuse_cleanup_shared_script "shared fuse-cleanup GC is installed"
 run_test test_fuse_cleanup_shared_script_runs "shared fuse-cleanup GC runs cleanly"
+run_test test_fuse_cleanup_sweeps_seeded_files "shared fuse-cleanup GC sweeps seeded files"
 run_test test_fuse_cleanup_cron_runs "fuse-cleanup-cron runs cleanly"
 run_test test_no_bindfs_without_flag "Build without bindfs excludes it but keeps the shared GC"
 

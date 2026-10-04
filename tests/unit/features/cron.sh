@@ -270,6 +270,92 @@ test_cron_startup_order() {
     fi
 }
 
+# ============================================================================
+# Dockerfile ARG ordering for the cron RUN (#976)
+# ============================================================================
+#
+# A Dockerfile ARG expands empty before its declaration. ARG INCLUDE_BINDFS used
+# to be declared just AFTER the cron RUN, so a bindfs-only image never got the
+# daemon its /etc/cron.d/fuse-cleanup job needs — silently, since the condition
+# just read false. Same check shape as the Node RUN guard in python-dev.sh (#1008).
+
+# Line number of the cron RUN (the first RUN after ARG INCLUDE_CRON).
+cron_run_line() {
+    command awk '/^ARG INCLUDE_CRON=/{seen=1} seen && /^RUN /{print NR; exit}' "$1"
+}
+
+# Print the cron RUN condition as one line (from its RUN to the cron.sh call).
+extract_cron_clause() {
+    local run_line
+    run_line=$(cron_run_line "$1")
+    [ -n "$run_line" ] || return 0
+    command awk -v run="$run_line" 'NR >= run { print } NR >= run && /cron\.sh/ { exit }' "$1" |
+        command tr -d '\\\n'
+}
+
+# Print the ARG names the cron RUN condition reads, sorted, space-separated.
+cron_condition_vars() {
+    extract_cron_clause "$1" |
+        command grep -o '\${[A-Z_][A-Z0-9_]*}' |
+        command sed -e 's/^\${//' -e 's/}$//' |
+        command sort -u |
+        command tr '\n' ' ' |
+        command sed 's/ $//'
+}
+
+# Print one line per ARG the cron RUN reads that is NOT declared between the
+# RUN's stage FROM and the RUN itself; prints nothing when all are in scope.
+cron_condition_arg_order_errors() {
+    local dockerfile="$1"
+    local run_line stage_start var decls
+    run_line=$(cron_run_line "$dockerfile")
+    stage_start=$(command awk -v run="${run_line:-0}" 'NR < run && /^FROM /{last=NR} END{print last+0}' "$dockerfile")
+    for var in $(cron_condition_vars "$dockerfile"); do
+        if ! command awk -v lo="$stage_start" -v hi="${run_line:-0}" -v re="^ARG ${var}(=|$)" \
+            'NR > lo && NR < hi && $0 ~ re {found=1} END{exit !found}' "$dockerfile"; then
+            decls=$(command grep -nE "^ARG ${var}(=|$)" "$dockerfile" | command cut -d: -f1 | command tr '\n' ' ' | command sed 's/ $//')
+            echo "${var}: declared at line(s) ${decls:-none}, cron RUN at line ${run_line:-none} (stage FROM at line ${stage_start})"
+        fi
+    done
+}
+
+test_cron_condition_args_declared_before_use() {
+    local dockerfile="$PROJECT_ROOT/Dockerfile"
+
+    # Pin the derived list so the ordering check cannot go vacuous if the
+    # extraction stops matching.
+    assert_equals "INCLUDE_BINDFS INCLUDE_CRON INCLUDE_DEV_TOOLS INCLUDE_RUST_DEV" \
+        "$(cron_condition_vars "$dockerfile")" \
+        "Cron RUN condition reads exactly the expected ARGs"
+    assert_equals "" "$(cron_condition_arg_order_errors "$dockerfile")" \
+        "Every ARG the cron RUN condition reads is declared in-stage before it"
+    assert_equals "1" "$(command grep -c '^ARG INCLUDE_BINDFS=' "$dockerfile")" \
+        "INCLUDE_BINDFS is declared exactly once"
+}
+
+# Negative control: the pre-#976 layout (ARG INCLUDE_BINDFS just after the cron
+# RUN) must be reported, and only that ARG.
+test_cron_arg_order_check_catches_late_include_bindfs() {
+    local mutated="$TEST_TEMP_DIR/Dockerfile.late-bindfs"
+    local errors
+    command awk '
+        /^ARG INCLUDE_BINDFS=/ { held=$0; next }
+        { print }
+        /features\/cron\.sh; \\$/ { in_cron=1 }
+        in_cron && /^ *fi$/ { print held; in_cron=0 }
+    ' "$PROJECT_ROOT/Dockerfile" >"$mutated"
+
+    if command cmp -s "$PROJECT_ROOT/Dockerfile" "$mutated"; then
+        assert_true false "Mutation did not change the Dockerfile copy"
+    fi
+    errors=$(cron_condition_arg_order_errors "$mutated")
+    assert_contains "$errors" "INCLUDE_BINDFS: declared at line" \
+        "Late ARG INCLUDE_BINDFS is reported"
+    assert_not_contains "$errors" "INCLUDE_CRON" "Unmoved INCLUDE_CRON is not reported"
+    assert_not_contains "$errors" "INCLUDE_DEV_TOOLS" "Unmoved INCLUDE_DEV_TOOLS is not reported"
+    assert_not_contains "$errors" "INCLUDE_RUST_DEV" "Unmoved INCLUDE_RUST_DEV is not reported"
+}
+
 # Run tests with setup/teardown wrapper
 run_test_with_setup() {
     local test_function="$1"
@@ -286,6 +372,8 @@ run_test_with_setup test_cron_env_file "Cron environment file"
 run_test_with_setup test_cron_bashrc "Cron bashrc configuration"
 run_test_with_setup test_cron_verification_script "Cron verification script"
 run_test_with_setup test_cron_startup_order "Cron startup script ordering"
+run_test_with_setup test_cron_condition_args_declared_before_use "Cron RUN ARGs declared before use (#976)"
+run_test_with_setup test_cron_arg_order_check_catches_late_include_bindfs "ARG-order check catches a late INCLUDE_BINDFS"
 
 # Generate report
 generate_report
