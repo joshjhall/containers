@@ -29,6 +29,9 @@
 #     stdin — a stub that never reads would SIGPIPE the writer of an
 #     `echo ... | tee` pipeline under pipefail. The build steps
 #     before the guard therefore run inert: no network, no root, no writes.
+#     This holds only while those steps invoke tools by bare name (or via
+#     `command`): a command written as an absolute path (/usr/bin/curl) is not
+#     a lookup and would run for real, so keep that out of the pre-guard code.
 #   - The copy is truncated after the guard's closing brace and ends with
 #     `echo PAST_GUARD; exit 0`, so nothing after the guard runs on the host.
 
