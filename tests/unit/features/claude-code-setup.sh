@@ -3252,6 +3252,129 @@ test_librarian_tree_not_group_world_writable() {
     assert_equals "" "$unreadable" "every entry stays world-readable (a+rX kept)"
 }
 
+# Extract the shipped `# BEGIN/END librarian-symlink-prune` block (#973).
+_extract_symlink_prune() {
+    command sed -n '/^# BEGIN librarian-symlink-prune$/,/^# END librarian-symlink-prune$/p' \
+        "$PROJECT_ROOT/lib/features/claude-code-setup.sh"
+}
+
+# Run the extracted prune block with LIBRARIAN_DIR=$1, stub loggers, as a child.
+_run_symlink_prune() {
+    local block
+    block="$(_extract_symlink_prune)"
+    LIBRARIAN_DIR="$1" bash -c '
+        log_message() { :; }
+        log_error() { command printf "%s\n" "$*" >&2; }
+        '"$block"
+}
+
+# Test (behavioral, #973): the post-extraction prune removes every symlink whose
+# target escapes the librarian tree — absolute, relative, dangling — and keeps
+# in-tree links. The additionalDirectories grant lets Claude edit anything under
+# $LIBRARIAN_DIR, so an escaping link (upstream ships `.codegraph ->
+# /cache/codegraph`) is a writable path under the grant. Asserts the exact
+# surviving set, so neither a no-op nor a delete-everything passes.
+test_librarian_escaping_symlinks_pruned() {
+    if [ -z "$(_extract_symlink_prune)" ]; then
+        fail_test "no '# BEGIN/END librarian-symlink-prune' block in claude-code-setup.sh"
+        return
+    fi
+
+    local scratch tree
+    scratch="$(command mktemp -d)"
+    tree="$scratch/librarian"
+    command mkdir -p "$tree/plugins/workflow" "$scratch/outside"
+    command touch "$tree/CLAUDE.md" "$tree/plugins/workflow/real.md"
+    command ln -s "$scratch/outside" "$tree/.codegraph"           # absolute escape
+    command ln -s ../../../outside "$tree/plugins/workflow/rel"   # relative escape
+    command ln -s /nonexistent/gone "$tree/plugins/dangling"      # dangling escape
+    command ln -s "$scratch/librarian-evil" "$tree/prefix-twin"   # shares the prefix, not the tree
+    command ln -s CLAUDE.md "$tree/AGENTS.md"                     # in-tree, relative
+    command ln -s "$tree/plugins/workflow/real.md" "$tree/abs-in" # in-tree, absolute
+    command ln -s ../CLAUDE.md "$tree/plugins/up-in"              # in-tree via ..
+    command ln -s .codegraph "$tree/chain"                        # in-tree name, escapes via a chain
+    # Enter through a symlinked root: find must still descend into the real tree.
+    command ln -s "$tree" "$scratch/root-link"
+
+    _run_symlink_prune "$scratch/root-link"
+
+    local survivors outside_intact
+    survivors="$(cd "$tree" && command find . -type l | LC_ALL=C command sort | command tr '\n' ' ')"
+    outside_intact="$([ -d "$scratch/outside" ] && command printf yes || command printf no)"
+    command rm -rf "$scratch"
+    assert_equals "./AGENTS.md ./abs-in ./plugins/up-in " "$survivors" \
+        "only in-tree symlinks survive the prune"
+    assert_equals "yes" "$outside_intact" "rm removed the link, never followed it"
+}
+
+# Run the prune block with stub dir $1 prepended to PATH, LIBRARIAN_DIR=$2.
+# env -u BASH_ENV is required (#618): /etc/bash_env rebuilds PATH on
+# non-interactive bash, which would silently drop the stub.
+_run_symlink_prune_stubbed() {
+    local block
+    block="$(_extract_symlink_prune)"
+    env -u BASH_ENV PATH="$1:$PATH" LIBRARIAN_DIR="$2" bash -c '
+        log_message() { :; }
+        log_error() { command printf "%s\n" "$*" >&2; }
+        '"$block"
+}
+
+# Test (#973): the two fail-closed branches. A failing find must exit 1 and
+# prune nothing (not end the loop silently with a partial prune), and a link
+# realpath cannot resolve must exit 1 rather than fall through to delete. The
+# escaping link survives in both, so a regression to either fail-open shape
+# (partial prune, or delete on empty) is caught.
+test_librarian_symlink_prune_fails_closed() {
+    local scratch tree stubs rc out still real_realpath
+    scratch="$(command mktemp -d)"
+    tree="$scratch/librarian"
+    stubs="$scratch/stubs"
+    command mkdir -p "$tree" "$stubs" "$scratch/outside"
+    command ln -s "$scratch/outside" "$tree/.codegraph"
+
+    # find exits non-zero after listing the link: the prune must not act on it.
+    command printf '#!/bin/sh\ncommand printf "%%s\\0" "%s/.codegraph"\nexit 1\n' "$tree" >"$stubs/find"
+    command chmod +x "$stubs/find"
+    rc=0
+    out="$(_run_symlink_prune_stubbed "$stubs" "$tree" 2>&1)" || rc=$?
+    still="$([ -L "$tree/.codegraph" ] && command printf yes || command printf no)"
+    assert_equals "1" "$rc" "find failure exits 1"
+    assert_contains "$out" "find failed" "find failure is named"
+    assert_equals "yes" "$still" "find failure prunes nothing"
+
+    # realpath resolves the root but prints nothing for `-m` on a link.
+    command rm -f "$stubs/find"
+    real_realpath="$(command -v realpath)"
+    command printf '#!/bin/sh\n[ "$1" = "-m" ] && exit 1\nexec %s "$@"\n' "$real_realpath" >"$stubs/realpath"
+    command chmod +x "$stubs/realpath"
+    rc=0
+    out="$(_run_symlink_prune_stubbed "$stubs" "$tree" 2>&1)" || rc=$?
+    still="$([ -L "$tree/.codegraph" ] && command printf yes || command printf no)"
+    command rm -rf "$scratch"
+    assert_equals "1" "$rc" "unresolvable link exits 1"
+    assert_contains "$out" "cannot resolve" "unresolvable link is named"
+    assert_equals "yes" "$still" "unresolvable link is not deleted"
+}
+
+# Test (#973): the prune runs as root, so an empty or relative LIBRARIAN_DIR
+# must fail the build instead of walking an arbitrary tree.
+test_librarian_symlink_prune_refuses_bad_dir() {
+    local scratch rc out
+    scratch="$(command mktemp -d)"
+    command ln -s /nonexistent "$scratch/escape"
+
+    for bad in "" "relative/dir"; do
+        rc=0
+        out="$(cd "$scratch" && _run_symlink_prune "$bad" 2>&1)" || rc=$?
+        assert_equals "1" "$rc" "prune exits 1 for LIBRARIAN_DIR='$bad'"
+        assert_contains "$out" "must be absolute" "prune names the bad LIBRARIAN_DIR='$bad'"
+    done
+    local still
+    still="$([ -L "$scratch/escape" ] && command printf yes || command printf no)"
+    command rm -rf "$scratch"
+    assert_equals "yes" "$still" "a refused prune touches nothing"
+}
+
 # Test: DEFAULT_PERMISSIONS carries a Read rule for the real librarian install
 # path, and that path agrees with LIBRARIAN_DIR as defined in
 # claude-plugin-lib.sh. This is the drift guard for the deliberate literal in
@@ -3296,6 +3419,9 @@ run_test test_librarian_grant_handles_malformed_settings "Librarian grant: malfo
 run_test test_librarian_grant_composes_with_host_event_hooks "Librarian grant: composes with the host-event hook writer"
 run_test test_default_permissions_has_librarian_read "Librarian grant: DEFAULT_PERMISSIONS reads the real install path"
 run_test test_librarian_tree_not_group_world_writable "Librarian tree: post-extraction chmod strips group/world write (#1020)"
+run_test test_librarian_escaping_symlinks_pruned "Librarian tree: symlinks escaping the tree are pruned, in-tree kept (#973)"
+run_test test_librarian_symlink_prune_refuses_bad_dir "Librarian tree: prune refuses an empty/relative LIBRARIAN_DIR (#973)"
+run_test test_librarian_symlink_prune_fails_closed "Librarian tree: prune fails closed on find/realpath failure (#973)"
 
 # Generate test report
 generate_report

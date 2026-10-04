@@ -196,6 +196,51 @@ fi
 # and bin/workflow-scripts-dir.sh's #667 trust gate refuses a writable scripts
 # dir. The plugin cache install copies these modes, so it inherits 755/644 (#1020).
 chmod -R a+rX,go-w "$LIBRARIAN_DIR"
+# Prune every symlink whose resolved target leaves the tree (#973). claude-setup
+# grants $LIBRARIAN_DIR via permissions.additionalDirectories, which lets Claude
+# EDIT there without a prompt, so "the runtime user cannot write under it" must
+# hold — and a link out of the tree defeats root ownership + go-w above. The
+# upstream repo commits `.codegraph -> /cache/codegraph` (its `.codegraph/`
+# gitignore entry misses a symlink), which put a writable volume under the grant.
+# Upstream fix: joshjhall/librarian#1105. Keep this prune regardless — older
+# pinned LIBRARIAN_REF tarballs still carry the link.
+# Allow-in-tree, not a deny-list: in-repo links (AGENTS.md -> CLAUDE.md) stay,
+# and `realpath -m` resolves dangling links so they are judged the same way.
+# Runs as root: refuse an empty or relative LIBRARIAN_DIR rather than let find
+# walk the wrong tree, and `rm -f --` removes the link itself, never its target.
+# BEGIN librarian-symlink-prune
+case "${LIBRARIAN_DIR:-}" in
+    /?*) ;;
+    *)
+        log_error "librarian symlink prune: LIBRARIAN_DIR must be absolute, got '${LIBRARIAN_DIR:-}'"
+        exit 1
+        ;;
+esac
+librarian_root="$(realpath "$LIBRARIAN_DIR")"
+# Collect first so a find failure fails the build instead of pruning partially.
+librarian_links="$(mktemp)"
+if ! find "$librarian_root" -type l -print0 >"$librarian_links"; then
+    log_error "librarian symlink prune: find failed under ${librarian_root}"
+    rm -f "$librarian_links"
+    exit 1
+fi
+while IFS= read -r -d '' link; do
+    resolved="$(realpath -m -- "$link")" || resolved=""
+    if [ -z "$resolved" ]; then
+        log_error "librarian symlink prune: cannot resolve ${link}"
+        rm -f "$librarian_links"
+        exit 1
+    fi
+    case "$resolved" in
+        "$librarian_root"/*) ;;
+        *)
+            rm -f -- "$link"
+            log_message "pruned librarian symlink escaping the tree: ${link}"
+            ;;
+    esac
+done <"$librarian_links"
+rm -f "$librarian_links"
+# END librarian-symlink-prune
 rm -rf "$librarian_tmp"
 log_message "✓ librarian verified + installed to ${LIBRARIAN_DIR} @ ${LIBRARIAN_REF}"
 

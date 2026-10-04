@@ -62,6 +62,29 @@ test_librarian_and_buildbound_staged() {
         "test ! -d /opt/librarian/.git && echo 'no-git'" \
         "no-git"
 
+    # --- The runtime user cannot write under /opt/librarian (#973). claude-setup
+    #     grants it via permissions.additionalDirectories, which permits EDITS,
+    #     so read-only must be a checked invariant, not an observation. Runs as
+    #     the image's default user; the uid guard keeps it from passing as root.
+    #     find -L follows links, so a symlink escaping to a writable volume (the
+    #     upstream `.codegraph -> /cache/codegraph`) is caught here. ---
+    assert_command_in_container "$image" \
+        'test "$(id -u)" -ne 0 && echo non-root' \
+        "non-root" \
+        "librarian invariant runs as the non-root runtime user"
+    assert_command_in_container "$image" \
+        'w="$(command find -L /opt/librarian -writable 2>/dev/null)"; test -z "$w" && echo no-writable || { echo "$w"; exit 1; }' \
+        "no-writable" \
+        "runtime user can write nothing under /opt/librarian (links followed)"
+    assert_command_in_container "$image" \
+        'root="$(realpath /opt/librarian)"; bad=""; while IFS= read -r -d "" l; do case "$(realpath -m "$l")" in "$root"/*) ;; *) bad="$bad $l" ;; esac; done < <(command find /opt/librarian -type l -print0); test -z "$bad" && echo no-escape || { echo "escaping:$bad"; exit 1; }' \
+        "no-escape" \
+        "no symlink under /opt/librarian resolves outside the tree"
+    assert_command_in_container "$image" \
+        'for d in /opt/librarian /opt/librarian/plugins /opt/librarian/plugins/workflow/skills/ship-issue; do touch "$d/.w973" 2>/dev/null && { echo "wrote $d"; exit 1; }; done; echo touch-denied' \
+        "touch-denied" \
+        "touch under /opt/librarian is denied for the runtime user"
+
     # --- Build-bound skill templates still staged (the only skills left here
     #     after #611 removed the migrated artifacts) ---
     assert_dir_in_image "$image" "/etc/container/config/claude-templates/skills"
@@ -190,9 +213,11 @@ test_claude_setup_has_skills_section() {
         "grep -q 'plugin marketplace add' /usr/local/bin/claude-setup && echo 'found'" \
         "found"
 
-    # Verify it installs librarian-scoped plugins (plugin@librarian)
+    # Verify it installs librarian-scoped plugins (plugin@librarian). The install
+    # loop moved into the sourced claude-plugin-lib.sh in #942; this grep still
+    # read claude-setup and failed unnoticed because no CI tier runs this suite.
     assert_command_in_container "$image" \
-        "grep -qF 'plugin install \"\${plugin}@\${LIBRARIAN_MARKETPLACE}\"' /usr/local/bin/claude-setup && echo 'found'" \
+        "grep -qF 'plugin install \"\${plugin}@\${LIBRARIAN_MARKETPLACE}\"' /usr/local/lib/claude/claude-plugin-lib.sh && echo 'found'" \
         "found"
 
     # Verify it still references the build-bound templates directory

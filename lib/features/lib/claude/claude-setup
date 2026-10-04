@@ -643,6 +643,17 @@ fi
 # A run that did not notice could skip the adversarial review entirely and still
 # look like a clean ship — the silent-skip class #951/#948 were filed against.
 #
+# Scope (#973): additionalDirectories extends where Claude can read AND EDIT, and
+# it covers the whole tree (every plugin, hook, manifest), not just the harness.
+# Narrowing it to a subpath is unverified, so the grant stays tree-wide and its
+# safety rests on a checked invariant: the runtime user cannot write under
+# $LIBRARIAN_DIR. That holds because the build leaves the tree root-owned and
+# go-w, and prunes any symlink escaping the tree (claude-code-setup.sh; upstream
+# ships `.codegraph -> /cache/codegraph`). It is enforced by
+# test_librarian_escaping_symlinks_pruned (unit) and the find -L -writable /
+# touch checks in tests/integration/builds/test_claude_skills_agents.sh. A root
+# runtime user voids it — do not run this image as root with the grant in place.
+#
 # Gated on [ -d "$LIBRARIAN_DIR" ], the same check the install below performs:
 # an image built without the librarian clone is a valid configuration and must
 # not get a dangling grant to a directory that does not exist.
