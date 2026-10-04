@@ -163,37 +163,10 @@ update_luggage_catalog() {
     "$luggage_bin" catalog add-version "${tool}@${version}" --catalog "$catalog"
 }
 
-# sync_rust_minor_pins - Rewrite every X.Y-granularity Rust toolchain pin.
-#
-# Arguments:
-#   $1 - full Rust version (X.Y.Z); only its X.Y prefix is written
-#
-# Description:
-#   tests/unit/rust-version-sync.sh requires these to equal the Dockerfile
-#   RUST_VERSION's X.Y: the luggage-builder base image tag, Cargo.toml
-#   rust-version (MSRV), clippy.toml msrv, and every explicit CI
-#   `toolchain: "X.Y"` pin. A patch bump leaves them unchanged (same X.Y).
-#   Writes go through sed_inplace, so a dry run touches nothing.
-sync_rust_minor_pins() {
-    local minor
-    minor="$(printf '%s' "$1" | command grep -oE '^[0-9]+\.[0-9]+')"
-    [ -n "$minor" ] || return 1
-
-    sed_inplace "s/^FROM rust:[0-9][0-9.]*-/FROM rust:$minor-/" "$PROJECT_ROOT/Dockerfile" || return 1
-    if [ -f "$PROJECT_ROOT/Cargo.toml" ]; then
-        sed_inplace "s/^rust-version = \"[0-9][^\"]*\"/rust-version = \"$minor\"/" "$PROJECT_ROOT/Cargo.toml" || return 1
-    fi
-    if [ -f "$PROJECT_ROOT/clippy.toml" ]; then
-        sed_inplace "s/^msrv = \"[0-9][^\"]*\"/msrv = \"$minor\"/" "$PROJECT_ROOT/clippy.toml" || return 1
-    fi
-
-    local wf
-    for wf in "$PROJECT_ROOT"/.github/workflows/*.yml "$PROJECT_ROOT"/.github/workflows/*.yaml; do
-        [ -f "$wf" ] || continue
-        command grep -qE '^[[:space:]]*toolchain: *"?[0-9]+\.[0-9]+' "$wf" || continue
-        sed_inplace "s/^\([[:space:]]*toolchain: *\"\{0,1\}\)[0-9][0-9]*\.[0-9][0-9]*/\1$minor/" "$wf" || return 1
-    done
-}
+# sync_rust_minor_pins lives in its own module to keep this file under the
+# file-size ceiling (tests/unit/file-size-ceiling.sh).
+# shellcheck source=bin/lib/update-versions/rust-pins.sh
+source "$(dirname "${BASH_SOURCE[0]}")/rust-pins.sh"
 
 # Function to update a version in a file
 update_version() {
