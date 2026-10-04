@@ -199,14 +199,22 @@ map_to_test() {
             return
             ;;
 
-        # bin/foo.sh → tests/unit/bin/foo.sh
+        # bin/foo.sh → tests/unit/bin/foo.sh plus every foo-*.sh sibling suite.
+        # Same reasoning as the lib/runtime arm's point 2: a suite split along a
+        # seam (check-versions.sh / check-versions-checkers.sh, #1024) must not
+        # silently drop the moved half from the push-time run.
         bin/*.sh)
-            local base
+            local base match
             base=$(basename "$file")
             local test_path="${TESTS_DIR}/unit/bin/${base}"
             if [ -f "$test_path" ]; then
                 echo "$test_path"
             fi
+            for match in "${TESTS_DIR}"/unit/bin/"${base%.sh}"-*.sh; do
+                if [ -f "$match" ]; then
+                    echo "$match"
+                fi
+            done
             return
             ;;
 

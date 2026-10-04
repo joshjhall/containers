@@ -254,6 +254,33 @@ test_runtime_mapping_unmatched_is_silent() {
     assert_empty "$out" "an uncovered runtime script must map to no test path"
 }
 
+# The bin arm fans out to <stem>-*.sh siblings for the same reason the runtime
+# arm does: check-versions.sh was split (#1024), and a changed
+# bin/check-versions.sh must still run the moved checker-mock suite at push time.
+test_bin_mapping_emits_all_siblings() {
+    local out count
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    out=$(map_to_test "bin/check-versions.sh")
+    assert_contains "$out" "tests/unit/bin/check-versions.sh" \
+        "the exact-match suite must be included"
+    assert_contains "$out" "tests/unit/bin/check-versions-checkers.sh" \
+        "split checker-mock sibling suite must be included (#1024)"
+
+    count=0
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        count=$((count + 1))
+        assert_file_exists "$path" "mapped test path must exist: $path"
+    done <<<"$out"
+
+    assert_equals "2" "$count" \
+        "exactly the two known check-versions suites must be mapped"
+}
+
 run_test test_runner_exports_flag "Pre-push runner exports SKIP_NETWORK_TESTS"
 run_test test_framework_defines_helper "framework.sh defines network_tests_disabled"
 run_test test_framework_exports_helper "framework.sh exports network_tests_disabled"
@@ -268,6 +295,7 @@ run_test test_runtime_mapping_emits_all_siblings "runtime mapping emits every si
 run_test test_runtime_mapping_unmatched_is_silent "uncovered runtime script maps to no test path (#832)"
 run_test test_runtime_mapping_keeps_prefixed_suites "runtime mapping finds suites that keep the NN- prefix (#832)"
 run_test test_runtime_mapping_no_duplicate_paths "runtime mapping emits no duplicate test paths (#832)"
+run_test test_bin_mapping_emits_all_siblings "bin mapping emits every sibling suite (#1024)"
 
 # Generate test report
 generate_report

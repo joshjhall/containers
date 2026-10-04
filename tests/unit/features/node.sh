@@ -493,8 +493,95 @@ test_node_system_deps_include_libatomic() {
 ca-certificates
 xz-utils
 libatomic1" "$requested" "install_node_system_deps requests libatomic1 with the download deps"
-    assert_file_contains "$PROJECT_ROOT/lib/features/node.sh" "^install_node_system_deps$" \
-        "node.sh calls install_node_system_deps"
+}
+
+# _run_node_sh_prefix NODE_SH - run node.sh up to `ensure_corepack || exit 1`
+#
+# The prefix is cut out of NODE_SH (the real node.sh, or a mutated copy) and
+# each `source /tmp/build-scripts/<rel>` is rewritten to `_src <rel>`. _src
+# sources the real lib/features/lib/* helpers and skips base/*, whose functions
+# are stubbed here; an unstubbed new dependency fails the run rather than
+# no-opping. apt_install records its args to apt.calls, and ensure_corepack is
+# replaced (once its file is sourced) by a recorder writing whether
+# npm_audit_verdict was defined at the moment node.sh called it.
+#
+# Prints the prefix's exit code, or "no-prefix" if the cut-off line is missing.
+_run_node_sh_prefix() {
+    local node_sh="$1"
+    local prefix="$TEST_TEMP_DIR/node-prefix.sh"
+    local stub_bin="$TEST_TEMP_DIR/stub-bin"
+    local tools="$TEST_TEMP_DIR/tools"
+    mkdir -p "$stub_bin" "$tools" "$TEST_TEMP_DIR/build"
+    : >"$TEST_TEMP_DIR/apt.calls"
+    command rm -f "$TEST_TEMP_DIR/corepack.call"
+
+    command awk '{ sub(/^source \/tmp\/build-scripts\//, "_src ") } { print }
+        /^ensure_corepack \|\| exit 1$/ { exit }' "$node_sh" >"$prefix"
+    if ! command grep -qx 'ensure_corepack || exit 1' "$prefix"; then
+        echo "no-prefix"
+        return 0
+    fi
+
+    local tool
+    for tool in cut rm; do
+        ln -sf "$(command -v "$tool")" "$tools/$tool"
+    done
+    printf '#!/bin/bash\nexit 0\n' >"$stub_bin/curl"
+    printf '#!/bin/bash\nexit 0\n' >"$stub_bin/tar"
+    printf '#!/bin/bash\necho arm64\n' >"$stub_bin/dpkg"
+    chmod +x "$stub_bin/curl" "$stub_bin/tar" "$stub_bin/dpkg"
+
+    local rc=0
+    env -i PATH="$stub_bin:$tools" ROOT="$PROJECT_ROOT" OUT="$TEST_TEMP_DIR" \
+        /bin/bash -c '
+        _src() {
+            case "$1" in
+                base/*) return 0 ;;
+            esac
+            source "$ROOT/lib/$1"
+            if [ "$1" = features/lib/node/ensure-corepack.sh ]; then
+                ensure_corepack() {
+                    if declare -F npm_audit_verdict >/dev/null; then
+                        echo defined
+                    else
+                        echo undefined
+                    fi >>"$OUT/corepack.call"
+                }
+            fi
+        }
+        log_message() { :; }
+        log_error() { :; }
+        log_feature_start() { :; }
+        log_feature_end() { :; }
+        log_command() { shift; "$@"; }
+        validate_node_version() { :; }
+        resolve_node_version() { printf "%s\n" "$1"; }
+        map_arch() { printf "%s\n" "$2"; }
+        create_secure_temp_dir() { printf "%s\n" "$OUT/build"; }
+        verify_download_or_fail() { :; }
+        apt_update() { :; }
+        apt_install() { printf "%s\n" "$@" >>"$OUT/apt.calls"; }
+        source "$1"
+    ' _ "$prefix" >/dev/null 2>&1 || rc=$?
+    echo "$rc"
+}
+
+# node.sh's own wiring, behaviorally: the unit test above proves the helper
+# requests libatomic1, this proves node.sh actually calls it, and that the
+# verdict classifier ensure_corepack relies on is loaded by the time node.sh
+# reaches ensure_corepack (a source line moved below the call would leave
+# npm_audit_verdict undefined only on the Node 25+ install path).
+test_node_sh_wires_deps_and_audit_before_corepack() {
+    local rc
+    rc=$(_run_node_sh_prefix "$PROJECT_ROOT/lib/features/node.sh")
+    assert_equals "0" "$rc" "node.sh runs cleanly up to ensure_corepack"
+    assert_equals "curl
+ca-certificates
+xz-utils
+libatomic1" "$(command cat "$TEST_TEMP_DIR/apt.calls")" \
+        "node.sh installs the system deps, libatomic1 included"
+    assert_equals "defined" "$(command cat "$TEST_TEMP_DIR/corepack.call" 2>/dev/null)" \
+        "npm_audit_verdict is defined when node.sh calls ensure_corepack"
 }
 
 # The pin must use the override pattern: bin/check-versions.sh reads it and
@@ -615,6 +702,7 @@ run_test_with_setup test_corepack_missing_without_pin_is_fatal "Missing corepack
 run_test_with_setup test_corepack_non_exact_pin_is_fatal "Non-exact COREPACK_VERSION is rejected before npm runs"
 run_test_with_setup test_corepack_pinned "COREPACK_VERSION pinned with an override default"
 run_test_with_setup test_node_system_deps_include_libatomic "System deps include libatomic1 (behavioral)"
+run_test_with_setup test_node_sh_wires_deps_and_audit_before_corepack "node.sh installs deps and loads the audit verdict before ensure_corepack"
 run_test_with_setup test_node_version_verification "Node version verification script"
 run_test_with_setup test_node_path_configuration "Node PATH configuration"
 run_test_with_setup test_node_helper_functions "Node helper functions"
