@@ -258,27 +258,18 @@ test_runtime_mapping_unmatched_is_silent() {
 # arm does: check-versions.sh was split (#1024), and a changed
 # bin/check-versions.sh must still run the moved checker-mock suite at push time.
 test_bin_mapping_emits_all_siblings() {
-    local out count
+    local out
     if ! _load_map_to_test; then
         fail_test "could not extract map_to_test from $RUNNER"
         return 0
     fi
 
-    out=$(map_to_test "bin/check-versions.sh")
-    assert_contains "$out" "tests/unit/bin/check-versions.sh" \
-        "the exact-match suite must be included"
-    assert_contains "$out" "tests/unit/bin/check-versions-checkers.sh" \
-        "split checker-mock sibling suite must be included (#1024)"
-
-    count=0
-    while IFS= read -r path; do
-        [ -n "$path" ] || continue
-        count=$((count + 1))
-        assert_file_exists "$path" "mapped test path must exist: $path"
-    done <<<"$out"
-
-    assert_equals "2" "$count" \
-        "exactly the two known check-versions suites must be mapped"
+    # The exact set, not a count: a count of 2 passes if a sibling is swapped
+    # for some other existing suite or duplicated in place of one.
+    out=$(map_to_test "bin/check-versions.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
+$TESTS_DIR/unit/bin/check-versions.sh" "$out" \
+        "exactly the exact-match suite and its split sibling must be mapped (#1024)"
 }
 
 # The runner's own collection loop, not just map_to_test. #832's sibling fanout
@@ -296,25 +287,24 @@ _load_map_changed_files() {
 }
 
 test_collection_keeps_each_sibling_suite() {
-    local out count path
+    local out
     if ! _load_map_changed_files; then
         fail_test "could not extract map_changed_files from $RUNNER"
         return 0
     fi
 
+    # The exact sorted set, each on its own line: a joined line (the xargs bug),
+    # a dropped sibling, a duplicate, or a substituted suite all change it.
     out=$(command printf '%s\n' bin/check-versions.sh \
-        lib/runtime/42-workspace-fs-health.sh | map_changed_files)
-
-    count=0
-    while IFS= read -r path; do
-        [ -n "$path" ] || continue
-        count=$((count + 1))
-        assert_file_exists "$path" "each collected line must be ONE existing suite: $path"
-    done <<<"$out"
-
-    # 2 check-versions suites + 5 workspace-fs-health suites.
-    assert_equals "7" "$count" \
-        "every sibling suite of both changed scripts must be collected"
+        lib/runtime/42-workspace-fs-health.sh | map_changed_files | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
+$TESTS_DIR/unit/bin/check-versions.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health-cron-entry.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health-submodules.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health-worktrees.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health-xattr.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health.sh" "$out" \
+        "every sibling suite of both changed scripts, each once, must be collected"
 }
 
 # A bin script with no suite must collect nothing — neither a bogus exact path
