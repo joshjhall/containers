@@ -3292,8 +3292,11 @@ test_librarian_escaping_symlinks_pruned() {
     command ln -s CLAUDE.md "$tree/AGENTS.md"                     # in-tree, relative
     command ln -s "$tree/plugins/workflow/real.md" "$tree/abs-in" # in-tree, absolute
     command ln -s ../CLAUDE.md "$tree/plugins/up-in"              # in-tree via ..
+    command ln -s .codegraph "$tree/chain"                        # in-tree name, escapes via a chain
+    # Enter through a symlinked root: find must still descend into the real tree.
+    command ln -s "$tree" "$scratch/root-link"
 
-    _run_symlink_prune "$tree"
+    _run_symlink_prune "$scratch/root-link"
 
     local survivors outside_intact
     survivors="$(cd "$tree" && command find . -type l | LC_ALL=C command sort | command tr '\n' ' ')"

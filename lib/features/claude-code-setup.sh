@@ -217,15 +217,29 @@ case "${LIBRARIAN_DIR:-}" in
         ;;
 esac
 librarian_root="$(realpath "$LIBRARIAN_DIR")"
+# Collect first so a find failure fails the build instead of pruning partially.
+librarian_links="$(mktemp)"
+if ! find "$librarian_root" -type l -print0 >"$librarian_links"; then
+    log_error "librarian symlink prune: find failed under ${librarian_root}"
+    rm -f "$librarian_links"
+    exit 1
+fi
 while IFS= read -r -d '' link; do
-    case "$(realpath -m "$link")" in
+    resolved="$(realpath -m -- "$link")" || resolved=""
+    if [ -z "$resolved" ]; then
+        log_error "librarian symlink prune: cannot resolve ${link}"
+        rm -f "$librarian_links"
+        exit 1
+    fi
+    case "$resolved" in
         "$librarian_root"/*) ;;
         *)
             rm -f -- "$link"
             log_message "pruned librarian symlink escaping the tree: ${link}"
             ;;
     esac
-done < <(find "$LIBRARIAN_DIR" -type l -print0)
+done <"$librarian_links"
+rm -f "$librarian_links"
 # END librarian-symlink-prune
 rm -rf "$librarian_tmp"
 log_message "✓ librarian verified + installed to ${LIBRARIAN_DIR} @ ${LIBRARIAN_REF}"
