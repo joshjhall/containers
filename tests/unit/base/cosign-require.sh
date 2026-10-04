@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Unit tests for lib/base/cosign-require.sh
 #
-# cosign-require.sh asserts that the base-installed cosign (lib/base/setup.sh,
-# pinned COSIGN_VERSION) is on PATH. It deliberately does NOT install cosign:
+# cosign-require.sh asserts that PATH resolves cosign to the base install
+# (lib/base/setup.sh, pinned COSIGN_VERSION, /usr/local/bin/cosign) and rejects
+# a cosign found anywhere else (#940). It deliberately does NOT install cosign:
 # the second, separately-pinned .deb install this file used to perform was dead
 # code, and its drifting 3.0.2 pin was invisible to bin/check-versions.sh (#935).
 #
@@ -60,10 +61,16 @@ run_test_with_setup() {
 #
 # Args:
 #   $1: "present" to place a mock cosign on PATH, "absent" for an empty PATH
+#   $2: value assigned to _COSIGN_BASE_PATH AFTER sourcing (the test seam),
+#       or "" to keep the helper's own /usr/local/bin/cosign
+#   $3: value exported as _COSIGN_BASE_PATH BEFORE sourcing, or "" for none —
+#       used to prove the build environment cannot widen the pin
 #
 # Echoes the helper's combined output; returns the helper's exit code.
 run_require_cosign() {
     local mode="$1"
+    local base_path="${2:-}"
+    local pre_env="${3:-}"
     local stub_bin="$TEST_TEMP_DIR/bin"
 
     if [ "$mode" = "present" ]; then
@@ -76,15 +83,17 @@ MOCK
 
     # A minimal PATH containing only the stub dir: 'command -v cosign' then
     # answers purely from what this test placed there. Bash builtins used by
-    # the helper (command, return) need no external binaries.
+    # the helper (command, local, return) need no external binaries.
     bash -c "
         export PATH='$stub_bin'
         _COSIGN_REQUIRE_LOADED=''
+        if [ -n '$pre_env' ]; then export _COSIGN_BASE_PATH='$pre_env'; fi
         log_message() { echo \"\$*\"; }
         log_error() { echo \"\$*\"; }
         protected_export() { :; }
 
         source '$SOURCE_FILE'
+        if [ -n '$base_path' ]; then _COSIGN_BASE_PATH='$base_path'; fi
         require_cosign
     " 2>&1
 }
@@ -150,11 +159,59 @@ test_does_not_reference_sigstore_releases() {
 test_present_returns_zero() {
     local exit_code=0
     local output
-    output=$(run_require_cosign "present") || exit_code=$?
+    output=$(run_require_cosign "present" "$TEST_TEMP_DIR/bin/cosign") || exit_code=$?
 
-    assert_equals "0" "$exit_code" "require_cosign returns 0 when cosign is on PATH"
-    assert_contains "$output" "base install" \
-        "require_cosign reports it is using the base-installed cosign"
+    assert_equals "0" "$exit_code" \
+        "require_cosign returns 0 when cosign resolves to the base install path"
+    assert_contains "$output" "Using cosign from base install: $TEST_TEMP_DIR/bin/cosign" \
+        "require_cosign reports the resolved base-installed cosign"
+}
+
+# The #940 discriminator: a cosign that is on PATH but NOT at the base install
+# location must be rejected. Without the resolved-path check in require_cosign
+# this returns 0 — the same stub passes test_present_returns_zero above, so the
+# only difference between the two cases is where the pin points.
+test_present_outside_base_returns_one() {
+    local exit_code=0
+    local output
+    output=$(run_require_cosign "present" "$TEST_TEMP_DIR/base/cosign") || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "require_cosign returns 1 when cosign resolves outside the base install (#940)"
+    assert_contains "$output" "cosign resolved to $TEST_TEMP_DIR/bin/cosign, not the base install at $TEST_TEMP_DIR/base/cosign" \
+        "Error names both the substitute path and the expected base path"
+    assert_not_contains "$output" "Using cosign" \
+        "require_cosign does not report using the substitute"
+}
+
+# The pin is assigned unconditionally at source time, so a _COSIGN_BASE_PATH
+# exported by the build environment cannot redirect it to a substitute. With a
+# ${_COSIGN_BASE_PATH:-...} default instead, this returns 0.
+test_env_cannot_widen_pin() {
+    local exit_code=0
+    local output
+    output=$(run_require_cosign "present" "" "$TEST_TEMP_DIR/bin/cosign") || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "An exported _COSIGN_BASE_PATH does not override the pin (#940)"
+    assert_contains "$output" "not the base install at /usr/local/bin/cosign" \
+        "The pin stays at setup.sh's install location"
+}
+
+# The pinned location is the literal path lib/base/setup.sh installs to.
+test_pin_matches_setup_install_target() {
+    local pinned
+    pinned=$(bash -c "
+        _COSIGN_REQUIRE_LOADED=''
+        protected_export() { :; }
+        source '$SOURCE_FILE'
+        printf '%s' \"\$_COSIGN_BASE_PATH\"
+    ")
+
+    assert_equals "/usr/local/bin/cosign" "$pinned" \
+        "require_cosign pins cosign to /usr/local/bin/cosign"
+    assert_file_contains "$PROJECT_ROOT/lib/base/setup.sh" "chmod +x /usr/local/bin/cosign" \
+        "lib/base/setup.sh installs cosign at the pinned location"
 }
 
 # The discriminating case: without the 'command -v cosign' guard in
@@ -199,6 +256,9 @@ run_test_with_setup test_does_not_reference_sigstore_releases "No sigstore relea
 
 # Functional
 run_test_with_setup test_present_returns_zero "Present: returns 0 and reports base install"
+run_test_with_setup test_present_outside_base_returns_one "Present outside base: returns 1 (#940)"
+run_test_with_setup test_env_cannot_widen_pin "Env cannot widen the path pin (#940)"
+run_test_with_setup test_pin_matches_setup_install_target "Pin matches setup.sh install target"
 run_test_with_setup test_absent_returns_one "Absent: returns 1 with actionable error"
 run_test_with_setup test_absent_does_not_create_cosign "Absent: installs nothing"
 
