@@ -417,14 +417,17 @@ test_boot_pass_tolerates_nonnumeric_count() {
 # the GC's stderr to /dev/null, and through a file rather than stdout because
 # stdout is the cleaned count the caller parses.
 
-# Echo the value the GC actually saw for $1, having run the boot pass with the
-# environment the caller exported. Prints UNSET when the variable did not arrive.
+# Echo the value the GC actually saw for each named variable, one per line in
+# argument order, having run the boot pass with the environment the caller
+# exported. Prints UNSET for a variable that did not arrive.
 observe_gc_env() {
-    local var="$1" stub obs
+    local var stub obs
+    local -a report=()
     obs=$(mktemp)
-    stub=$(stub_fuse_cleanup_bin \
-        "command printf '%s\\n' \"\${$var:-UNSET}\" >'$obs'" \
-        'echo 0')
+    for var in "$@"; do
+        report+=("command printf '%s\\n' \"\${$var:-UNSET}\" >>'$obs'")
+    done
+    stub=$(stub_fuse_cleanup_bin "${report[@]}" 'echo 0')
 
     run_boot_pass "$stub" >/dev/null 2>&1
     command rm -rf "$(dirname "$stub")"
@@ -475,22 +478,51 @@ test_boot_pass_preserves_disable() {
         "Boot pass still passes FUSE_CLEANUP_DISABLE through (issue #953)"
 }
 
+test_boot_pass_neutralizes_all_seams_together() {
+    # The per-variable tests above each inject ONE seam, so together they pin
+    # each name but not the set: production clears all three with a single
+    # unset, and a refactor splitting it per variable (say, to special-case
+    # FALLBACK_ROOT's reassignment) could drop one while every single-seam test
+    # stays green. Injecting all three at once pins the set as one observation.
+    # FALLBACK_ROOT arrives as this leg's own /workspace, not UNSET.
+    local seen expected
+    seen=$(FUSE_CLEANUP_ROOTS=/etc \
+        FUSE_CLEANUP_FINDMNT=/tmp/evil-findmnt \
+        FUSE_CLEANUP_FALLBACK_ROOT=/etc \
+        observe_gc_env FUSE_CLEANUP_ROOTS FUSE_CLEANUP_FINDMNT FUSE_CLEANUP_FALLBACK_ROOT)
+    expected=$(command printf '%s\n' UNSET UNSET /workspace)
+
+    assert_equals "$expected" "$seen" \
+        "Boot pass neutralizes all three seams injected together (issue #970)"
+}
+
 test_boot_pass_unset_does_not_leak_to_caller() {
     # The unset lives in a command-substitution subshell, so it must not disturb
     # the entrypoint's own environment. A bare `unset` before the call would
-    # strip the variable for everything that runs after setup_bindfs_overlays.
-    local stub after
+    # strip the variables for everything that runs after setup_bindfs_overlays.
+    #
+    # This deliberately does NOT go through run_boot_pass: that helper wraps the
+    # call in its own ( ) subshell, which would swallow a leaked unset and keep
+    # this test green against exactly the bug it names. The function is called
+    # in the same shell that reads the variables back afterwards.
+    local stub after expected
     stub=$(stub_fuse_cleanup_bin 'echo 0')
 
     after=$(
         export FUSE_CLEANUP_ROOTS=/etc
-        run_boot_pass "$stub" >/dev/null 2>&1
-        command printf '%s\n' "${FUSE_CLEANUP_ROOTS:-UNSET}"
+        export FUSE_CLEANUP_FINDMNT=/tmp/evil-findmnt
+        export FUSE_CLEANUP_FALLBACK_ROOT=/etc
+        # shellcheck source=/dev/null
+        source "$SOURCE_FILE"
+        BINDFS_ENABLED=false FUSE_CLEANUP_BIN="$stub" setup_bindfs_overlays >/dev/null 2>&1
+        command printf '%s\n' "${FUSE_CLEANUP_ROOTS:-UNSET}" \
+            "${FUSE_CLEANUP_FINDMNT:-UNSET}" "${FUSE_CLEANUP_FALLBACK_ROOT:-UNSET}"
     )
     command rm -rf "$(dirname "$stub")"
+    expected=$(command printf '%s\n' /etc /tmp/evil-findmnt /etc)
 
-    assert_equals "/etc" "$after" \
-        "Neutralization is scoped to the GC call, not the caller's environment"
+    assert_equals "$expected" "$after" \
+        "Neutralization of all three seams is scoped to the GC call, not the caller's environment"
 }
 
 # ============================================================================
@@ -686,6 +718,7 @@ run_test test_boot_pass_drops_injected_roots "Boot pass drops injected FUSE_CLEA
 run_test test_boot_pass_drops_injected_findmnt "Boot pass drops injected FUSE_CLEANUP_FINDMNT (#953)"
 run_test test_boot_pass_overrides_injected_fallback_root "Boot pass replaces an injected fallback root (#953)"
 run_test test_boot_pass_preserves_disable "Boot pass preserves FUSE_CLEANUP_DISABLE (#953)"
+run_test test_boot_pass_neutralizes_all_seams_together "Boot pass neutralizes all three seams together (#970)"
 run_test test_boot_pass_unset_does_not_leak_to_caller "Neutralization does not leak to the caller (#953)"
 
 # Overlay argv (#977)

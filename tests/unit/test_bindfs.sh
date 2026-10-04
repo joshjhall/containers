@@ -147,18 +147,22 @@ extract_cron_wrapper() {
     command chmod +x "$1"
 }
 
-# Echo what the GC saw for $1, running the extracted wrapper in the caller's
-# environment. Prints UNSET when the variable did not arrive.
+# Echo what the GC saw for each named variable, one per line in argument order,
+# running the extracted wrapper in the caller's environment. Prints UNSET for a
+# variable that did not arrive.
 observe_cron_gc_env() {
-    local var="$1" tmpdir wrapper stub obs
+    local var tmpdir wrapper stub obs
+    local -a report=()
     tmpdir=$(mktemp -d)
     wrapper="$tmpdir/fuse-cleanup-cron"
     stub="$tmpdir/fuse-cleanup"
     obs="$tmpdir/observed"
 
     extract_cron_wrapper "$wrapper"
-    command printf '%s\n' '#!/bin/bash' \
-        "command printf '%s\\n' \"\${$var:-UNSET}\" >'$obs'" 'echo 0' >"$stub"
+    for var in "$@"; do
+        report+=("command printf '%s\\n' \"\${$var:-UNSET}\" >>'$obs'")
+    done
+    command printf '%s\n' '#!/bin/bash' "${report[@]}" 'echo 0' >"$stub"
     command chmod +x "$stub"
 
     FUSE_CLEANUP_BIN="$stub" bash "$wrapper" >/dev/null 2>&1
@@ -190,6 +194,21 @@ test_cron_wrapper_drops_injected_fallback_root() {
 
     assert_equals "UNSET" "$seen" \
         "Cron wrapper drops an injected FUSE_CLEANUP_FALLBACK_ROOT (issue #953)"
+}
+
+test_cron_wrapper_drops_all_seams_together() {
+    # The three tests above each inject ONE seam, so they pin each name but not
+    # the set: the wrapper clears all three with a single unset, and splitting
+    # it per variable could drop one with every single-seam test still green.
+    local seen expected
+    seen=$(FUSE_CLEANUP_ROOTS=/etc \
+        FUSE_CLEANUP_FINDMNT=/tmp/evil-findmnt \
+        FUSE_CLEANUP_FALLBACK_ROOT=/etc \
+        observe_cron_gc_env FUSE_CLEANUP_ROOTS FUSE_CLEANUP_FINDMNT FUSE_CLEANUP_FALLBACK_ROOT)
+    expected=$(command printf '%s\n' UNSET UNSET UNSET)
+
+    assert_equals "$expected" "$seen" \
+        "Cron wrapper drops all three seams injected together (issue #970)"
 }
 
 test_cron_wrapper_preserves_disable() {
@@ -474,6 +493,7 @@ run_test test_cron_wrapper_missing_gc_executes "Cron wrapper missing-GC branch a
 run_test test_cron_wrapper_drops_injected_roots "Cron wrapper drops injected FUSE_CLEANUP_ROOTS (#953)"
 run_test test_cron_wrapper_drops_injected_findmnt "Cron wrapper drops injected FUSE_CLEANUP_FINDMNT (#953)"
 run_test test_cron_wrapper_drops_injected_fallback_root "Cron wrapper drops injected FUSE_CLEANUP_FALLBACK_ROOT (#953)"
+run_test test_cron_wrapper_drops_all_seams_together "Cron wrapper drops all three seams together (#970)"
 run_test test_cron_wrapper_preserves_disable "Cron wrapper preserves FUSE_CLEANUP_DISABLE (#953)"
 run_test test_cron_wrapper_unsets_after_sourcing_env "Cron wrapper unsets after sourcing cron-env (#953)"
 run_test test_cron_log_file_is_writable_by_cron_user "Cron log file is writable by the cron user (#951)"
