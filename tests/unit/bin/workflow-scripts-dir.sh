@@ -435,20 +435,25 @@ test_root_owned_dir_accepted() {
     teardown
 }
 
-test_root_owned_group_writable_refused() {
+test_root_owned_writable_refused() {
     setup
     if ! have_root; then
         skip_test "needs a root runner or passwordless sudo to create a root-owned fixture"
         teardown
         return 0
     fi
-    local fixture rc=0 err
-    fixture="$(make_owned_scripts_dir 0:0 0775)"
-    run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" >/dev/null 2>&1 || rc=$?
-    assert_not_equals "0" "$rc" "a root-owned but group-writable dir is still refused"
-    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" 2>&1 >/dev/null || true)"
-    assert_contains "$err" "refusing $fixture/scripts" "stderr names the refused root-owned dir"
-    guarded_privileged_rm "$fixture"
+    local mode fixture rc err
+    # Group-write (0775) and world-write-only (0757): the write half of the rule
+    # holds for a root owner on each bit independently.
+    for mode in 0775 0757; do
+        rc=0
+        fixture="$(make_owned_scripts_dir 0:0 "$mode")"
+        run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" >/dev/null 2>&1 || rc=$?
+        assert_not_equals "0" "$rc" "a root-owned $mode dir is still refused"
+        err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" 2>&1 >/dev/null || true)"
+        assert_contains "$err" "refusing $fixture/scripts" "stderr names the refused root-owned $mode dir"
+        guarded_privileged_rm "$fixture"
+    done
     teardown
 }
 
@@ -534,7 +539,7 @@ run_test test_opt_librarian_ranks_between_plugin_root_and_cache
 run_test test_distrusted_opt_librarian_falls_through_to_cache
 run_test test_opt_librarian_default_matches_build_install
 run_test test_root_owned_dir_accepted
-run_test test_root_owned_group_writable_refused
+run_test test_root_owned_writable_refused
 run_test test_other_user_owned_dir_refused
 run_test test_guarded_privileged_rm_refuses_outside_scratch
 run_test test_not_found
