@@ -108,7 +108,15 @@ STUB
             in_guard && mutate == "--mutate" { sub(/exit 1/, ":") }
             { print }
             in_guard && /^}/ { done = 1 }
-        ' >"$dir/feature-script"
+            END { exit !done }
+        ' >"$dir/feature-script" || {
+        # No column-0 `}` closed the guard (a one-line `require_cosign ||
+        # exit 1`, or an indented brace): the copy would run the whole script
+        # on the host. Refuse, with a status no assertion expects.
+        command printf 'guard not truncatable in: %s\nrc=missing\n' "$script"
+        command rm -rf "$dir"
+        return 0
+    }
     echo 'echo PAST_GUARD; exit 0' >>"$dir/feature-script"
 
     # shellcheck disable=SC2016 # expanded by the inner bash, not here
@@ -129,7 +137,7 @@ _cosign_guard_rc() {
     command printf '%s\n' "$1" | command tail -n 1
 }
 
-# The four runtime tests, against $COSIGN_GUARD_SCRIPT. The --mutate case
+# The runtime tests, against $COSIGN_GUARD_SCRIPT. The --mutate case
 # no-ops the guard's `exit 1` in a scratch copy: if the absent-cosign test
 # could pass against that mutant it would not be testing the exit path.
 test_cosign_absent_exits_feature() {
@@ -181,13 +189,33 @@ test_cosign_guard_mutant_is_detected() {
         "the shadowed-cosign exit status discriminates the mutant"
 }
 
+# A guard the truncation cannot find the end of must be refused, not run: the
+# copy would otherwise be the whole feature script. Drives the refusal with a
+# scratch copy whose guard is collapsed to one line.
+test_cosign_guard_untruncatable_is_refused() {
+    local out scratch
+    scratch=$(command mktemp)
+    command awk '
+        /^require_cosign \|\|/ { print "require_cosign || exit 1"; skip = 1; next }
+        skip && /^}/ { skip = 0; next }
+        !skip { print }
+    ' "$COSIGN_GUARD_SCRIPT" >"$scratch"
+    out=$(run_feature_cosign_guard "$scratch" absent)
+    command rm -f "$scratch"
+    assert_equals "rc=missing" "$(_cosign_guard_rc "$out")" \
+        "a one-line guard is refused rather than run to the end of the script"
+    assert_contains "$out" "guard not truncatable" \
+        "the refusal names the truncation, not a missing guard"
+}
+
 # register_cosign_guard_tests <feature-script>
 #
-# Runs the four tests above against <feature-script> in the calling suite.
+# Runs the tests above against <feature-script> in the calling suite.
 register_cosign_guard_tests() {
     COSIGN_GUARD_SCRIPT="$1"
     run_test test_cosign_absent_exits_feature "Cosign absent: feature exits 1"
     run_test test_cosign_shadowed_exits_feature "Cosign shadowed: feature exits 1"
     run_test test_cosign_present_passes_guard "Cosign present: feature passes guard"
     run_test test_cosign_guard_mutant_is_detected "Cosign guard mutant detected"
+    run_test test_cosign_guard_untruncatable_is_refused "Cosign guard: untruncatable copy refused"
 }
