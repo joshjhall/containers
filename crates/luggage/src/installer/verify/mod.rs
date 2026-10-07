@@ -283,7 +283,9 @@ mod tests {
         }
     }
 
-    /// The malformed-pin path, through the same front door.
+    /// A malformed pin must likewise stay a hard failure through `dispatch` —
+    /// a typo'd constant that read as a pass or a warning here would silently
+    /// disable verification for that entry.
     #[test]
     fn tier_2_malformed_pin_via_dispatch_is_verification_failed() {
         let v = Verification { pinned_checksum: Some("not-a-digest".into()), ..verification(2) };
