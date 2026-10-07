@@ -252,9 +252,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-        # Note: gitleaks-action@v2 doesn't accept input parameters
-        # It automatically scans commits in push/PR events
-        # To customize behavior, create a .gitleaks.toml configuration file
+          # Without this the action falls back to its hard-coded 8.24.3, which
+          # predates the scoped [[allowlists]] in .gitleaks.toml and fails every
+          # full-history workflow_dispatch scan (#1050). Must equal the
+          # GITLEAKS_VERSION default in lib/features/dev-tools.sh and stay
+          # >= 8.29.0 — tests/unit/gitleaks-version-sync.sh enforces both, and
+          # the auto-patch updater bumps the two together.
+          GITLEAKS_VERSION: "8.30.1"
+        # Configuration comes from .gitleaks.toml at the repo root; the action
+        # scans the event's commit range (full history on workflow_dispatch).
 
       - name: Upload test results
         if: always()

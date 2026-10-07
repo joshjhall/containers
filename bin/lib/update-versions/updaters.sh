@@ -30,16 +30,18 @@ RC_UPDATE_FAILED=4   # a case matched but the rewrite itself failed
 # Portable in-place sed across GNU sed (Linux) and BSD sed (macOS).
 # Usage: sed_inplace 'EXPRESSION' file [file ...]
 sed_inplace() {
-    local expr="$1"
+    local expr="$1" rc=0
     shift
     if [ "${DRY_RUN:-false}" = true ]; then
         return 0
     fi
-    command sed -i.bak "$expr" "$@"
-    local f
-    for f in "$@"; do
-        command rm -f "$f.bak"
-    done
+    # Report a failed write as RC_UPDATE_FAILED, not the cleanup's status (a
+    # trailing rm always masked it) nor sed's raw code (1 would collide with
+    # RC_INVALID_VERSION). Most arms end in a sed_inplace, so this is also
+    # what update_version returns when their last write fails.
+    command sed -i.bak "$expr" "$@" || rc=$RC_UPDATE_FAILED
+    command rm -f "${@/%/.bak}"
+    return "$rc"
 }
 
 # resolve_action_sha - Resolve a GitHub Actions release tag to its commit SHA.
@@ -163,10 +165,12 @@ update_luggage_catalog() {
     "$luggage_bin" catalog add-version "${tool}@${version}" --catalog "$catalog"
 }
 
-# sync_rust_minor_pins lives in its own module to keep this file under the
-# file-size ceiling (tests/unit/file-size-ceiling.sh).
+# sync_rust_minor_pins and sync_gitleaks_pins live in their own modules to keep
+# this file under the file-size ceiling (tests/unit/file-size-ceiling.sh).
 # shellcheck source=bin/lib/update-versions/rust-pins.sh
 source "$(dirname "${BASH_SOURCE[0]}")/rust-pins.sh"
+# shellcheck source=bin/lib/update-versions/gitleaks-pins.sh
+source "$(dirname "${BASH_SOURCE[0]}")/gitleaks-pins.sh"
 
 # Function to update a version in a file
 update_version() {
@@ -470,8 +474,7 @@ update_version() {
                     sed_inplace "s/^LEFTHOOK_VERSION=\"[0-9][^\"]*\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 gitleaks)
-                    sed_inplace "s/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-[^}]*}\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^GITLEAKS_VERSION=\"[0-9][^\"]*\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
+                    sync_gitleaks_pins "$script_path" "$latest" || return
                     ;;
                 dprint)
                     sed_inplace "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"

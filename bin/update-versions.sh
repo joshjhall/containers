@@ -239,7 +239,8 @@ if [ "$FAILED_UPDATES" -gt 0 ]; then
     #       malformed upstream version). The tree is consistent; the tools just
     #       stalled. auto-patch.yml keeps the updates that DID apply and warns.
     #   3 — a matching case ran and its rewrite FAILED (e.g. pin_action could
-    #       not resolve a SHA, or the luggage catalog update failed). The tree
+    #       not resolve a SHA, the luggage catalog update failed, or a
+    #       sed_inplace write failed). The tree
     #       may be half-updated — a Dockerfile ARG bumped while its vendored
     #       catalog entry was not (issue #506) ships a build that cannot
     #       succeed. That must never sail through auto-merge, so it is fatal to
@@ -255,7 +256,9 @@ if [ "$FAILED_UPDATES" -gt 0 ]; then
     #
     # In practice a dry run cannot reach exit 3: both rewrite-failure sources
     # (pin_action's SHA resolution, update_luggage_catalog's binary probe)
-    # short-circuit before doing the work that could fail.
+    # short-circuit before doing the work that could fail. sync_gitleaks_pins'
+    # preflight does run on a dry run, but it reports RC_INVALID_VERSION (exit
+    # 2), since it refuses before writing anything.
     if [ "$UPDATE_ERRORS" -gt 0 ]; then
         exit 3
     fi
