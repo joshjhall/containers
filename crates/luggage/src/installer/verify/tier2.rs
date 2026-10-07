@@ -30,6 +30,29 @@ use containers_common::tooldb::Verification;
 use super::sha::{digests_equal, is_hex_digest};
 use crate::error::{LuggageError, Result};
 
+/// Return the entry's pinned checksum, or the typed error for its absence.
+///
+/// Shared by [`verify`] and [`super::ensure_supported`] so the pre-download
+/// guard refuses a pinless tier-2 entry with exactly the error dispatch would
+/// raise after the download — the same single-source-of-truth role
+/// [`super::unsupported_tier`] plays for unimplemented tiers.
+///
+/// # Errors
+///
+/// [`LuggageError::Catalog`] when `verification.pinned_checksum` is absent.
+pub(super) fn require_pin<'a>(
+    tool: &str,
+    version: &str,
+    verification: &'a Verification,
+) -> Result<&'a str> {
+    verification.pinned_checksum.as_deref().ok_or_else(|| {
+        LuggageError::Catalog(format!(
+            "tier 2 verification for {tool}@{version} requires a `pinned_checksum` in the \
+             catalog entry"
+        ))
+    })
+}
+
 /// Verify a precomputed artifact digest against the catalog's pinned checksum.
 ///
 /// `actual_digest` is the artifact's hex digest, computed while the artifact
@@ -56,12 +79,7 @@ pub fn verify(
     actual_digest: &str,
     verification: &Verification,
 ) -> Result<()> {
-    let pinned = verification.pinned_checksum.as_deref().ok_or_else(|| {
-        LuggageError::Catalog(format!(
-            "tier 2 verification for {tool}@{version} requires a `pinned_checksum` in the \
-             catalog entry"
-        ))
-    })?;
+    let pinned = require_pin(tool, version, verification)?;
 
     let fail = |reason: String| LuggageError::VerificationFailed {
         tool: tool.to_owned(),

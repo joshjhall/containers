@@ -493,7 +493,8 @@ impl Installer {
     ) -> Result<StageOutcome> {
         self.stage_system_packages(resolved, logger)?;
 
-        // Reject an unsupported verification tier BEFORE downloading. The
+        // Reject an unsupported verification tier — or a tier-2 entry with no
+        // `pinned_checksum`, which can never pass — BEFORE downloading. The
         // download derives its digest algorithm from `verification.algorithm`,
         // and a tier-1 entry legitimately carries `algorithm: "gpg"` — without
         // this the caller would get "unrecognised digest algorithm `gpg`"
@@ -769,6 +770,29 @@ mod tests {
         match err {
             LuggageError::VerificationFailed { tier, .. } => assert_eq!(tier, 4),
             other => panic!("expected a pre-download tier-4 refusal, got {other:?}"),
+        }
+    }
+
+    /// A tier-2 entry with no pin can never verify, so it must be refused
+    /// before the download (#891). As above, the dead `source_url_template`
+    /// means a refusal after the fetch would surface as `DownloadFailed`.
+    #[test]
+    fn pinless_tier_2_is_refused_before_downloading() {
+        let mut resolved = sample_resolved_with_deps();
+        resolved.verification_tier = 2;
+        resolved.verification =
+            Verification { tier: 2, pinned_checksum: None, ..resolved.verification };
+        resolved.source_url_template = Some("https://example.test/artifact.tar.gz".into());
+
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        let plan = installer.plan(&resolved).unwrap();
+        let err = installer.run_stages(&resolved, plan, None).unwrap_err();
+        match err {
+            LuggageError::Catalog(msg) => assert!(msg.contains("pinned_checksum"), "got: {msg}"),
+            other => panic!("expected a pre-download Catalog refusal, got {other:?}"),
         }
     }
 
