@@ -494,6 +494,57 @@ test_collect_go_test_sentinel() {
     assert_equals "false" "$RUN_ALL" "RUN_ALL must stay false without an ALL line"
 }
 
+# ============================================================================
+# lefthook.yml → lefthook policy suites (#1075)
+# ============================================================================
+# lefthook.yml had no arm, so editing only it ran none of the lefthook policy
+# suites at push time — they ran only in full CI.
+
+test_lefthook_mapping_emits_policy_suites() {
+    local out
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+
+    # The exact set, by name: a dropped or substituted suite changes it.
+    out=$(map_to_test "lefthook.yml" | command sort)
+    assert_equals "$TESTS_DIR/unit/lefthook-cargo-hint.sh
+$TESTS_DIR/unit/lefthook-optional-tools.sh" "$out" \
+        "lefthook.yml must map to every lefthook policy suite"
+
+    # Through the collection loop too, so each suite stays its own line.
+    out=$(command printf '%s\n' lefthook.yml | map_changed_files | command sort)
+    assert_equals "$TESTS_DIR/unit/lefthook-cargo-hint.sh
+$TESTS_DIR/unit/lefthook-optional-tools.sh" "$out" \
+        "lefthook.yml must collect each lefthook policy suite as its own path"
+}
+
+# The arm globs tests/unit/lefthook-*.sh, so a new policy suite is picked up
+# and an unrelated suite is not. With none present, the unmatched glob stays
+# literal and the -f guard must keep it out.
+test_lefthook_mapping_follows_glob() {
+    local root out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+    root=$(/usr/bin/mktemp -d)
+    /usr/bin/mkdir -p "$root/tests/unit"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "lefthook.yml")
+    assert_empty "$out" "no lefthook suites must map to no test path"
+
+    /usr/bin/touch "$root/tests/unit/lefthook-a.sh" "$root/tests/unit/lefthook-b.sh" \
+        "$root/tests/unit/other.sh"
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "lefthook.yml" | command sort)
+    assert_equals "$root/tests/unit/lefthook-a.sh
+$root/tests/unit/lefthook-b.sh" "$out" \
+        "lefthook.yml must map to exactly the lefthook-*.sh suites present"
+
+    /usr/bin/rm -rf "$root"
+}
+
 run_test test_runner_exports_flag "Pre-push runner exports SKIP_NETWORK_TESTS"
 run_test test_framework_defines_helper "framework.sh defines network_tests_disabled"
 run_test test_framework_exports_helper "framework.sh exports network_tests_disabled"
@@ -518,6 +569,8 @@ run_test test_bin_nested_maps_by_relative_path "nested bin/** script maps by its
 run_test test_collect_dedupes_overlapping_inputs "runner main block runs each overlapping suite once (#1031)"
 run_test test_collect_sets_run_all "runner main block sets RUN_ALL and stops at ALL (#1031)"
 run_test test_collect_go_test_sentinel "runner main block handles the GO_TEST sentinel (#1031)"
+run_test test_lefthook_mapping_emits_policy_suites "lefthook.yml maps to every lefthook policy suite (#1075)"
+run_test test_lefthook_mapping_follows_glob "lefthook.yml mapping follows the lefthook-*.sh glob (#1075)"
 
 # Generate test report
 generate_report
