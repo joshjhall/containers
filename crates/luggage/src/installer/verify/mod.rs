@@ -53,7 +53,8 @@ use crate::installer::template::Substitutions;
 /// luggage's public API is unchanged.
 pub use containers_common::tooldb::VerificationWarning;
 
-/// Fail fast when `verification.tier` is one this build will not satisfy.
+/// Fail fast when `verification` is one this build will not satisfy — an
+/// unsupported tier, or a tier-2 entry with no `pinned_checksum`.
 ///
 /// Called before the artifact is downloaded, for three reasons. First, it keeps
 /// the *tier's* error the one the caller sees: the download path derives a
@@ -75,7 +76,7 @@ pub use containers_common::tooldb::VerificationWarning;
 ///   [`dispatch`] returns for those tiers.
 /// - [`LuggageError::Catalog`] for a tier-2 entry with no `pinned_checksum` —
 ///   the same error [`tier2::verify`] raises, built by the same
-///   [`tier2::require_pin`], so the guard and dispatch cannot disagree about it.
+///   `tier2::require_pin`, so the guard and dispatch cannot disagree about it.
 /// - [`LuggageError::VerificationFailed`] for tier 4 when `require_verified`
 ///   is set. This is a *policy* refusal of a supported tier, not an
 ///   unimplemented one, so it is deliberately not a `NotImplemented`: it maps
@@ -233,6 +234,9 @@ mod tests {
         assert!(matches!(err, LuggageError::NotImplemented(_)));
     }
 
+    /// In the installer [`ensure_supported`] now refuses this entry first; this
+    /// pins `dispatch`'s own fail-closed behaviour for any direct caller.
+    ///
     /// A tier-2 entry that reaches `dispatch` with no pin is catalog drift —
     /// the tier is implemented, so the error must be `Catalog`, not
     /// `NotImplemented`.
