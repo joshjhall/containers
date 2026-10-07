@@ -83,6 +83,11 @@ check_image_drift() {
         echo "  Not checked (image does not record): ${unchecked[*]}"
     fi
 
+    if [ "$compared" -eq 0 ]; then
+        echo -e "${YELLOW}⚠${NC}  No INCLUDE_* flag recorded by both files - drift not verified"
+        return 0
+    fi
+
     if [ ${#mismatches[@]} -eq 0 ]; then
         echo -e "${GREEN}✓${NC} Image matches docker-compose.yml on $compared recorded INCLUDE_* flag(s)"
         return 0

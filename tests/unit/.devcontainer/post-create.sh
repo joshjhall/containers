@@ -100,17 +100,6 @@ test_script_uses_lefthook_install() {
     fi
 }
 
-# Test: Setup script installs both pre-commit and pre-push (lefthook install does both)
-test_script_installs_hooks() {
-    local script="$PROJECT_ROOT/.devcontainer/post-create.sh"
-
-    if command grep -q "pre-commit.*pre-push\|lefthook install" "$script"; then
-        assert_true true "Setup script installs both commit and push hooks via lefthook"
-    else
-        assert_true false "Setup script doesn't install lefthook hooks"
-    fi
-}
-
 # Test: Setup script has color variables (sourced or defined)
 test_script_has_colors() {
     local script="$PROJECT_ROOT/.devcontainer/post-create.sh"
@@ -255,6 +244,18 @@ test_drift_ignores_keys_absent_from_conf() {
     assert_contains "$out" "on 3 recorded INCLUDE_* flag(s)" "Clean result states how many flags were compared"
 }
 
+test_drift_warns_when_nothing_compared() {
+    local dir out
+    dir=$(_drift_fixture_dir)
+    command printf '%s\n' INCLUDE_KUBERNETES=false >"$dir/features.conf"
+
+    out=$(_run_drift "$dir/compose.yml" "$dir/features.conf")
+
+    assert_contains "$out" "rc=0" "Zero overlap returns 0"
+    assert_contains "$out" "drift not verified" "Zero overlap warns instead of claiming a match"
+    assert_not_contains "$out" "Image matches" "Zero overlap does not print the success line"
+}
+
 test_drift_skips_when_conf_missing() {
     local dir out
     dir=$(_drift_fixture_dir)
@@ -390,7 +391,6 @@ run_test test_lefthook_has_credential_detection "Lefthook config includes creden
 run_test test_lefthook_prevents_env_commit "Lefthook config prevents .env commit"
 run_test test_gitignore_has_env ".gitignore contains .env"
 run_test test_script_uses_lefthook_install "Setup script uses lefthook install"
-run_test test_script_installs_hooks "Setup script installs lefthook hooks"
 run_test test_script_has_colors "Setup script has color variables"
 run_test test_script_checks_gitignore "Setup script checks .gitignore"
 run_test test_script_has_tool_checker "Setup script has check_tool function"
@@ -399,6 +399,7 @@ run_test test_drift_clean_when_image_matches "Drift check: matching image is cle
 run_test test_drift_warns_on_mismatch "Drift check: mismatch warns and names the key"
 run_test test_drift_parses_single_quoted_values "Drift check: single-quoted compose values are parsed"
 run_test test_drift_ignores_keys_absent_from_conf "Drift check: keys absent from conf are ignored"
+run_test test_drift_warns_when_nothing_compared "Drift check: zero comparable flags warns"
 run_test test_drift_skips_when_conf_missing "Drift check: missing conf is skipped"
 run_test test_drift_skips_when_compose_missing "Drift check: missing compose file is skipped"
 run_test test_drift_does_not_fail_script "Drift check: post-create still exits 0"
