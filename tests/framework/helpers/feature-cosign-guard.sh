@@ -54,8 +54,10 @@
 #     a real system path, so uid 0 is refused outright.
 #   - Residual, not scanned: `.`/`source` of a host file (docker.sh reads
 #     /etc/os-release), `cd`, `printf -v`/`read` into variables, an absolute
-#     path reached through a variable (`"$x" args`), and quotes nested inside
-#     a multi-line `$(...)`, which the comment-skip tracker does not model.
+#     path reached through a variable (`"$x" args`), a relative-path command
+#     (`./tool`), a keyword split by quoting (`ev""al`, `$'\x65val'`), and
+#     quotes nested inside a multi-line `$(...)`, which the comment-skip
+#     tracker does not model.
 #     None writes outside the sandbox today; keep the pre-guard code to
 #     bare-name tool calls.
 
@@ -221,9 +223,16 @@ _cosign_guard_scan_safe() {
             }
         }
         function refuse(why) { print FILENAME ":" FNR ": " why ": " $0 > "/dev/stderr"; bad = 1 }
-        FNR == 1 { q = 0; bt = 0; depth = 0; cont = 0; subst = 0; heredoc = 0 }
+        FNR == 1 { q = 0; bt = 0; depth = 0; cont = 0; subst = 0; heredoc = "" }
+        # A here-document body is data: scan it (a `#` there is not a
+        # comment) but keep it out of the quote tracker, where a stray
+        # apostrophe would leave every later line "inside a string".
+        heredoc != "" {
+            body = $0; sub(/^\t+/, "", body)
+            if (body == heredoc) { heredoc = ""; next }
+        }
         {
-            clean = q == 0 && !bt && depth == 0 && !cont && !subst && !heredoc
+            clean = q == 0 && !bt && depth == 0 && !cont && !subst && heredoc == ""
             if (clean && /^[[:space:]]*#/) next
             line = $0
             # Drop the benign forms, then look for any write redirection left.
@@ -239,7 +248,17 @@ _cosign_guard_scan_safe() {
                 $0 ~ /[;&|({!`][[:space:]]*["\047]?\// ||
                 $0 ~ /(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|time)[[:space:]]+["\047]?\//)
                 refuse("absolute-path command")
-            if ($0 ~ /<</ && $0 !~ /<<</) heredoc = 1
+            if (heredoc != "") next
+            # Remember the delimiter (`<<EOF`, `<<-"EOF"`, `<< EOF`); a
+            # `<<` it cannot parse latches until end of file, which only
+            # scans more.
+            if ($0 ~ /<</ && $0 !~ /<<</) {
+                heredoc = "\n"
+                if (match($0, /<<-?[[:space:]]*["\047]?[A-Za-z_][A-Za-z0-9_]*/)) {
+                    heredoc = substr($0, RSTART, RLENGTH)
+                    sub(/^<<-?[[:space:]]*["\047]?/, "", heredoc)
+                }
+            }
             track($0)
             subst = $0 ~ /\$\(|`/
             cont = !hit_comment && match($0, /\\+$/) && RLENGTH % 2 == 1
@@ -473,13 +492,15 @@ test_cosign_guard_scan() {
         '# echo x >/etc/comment-only' '#   - dive <image>: Analyze' \
         'add_key "K" \' '    "/usr/share/keyrings/k.gpg" \' '    x' \
         'cmd --keyring /etc/apt/x' '[ -f "/tmp/x" ]' \
-        'v=$(. /etc/os-release && echo "$V")' 'echo "a # b"' >"$f"
+        'v=$(. /etc/os-release && echo "$V")' 'echo "a # b"' \
+        'cat <<-EOF' "	don't" '	EOF' '# after a here-doc: x >y' >"$f"
     _cosign_guard_scan_safe "$f" 2>/dev/null
     assert_equals "0" "$?" "/dev/null, fd duplication, comments and arguments are allowed"
     # shellcheck disable=SC2016 # literal shell text, scanned not run
     for case in 'cmd >/etc/x' 'cmd >>/etc/x' 'cmd 2>/tmp/x' 'cmd >"$VAR"' \
         'cmd &>/etc/x' 'cmd >/dev/null >/etc/x' \
         'x="|#"; echo d >/etc/x' 'echo a\|#b >/etc/x' 'x=$(echo "|#" >/etc/x)' \
+        'x=`echo|a|#` >/etc/x' 'x=$(|# >/etc/x|)' 'cat <<EOF|# >/etc/x|EOF' \
         'cmd >&2foo' 'cmd >/dev/nullX' \
         "eval \"x \$(printf '\\076') /cache/x\"" \
         '/usr/bin/sudo id' 'x && /usr/bin/mv a b' 'if "/usr/bin/x"; then :; fi' \
