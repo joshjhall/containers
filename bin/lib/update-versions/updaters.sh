@@ -35,9 +35,11 @@ sed_inplace() {
     if [ "${DRY_RUN:-false}" = true ]; then
         return 0
     fi
-    # Return sed's status, not the cleanup's: callers guard writes with
-    # `sed_inplace ... || return`, which a trailing rm would always mask.
-    command sed -i.bak "$expr" "$@" || rc=$?
+    # Report a failed write as RC_UPDATE_FAILED, not the cleanup's status (a
+    # trailing rm always masked it) nor sed's raw code (1 would collide with
+    # RC_INVALID_VERSION). Most arms end in a sed_inplace, so this is also
+    # what update_version returns when their last write fails.
+    command sed -i.bak "$expr" "$@" || rc=$RC_UPDATE_FAILED
     command rm -f "${@/%/.bak}"
     return "$rc"
 }

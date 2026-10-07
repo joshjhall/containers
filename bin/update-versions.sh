@@ -239,7 +239,8 @@ if [ "$FAILED_UPDATES" -gt 0 ]; then
     #       malformed upstream version). The tree is consistent; the tools just
     #       stalled. auto-patch.yml keeps the updates that DID apply and warns.
     #   3 — a matching case ran and its rewrite FAILED (e.g. pin_action could
-    #       not resolve a SHA, or the luggage catalog update failed). The tree
+    #       not resolve a SHA, the luggage catalog update failed, or a
+    #       sed_inplace write failed). The tree
     #       may be half-updated — a Dockerfile ARG bumped while its vendored
     #       catalog entry was not (issue #506) ships a build that cannot
     #       succeed. That must never sail through auto-merge, so it is fatal to

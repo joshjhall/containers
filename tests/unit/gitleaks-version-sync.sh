@@ -219,7 +219,10 @@ test_sed_inplace_propagates_sed_failure() {
         DRY_RUN=false
         sed_inplace 's/a/b/' "$TEST_SCRATCH_BASE/does-not-exist/file"
     ) >/dev/null 2>&1 || rc=$?
-    assert_not_equals "0" "$rc" "sed_inplace must return non-zero when sed fails"
+    local expected
+    expected="$(command sed -nE 's/^RC_UPDATE_FAILED=([0-9]+).*/\1/p' \
+        "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh")"
+    assert_equals "$expected" "$rc" "sed_inplace must report a failed sed as RC_UPDATE_FAILED"
 }
 
 test_updater_dry_run_writes_nothing() {
