@@ -197,8 +197,9 @@ fi
 # dir. The plugin cache install copies these modes, so it inherits 755/644 (#1020).
 chmod -R a+rX,go-w "$LIBRARIAN_DIR"
 # Prune every symlink whose resolved target leaves the tree (#973). claude-setup
-# grants $LIBRARIAN_DIR via permissions.additionalDirectories, which lets Claude
-# EDIT there without a prompt, so "the runtime user cannot write under it" must
+# used to grant $LIBRARIAN_DIR via permissions.additionalDirectories, which lets
+# Claude EDIT there without a prompt; #1035 revokes that grant, but a user can
+# re-add it by hand, so "the runtime user cannot write under it" must still
 # hold — and a link out of the tree defeats root ownership + go-w above. The
 # upstream repo commits `.codegraph -> /cache/codegraph` (its `.codegraph/`
 # gitignore entry misses a symlink), which put a writable volume under the grant.
@@ -284,10 +285,10 @@ AUTO_MEMORY_DIR="${WORKING_DIR}/.claude/memory"
 # literal by design (claude-plugin-lib.sh), and a unit test asserts the two agree
 # so they cannot drift silently.
 #
-# The real access mechanism is permissions.additionalDirectories, written by
-# claude-setup on every boot; this Read rule is belt-and-suspenders. Its value is
-# being the TRACKED home of the correction, so new images stop shipping the
-# stale-path pattern.
+# This rule is now the only standing read access to the tree: claude-setup's
+# #967 permissions.additionalDirectories grant is revoked (#1035), because
+# librarian v0.15.0's harness-stage.sh copies Workflow harnesses under the
+# session's cwd instead of needing the tree granted.
 DEFAULT_PERMISSIONS='[
   "Read(~/.claude/skills/**)",
   "Read(~/.claude/agents/**)",

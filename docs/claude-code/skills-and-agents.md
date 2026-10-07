@@ -110,16 +110,19 @@ workflow identity at the release tag with the GitHub OIDC issuer, pinned via
 forks or test signers — see
 [environment variables](../reference/environment-variables.md)).
 
-**Directory grant (#967).** `claude-setup` also adds `/opt/librarian` to
-`permissions.additionalDirectories` in `~/.claude/settings.json`, on every boot
-and only when the directory exists. Without it the `Workflow` tool refuses a
-`scriptPath` under the tree — *"scriptPath must be a script path this tool
-returned, or a file you can already read"* — and a golem has to copy
-`ship-issue/workflow.js` into its worktree before it can run the mandatory
-adversarial pre-PR review. The refusal is not a filesystem-permission problem
-(`/opt/librarian` is world-readable); the tool gates on that settings key, so no
-`chmod` would fix it. With the grant in place, the harness runs from its real
-path.
+**Workflow harnesses (#1035).** The `Workflow` tool only accepts a
+`scriptPath` under the session's working directory (or a directory it has been
+granted), and `/opt/librarian` is outside every worktree. From librarian
+v0.15.0, every harness call site runs
+`plugins/workflow/scripts/harness-stage.sh stage <id>` first, which copies the
+harness to `<cwd>/.claude/tmp/harness/<id>.workflow.js` (gitignored). The
+`/opt/librarian` entry that #967 added to `permissions.additionalDirectories` is
+therefore no longer needed. That entry also allowed edits across the whole
+tree, so `claude-setup` now **removes** it from `~/.claude/settings.json` on
+boot, leaving any directories you added yourself. Plain reads stay covered by
+the `Read(/opt/librarian/**)` default permission. On an image pinned to a
+librarian older than v0.15.0, copy the harness into the worktree before you
+invoke it.
 
 Project-level `.claude/` configs still merge with the installed plugins (union
 semantics, project wins on name conflicts).
