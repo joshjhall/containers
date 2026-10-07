@@ -286,7 +286,9 @@ test_verify_sigstore_fails_closed_without_cosign_require() {
 
     assert_equals "1" "$exit_code" \
         "verify_sigstore_signature fails closed when require_cosign is unavailable"
-    assert_contains "$output" "Sigstore verification unavailable" \
+    # bash's own 127 diagnostic, not the guard's log_message, which the
+    # framework's LOG_LEVEL=1 (WARN) default suppresses.
+    assert_contains "$output" "require_cosign: command not found" \
         "The failure comes from the require_cosign guard"
 }
 
@@ -339,7 +341,7 @@ test_kubectl_sigstore_fails_closed_without_cosign_require() {
 
     assert_equals "1" "$exit_code" \
         "download_and_verify_kubectl_sigstore fails closed when require_cosign is unavailable"
-    assert_contains "$output" "cannot verify kubectl Sigstore signature" \
+    assert_contains "$output" "require_cosign: command not found" \
         "The failure comes from the require_cosign guard"
     assert_not_contains "$output" "CURL_CALLED" \
         "Nothing is downloaded when the guard is unavailable"
