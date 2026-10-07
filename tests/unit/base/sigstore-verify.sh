@@ -371,6 +371,26 @@ test_kubectl_sigstore_rejects_shadowed_cosign() {
         "Nothing is downloaded once the guard rejects cosign"
 }
 
+# Positive control through the real require_cosign: with the pinned stub
+# resolving, the kubectl path succeeds and the stub received the verify-blob
+# call. The other kubectl binding test replaces require_cosign, so this is
+# what proves the real guard's COSIGN_BIN reaches the call site.
+test_kubectl_sigstore_uses_pinned_cosign() {
+    echo "kubectl binary" >"$TEST_TEMP_DIR/kubectl"
+    # shellcheck disable=SC2016 # expanded by the stub, not here
+    write_curl_stub 'while [ $# -gt 0 ]; do if [ "$1" = -o ]; then : >"$2"; shift; fi; shift; done'
+
+    local exit_code=0
+    run_sigstore "" \
+        "download_and_verify_kubectl_sigstore '$TEST_TEMP_DIR/kubectl' '1.28.0'" \
+        >/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" \
+        "download_and_verify_kubectl_sigstore succeeds with the pinned cosign"
+    assert_file_contains "$TEST_TEMP_DIR/cosign.args" "verify-blob $TEST_TEMP_DIR/kubectl" \
+        "The pinned cosign received the kubectl verify-blob call"
+}
+
 # The kubectl verify-blob call is bound to COSIGN_BIN. The curl stub creates
 # empty .sig/.cert files; a cosign shell function stands in for a bare-name
 # lookup. Without "$COSIGN_BIN" in the function, the impostor runs.
@@ -503,6 +523,7 @@ run_test_with_setup test_verify_sigstore_fails_closed_without_cosign_require "ve
 
 # download_and_verify_kubectl_sigstore rejection paths
 run_test_with_setup test_kubectl_sigstore_cosign_not_installed "kubectl_sigstore: cosign not installed"
+run_test_with_setup test_kubectl_sigstore_uses_pinned_cosign "kubectl_sigstore: uses pinned cosign"
 run_test_with_setup test_kubectl_sigstore_rejects_shadowed_cosign "kubectl_sigstore: rejects shadowed cosign"
 run_test_with_setup test_kubectl_sigstore_invokes_cosign_bin "kubectl_sigstore: invokes COSIGN_BIN"
 run_test_with_setup test_kubectl_sigstore_fails_closed_without_cosign_require "kubectl_sigstore: fails closed without cosign-require.sh"
