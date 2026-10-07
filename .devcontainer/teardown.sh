@@ -1,44 +1,43 @@
 #!/usr/bin/env bash
-# rebuild.sh — pre-build the devcontainer image (HOST-side helper for Zed).
+# teardown.sh — tear down the devcontainer stack (HOST-side helper for Zed).
 #
 # Zed has no in-editor "Rebuild Container" action and does NOT detect
 # .devcontainer/devcontainer.json changes, so after editing the devcontainer
-# config (or when state is wedged) you tear the old container down and rebuild
-# the image from a host terminal, then reopen the project. This wraps that.
+# config (or when state is wedged) you tear the old container down from a host
+# terminal, then reopen the project so Zed rebuilds and recreates it.
 #
-# Why pre-build instead of letting Zed do it on reopen? Zed delegates to the
-# devcontainer spec, which builds in two stages: (1) THIS image from
-# docker-compose.yml (the slow part — Rust/Node/etc.), then (2) a generated
-# Dockerfile.extended that layers devcontainer *features* on top. Zed
-# regenerates stage 2 every launch and owns container creation (it injects
+# This script ONLY tears down. It deliberately does NOT pre-build the image:
+# Zed drives its own build on reopen (it owns container creation — injecting
 # SYS_PTRACE, seccomp=unconfined, and devcontainer labels via a runtime
-# overlay), so this script CANNOT create the final container itself. What it
-# CAN do is build stage 1 with the cache warm — Zed's build sets
-# BUILDKIT_INLINE_CACHE=1, so on reopen it reuses every layer we built here and
-# only the cheap features layer runs. Net effect: you control when the slow
-# build happens, and the reopen is near-instant.
+# overlay, and it layers devcontainer *features* on top via a generated
+# Dockerfile.extended). A host-side `compose build` runs on a different builder
+# than Zed's, so the layers it produced were NOT reused on reopen — the warm
+# cache never materialized. Letting Zed own the whole build is slower to reach
+# (you close/reopen the project window) but it actually reuses its own cache.
+#
+# By default the image and named cache volumes are KEPT, so Zed's reopen build
+# is incremental. Use --rmi / --volumes only when you want a clean slate.
 #
 # Run this from a HOST terminal (your laptop), NOT inside the dev container.
 #
 # Usage:
-#   .devcontainer/rebuild.sh [--no-cache] [--rmi] [--volumes] [--help]
+#   .devcontainer/teardown.sh [--rmi] [--volumes] [--help]
 #
-#   (default)     down (keep image + cache), then `build` warm so reopen is fast
-#   --no-cache    build with --no-cache (cold, slow) — use when layers are stale
+#   (default)     stop + remove the container (image + caches kept)
 #   --rmi         also remove the locally-built image on teardown
 #   --volumes,-v  also drop named cache volumes (pip/npm/cargo/… — slower rebuild)
 #   --help,-h     show this help
 #
-# After it finishes, reopen the project in Zed:
+# After it finishes, reopen the project in Zed to rebuild + start the container:
 #   Cmd/Ctrl+Shift+P -> "project: open remote"  (or Ctrl/Alt+Cmd+Shift+O)
 
 set -euo pipefail
 
 # --- resolve paths (script lives in .devcontainer/) -------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+# The compose file and the Compose working_dir label both live in this dir.
+DEVCONTAINER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_FILE="$DEVCONTAINER_DIR/docker-compose.yml"
 
-NO_CACHE=false
 DROP_VOLUMES=false
 REMOVE_IMAGE=false
 
@@ -48,7 +47,6 @@ usage() {
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --no-cache) NO_CACHE=true ;;
         --rmi) REMOVE_IMAGE=true ;;
         --volumes | -v) DROP_VOLUMES=true ;;
         --help | -h)
@@ -56,7 +54,7 @@ while [ $# -gt 0 ]; do
             exit 0
             ;;
         *)
-            printf 'rebuild.sh: unknown option: %s\n\n' "$1" >&2
+            printf 'teardown.sh: unknown option: %s\n\n' "$1" >&2
             usage >&2
             exit 1
             ;;
@@ -67,44 +65,45 @@ done
 # --- guards -----------------------------------------------------------------
 # Must run on the host: you can't tear down the container from inside it.
 if [ -f /.dockerenv ] || [ -f "$HOME/.container-initialized" ]; then
-    printf 'rebuild.sh: looks like this is running INSIDE the dev container.\n' >&2
-    printf '            Run it from a host terminal instead.\n' >&2
+    printf 'teardown.sh: looks like this is running INSIDE the dev container.\n' >&2
+    printf '             Run it from a host terminal instead.\n' >&2
     exit 1
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
-    printf 'rebuild.sh: docker not found on PATH.\n' >&2
+    printf 'teardown.sh: docker not found on PATH.\n' >&2
     exit 1
 fi
 
 # Zed drives Compose v2 (`docker compose`), not the legacy `docker-compose`.
 if ! docker compose version >/dev/null 2>&1; then
-    printf 'rebuild.sh: `docker compose` (Compose v2) is required but not available.\n' >&2
+    printf 'teardown.sh: `docker compose` (Compose v2) is required but not available.\n' >&2
     exit 1
 fi
 
 if [ ! -f "$COMPOSE_FILE" ]; then
-    printf 'rebuild.sh: compose file not found: %s\n' "$COMPOSE_FILE" >&2
+    printf 'teardown.sh: compose file not found: %s\n' "$COMPOSE_FILE" >&2
     exit 1
 fi
 
 # --- resolve the Compose project name ---------------------------------------
 # Zed (and VS Code) launch the stack under a project name derived from the
-# WORKSPACE folder (e.g. "containers_devcontainer"), NOT from this compose
+# WORKSPACE folder (e.g. "containers_devcontainer"), NOT from the compose
 # file's parent dir. If we let `docker compose` derive the name itself it would
 # pick "devcontainer" (the .devcontainer/ dirname) and every command would
 # target a project that doesn't exist — silently doing nothing and leaving the
 # wedged container running. So discover the real name from the running/exited
-# container's compose labels, keyed off this script's directory.
+# container's compose labels, keyed off the .devcontainer/ dir (Compose's
+# working_dir is the compose file's dir, which is also this script's dir).
 PROJECT_NAME="$(
     docker ps -a \
-        --filter "label=com.docker.compose.project.working_dir=$SCRIPT_DIR" \
+        --filter "label=com.docker.compose.project.working_dir=$DEVCONTAINER_DIR" \
         --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | command head -n1
 )"
-# Fallback when no container exists yet (e.g. first build, or it was already
-# removed): editors name the project "<workspace-folder-basename>_devcontainer".
+# Fallback when no container exists yet (e.g. it was already removed): editors
+# name the project "<workspace-folder-basename>_devcontainer".
 if [ -z "$PROJECT_NAME" ]; then
-    PROJECT_NAME="$(command basename "$(command dirname "$SCRIPT_DIR")")_devcontainer"
+    PROJECT_NAME="$(command basename "$(command dirname "$DEVCONTAINER_DIR")")_devcontainer"
     printf '==> No existing container found; assuming project name: %s\n' "$PROJECT_NAME"
 else
     printf '==> Targeting Compose project: %s\n' "$PROJECT_NAME"
@@ -115,8 +114,8 @@ compose() {
 }
 
 # --- tear down --------------------------------------------------------------
-# Default keeps the image and cache so the rebuild below is fast; --rmi/--volumes
-# opt into the slow, clean-slate variants.
+# Default keeps the image and cache so Zed's reopen build is incremental;
+# --rmi/--volumes opt into the slow, clean-slate variants.
 down_args=(down)
 teardown_msg='==> Stopping and removing the container (image + caches kept)…'
 if [ "$REMOVE_IMAGE" = true ]; then
@@ -130,27 +129,16 @@ fi
 printf '%s\n' "$teardown_msg"
 compose "${down_args[@]}"
 
-# --- build ------------------------------------------------------------------
-# Build stage 1 now so Zed's reopen reuses the warm cache (BUILDKIT_INLINE_CACHE
-# is set in Zed's build overlay). We do NOT `up` — Zed must create the runtime
-# container itself with its devcontainer overlay (SYS_PTRACE, seccomp, labels).
-if [ "$NO_CACHE" = true ]; then
-    printf '==> Building image with --no-cache (cold; this takes a while)…\n'
-    compose build --no-cache
-else
-    printf '==> Building image with warm cache…\n'
-    compose build
-fi
-
 # --- next steps -------------------------------------------------------------
 cat <<'EOF'
 
-==> Image built. Reopen the project in Zed to create + start the container:
+==> Torn down. Reopen the project in Zed to rebuild + start the container:
       Cmd/Ctrl+Shift+P  ->  "project: open remote"
       (shortcut: Ctrl+Cmd+Shift+O on macOS, Alt+Ctrl+Shift+O on Linux)
 
-    Zed adds the devcontainer features layer on top of the image we just built
-    (fast, since the slow layers are cached) and creates the container.
+    Zed builds the image and layers the devcontainer features on top, then
+    creates the container. The image + caches kept above keep that build
+    incremental (use --rmi / --volumes next time for a clean slate).
 
     Wait for first start to finish before working — quickest gate:
       [ -f ~/.container-initialized ] && echo ready
