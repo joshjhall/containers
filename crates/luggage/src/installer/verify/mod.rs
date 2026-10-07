@@ -255,6 +255,58 @@ mod tests {
         assert!(matches!(err, LuggageError::Catalog(_)), "got {err:?}");
     }
 
+    /// `stage_verify` only ever reaches tier 2 through `dispatch`, so the
+    /// mismatch must surface here exactly as `tier2::verify` raised it — not
+    /// swallowed, and not downgraded to a warning.
+    #[test]
+    fn tier_2_mismatch_via_dispatch_is_verification_failed() {
+        let pin = super::sha::digest_hex(Some("sha256"), b"hello").unwrap();
+        let v = Verification { pinned_checksum: Some(pin), ..verification(2) };
+        let err = dispatch(
+            "node",
+            "24.0.0",
+            &"0".repeat(64),
+            "node.tar.gz",
+            &v,
+            &Substitutions::default(),
+            &DeadClient,
+        )
+        .unwrap_err();
+        match err {
+            LuggageError::VerificationFailed { tier, tool, version, reason } => {
+                assert_eq!(tier, 2);
+                assert_eq!(tool, "node");
+                assert_eq!(version, "24.0.0");
+                assert!(reason.contains("digest mismatch"), "got: {reason}");
+            }
+            other => panic!("expected VerificationFailed, got {other:?}"),
+        }
+    }
+
+    /// A malformed pin must likewise stay a hard failure through `dispatch` —
+    /// a typo'd constant that read as a pass or a warning here would silently
+    /// disable verification for that entry.
+    #[test]
+    fn tier_2_malformed_pin_via_dispatch_is_verification_failed() {
+        let v = Verification { pinned_checksum: Some("not-a-digest".into()), ..verification(2) };
+        let err = dispatch(
+            "node",
+            "24.0.0",
+            "deadbeef",
+            "node.tar.gz",
+            &v,
+            &Substitutions::default(),
+            &DeadClient,
+        )
+        .unwrap_err();
+        match err {
+            LuggageError::VerificationFailed { tier: 2, reason, .. } => {
+                assert!(reason.contains("not a hex digest"), "got: {reason}");
+            }
+            other => panic!("expected VerificationFailed, got {other:?}"),
+        }
+    }
+
     /// Tier 4 is implemented now, and dispatching it must surface the
     /// acceptance as a warning rather than as a bare `Ok` — a silent tier-4
     /// pass is precisely the weakening this tier's implementation guards
