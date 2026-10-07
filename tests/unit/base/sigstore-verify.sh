@@ -314,6 +314,40 @@ test_kubectl_sigstore_cosign_not_installed() {
     assert_equals "1" "$exit_code" "download_and_verify_kubectl_sigstore returns 1 when cosign missing"
 }
 
+# The kubectl twin of test_verify_sigstore_fails_closed_without_cosign_require:
+# with cosign-require.sh unsourced the guard fails before any download.
+test_kubectl_sigstore_fails_closed_without_cosign_require() {
+    if [ -f /tmp/build-scripts/base/cosign-require.sh ]; then
+        skip_test "host /tmp/build-scripts provides cosign-require.sh"
+        return
+    fi
+    local lone="$TEST_TEMP_DIR/lone"
+    command mkdir -p "$lone"
+    command cp "$SOURCE_FILE" "$lone/sigstore-verify.sh"
+    write_curl_stub "echo CURL_CALLED"
+
+    local exit_code=0
+    local output
+    # unset -f: see test_verify_sigstore_fails_closed_without_cosign_require.
+    output=$(bash -c "
+        unset -f require_cosign
+        export PATH='$TEST_TEMP_DIR/bin:/usr/bin:/bin'
+        _SIGSTORE_VERIFY_LOADED=''
+        _COSIGN_REQUIRE_LOADED=''
+        source '$PROJECT_ROOT/lib/base/logging.sh' 2>/dev/null || true
+        source '$lone/sigstore-verify.sh'
+        cosign() { echo 'Verified OK'; }
+        download_and_verify_kubectl_sigstore '$TEST_TEMP_DIR/kubectl' '1.28.0'
+    " 2>&1) || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "download_and_verify_kubectl_sigstore fails closed when require_cosign is unavailable"
+    assert_contains "$output" "cannot verify kubectl Sigstore signature" \
+        "The failure comes from the require_cosign guard"
+    assert_not_contains "$output" "CURL_CALLED" \
+        "Nothing is downloaded when the guard is unavailable"
+}
+
 # Without the require_cosign call in download_and_verify_kubectl_sigstore, a
 # shadowing substitute would reach the signature downloads; with it, the
 # function stops at the guard. curl (called as `command curl`, so it must be a
@@ -472,6 +506,7 @@ run_test_with_setup test_verify_sigstore_fails_closed_without_cosign_require "ve
 run_test_with_setup test_kubectl_sigstore_cosign_not_installed "kubectl_sigstore: cosign not installed"
 run_test_with_setup test_kubectl_sigstore_rejects_shadowed_cosign "kubectl_sigstore: rejects shadowed cosign"
 run_test_with_setup test_kubectl_sigstore_invokes_cosign_bin "kubectl_sigstore: invokes COSIGN_BIN"
+run_test_with_setup test_kubectl_sigstore_fails_closed_without_cosign_require "kubectl_sigstore: fails closed without cosign-require.sh"
 
 # download_and_verify_sigstore error paths
 run_test_with_setup test_download_and_verify_sigstore_curl_failure "download_and_verify_sigstore: curl failure"
