@@ -1019,10 +1019,11 @@ test_default_plugins_still_populated() {
 # `tr ',' '\n' | wc -l` undercounts by one (no trailing newline on the last
 # field).
 #
-# The doc regex is deliberately narrow. examples/env/dev-tools.env carries
+# The doc regex is deliberately narrow. examples/env/dev-tools.env carried
 # "replaces all 13 static skills" and "replaces all 11 default agents" within
-# ten lines of the plugin literal, so a looser pattern (a bare `all [0-9]+`)
-# would match those and fail against an unrelated, correct number. A doc
+# ten lines of the plugin literal (removed in #905; the fixtures keep them as
+# decoys), so a looser pattern (a bare `all [0-9]+`) would match unrelated
+# counts like those and fail against a number that is itself correct. A doc
 # yielding NO match fails too — the prose was reworded and this guard has gone
 # blind, the same undetected-drift class the test exists to catch.
 #
