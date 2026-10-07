@@ -48,8 +48,9 @@
 #     write redirection whose target is not exactly /dev/null or an fd
 #     (`2>&1`, `>&-`) is refused.
 #   - Commands the stub PATH cannot intercept: eval, exec, enable,
-#     `command -p`, `hash -p`, and an absolute path in command position
-#     (/usr/bin/curl is not a lookup and runs for real). All refused.
+#     `command -p`, `hash -p`, and an absolute path in command position,
+#     bare or after `command`/`env`/`sudo`/... (/usr/bin/curl is not a lookup
+#     and runs for real). All refused, and a scan that cannot run refuses too.
 #   - Running as root. The scan is the only thing between a missed write and
 #     a real system path, so uid 0 is refused outright.
 #   - Residual, not scanned: `.`/`source` of a host file (docker.sh reads
@@ -103,8 +104,9 @@ run_feature_cosign_guard() {
         : >"$dir/build-scripts/base/$helper.sh"
     done
     # cosign-require.sh sources this when present; without it, its fallback
-    # resolves through the no-op `dirname` to the host's /shared/.
-    : >"$dir/build-scripts/shared/export-utils.sh"
+    # resolves through the no-op `dirname` to the host's /shared/. The marker
+    # lets test_cosign_present_passes_guard prove the sandbox copy was used.
+    command printf 'echo SANDBOX_EXPORT_UTILS\n' >"$dir/build-scripts/shared/export-utils.sh"
     command cat >"$dir/build-scripts/base/feature-header.sh" <<'STUB'
 log_message() { echo "$*"; }
 log_error() { echo "ERROR: $*"; }
@@ -192,10 +194,13 @@ STUB
 #   - uses eval, exec, enable, `command -p` or `hash -p`, which run code or
 #     real tools the stub PATH cannot intercept (eval also rebuilds a `>` at
 #     runtime, e.g. from `$(printf '\076')`);
-#   - has an absolute path in command position (/usr/bin/sudo would run for
-#     real, and as a sudo-group user defeat the uid-0 refusal).
+#   - has an absolute path in command position, including after a prefix
+#     such as `command`, `env` or `sudo` (/usr/bin/sudo would run for real,
+#     and as a sudo-group user defeat the uid-0 refusal).
 # Prints each offending line to stderr. Deliberately coarse: a `>` inside a
 # string or `[ a > b ]` also trips it, which is a refusal, never a missed write.
+# Fails closed: awk exits 1 when it refused a line and 2 when it could not scan
+# (a missing file, an awk error), and both are a non-zero, unsafe result.
 #
 # A `#` line is skipped as a comment only from a clean state: no open quote,
 # backtick or `$(`, not after a backslash-continued line or a line that opens
@@ -204,7 +209,7 @@ STUB
 # simple tracker (it does not model quotes nested inside `$(...)`); where it
 # is wrong it scans a line it could have skipped, never the reverse.
 _cosign_guard_scan_safe() {
-    ! command awk '
+    command awk '
         # Advance the quote state across s, stopping at an unquoted `#` that
         # starts a word (the rest of the line is a comment).
         function track(s,    i, c, n) {
@@ -243,10 +248,11 @@ _cosign_guard_scan_safe() {
             if ($0 ~ /(^|[^[:alnum:]_.-])(command|hash)[[:space:]]+-[[:alnum:]]*p/) refuse("command -p/hash -p")
             # Command position: a line start (unless it continues a quote or a
             # backslash-continued command, where it is an argument), after a
-            # control operator, or after a keyword that takes a command.
+            # control operator, or after a keyword or prefix that takes a
+            # command (`command /usr/bin/x` is not a PATH lookup either).
             if ((q == 0 && !cont && $0 ~ /^[[:space:]]*["\047]?\//) ||
                 $0 ~ /[;&|({!`][[:space:]]*["\047]?\// ||
-                $0 ~ /(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|time)[[:space:]]+["\047]?\//)
+                $0 ~ /(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|time|command|builtin|env|nohup|sudo|xargs)[[:space:]]+["\047]?\//)
                 refuse("absolute-path command")
             if (heredoc != "") next
             # Remember the delimiter (`<<EOF`, `<<-"EOF"`, `<< EOF`); a
@@ -263,7 +269,7 @@ _cosign_guard_scan_safe() {
             subst = $0 ~ /\$\(|`/
             cont = !hit_comment && match($0, /\\+$/) && RLENGTH % 2 == 1
         }
-        END { exit !bad }
+        END { exit bad }
     ' "$@"
 }
 
@@ -307,6 +313,8 @@ test_cosign_present_passes_guard() {
         "$name runs through the guard when the base cosign is present"
     assert_contains "$out" "PAST_GUARD" \
         "harness reaches the far side of the guard (positive control)"
+    assert_contains "$out" "SANDBOX_EXPORT_UTILS" \
+        "cosign-require.sh sourced the sandbox export-utils.sh, not a host path"
 }
 
 test_cosign_guard_mutant_is_detected() {
@@ -480,22 +488,24 @@ test_cosign_guard_unsafe_redirect_is_refused() {
     command rm -rf "$(command dirname "$probe")"
 }
 
-# The scan itself: benign forms pass, every refused form trips it. Cases are
-# whole files (lines joined by `|`) so multi-line ones carry their state.
+# The scan itself: benign forms pass, every refused form trips it. Each case
+# is a whole file (lines joined by `|`) so multi-line ones carry their state.
 test_cosign_guard_scan() {
     local f case
     f=$(command mktemp)
     # The shapes the real feature scripts use, which must stay allowed.
-    # shellcheck disable=SC1003 # trailing backslashes are literal scan input
-    command printf '%s\n' 'cmd 2>/dev/null' 'cmd >/dev/null 2>&1' \
-        'cmd >&2' '(cmd 2>/dev/null)' 'cmd >&-' \
-        '# echo x >/etc/comment-only' '#   - dive <image>: Analyze' \
-        'add_key "K" \' '    "/usr/share/keyrings/k.gpg" \' '    x' \
+    # shellcheck disable=SC1003,SC2016 # literal scan input, not run
+    for case in 'cmd 2>/dev/null' 'cmd >/dev/null 2>&1' 'cmd >&2' \
+        '(cmd 2>/dev/null)' 'cmd >&-' '# echo x >/etc/comment-only' \
+        '#   - dive <image>: Analyze' \
+        'add_key "K" \|    "/usr/share/keyrings/k.gpg" \|    x' \
         'cmd --keyring /etc/apt/x' '[ -f "/tmp/x" ]' \
         'v=$(. /etc/os-release && echo "$V")' 'echo "a # b"' \
-        'cat <<-EOF' "	don't" '	EOF' '# after a here-doc: x >y' >"$f"
-    _cosign_guard_scan_safe "$f" 2>/dev/null
-    assert_equals "0" "$?" "/dev/null, fd duplication, comments and arguments are allowed"
+        "cat <<-EOF|	don't|	EOF|# after a here-doc: x >y"; do
+        command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
+        _cosign_guard_scan_safe "$f" 2>/dev/null
+        assert_equals "0" "$?" "allowed: $case"
+    done
     # shellcheck disable=SC2016 # literal shell text, scanned not run
     for case in 'cmd >/etc/x' 'cmd >>/etc/x' 'cmd 2>/tmp/x' 'cmd >"$VAR"' \
         'cmd &>/etc/x' 'cmd >/dev/null >/etc/x' \
@@ -504,13 +514,17 @@ test_cosign_guard_scan() {
         'cmd >&2foo' 'cmd >/dev/nullX' \
         "eval \"x \$(printf '\\076') /cache/x\"" \
         '/usr/bin/sudo id' 'x && /usr/bin/mv a b' 'if "/usr/bin/x"; then :; fi' \
+        'command /usr/bin/mv a b' 'env /usr/bin/mv a b' 'echo a\\|/usr/bin/mv a b' \
         'command -p mv a b' 'hash -p /usr/bin/mv mv' 'exec /bin/sh' \
         'enable -f x y'; do
         command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
         _cosign_guard_scan_safe "$f" 2>/dev/null
         assert_equals "1" "$?" "refused: $case"
     done
+    # A scan that cannot run must refuse, not approve.
     command rm -f "$f"
+    _cosign_guard_scan_safe "$f" 2>/dev/null
+    assert_not_equals "0" "$?" "an unreadable file is refused (scan fails closed)"
 }
 
 # register_cosign_guard_tests <feature-script>
