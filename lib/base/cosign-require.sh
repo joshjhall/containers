@@ -7,13 +7,22 @@
 # COSIGN_VERSION before any feature script runs. This helper asserts that the
 # base install actually happened — and that PATH resolves `cosign` to that
 # install at /usr/local/bin/cosign, not to some earlier-on-PATH substitute —
-# and fails the feature build loudly if not.
+# and fails the feature build loudly if not. lib/base/sigstore-verify.sh, the
+# code that actually runs `cosign verify-blob`, calls it too.
 #
 # Why the resolved path is pinned (#940):
 #   setup.sh's install is checksum-verified; any other cosign is not. Accepting
 #   whatever `command -v cosign` returns would let a binary from a compromised
 #   or misconfigured base image (or a future build step) perform Sigstore
 #   verification for docker.sh/kubernetes.sh unchecked.
+#
+# Why callers run "$COSIGN_BIN", not bare `cosign` (#1029):
+#   The check resolves `cosign` through PATH once; a bare `cosign` afterwards
+#   resolves it again, so a PATH change in between would bypass the pin.
+#   require_cosign exports COSIGN_BIN as the absolute path it verified, and
+#   callers invoke that. The pinned path must also be a regular file, not a
+#   symlink: a symlink there passes the string comparison while running
+#   whatever it points at.
 #
 # Why there is only one cosign (#935):
 #   This file used to download and dpkg-install a second, separately pinned
@@ -34,7 +43,8 @@
 #
 # Usage:
 #   source /tmp/build-scripts/base/cosign-require.sh
-#   require_cosign
+#   require_cosign || return 1
+#   "$COSIGN_BIN" verify-blob ...
 
 # Prevent multiple sourcing
 if [ -n "${_COSIGN_REQUIRE_LOADED:-}" ]; then
@@ -61,12 +71,17 @@ fi
 
 # require_cosign - Assert PATH resolves cosign to the base install
 #
-# Returns 0 and logs the resolved path when `cosign` resolves to
-# $_COSIGN_BASE_PATH. Returns 1 with an actionable error when cosign is missing
-# (lib/base/setup.sh did not run or its install regressed) or resolves anywhere
-# else (an unverified substitute shadows the base install, #940) — either would
-# silently downgrade Sigstore verification in the calling feature.
+# Returns 0, logs the resolved path, and exports COSIGN_BIN (the verified
+# absolute path, for callers to invoke) when `cosign` resolves to
+# $_COSIGN_BASE_PATH and that path is a regular file, not a symlink. Returns 1
+# with an actionable error, and COSIGN_BIN unset, when cosign is missing
+# (lib/base/setup.sh did not run or its install regressed), resolves anywhere
+# else (an unverified substitute shadows the base install, #940), or the pinned
+# path is a symlink or not a regular file (#1029). Any of these would silently
+# downgrade Sigstore verification in the caller.
 require_cosign() {
+    unset COSIGN_BIN
+
     if ! command -v cosign >/dev/null 2>&1; then
         log_error "cosign not found on PATH."
         log_error "cosign is installed by lib/base/setup.sh (COSIGN_VERSION) before"
@@ -84,6 +99,14 @@ require_cosign() {
         return 1
     fi
 
+    if [ -L "$resolved" ] || [ ! -f "$resolved" ]; then
+        log_error "cosign at $resolved is a symlink or not a regular file."
+        log_error "lib/base/setup.sh installs a regular file there; anything else may"
+        log_error "run an unverified binary — see #1029."
+        return 1
+    fi
+
+    export COSIGN_BIN="$resolved"
     log_message "Using cosign from base install: $resolved"
     return 0
 }

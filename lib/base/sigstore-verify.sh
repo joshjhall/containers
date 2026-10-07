@@ -6,7 +6,12 @@
 #
 # Supported languages:
 #   - Python 3.11.0+: Sigstore (separate .sig + .crt files)
-#   - kubectl:        Sigstore (requires cosign from kubernetes or docker feature)
+#   - kubectl:        Sigstore
+#
+# cosign is the base install from lib/base/setup.sh. Every verification first
+# calls require_cosign (cosign-require.sh), which rejects a missing or shadowed
+# cosign, and then runs the absolute "$COSIGN_BIN" it verified, never a bare
+# `cosign` that PATH would resolve a second time (#940, #1029).
 #
 # Usage:
 #   source /tmp/build-scripts/base/sigstore-verify.sh
@@ -34,6 +39,14 @@ if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
 fi
 
+# Source the cosign pin (require_cosign, COSIGN_BIN)
+# shellcheck source=lib/base/cosign-require.sh
+if [ -f "/tmp/build-scripts/base/cosign-require.sh" ]; then
+    source "/tmp/build-scripts/base/cosign-require.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/cosign-require.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/cosign-require.sh"
+fi
+
 # ============================================================================
 # download_and_verify_kubectl_sigstore - Download and verify kubectl using Sigstore
 #
@@ -51,16 +64,15 @@ fi
 # Example:
 #   download_and_verify_kubectl_sigstore "/tmp/kubectl" "1.28.0"
 #
-# Note: Requires cosign to be installed
+# Note: Requires the base-installed cosign (see require_cosign)
 # ============================================================================
 download_and_verify_kubectl_sigstore() {
     local file="$1"
     local version="$2"
 
-    # Check if cosign is available
-    if ! command -v cosign &>/dev/null; then
-        log_warning "cosign not found, cannot verify kubectl Sigstore signature"
-        log_warning "Install kubernetes or docker feature to get cosign"
+    # Require the pinned base cosign; sets COSIGN_BIN
+    if ! require_cosign; then
+        log_warning "cannot verify kubectl Sigstore signature without the base cosign"
         return 1
     fi
 
@@ -111,7 +123,7 @@ download_and_verify_kubectl_sigstore() {
     #   - OIDC Issuer: https://accounts.google.com
     log_message "Verifying kubectl binary with Sigstore/cosign..."
 
-    if cosign verify-blob "$file" \
+    if "$COSIGN_BIN" verify-blob "$file" \
         --signature "$sig_file" \
         --certificate "$cert_file" \
         --certificate-identity "krel-staging@k8s-releng-prod.iam.gserviceaccount.com" \
@@ -164,9 +176,9 @@ verify_sigstore_signature() {
     local oidc_issuer="$4"
     local cert_file="${5:-}"
 
-    # Check if cosign is available
-    if ! command -v cosign >/dev/null 2>&1; then
-        log_message "Sigstore verification unavailable: cosign not installed"
+    # Require the pinned base cosign; sets COSIGN_BIN
+    if ! require_cosign; then
+        log_message "Sigstore verification unavailable: base cosign not usable"
         return 1
     fi
 
@@ -198,7 +210,7 @@ verify_sigstore_signature() {
     cosign_args+=(--certificate-identity "$cert_identity" --certificate-oidc-issuer "$oidc_issuer" "$file")
 
     # Single verification path
-    if cosign "${cosign_args[@]}" 2>&1 | command tee /tmp/cosign-verify-output.txt | command grep -q "Verified OK"; then
+    if "$COSIGN_BIN" "${cosign_args[@]}" 2>&1 | command tee /tmp/cosign-verify-output.txt | command grep -q "Verified OK"; then
         log_message "✓ Sigstore signature verified successfully"
         log_message "  Cert Identity: $cert_identity"
         command rm -f /tmp/cosign-verify-output.txt

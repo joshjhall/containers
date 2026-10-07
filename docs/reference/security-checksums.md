@@ -79,7 +79,10 @@ TIER 4: Calculated Checksums (TOFU fallback) ← LAST RESORT
 - **Go (Golang)**: GPG signatures (.asc via Google signing key)
 - **Terraform**: GPG signatures (SHA256SUMS.sig via HashiCorp key)
 - **kubectl**: Sigstore (cosign is a base tool installed by `lib/base/setup.sh`;
-  the kubernetes and docker features assert its presence via `require_cosign`)
+  the kubernetes and docker features assert its presence via `require_cosign`,
+  and `lib/base/sigstore-verify.sh` runs every `cosign verify-blob` through the
+  absolute `$COSIGN_BIN` that `require_cosign` verified, so a cosign earlier on
+  PATH or a symlink at `/usr/local/bin/cosign` is refused)
 
 **Example**:
 
