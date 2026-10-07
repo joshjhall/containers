@@ -15,7 +15,11 @@
 #     does NOT declare `merge` — including by omission, since a suite with no
 #     @tier header defaults to merge (test_in_tier in run_integration_tests.sh);
 #   - every suite the matrix names exists, and reads IMAGE_TO_TEST (so it tests
-#     the published image rather than building its own inside the job).
+#     the published image rather than building its own inside the job);
+#   - when any variant uses `extra_suites`, a gating step actually executes
+#     them (calls the runner, passes IMAGE_TO_TEST_MINIMAL, no
+#     continue-on-error or `|| true`) — a listed-but-unrun rider is the
+#     original rot one level down.
 #
 # The checker runs against fixtures as well as the real tree, so each rule is
 # shown to FAIL on the defect it exists for.
@@ -115,6 +119,38 @@ jobs:
 EOF
     printf '#!/usr/bin/env bash\n# @tier: merge,weekly\n' >"$dir/builds/test_covered.sh"
     printf '#!/usr/bin/env bash\n# @tier: merge\n' >"$dir/builds/test_rider.sh"
+}
+
+# extra_suites_step_problems CI_FILE — prints one line per way the
+# integration-test job fails to actually EXECUTE its `extra_suites` entries.
+# Without a consuming step, a suite listed in extra_suites satisfies every
+# header check above while never running — the rot #1027 exists to end.
+extra_suites_step_problems() {
+    local ci_file="$1" uses_extra consumers
+    uses_extra=$(yq -r '[.jobs["integration-test"].strategy.matrix.variant // [] | .[] | select(.extra_suites)] | length' "$ci_file")
+    [ "$uses_extra" = "0" ] && return 0
+
+    # A consuming step reads matrix.variant.extra_suites (via env: or run:).
+    consumers=$(yq -r '
+        .jobs["integration-test"].steps // [] | .[]
+        | select(((.env // {}) | to_entries | map(.value) | join(" ") | test("matrix\\.variant\\.extra_suites"))
+              or ((.run // "") | test("matrix\\.variant\\.extra_suites")))
+        | [((.run // "") | test("run_integration_tests\\.sh")),
+           ((.run // "") | test("IMAGE_TO_TEST_MINIMAL=")),
+           ((.["continue-on-error"] // false) | tostring),
+           ((.run // "") | test("\\|\\|[[:space:]]*true"))]
+        | @tsv' "$ci_file")
+    if [ -z "$consumers" ]; then
+        command echo "no integration-test step consumes matrix.variant.extra_suites"
+        return 0
+    fi
+    local runs minimal coe swallow
+    while IFS=$'\t' read -r runs minimal coe swallow; do
+        [ "$runs" = "true" ] || command echo "extra_suites step never calls run_integration_tests.sh"
+        [ "$minimal" = "true" ] || command echo "extra_suites step does not pass IMAGE_TO_TEST_MINIMAL"
+        [ "$coe" = "false" ] || command echo "extra_suites step sets continue-on-error"
+        [ "$swallow" = "false" ] || command echo "extra_suites step swallows failures with || true"
+    done <<<"$consumers"
 }
 
 # ---------------------------------------------------------------------------
@@ -247,10 +283,47 @@ test_checker_flags_suite_ignoring_image() {
         "a matrix suite that never expands IMAGE_TO_TEST (comment-only mention) is flagged"
 }
 
+test_extra_suites_step_gates() {
+    local got
+    got=$(extra_suites_step_problems "$CI_WORKFLOW")
+    assert_equals "" "$got" "integration-test executes its extra_suites and gates on them"
+}
+
 test_matrix_suites_test_published_image() {
     local got
     got=$(matrix_suites_ignoring_image "$CI_WORKFLOW" "$BUILDS_DIR")
     assert_equals "" "$got" "every merge-tier suite honors IMAGE_TO_TEST"
+}
+
+test_checker_flags_missing_extra_suites_step() {
+    local dir got
+    dir=$(command mktemp -d)
+    make_fixture "$dir"
+    got=$(extra_suites_step_problems "$dir/ci.yml")
+    command rm -rf "$dir"
+    assert_equals "no integration-test step consumes matrix.variant.extra_suites" "$got" \
+        "extra_suites with no consuming step is flagged"
+}
+
+test_checker_flags_weak_extra_suites_step() {
+    local dir got
+    dir=$(command mktemp -d)
+    make_fixture "$dir"
+    command cat >>"$dir/ci.yml" <<'YAML'
+    steps:
+      - name: extras
+        continue-on-error: true
+        env:
+          EXTRA_SUITES: ${{ matrix.variant.extra_suites }}
+        run: |
+          for s in $EXTRA_SUITES; do printf '%s\n' "$s" || true; done
+YAML
+    got=$(extra_suites_step_problems "$dir/ci.yml")
+    command rm -rf "$dir"
+    assert_contains "$got" "never calls run_integration_tests.sh" "a step that runs nothing is flagged"
+    assert_contains "$got" "does not pass IMAGE_TO_TEST_MINIMAL" "a step without the minimal image is flagged"
+    assert_contains "$got" "sets continue-on-error" "a non-gating step is flagged"
+    assert_contains "$got" "swallows failures" "a || true step is flagged"
 }
 
 # ---------------------------------------------------------------------------
@@ -288,8 +361,11 @@ run_test test_checker_flags_matrix_suite_drift "Checker flags a matrix suite wit
 run_test test_checker_flags_missing_matrix_suite "Checker flags a matrix suite with no file"
 run_test test_runner_tier_filter_splits_multi_tier_header "Runner --tier filter splits multi-tier headers"
 run_test test_checker_flags_suite_ignoring_image "Checker flags a matrix suite ignoring IMAGE_TO_TEST"
+run_test test_checker_flags_missing_extra_suites_step "Checker flags extra_suites with no consuming step"
+run_test test_checker_flags_weak_extra_suites_step "Checker flags a non-gating extra_suites step"
 run_test test_real_matrix_is_parsed "Real integration-test matrix parses"
 run_test test_every_suite_has_ci_disposition "Every integration suite has a CI disposition"
 run_test test_matrix_suites_test_published_image "Every merge-tier suite honors IMAGE_TO_TEST"
+run_test test_extra_suites_step_gates "The extra_suites step runs and gates the job"
 
 generate_report
