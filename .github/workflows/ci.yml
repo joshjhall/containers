@@ -257,7 +257,9 @@ jobs:
       - name: Install gitleaks (checksum-verified)
         run: |
           set -euo pipefail
-          GITLEAKS_VERSION=$(grep -oP 'GITLEAKS_VERSION="\$\{GITLEAKS_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          # `|| true`: under set -e a no-match grep would abort here, before
+          # the ::error:: below could say why.
+          GITLEAKS_VERSION=$(grep -oP 'GITLEAKS_VERSION="\$\{GITLEAKS_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh || true)
           if [ -z "$GITLEAKS_VERSION" ]; then
             echo "::error::could not read GITLEAKS_VERSION from lib/features/dev-tools.sh"
             exit 1
