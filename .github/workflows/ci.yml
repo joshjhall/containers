@@ -274,15 +274,17 @@ jobs:
           fi
 
           echo "Installing gitleaks $GITLEAKS_VERSION"
-          TARBALL="/tmp/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          # Private scratch dir, not a fixed /tmp name, so nothing can swap the
+          # tarball between the checksum and the extract.
+          WORK=$(mktemp -d)
+          TARBALL="${WORK}/gitleaks.tar.gz"
           curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
             -o "$TARBALL"
           echo "${EXPECTED_SHA}  ${TARBALL}" | sha256sum -c -
 
           # Extracted and moved into place only AFTER the checksum passes.
-          mkdir -p /tmp/gitleaks-bin
-          tar -xzf "$TARBALL" -C /tmp/gitleaks-bin gitleaks
-          sudo install -m 0755 /tmp/gitleaks-bin/gitleaks /usr/local/bin/gitleaks
+          tar -xzf "$TARBALL" -C "$WORK" gitleaks
+          sudo install -m 0755 "${WORK}/gitleaks" /usr/local/bin/gitleaks
           gitleaks version
 
       - name: Run secret scanning with Gitleaks

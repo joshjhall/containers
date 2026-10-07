@@ -146,6 +146,22 @@ test_updater_bumps_dev_tools_only() {
     assert_equals "yes" "$ci_same" "a gitleaks bump must leave ci.yml byte-identical"
 }
 
+# A bare quoted pin (no ${VAR:-} default) must be rewritten into the default
+# form, exercising the updater's second sed branch.
+test_updater_normalizes_bare_pin() {
+    local root="$TEST_SCRATCH_BASE/gitleaks-sync-bare" rc line
+    /bin/mkdir -p "$root/lib/features"
+    command sed -E 's/^GITLEAKS_VERSION=.*/GITLEAKS_VERSION="8.0.0"/' "$DEV_TOOLS" \
+        >"$root/lib/features/dev-tools.sh"
+    rc="$(_run_updater "$root")"
+    line="$(command grep -E '^GITLEAKS_VERSION=' "$root/lib/features/dev-tools.sh")"
+    /bin/rm -rf "$root"
+
+    assert_equals "0" "$rc" "update_version gitleaks must succeed on a bare pin"
+    assert_equals 'GITLEAKS_VERSION="${GITLEAKS_VERSION:-99.1.2}"' "$line" \
+        "a bare GITLEAKS_VERSION pin must be bumped into the \${VAR:-X.Y.Z} form"
+}
+
 # sed_inplace must return sed's own status. Its cleanup loop used to run last,
 # so a failed sed reported 0 and every `sed_inplace ... || return` guard in
 # rust-pins.sh was dead code.
@@ -173,6 +189,7 @@ run_test test_ci_has_no_version_literal "ci.yml carries no gitleaks version lite
 run_test test_ci_install_reads_dev_tools_and_verifies "ci.yml install step reads dev-tools.sh and verifies sha256"
 run_test test_ci_scan_follows_install "ci.yml scan runs after the verified install"
 run_test test_updater_bumps_dev_tools_only "updater bumps dev-tools.sh and leaves ci.yml alone"
+run_test test_updater_normalizes_bare_pin "updater rewrites a bare pin into the default form"
 run_test test_sed_inplace_propagates_sed_failure "sed_inplace returns sed's failure status"
 
 generate_report
