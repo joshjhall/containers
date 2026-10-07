@@ -40,7 +40,8 @@ EOF
 # Run the sandboxed teardown.sh. Extra leading args of the form VAR=value are
 # env assignments; the rest are script args. BASH_ENV is unset because the
 # container's /etc/bash_env re-prepends system dirs to PATH, which would let a
-# real docker shadow the stub. TEARDOWN_DOCKERENV_FILE points at a file that
+# real docker shadow the stub. The ${envs[@]+…} form keeps an empty array
+# safe under set -u on bash < 4.4. TEARDOWN_DOCKERENV_FILE points at a file that
 # does not exist, since this suite itself runs inside a container.
 _run_teardown() {
     local -a envs=()
@@ -49,7 +50,7 @@ _run_teardown() {
         shift
     done
     command env -u BASH_ENV PATH="$TEST_TEMP_DIR/bin:$PATH" HOME="$TEST_TEMP_DIR/home" \
-        TEARDOWN_DOCKERENV_FILE="$TEST_TEMP_DIR/no-dockerenv" "${envs[@]}" \
+        TEARDOWN_DOCKERENV_FILE="$TEST_TEMP_DIR/no-dockerenv" ${envs[@]+"${envs[@]}"} \
         bash "$TEST_TEMP_DIR/proj/.devcontainer/teardown.sh" "$@"
 }
 

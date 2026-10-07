@@ -26,26 +26,40 @@ _make_sandbox() {
         "$dir/.devcontainer/"
     command cp "$PROJECT_ROOT/lib/shared/colors.sh" "$dir/lib/shared/"
     if [ "$mode" != "--no-git" ]; then
-        git -C "$dir" init -q
+        _hermetic_git -C "$dir" init -q
     fi
+}
+
+# Environment that isolates git from the caller's global/system config, so a
+# developer whose global ignore (core.excludesFile, ~/.config/git/ignore)
+# lists .env cannot make the sandbox report ".env is ignored". Set as an array
+# of env assignments for `command env`.
+_hermetic_git_env() {
+    command mkdir -p "$TEST_TEMP_DIR/home"
+    HERMETIC_GIT_ENV=(HOME="$TEST_TEMP_DIR/home" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1)
+}
+
+_hermetic_git() {
+    _hermetic_git_env
+    command env -u XDG_CONFIG_HOME "${HERMETIC_GIT_ENV[@]}" git "$@"
 }
 
 # Run the sandboxed post-create.sh with `lefthook` stubbed: the stub logs its
 # args to <sandbox>/lefthook.calls and exits $LEFTHOOK_STUB_RC (default 0).
-# Extra args are env assignments. BASH_ENV is unset because the container's
-# /etc/bash_env re-prepends system dirs to PATH, which would let the real
-# lefthook shadow the stub.
+# Extra args are env assignments. Git runs hermetically (_hermetic_git_env),
+# so the step-5 identity check reports "not configured" — that is expected.
+# BASH_ENV is unset because the container's /etc/bash_env re-prepends system
+# dirs to PATH, which would let the real lefthook shadow the stub.
 _run_post_create() {
     local sandbox=$1
     shift
     local stub="$TEST_TEMP_DIR/stub-bin"
     command mkdir -p "$stub"
-    command printf '#!/bin/sh
-echo "$*" >>"$LEFTHOOK_CALLS"
-exit "${LEFTHOOK_STUB_RC:-0}"
-' >"$stub/lefthook"
+    command printf '#!/bin/sh\necho "$*" >>"$LEFTHOOK_CALLS"\nexit "${LEFTHOOK_STUB_RC:-0}"\n' >"$stub/lefthook"
     command chmod +x "$stub/lefthook"
-    command env -u BASH_ENV PATH="$stub:$PATH" LEFTHOOK_CALLS="$sandbox/lefthook.calls" \
+    _hermetic_git_env
+    command env -u BASH_ENV -u XDG_CONFIG_HOME "${HERMETIC_GIT_ENV[@]}" \
+        PATH="$stub:$PATH" LEFTHOOK_CALLS="$sandbox/lefthook.calls" \
         GIT_CEILING_DIRECTORIES="$(command dirname "$sandbox")" \
         ENABLED_FEATURES_CONF="$sandbox/no-such-features.conf" "$@" \
         bash "$sandbox/.devcontainer/post-create.sh"
@@ -233,24 +247,23 @@ test_gitignore_append_without_trailing_newline() {
     assert_equals "$(command printf 'foo\n.env')" "$(command cat "$sb/.gitignore")" \
         "A newline is inserted before .env (no 'foo.env' merge)"
     local ignored=0
-    git -C "$sb" check-ignore -q .env || ignored=$?
+    _hermetic_git -C "$sb" check-ignore -q .env || ignored=$?
     assert_equals "0" "$ignored" ".env is now actually ignored by git"
 }
 
+# .gitignore is a DIRECTORY, so the append fails for every uid (root ignores
+# file modes, not EISDIR). This also drives the trailing-newline probe down
+# its failure path: `[ -s ]` is true for a directory but `tail -c 1` errors,
+# which must not abort the script under set -e.
 test_gitignore_write_failure_is_non_fatal() {
-    if [ "$(id -u)" -eq 0 ]; then
-        skip_test "root ignores read-only file modes"
-        return
-    fi
     local sb="$TEST_TEMP_DIR/sb" rc=0 out
     _make_sandbox "$sb"
-    command printf 'foo\n' >"$sb/.gitignore"
-    command chmod 444 "$sb/.gitignore"
+    command mkdir "$sb/.gitignore"
 
     out=$(_run_post_create "$sb" 2>&1) || rc=$?
-    command chmod 644 "$sb/.gitignore"
 
     assert_equals "0" "$rc" "post-create.sh exits 0 when .gitignore is not writable"
+    assert_contains "$out" ".env is NOT ignored" "Unwritable .gitignore still reports the missing entry"
     assert_contains "$out" "Could not write .gitignore" "Write failure is reported"
     assert_contains "$out" "Setup Complete" "Script continues past the write failure"
 }
