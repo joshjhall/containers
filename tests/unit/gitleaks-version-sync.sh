@@ -130,16 +130,36 @@ test_updater_fails_cleanly_without_ci_yml() {
     assert_equals "$DEV_VERSION" "$dev_after" "dev-tools.sh must be left untouched when ci.yml is missing"
 }
 
-# sed exits 0 on no match, so a reformatted pin line (here: unquoted) must be
-# caught by the post-write check rather than reported as a successful bump.
+# _unquote_pin <file> <pin-regex> — strip the quotes from a pin line so it no
+# longer matches the updater's expected shape. Portable: no `sed -i`.
+_unquote_pin() {
+    command sed -E "s/^($2)\"([^\"]*)\"/\\1\\2/" "$1" >"$1.tmp" && /bin/mv "$1.tmp" "$1"
+}
+
+# sed exits 0 on no match, so a reformatted pin line in EITHER file must fail
+# the bump before anything is written, rather than leaving one pin bumped alone.
 test_updater_fails_on_unmatched_ci_pin() {
-    local root rc
-    root="$(_scratch_root gitleaks-sync-reformat)"
-    command sed -i -E 's/(GITLEAKS_VERSION: *)"([^"]*)"/\1\2/' "$root/.github/workflows/ci.yml"
+    local root rc dev_after
+    root="$(_scratch_root gitleaks-sync-reformat-ci)"
+    _unquote_pin "$root/.github/workflows/ci.yml" '[[:space:]]*GITLEAKS_VERSION: *'
     rc="$(_run_updater "$root" false)"
+    dev_after="$(_dev_tools_version "$root/lib/features/dev-tools.sh")"
     /bin/rm -rf "$root"
 
-    assert_not_equals "0" "$rc" "update_version gitleaks must fail when the ci.yml pin line did not match"
+    assert_not_equals "0" "$rc" "update_version gitleaks must fail when the ci.yml pin line has an unexpected shape"
+    assert_equals "$DEV_VERSION" "$dev_after" "dev-tools.sh must be left untouched when the ci.yml pin cannot be rewritten"
+}
+
+test_updater_fails_on_unmatched_dev_tools_pin() {
+    local root rc ci_same=yes
+    root="$(_scratch_root gitleaks-sync-reformat-dev)"
+    _unquote_pin "$root/lib/features/dev-tools.sh" 'GITLEAKS_VERSION='
+    rc="$(_run_updater "$root" false)"
+    command cmp -s "$CI_WORKFLOW" "$root/.github/workflows/ci.yml" || ci_same=no
+    /bin/rm -rf "$root"
+
+    assert_not_equals "0" "$rc" "update_version gitleaks must fail when the dev-tools.sh pin line has an unexpected shape"
+    assert_equals "yes" "$ci_same" "ci.yml must be left untouched when the dev-tools.sh pin cannot be rewritten"
 }
 
 test_updater_dry_run_writes_nothing() {
@@ -178,7 +198,8 @@ run_test test_ci_pin_matches_dev_tools "ci.yml pin equals dev-tools.sh default"
 run_test test_ci_pin_meets_floor "ci.yml pin is >= $GITLEAKS_FLOOR"
 run_test test_updater_bumps_both_pins "updater bumps both pins together"
 run_test test_updater_fails_cleanly_without_ci_yml "updater fails before writing when ci.yml is missing"
-run_test test_updater_fails_on_unmatched_ci_pin "updater fails when the ci.yml pin did not match"
+run_test test_updater_fails_on_unmatched_ci_pin "updater fails before writing on a reformatted ci.yml pin"
+run_test test_updater_fails_on_unmatched_dev_tools_pin "updater fails before writing on a reformatted dev-tools.sh pin"
 run_test test_updater_dry_run_writes_nothing "updater dry run writes nothing"
 
 generate_report
