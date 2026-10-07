@@ -21,6 +21,7 @@
 # How the build-time environment is faked:
 #   - /tmp/build-scripts/ is rewritten to a sandbox holding empty stubs for the
 #     sourced helpers, except cosign-require.sh, which is the REAL file.
+#     shared/export-utils.sh, which cosign-require.sh sources, is stubbed too.
 #   - The stub feature-header.sh defines log_message/log_error/log_warning to
 #     echo, so the guard's messages reach the output for assertions.
 #   - PATH holds only the sandbox bin dir, and command_not_found_handle turns
@@ -34,21 +35,32 @@
 #     would let a pre-guard call resolve to a real framework function instead
 #     of the no-op.
 #   - The copy is truncated at the guard's closing brace, which must be a
-#     column-0 `}` within 3 lines of `require_cosign ||` — anything looser
-#     could end at an unrelated `}` further down. It ends with
+#     column-0 `}` alone on its line, within 3 lines of the first
+#     `require_cosign ||` — anything looser could end at an unrelated `}`
+#     further down or keep code after the brace. It ends with
 #     `echo PAST_GUARD; exit 0`, so nothing after the guard runs on the host.
 #
-# What it does NOT neutralize, and therefore refuses or relies on:
+# What it does NOT neutralize, and therefore refuses or relies on (every
+# executed file — the copy and the copied guard — is scanned by
+# _cosign_guard_scan_safe):
 #   - Redirections. bash opens a `>`/`>>` target BEFORE resolving the command,
-#     so `command tee >/etc/x` creates /etc/x even though tee is a no-op. Every
-#     executed file (the copy and the copied guard) is scanned, and any write
-#     redirection whose target is not /dev/null or an fd (`2>&1`) is refused.
+#     so `command tee >/etc/x` creates /etc/x even though tee is a no-op. Any
+#     write redirection whose target is not exactly /dev/null or an fd
+#     (`2>&1`, `>&-`) is refused.
+#   - Commands the stub PATH cannot intercept: eval, exec, enable,
+#     `command -p`, `hash -p`, and an absolute path in command position,
+#     bare or after `command`/`env`/`sudo`/... (/usr/bin/curl is not a lookup
+#     and runs for real). All refused, and a scan that cannot run refuses too.
 #   - Running as root. The scan is the only thing between a missed write and
 #     a real system path, so uid 0 is refused outright.
-#   - Residual, not scanned: an absolute-path command (/usr/bin/curl is not a
-#     lookup and runs for real), `.`/`source` of a host file, `cd`, and
-#     `printf -v`/`read` into variables. None writes outside the sandbox today;
-#     keep the pre-guard code to bare-name tool calls.
+#   - Residual, not scanned: `.`/`source` of a host file (docker.sh reads
+#     /etc/os-release), `cd`, `printf -v`/`read` into variables, an absolute
+#     path reached through a variable (`"$x" args`), a relative-path command
+#     (`./tool`), a keyword split by quoting (`ev""al`, `$'\x65val'`), and
+#     quotes nested inside a multi-line `$(...)`, which the comment-skip
+#     tracker does not model.
+#     None writes outside the sandbox today; keep the pre-guard code to
+#     bare-name tool calls.
 
 # run_feature_cosign_guard <feature-script> <mode> [--mutate]
 #
@@ -85,12 +97,16 @@ run_feature_cosign_guard() {
         return 0
     fi
     dir=$(command mktemp -d)
-    command mkdir -p "$dir/bin" "$dir/build-scripts/base"
+    command mkdir -p "$dir/bin" "$dir/build-scripts/base" "$dir/build-scripts/shared"
 
     for helper in feature-header apt-utils retry-utils checksum-fetch \
         download-verify checksum-verification cache-utils path-utils; do
         : >"$dir/build-scripts/base/$helper.sh"
     done
+    # cosign-require.sh sources this when present; without it, its fallback
+    # resolves through the no-op `dirname` to the host's /shared/. The marker
+    # lets test_cosign_present_passes_guard prove the sandbox copy was used.
+    command printf 'echo SANDBOX_EXPORT_UTILS\n' >"$dir/build-scripts/shared/export-utils.sh"
     command cat >"$dir/build-scripts/base/feature-header.sh" <<'STUB'
 log_message() { echo "$*"; }
 log_error() { echo "ERROR: $*"; }
@@ -119,19 +135,21 @@ STUB
     done
 
     # Copy up to the guard's closing brace, optionally no-op its exit, then
-    # mark the far side. The brace must be a column-0 `}` within 3 lines of
-    # `require_cosign ||`; past that the guard is not the expected shape and
-    # the next column-0 `}` could belong to unrelated post-guard code. awk
+    # mark the far side. The brace must be a column-0 `}` alone on its line
+    # (`} && x` would keep x), within 3 lines of the first
+    # `require_cosign ||` (a repeat must not restart the window); past that the
+    # guard is not the expected shape and the next column-0 `}` could belong to
+    # unrelated post-guard code. awk
     # stops printing rather than exiting: an early exit would close the pipe on
     # a still-writing sed, and SIGPIPE fails the caller's pipefail.
     command sed "s|/tmp/build-scripts/|$dir/build-scripts/|g" "$script" |
         command awk -v mutate="$mutate" '
             done || bad { next }
-            /^require_cosign \|\|/ { in_guard = 1; start = NR }
+            /^require_cosign \|\|/ && !in_guard { in_guard = 1; start = NR }
             in_guard && NR - start > 3 { bad = 1; next }
             in_guard && mutate == "--mutate" { sub(/exit 1/, ":") }
             { print }
-            in_guard && /^}/ { done = 1 }
+            in_guard && /^}[[:space:]]*$/ { done = 1 }
             END { exit !done }
         ' >"$dir/feature-script" || {
         # No column-0 `}` closed the guard within 3 lines (a one-line
@@ -144,11 +162,12 @@ STUB
     }
     echo 'echo PAST_GUARD; exit 0' >>"$dir/feature-script"
 
-    # Refuse any write redirection to a real path: bash opens the target
-    # before command lookup, so the no-op handler cannot stop it.
-    if ! _cosign_guard_redirects_safe "$dir/feature-script" \
+    # Refuse any write redirection to a real path (bash opens the target
+    # before command lookup, so the no-op handler cannot stop it) and any
+    # command the stub PATH cannot intercept.
+    if ! _cosign_guard_scan_safe "$dir/feature-script" \
         "$dir/build-scripts/base/cosign-require.sh" 2>&1; then
-        command printf 'unsafe redirection in: %s\nrc=missing\n' "$script"
+        command printf 'unsafe construct in: %s\nrc=missing\n' "$script"
         command rm -rf "$dir"
         return 0
     fi
@@ -166,23 +185,114 @@ STUB
     command rm -rf "$dir"
 }
 
-# _cosign_guard_redirects_safe <file>...
+# _cosign_guard_scan_safe <file>...
 #
-# Succeeds when no non-comment line in the given files redirects output to
-# anything but /dev/null or an fd duplication (`2>&1`, `>&2`). Prints each
-# offending line to stderr. Deliberately coarse: a `>` inside a string or
-# `[ a > b ]` also trips it, which is a refusal, never a missed write.
-_cosign_guard_redirects_safe() {
-    ! command awk '
-        /^[[:space:]]*#/ { next }
+# Succeeds when no scanned line in the given files
+#   - redirects output to anything but /dev/null or an fd duplication (`2>&1`,
+#     `>&2`, `>&-`), each matched up to a word end so `>&2foo` and
+#     `>/dev/nullX` (real files) are not mistaken for them;
+#   - uses eval, exec, enable, `command -p` or `hash -p`, which run code or
+#     real tools the stub PATH cannot intercept (eval also rebuilds a `>` at
+#     runtime, e.g. from `$(printf '\076')`);
+#   - has an absolute path in command position, including after a prefix
+#     such as `command`, `env` or `sudo` and any options or `VAR=x`
+#     assignments before it (/usr/bin/sudo would run for real, and as a
+#     sudo-group user defeat the uid-0 refusal). After env, sudo, xargs,
+#     nohup, time or coproc, any absolute-path word on the line is refused.
+# Prints each offending line to stderr. Deliberately coarse: a `>` inside a
+# string or `[ a > b ]` also trips it, which is a refusal, never a missed write.
+# Fails closed: awk exits 1 when it refused a line and 2 when it could not scan
+# (a missing file, an awk error), and both are a non-zero, unsafe result.
+#
+# A `#` line is skipped as a comment only from a clean state: no open quote,
+# backtick or `$(`, not after a backslash-continued line or a line that opens
+# a command substitution, and not after a here-document. Otherwise a string
+# such as `x="` / `#"; echo d >f` would hide its second line. The state is a
+# simple tracker (it does not model quotes nested inside `$(...)`); where it
+# is wrong it scans a line it could have skipped, never the reverse.
+_cosign_guard_scan_safe() {
+    command awk '
+        # Advance the quote state across s, stopping at an unquoted `#` that
+        # starts a word (the rest of the line is a comment).
+        function track(s,    i, c, n) {
+            n = length(s); hit_comment = 0
+            for (i = 1; i <= n; i++) {
+                c = substr(s, i, 1)
+                if (q == 0 && c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[[:space:];|&(]/)) {
+                    hit_comment = 1; return
+                }
+                if (c == "\\" && q != 1) { i++; continue }
+                if (c == "\047" && q != 2) q = q ? 0 : 1
+                else if (c == "\"" && q != 1) q = q ? 0 : 2
+                else if (c == "`" && q != 1) bt = !bt
+                else if (q != 1 && c == "$" && substr(s, i + 1, 1) == "(") { depth++; i++ }
+                else if (q == 0 && c == ")" && depth > 0) depth--
+            }
+        }
+        function refuse(why) { print FILENAME ":" FNR ": " why ": " $0 > "/dev/stderr"; bad = 1 }
+        FNR == 1 { q = 0; bt = 0; depth = 0; cont = 0; opcont = 0; subst = 0; heredoc = "" }
+        # A here-document body is data: scan it (a `#` there is not a
+        # comment) but keep it out of the quote tracker, where a stray
+        # apostrophe would leave every later line "inside a string".
+        heredoc != "" {
+            body = $0; sub(/^\t+/, "", body)
+            if (body == heredoc) { heredoc = ""; next }
+        }
         {
+            clean = q == 0 && !bt && depth == 0 && !cont && !subst && heredoc == ""
+            if (clean && /^[[:space:]]*#/) next
             line = $0
             # Drop the benign forms, then look for any write redirection left.
-            gsub(/[0-9]*>>?[[:space:]]*\/dev\/null/, "", line)
-            gsub(/[0-9]*>&[0-9-]+/, "", line)
-            if (line ~ />/) { print FILENAME ":" FNR ": " $0 > "/dev/stderr"; bad = 1 }
+            gsub(/[0-9]*>>?[[:space:]]*\/dev\/null([[:space:];|&)]|$)/, " ", line)
+            gsub(/[0-9]*>&([0-9]+-?|-)([[:space:];|&)]|$)/, " ", line)
+            if (line ~ />/) refuse("write redirection")
+            if ($0 ~ /(^|[^[:alnum:]_.-])(eval|exec|enable)([^[:alnum:]_.-]|$)/) refuse("eval/exec/enable")
+            if ($0 ~ /(^|[^[:alnum:]_.-])(command|hash)[[:space:]]+-[[:alnum:]]*p/) refuse("command -p/hash -p")
+            # Command position: a line start (unless it continues a quote, or
+            # a backslash-continued command whose last word was an argument),
+            # after a control operator or a case-arm `)` (spaced, so
+            # `$(dirname x)/path` stays an argument), or after a keyword or
+            # prefix that takes a command (`command /usr/bin/x` is not a PATH
+            # lookup either), with any options and assignments in between.
+            # env/sudo/xargs/nohup/time/coproc options take arguments that
+            # cannot be told apart from the command, so after one of them
+            # any later absolute-path word on the line is refused.
+            # A redirection is not a command word: `2>/dev/null /usr/bin/x`
+            # still runs /usr/bin/x. Drop redirections (operator plus target)
+            # from a copy before looking for command position. A target never
+            # starts with `(` or a backtick: `<(/usr/bin/x)` is a process
+            # substitution, and its command must stay visible. Nor does it
+            # start with `$(` or `"$(`: rewrite that opening to ` (` first, so
+            # the strip stops there and `<$(/usr/bin/x)` stays visible too.
+            cp = $0
+            while (match(cp, /(>>?|<|>&|&>)[[:space:]]*"?\$\(/))
+                cp = substr(cp, 1, RSTART - 1) " (" substr(cp, RSTART + RLENGTH)
+            gsub(/[0-9]*(>>?|<|>&|&>)[[:space:]]*[^[:space:];|&()`][^[:space:];|&)]*/, " ", cp)
+            if ((q == 0 && (!cont || opcont) && cp ~ /^[[:space:]]*["\047]?\//) ||
+                cp ~ /[;&|({!`][[:space:]]*["\047]?\// ||
+                cp ~ /\)[[:space:]]+["\047]?\// ||
+                cp ~ /(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|command|builtin)[[:space:]]+((-[^[:space:]]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*["\047]?\// ||
+                cp ~ /(^|[^[:alnum:]_.-])(env|sudo|xargs|nohup|time|coproc)[[:space:]](.*[[:space:]=])?["\047]?\// ||
+                cp ~ /(^|[;&|({!`[:space:]])[A-Za-z_][A-Za-z0-9_]*=[^[:space:]()`]*[[:space:]]+["\047]?\//)
+                refuse("absolute-path command")
+            if (heredoc != "") next
+            # Remember the delimiter (`<<EOF`, `<<-"EOF"`, `<< EOF`); a
+            # `<<` it cannot parse latches until end of file, which only
+            # scans more.
+            if ($0 ~ /<</ && $0 !~ /<<</) {
+                heredoc = "\n"
+                if (match($0, /<<-?[[:space:]]*["\047]?[A-Za-z_][A-Za-z0-9_]*/)) {
+                    heredoc = substr($0, RSTART, RLENGTH)
+                    sub(/^<<-?[[:space:]]*["\047]?/, "", heredoc)
+                }
+            }
+            track($0)
+            subst = $0 ~ /\$\(|`/
+            cont = !hit_comment && match($0, /\\+$/) && RLENGTH % 2 == 1
+            # `cmd && \` continues into a command, not an argument.
+            opcont = cont && $0 ~ /(&&|\|\||[;|&(!{`]|(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|time|command|builtin|env|nohup|sudo|xargs))[[:space:]]*\\$/
         }
-        END { exit !bad }
+        END { exit bad }
     ' "$@"
 }
 
@@ -226,6 +336,8 @@ test_cosign_present_passes_guard() {
         "$name runs through the guard when the base cosign is present"
     assert_contains "$out" "PAST_GUARD" \
         "harness reaches the far side of the guard (positive control)"
+    assert_contains "$out" "SANDBOX_EXPORT_UTILS" \
+        "cosign-require.sh sourced the sandbox export-utils.sh, not a host path"
 }
 
 test_cosign_guard_mutant_is_detected() {
@@ -264,7 +376,9 @@ test_cosign_guard_untruncatable_is_refused() {
 
 # The guard indented, plus a later column-0 `}` (a function past the guard):
 # an unbounded "first column-0 } after the guard" match would stop at that
-# later brace and run the post-guard code between them. Must be refused.
+# later brace and run the post-guard code between them. Must be refused. Run
+# in present mode: in absent mode the guard exits before POST_GUARD_RAN
+# whether or not the copy was refused, so that assertion could not fail.
 test_cosign_guard_far_brace_is_refused() {
     local out scratch
     scratch=$(command mktemp)
@@ -280,7 +394,7 @@ test_cosign_guard_far_brace_is_refused() {
         }
         { print }
     ' "$COSIGN_GUARD_SCRIPT" >"$scratch"
-    out=$(run_feature_cosign_guard "$scratch" absent)
+    out=$(run_feature_cosign_guard "$scratch" present)
     command rm -f "$scratch"
     assert_equals "rc=missing" "$(_cosign_guard_rc "$out")" \
         "a guard closed only by a distant column-0 } is refused"
@@ -288,6 +402,87 @@ test_cosign_guard_far_brace_is_refused() {
         "the refusal names the truncation bound"
     assert_not_contains "$out" "POST_GUARD_RAN" \
         "no code past the guard ran"
+}
+
+# Code after the closing brace on the same line (`} && x`) runs once the
+# guard passes, so a brace with anything after it does not close the copy.
+test_cosign_guard_trailing_code_is_refused() {
+    local out scratch
+    scratch=$(command mktemp)
+    command awk '
+        /^require_cosign \|\|/ { g = 1 }
+        g && /^}/ { print "} && echo POST_GUARD_RAN"; g = 0; next }
+        { print }
+    ' "$COSIGN_GUARD_SCRIPT" >"$scratch"
+    out=$(run_feature_cosign_guard "$scratch" present)
+    command rm -f "$scratch"
+    assert_equals "rc=missing" "$(_cosign_guard_rc "$out")" \
+        "a closing brace followed by code is refused"
+    assert_contains "$out" "guard not truncatable" \
+        "the refusal names the truncation"
+    assert_not_contains "$out" "POST_GUARD_RAN" \
+        "the code after the brace did not run"
+}
+
+# A second `require_cosign ||` must not restart the 3-line window: the
+# indented brace leaves the first guard open, and a restarted window would
+# end at the second guard's brace with POST_GUARD_RAN in between.
+test_cosign_guard_repeated_guard_is_refused() {
+    local out scratch
+    scratch=$(command mktemp)
+    command awk '
+        /^require_cosign \|\|/ { g = 1 }
+        g && /^}/ {
+            print "    }"
+            print "require_cosign || :"
+            print "{ echo POST_GUARD_RAN"
+            print "}"
+            g = 0; next
+        }
+        { print }
+    ' "$COSIGN_GUARD_SCRIPT" >"$scratch"
+    out=$(run_feature_cosign_guard "$scratch" present)
+    command rm -f "$scratch"
+    assert_equals "rc=missing" "$(_cosign_guard_rc "$out")" \
+        "a repeated require_cosign line does not widen the window"
+    assert_contains "$out" "guard not truncatable" \
+        "the refusal names the truncation bound"
+    assert_not_contains "$out" "POST_GUARD_RAN" \
+        "no code past the first guard ran"
+}
+
+# uid 0 is refused before anything runs. A stub `id` first on PATH reports 0;
+# the harness resolves `command id` through PATH, so this drives the real check.
+test_cosign_guard_refuses_root() {
+    local out stubdir
+    stubdir=$(command mktemp -d)
+    command printf '#!/bin/sh\necho 0\n' >"$stubdir/id"
+    command chmod +x "$stubdir/id"
+    out=$(PATH="$stubdir:$PATH" run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" present)
+    command rm -rf "$stubdir"
+    assert_equals "rc=missing" "$(_cosign_guard_rc "$out")" \
+        "running as uid 0 is refused"
+    assert_contains "$out" "refusing to run as root" \
+        "the refusal names the uid check"
+    assert_not_contains "$out" "PAST_GUARD" \
+        "the feature script never ran"
+}
+
+# The inner shell starts under `env -i`, so an exported function cannot stand
+# in for a stub. log_feature_end is called by every absent-mode guard; an
+# inherited export would print LEAKED instead of falling through to the no-op.
+test_cosign_guard_env_is_cleared() {
+    local out
+    out=$(
+        # shellcheck disable=SC2317 # invoked only if env -i stops clearing it
+        log_feature_end() { echo LEAKED; }
+        export -f log_feature_end
+        run_feature_cosign_guard "$COSIGN_GUARD_SCRIPT" absent
+    )
+    assert_equals "rc=1" "$(_cosign_guard_rc "$out")" \
+        "the guard still exits 1"
+    assert_not_contains "$out" "LEAKED" \
+        "an exported caller function does not reach the feature script"
 }
 
 # bash opens a redirection target before command lookup, so a write to a real
@@ -306,8 +501,8 @@ test_cosign_guard_unsafe_redirect_is_refused() {
     command rm -f "$scratch"
     assert_equals "rc=missing" "$(_cosign_guard_rc "$out")" \
         "a pre-guard write redirection to a real path is refused"
-    assert_contains "$out" "unsafe redirection" \
-        "the refusal names the redirection scan"
+    assert_contains "$out" "unsafe construct" \
+        "the refusal names the scan"
     if [ -e "$probe" ]; then
         assert_equals "absent" "present" "the redirection target was never created"
     else
@@ -316,21 +511,75 @@ test_cosign_guard_unsafe_redirect_is_refused() {
     command rm -rf "$(command dirname "$probe")"
 }
 
-# The redirection scan itself: benign forms pass, every write form trips it.
-test_cosign_guard_redirect_scan() {
-    local f
+# The scan itself: benign forms pass, every refused form trips it. Each case
+# is a whole file (lines joined by `|`) so multi-line ones carry their state.
+test_cosign_guard_scan() {
+    local f case
     f=$(command mktemp)
-    command printf '%s\n' 'cmd 2>/dev/null' 'cmd >/dev/null 2>&1' \
-        'cmd >&2' '# echo x >/etc/comment-only' >"$f"
-    _cosign_guard_redirects_safe "$f" 2>/dev/null
-    assert_equals "0" "$?" "/dev/null, fd duplication and comments are allowed"
-    for line in 'cmd >/etc/x' 'cmd >>/etc/x' 'cmd 2>/tmp/x' 'cmd >"$VAR"' \
-        'cmd &>/etc/x' 'cmd >/dev/null >/etc/x'; do
-        command printf '%s\n' "$line" >"$f"
-        _cosign_guard_redirects_safe "$f" 2>/dev/null
-        assert_equals "1" "$?" "write redirection refused: $line"
+    # The shapes the real feature scripts use, which must stay allowed.
+    # shellcheck disable=SC1003,SC2016 # literal scan input, not run
+    for case in 'cmd 2>/dev/null' 'cmd >/dev/null 2>&1' 'cmd >&2' \
+        '(cmd 2>/dev/null)' 'cmd >&-' '# echo x >/etc/comment-only' \
+        '#   - dive <image>: Analyze' \
+        'add_key "K" \|    "/usr/share/keyrings/k.gpg" \|    x' \
+        'cmd --keyring /etc/apt/x' '[ -f "/tmp/x" ]' \
+        'v=$(. /etc/os-release && echo "$V")' 'echo "a # b"' \
+        'if [ -f "$(dirname x)/../y.sh" ]; then :; fi' \
+        'cmd --exec x' 'is_enabled=1' 'executable=1' 'my_eval_helper x' \
+        'cmd 2>/dev/null --keyring /etc/apt/x' 'cat <"$(dirname x)/y"' \
+        "cat <<-EOF|	don't|	EOF|# after a here-doc: x >y"; do
+        command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
+        _cosign_guard_scan_safe "$f" 2>/dev/null
+        assert_equals "0" "$?" "allowed: $case"
     done
+    # shellcheck disable=SC2016 # literal shell text, scanned not run
+    for case in 'cmd >/etc/x' 'cmd >>/etc/x' 'cmd 2>/tmp/x' 'cmd >"$VAR"' \
+        'cmd &>/etc/x' 'cmd >/dev/null >/etc/x' \
+        'x="|#"; echo d >/etc/x' 'echo a\|#b >/etc/x' 'x=$(echo "|#" >/etc/x)' \
+        'x=`echo|a|#` >/etc/x' 'x=$(|# >/etc/x|)' 'cat <<EOF|# >/etc/x|EOF' \
+        'cmd >&2foo' 'cmd >/dev/nullX' \
+        "eval \"x \$(printf '\\076') /cache/x\"" \
+        '/usr/bin/sudo id' 'x && /usr/bin/mv a b' 'if "/usr/bin/x"; then :; fi' \
+        'command /usr/bin/mv a b' 'env /usr/bin/mv a b' 'echo a\\|/usr/bin/mv a b' \
+        'builtin /usr/bin/x' 'nohup /usr/bin/mv a b' 'sudo /usr/bin/id' \
+        'xargs /usr/bin/rm' 'while /usr/bin/x; do :; done' 'until /usr/bin/x; do :; done' \
+        'time /usr/bin/x' 'for i in 1; do /usr/bin/x; done' 'if x; then :; else /usr/bin/x; fi' \
+        'if x; then :; elif /usr/bin/x; then :; fi' 'if x|then /usr/bin/x|fi' \
+        'env V=1 /usr/bin/mv a b' 'sudo -u x /usr/bin/id' 'xargs -n1 /usr/bin/rm' \
+        'V=x /usr/bin/mv a b' 'coproc /usr/bin/x' 'command -- /usr/bin/x' \
+        'env -i HOME=/h /usr/bin/x' '{ /usr/bin/x; }' '! /usr/bin/x' \
+        'x=`/usr/bin/x`' 'command -vp mv' 'case $x in a) /usr/bin/x ;; esac' \
+        'command -p mv a b' 'hash -p /usr/bin/mv mv' 'exec /bin/sh' \
+        'enable -f x y' '2>/dev/null /usr/bin/x' '>/dev/null /usr/bin/x' \
+        'x; 2>&1 /usr/bin/x' '</dev/null /usr/bin/x' 'cat <(/usr/bin/x)' \
+        'diff <(/usr/bin/x) y' 'tee >(/usr/bin/x)' '>>/tmp/l /usr/bin/x' \
+        '&>/dev/null /usr/bin/x' 'a=1 >/dev/null /usr/bin/x' \
+        'if x; then >/dev/null /usr/bin/x; fi' 'cat <$(/usr/bin/x)' \
+        'cat < "$(/usr/bin/x)"' 'cat <"$(/usr/bin/x)"'; do
+        command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
+        _cosign_guard_scan_safe "$f" 2>/dev/null
+        assert_equals "1" "$?" "refused: $case"
+    done
+    # After `&&`, `||` or `|` a continued line is a command, not an argument.
+    # Written directly: these operators collide with the `|` line separator.
+    for case in '&&' '||' '|'; do
+        command printf 'cmd %s \\\n/usr/bin/rm x\n' "$case" >"$f"
+        _cosign_guard_scan_safe "$f" 2>/dev/null
+        assert_equals "1" "$?" "refused: absolute path continued after $case"
+    done
+    # State resets per file: the harness scans two files in one call, and an
+    # open quote at the end of one must not leave the next "inside a string".
+    local g
+    g=$(command mktemp)
+    command printf 'x="\n' >"$f"
+    command printf '/usr/bin/x\n' >"$g"
+    _cosign_guard_scan_safe "$f" "$g" 2>/dev/null
+    assert_equals "1" "$?" "refused: per-file state does not leak across files"
+    command rm -f "$g"
+    # A scan that cannot run must refuse, not approve.
     command rm -f "$f"
+    _cosign_guard_scan_safe "$f" 2>/dev/null
+    assert_not_equals "0" "$?" "an unreadable file is refused (scan fails closed)"
 }
 
 # register_cosign_guard_tests <feature-script>
@@ -344,6 +593,10 @@ register_cosign_guard_tests() {
     run_test test_cosign_guard_mutant_is_detected "Cosign guard mutant detected"
     run_test test_cosign_guard_untruncatable_is_refused "Cosign guard: untruncatable copy refused"
     run_test test_cosign_guard_far_brace_is_refused "Cosign guard: distant closing brace refused"
+    run_test test_cosign_guard_trailing_code_is_refused "Cosign guard: code after closing brace refused"
+    run_test test_cosign_guard_repeated_guard_is_refused "Cosign guard: repeated guard line refused"
+    run_test test_cosign_guard_refuses_root "Cosign guard: uid 0 refused"
+    run_test test_cosign_guard_env_is_cleared "Cosign guard: caller environment cleared"
     run_test test_cosign_guard_unsafe_redirect_is_refused "Cosign guard: unsafe redirection refused"
-    run_test test_cosign_guard_redirect_scan "Cosign guard: redirection scan"
+    run_test test_cosign_guard_scan "Cosign guard: construct scan"
 }
