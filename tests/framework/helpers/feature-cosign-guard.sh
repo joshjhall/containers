@@ -228,7 +228,7 @@ _cosign_guard_scan_safe() {
             }
         }
         function refuse(why) { print FILENAME ":" FNR ": " why ": " $0 > "/dev/stderr"; bad = 1 }
-        FNR == 1 { q = 0; bt = 0; depth = 0; cont = 0; subst = 0; heredoc = "" }
+        FNR == 1 { q = 0; bt = 0; depth = 0; cont = 0; opcont = 0; subst = 0; heredoc = "" }
         # A here-document body is data: scan it (a `#` there is not a
         # comment) but keep it out of the quote tracker, where a stray
         # apostrophe would leave every later line "inside a string".
@@ -246,12 +246,15 @@ _cosign_guard_scan_safe() {
             if (line ~ />/) refuse("write redirection")
             if ($0 ~ /(^|[^[:alnum:]_.-])(eval|exec|enable)([^[:alnum:]_.-]|$)/) refuse("eval/exec/enable")
             if ($0 ~ /(^|[^[:alnum:]_.-])(command|hash)[[:space:]]+-[[:alnum:]]*p/) refuse("command -p/hash -p")
-            # Command position: a line start (unless it continues a quote or a
-            # backslash-continued command, where it is an argument), after a
-            # control operator, or after a keyword or prefix that takes a
-            # command (`command /usr/bin/x` is not a PATH lookup either).
-            if ((q == 0 && !cont && $0 ~ /^[[:space:]]*["\047]?\//) ||
+            # Command position: a line start (unless it continues a quote, or
+            # a backslash-continued command whose last word was an argument),
+            # after a control operator or a case-arm `)` (spaced, so
+            # `$(dirname x)/path` stays an argument), or after a keyword or
+            # prefix that takes a command (`command /usr/bin/x` is not a PATH
+            # lookup either).
+            if ((q == 0 && (!cont || opcont) && $0 ~ /^[[:space:]]*["\047]?\//) ||
                 $0 ~ /[;&|({!`][[:space:]]*["\047]?\// ||
+                $0 ~ /\)[[:space:]]+["\047]?\// ||
                 $0 ~ /(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|time|command|builtin|env|nohup|sudo|xargs)[[:space:]]+["\047]?\//)
                 refuse("absolute-path command")
             if (heredoc != "") next
@@ -268,6 +271,8 @@ _cosign_guard_scan_safe() {
             track($0)
             subst = $0 ~ /\$\(|`/
             cont = !hit_comment && match($0, /\\+$/) && RLENGTH % 2 == 1
+            # `cmd && \` continues into a command, not an argument.
+            opcont = cont && $0 ~ /(&&|\|\||[;|&(!{`]|(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|time|command|builtin|env|nohup|sudo|xargs))[[:space:]]*\\$/
         }
         END { exit bad }
     ' "$@"
@@ -501,6 +506,7 @@ test_cosign_guard_scan() {
         'add_key "K" \|    "/usr/share/keyrings/k.gpg" \|    x' \
         'cmd --keyring /etc/apt/x' '[ -f "/tmp/x" ]' \
         'v=$(. /etc/os-release && echo "$V")' 'echo "a # b"' \
+        'if [ -f "$(dirname x)/../y.sh" ]; then :; fi' \
         "cat <<-EOF|	don't|	EOF|# after a here-doc: x >y"; do
         command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
         _cosign_guard_scan_safe "$f" 2>/dev/null
@@ -515,11 +521,22 @@ test_cosign_guard_scan() {
         "eval \"x \$(printf '\\076') /cache/x\"" \
         '/usr/bin/sudo id' 'x && /usr/bin/mv a b' 'if "/usr/bin/x"; then :; fi' \
         'command /usr/bin/mv a b' 'env /usr/bin/mv a b' 'echo a\\|/usr/bin/mv a b' \
+        'builtin /usr/bin/x' 'nohup /usr/bin/mv a b' 'sudo /usr/bin/id' \
+        'xargs /usr/bin/rm' 'while /usr/bin/x; do :; done' 'until /usr/bin/x; do :; done' \
+        'time /usr/bin/x' 'for i in 1; do /usr/bin/x; done' 'if x; then :; else /usr/bin/x; fi' \
+        'if x; then :; elif /usr/bin/x; then :; fi' 'if x|then /usr/bin/x|fi' 'case $x in a) /usr/bin/x ;; esac' \
         'command -p mv a b' 'hash -p /usr/bin/mv mv' 'exec /bin/sh' \
         'enable -f x y'; do
         command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
         _cosign_guard_scan_safe "$f" 2>/dev/null
         assert_equals "1" "$?" "refused: $case"
+    done
+    # After `&&`, `||` or `|` a continued line is a command, not an argument.
+    # Written directly: these operators collide with the `|` line separator.
+    for case in '&&' '||' '|'; do
+        command printf 'cmd %s \\\n/usr/bin/rm x\n' "$case" >"$f"
+        _cosign_guard_scan_safe "$f" 2>/dev/null
+        assert_equals "1" "$?" "refused: absolute path continued after $case"
     done
     # A scan that cannot run must refuse, not approve.
     command rm -f "$f"
