@@ -293,4 +293,11 @@ mod tests {
         wrong.replace_range(0..1, "c"); // flip first nybble
         assert!(!digests_equal(ABC_SHA256, &wrong));
     }
+
+    #[test]
+    fn is_hex_digest_accepts_mixed_case_hex_only() {
+        assert!(is_hex_digest("DEADbeef00"));
+        assert!(!is_hex_digest(""));
+        assert!(!is_hex_digest("deadbeeg"));
+    }
 }
