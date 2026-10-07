@@ -246,22 +246,23 @@ Per-skill / per-agent overrides for librarian content are managed upstream in
 the `librarian` repo, not by this image. Project-level `.claude/skills/` and
 `.claude/agents/` still take precedence on name conflicts (union merge).
 
-### Overriding the build-bound artifacts (`CLAUDE_SKILLS` / `CLAUDE_AGENTS`)
+### Overriding the build-bound artifacts (`CLAUDE_SKILLS` / `CLAUDE_EXTRA_*`)
 
-The legacy `CLAUDE_SKILLS` / `CLAUDE_EXTRA_SKILLS` and `CLAUDE_AGENTS` /
-`CLAUDE_EXTRA_AGENTS` build args still exist and still work. As the migrated
-artifacts move to `librarian` (#608), their remaining scope is the artifacts the
-container itself installs:
+The `CLAUDE_SKILLS` / `CLAUDE_EXTRA_SKILLS` and `CLAUDE_EXTRA_AGENTS` build args
+still work, but their scope is now only the artifacts the container itself
+installs:
 
 - `CLAUDE_SKILLS` / `CLAUDE_EXTRA_SKILLS` — govern the
   [build-bound skills](#build-bound-skills-stay-in-this-repo)
   (`container-environment`, `docker-development`, `cloud-infrastructure`). They
   no longer select the migrated general-purpose skills (those come from
   `librarian` and are chosen at the plugin level above).
-- `CLAUDE_AGENTS` / `CLAUDE_EXTRA_AGENTS` — select from whatever agent set the
-  image installs. Once #608 lands, that set is the librarian-installed agents;
-  prefer `claude plugin install` / `uninstall` for plugin-level agent
-  selection, and reserve these args for narrowing the installed set.
+- `CLAUDE_EXTRA_AGENTS` — additive: installs extra agents from the staged
+  templates alongside the librarian plugin agents.
+- `CLAUDE_AGENTS` is **no longer read** by `claude-setup`. The general-purpose
+  agents ship inside the librarian plugins, so select them per plugin with
+  `CLAUDE_LIBRARIAN_PLUGINS` (or `claude plugin install` / `uninstall`) — there
+  is no per-agent override.
 
 ```bash
 # Drop the conditional build-bound skills (container-environment still installs)

@@ -265,8 +265,8 @@ per-skill). Key capabilities: `/codebase-audit` (parallel scanners),
 and state persistence).
 
 The build-bound skills (`container-environment`, `cloud-infrastructure`,
-`docker-development`) stay in this repo; `CLAUDE_SKILLS` / `CLAUDE_AGENTS` gate
-those, and `CLAUDE_EXTRA_SKILLS` / `CLAUDE_EXTRA_AGENTS` add repo-local extras.
+`docker-development`) stay in this repo; `CLAUDE_SKILLS` gates those, and
+`CLAUDE_EXTRA_SKILLS` / `CLAUDE_EXTRA_AGENTS` add repo-local extras.
 See `docs/claude-code/skills-and-agents.md` for the librarian install path
 (host + pinned-container) and full details.
 

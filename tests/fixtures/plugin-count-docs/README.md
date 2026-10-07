@@ -28,10 +28,10 @@ of prose. Two details are load-bearing rather than decorative:
 
 - `plugins-and-mcps.md` carries **two** matching lines, mirroring the real doc,
   so the scan's inner per-match loop is exercised and not just its first pass.
-- `dev-tools.env` reproduces the real file's "13 static skills" / "11 default
-  agents" decoys. They sit within ten lines of the plugin literal in the real
-  file, which is why the scan's regex is narrow; a loosened regex must fail
-  here the same way it would there.
+- `dev-tools.env` keeps the "13 static skills" / "11 default agents" decoys
+  the real file carried within ten lines of the plugin literal until #905.
+  They are why the scan's regex is narrow: any unrelated count near the plugin
+  literal would trip a loosened regex, so it must fail here.
 
 `setup-stubs/*.setup` are stand-in `claude-setup` files for the counter's own
 branches (absent assignment, empty first entry, single entry). The `.setup`
