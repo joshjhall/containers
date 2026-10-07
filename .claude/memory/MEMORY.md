@@ -88,7 +88,7 @@
 - [Sibling suite split updates mapping test](sibling-suite-split-updates-mapping-test.md) — a new tests/unit/runtime/ sibling breaks run-changed-tests.sh's exact-count assert
 - [Stale repo-local git identity](stale-repo-local-git-identity.md) — `.git/config` `t <t@t.t>` shadows the 1Password global identity
 - [Fetch before releasing](fetch-before-release-bot-owns-main.md) — auto-patch bot pushes releases+tags to main on a schedule
-- [worktree-rm blocked by held build artifacts](worktree-rm-blocked-by-held-build-artifacts.md) — deregistered worktree reads as "dirty"; cargo
+- [worktree-rm blocked by held build artifacts](worktree-rm-blocked-by-held-build-artifacts.md) — leftover cargo artifacts held open by rust-analyzer; lsof +D
 - [Cross-repo schema required-flip](cross-repo-schema-required-flip.md) — a REQUIRED catalog field needs 3 PRs (optional→consume→required)
 - [logger without a syslog daemon](logger-without-syslog-daemon.md) — no /dev/log in these images; `logger` discards and exits 0
 - [cron user column is build-time](cron-user-column-is-build-time.md) — run cron jobs as root + resolve the container user at run time

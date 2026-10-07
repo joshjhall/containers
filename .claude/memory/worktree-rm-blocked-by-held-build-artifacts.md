@@ -1,27 +1,23 @@
 ---
 name: worktree-rm-blocked-by-held-build-artifacts
-description: "worktree-rm.sh can report \"uncommitted changes\" for an already-deregistered worktree; leftover cargo artifacts resist rm because a rust-analyzer holds them open — find it with lsof +D, do not wait for a restart"
+description: "leftover cargo artifacts in a deregistered worktree resist rm because a rust-analyzer holds them open — find it with lsof +D, do not wait for a restart"
 metadata:
   node_type: memory
   type: project
   originSessionId: 70fff190-ee3f-408b-b8e8-d31247eeaa88
-  modified: 2026-09-04T04:06:41.627Z
+  modified: 2026-10-07T00:00:00.000Z
 ---
 
 Post-merge teardown of a golem worktree can leave `.worktrees/issue-N/` behind
 even after the branch and git registration are gone (observed 2026-08-21,
 PR #795).
 
-Two distinct symptoms, both cosmetic once diagnosed:
+A deregistered leftover is no longer misreported as "has uncommitted changes":
+since librarian#813 (in the v0.15.0 pin) `worktree-rm.sh` says "no longer
+registered as a worktree" and removes the leftover itself (#864 closed as
+fixed there). What remains is cosmetic once diagnosed:
 
-1. `worktree-rm.sh N` prints "has uncommitted changes" when the worktree is
-   *already* deregistered — `git worktree list` doesn't show it and
-   `.git/worktrees/<name>` is absent, so the script's status probe fails
-   (`fatal: not a git repository: (null)`) and is read as dirty. Verify with
-   `git worktree list` + `ls .git/worktrees/` before believing the dirty
-   report; diff the worktree's changed files against merged `origin/main` to
-   confirm nothing unmerged is stranded, then remove the directory directly.
-2. `rm -rf` then fails on `target/debug/**` — either **Bad file descriptor**
+1. `rm -rf` of the leftover fails on `target/debug/**` — either **Bad file descriptor**
    (EBADF) or `Directory not empty` on a dir holding only `.fuse_hidden*`
    entries — leaving an artifacts-only shell (~200M).
 
@@ -49,8 +45,7 @@ Two distinct symptoms, both cosmetic once diagnosed:
    PID directly. The `/proc/*/cwd` scan is a useful *confirmation* that the
    process belongs to the worktree, not the primary way to find it.
 
-   Filed as a suggested improvement on #864: teardown should name the holding
-   PIDs instead of leaving the operator to find them. Related: [[stale-symlink-attrs-virtiofs]].
+   Teardown still does not name the holding PIDs — find them yourself. Related: [[stale-symlink-attrs-virtiofs]].
 
    **`lsof` clean + deletes still failing is a DIFFERENT symptom — stop, do not
    retry** (observed 2026-09-04, PR #896). When `lsof +D` on the whole worktree
