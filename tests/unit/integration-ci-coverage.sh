@@ -19,7 +19,8 @@
 #   - when any variant uses `extra_suites`, a gating step actually executes
 #     them (calls the runner, passes IMAGE_TO_TEST_MINIMAL, no
 #     continue-on-error or `|| true`) — a listed-but-unrun rider is the
-#     original rot one level down.
+#     original rot one level down — and every rider expands
+#     IMAGE_TO_TEST_MINIMAL, so the step's minimal image is actually used.
 #
 # The checker runs against fixtures as well as the real tree, so each rule is
 # shown to FAIL on the defect it exists for.
@@ -270,6 +271,22 @@ matrix_suites_ignoring_image() {
     done < <(matrix_suites "$1")
 }
 
+# extra_suites_ignoring_minimal CI_FILE BUILDS_DIR — prints each `extra_suites`
+# rider whose file never expands $IMAGE_TO_TEST_MINIMAL on a non-comment line.
+# The extra_suites step hands every rider the published minimal image so a
+# flag-absent check (bindfs's test_no_bindfs_without_flag) needs no local
+# build; a rider that stops reading it silently brings that full build back
+# inside the merge-tier job's 30-minute budget.
+extra_suites_ignoring_minimal() {
+    local suite
+    while IFS= read -r suite; do
+        [ -f "$2/test_${suite}.sh" ] || continue
+        command grep -vE '^[[:space:]]*#' "$2/test_${suite}.sh" |
+            command grep -qE '\$\{?IMAGE_TO_TEST_MINIMAL' || command echo "$suite"
+    done < <(yq -r '.jobs["integration-test"].strategy.matrix.variant // [] | .[] | .extra_suites // ""' "$1" |
+        command tr ' ' '\n' | command sed '/^$/d' | command sort -u)
+}
+
 test_checker_flags_suite_ignoring_image() {
     local dir got
     dir=$(command mktemp -d)
@@ -289,10 +306,30 @@ test_extra_suites_step_gates() {
     assert_equals "" "$got" "integration-test executes its extra_suites and gates on them"
 }
 
+test_extra_suites_use_published_minimal() {
+    local got
+    got=$(extra_suites_ignoring_minimal "$CI_WORKFLOW" "$BUILDS_DIR")
+    assert_equals "" "$got" "every extra_suites rider honors IMAGE_TO_TEST_MINIMAL"
+}
+
 test_matrix_suites_test_published_image() {
     local got
     got=$(matrix_suites_ignoring_image "$CI_WORKFLOW" "$BUILDS_DIR")
     assert_equals "" "$got" "every merge-tier suite honors IMAGE_TO_TEST"
+}
+
+test_checker_flags_rider_ignoring_minimal() {
+    local dir got
+    dir=$(command mktemp -d)
+    make_fixture "$dir"
+    # `covered` is a plain matrix test, not a rider: it needs no minimal image.
+    printf '# reads IMAGE_TO_TEST_MINIMAL (it does not)\n' >>"$dir/builds/test_rider.sh"
+    got=$(extra_suites_ignoring_minimal "$dir/ci.yml" "$dir/builds")
+    printf 'image="${IMAGE_TO_TEST_MINIMAL:-x}"\n' >>"$dir/builds/test_rider.sh"
+    got+="|$(extra_suites_ignoring_minimal "$dir/ci.yml" "$dir/builds")"
+    command rm -rf "$dir"
+    assert_equals "rider|" "$got" \
+        "a rider that never expands IMAGE_TO_TEST_MINIMAL is flagged; one that does passes"
 }
 
 test_checker_flags_missing_extra_suites_step() {
@@ -361,11 +398,13 @@ run_test test_checker_flags_matrix_suite_drift "Checker flags a matrix suite wit
 run_test test_checker_flags_missing_matrix_suite "Checker flags a matrix suite with no file"
 run_test test_runner_tier_filter_splits_multi_tier_header "Runner --tier filter splits multi-tier headers"
 run_test test_checker_flags_suite_ignoring_image "Checker flags a matrix suite ignoring IMAGE_TO_TEST"
+run_test test_checker_flags_rider_ignoring_minimal "Checker flags a rider ignoring IMAGE_TO_TEST_MINIMAL"
 run_test test_checker_flags_missing_extra_suites_step "Checker flags extra_suites with no consuming step"
 run_test test_checker_flags_weak_extra_suites_step "Checker flags a non-gating extra_suites step"
 run_test test_real_matrix_is_parsed "Real integration-test matrix parses"
 run_test test_every_suite_has_ci_disposition "Every integration suite has a CI disposition"
 run_test test_matrix_suites_test_published_image "Every merge-tier suite honors IMAGE_TO_TEST"
 run_test test_extra_suites_step_gates "The extra_suites step runs and gates the job"
+run_test test_extra_suites_use_published_minimal "Every extra_suites rider honors IMAGE_TO_TEST_MINIMAL"
 
 generate_report
