@@ -195,8 +195,10 @@ STUB
 #     real tools the stub PATH cannot intercept (eval also rebuilds a `>` at
 #     runtime, e.g. from `$(printf '\076')`);
 #   - has an absolute path in command position, including after a prefix
-#     such as `command`, `env` or `sudo` (/usr/bin/sudo would run for real,
-#     and as a sudo-group user defeat the uid-0 refusal).
+#     such as `command`, `env` or `sudo` and any options or `VAR=x`
+#     assignments before it (/usr/bin/sudo would run for real, and as a
+#     sudo-group user defeat the uid-0 refusal). After env, sudo, xargs,
+#     nohup, time or coproc, any absolute-path word on the line is refused.
 # Prints each offending line to stderr. Deliberately coarse: a `>` inside a
 # string or `[ a > b ]` also trips it, which is a refusal, never a missed write.
 # Fails closed: awk exits 1 when it refused a line and 2 when it could not scan
@@ -251,11 +253,16 @@ _cosign_guard_scan_safe() {
             # after a control operator or a case-arm `)` (spaced, so
             # `$(dirname x)/path` stays an argument), or after a keyword or
             # prefix that takes a command (`command /usr/bin/x` is not a PATH
-            # lookup either).
+            # lookup either), with any options and assignments in between.
+            # env/sudo/xargs/nohup/time/coproc options take arguments that
+            # cannot be told apart from the command, so after one of them
+            # any later absolute-path word on the line is refused.
             if ((q == 0 && (!cont || opcont) && $0 ~ /^[[:space:]]*["\047]?\//) ||
                 $0 ~ /[;&|({!`][[:space:]]*["\047]?\// ||
                 $0 ~ /\)[[:space:]]+["\047]?\// ||
-                $0 ~ /(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|time|command|builtin|env|nohup|sudo|xargs)[[:space:]]+["\047]?\//)
+                $0 ~ /(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|command|builtin)[[:space:]]+((-[^[:space:]]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*["\047]?\// ||
+                $0 ~ /(^|[^[:alnum:]_.-])(env|sudo|xargs|nohup|time|coproc)[[:space:]](.*[[:space:]=])?["\047]?\// ||
+                $0 ~ /(^|[;&|({!`[:space:]])[A-Za-z_][A-Za-z0-9_]*=[^[:space:]()`]*[[:space:]]+["\047]?\//)
                 refuse("absolute-path command")
             if (heredoc != "") next
             # Remember the delimiter (`<<EOF`, `<<-"EOF"`, `<< EOF`); a
@@ -524,7 +531,11 @@ test_cosign_guard_scan() {
         'builtin /usr/bin/x' 'nohup /usr/bin/mv a b' 'sudo /usr/bin/id' \
         'xargs /usr/bin/rm' 'while /usr/bin/x; do :; done' 'until /usr/bin/x; do :; done' \
         'time /usr/bin/x' 'for i in 1; do /usr/bin/x; done' 'if x; then :; else /usr/bin/x; fi' \
-        'if x; then :; elif /usr/bin/x; then :; fi' 'if x|then /usr/bin/x|fi' 'case $x in a) /usr/bin/x ;; esac' \
+        'if x; then :; elif /usr/bin/x; then :; fi' 'if x|then /usr/bin/x|fi' \
+        'env V=1 /usr/bin/mv a b' 'sudo -u x /usr/bin/id' 'xargs -n1 /usr/bin/rm' \
+        'V=x /usr/bin/mv a b' 'coproc /usr/bin/x' 'command -- /usr/bin/x' \
+        'env -i HOME=/h /usr/bin/x' '{ /usr/bin/x; }' '! /usr/bin/x' \
+        'x=`/usr/bin/x`' 'command -vp mv' 'case $x in a) /usr/bin/x ;; esac' \
         'command -p mv a b' 'hash -p /usr/bin/mv mv' 'exec /bin/sh' \
         'enable -f x y'; do
         command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
