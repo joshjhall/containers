@@ -13,13 +13,18 @@ even after the branch and git registration are gone (observed 2026-08-21,
 PR #795).
 
 A deregistered leftover is no longer misreported as "has uncommitted changes":
-since librarian#813 (in the v0.15.0 pin) `worktree-rm.sh` says "no longer
-registered as a worktree" and removes the leftover itself (#864 closed as
-fixed there). What remains is cosmetic once diagnosed:
+since librarian#813 (shipped in 0.12.0; present in the current pin)
+`worktree-rm.sh` says "no longer registered as a worktree" and removes the
+leftover itself (#864 is a duplicate of it). What remains is cosmetic once
+diagnosed:
 
-1. `rm -rf` of the leftover fails on `target/debug/**` — either **Bad file descriptor**
-   (EBADF) or `Directory not empty` on a dir holding only `.fuse_hidden*`
-   entries — leaving an artifacts-only shell (~200M).
+**Held-open artifacts.** The script's own leftover removal fails on
+`target/debug/**` — either **Bad file descriptor** (EBADF) or `Directory not
+empty` on a dir holding only `.fuse_hidden*` entries. It then reports
+"cleared leftover directory ... (N entries could not be removed)", says this is
+"expected on the macOS virtiofs mount stack", and may rename the tree aside to
+`.worktrees/.wedged-issue-N-<epoch>-<pid>` (#936), leaving an artifacts-only
+shell (~200M). That "expected" message does **not** rule out a killable holder.
 
    **This is a held-open file, not a filesystem state, and not something to
    wait out.** `.fuse_hidden*` is FUSE's marker for a file that has been
@@ -27,7 +32,7 @@ fixed there). What remains is cosmetic once diagnosed:
    the holder does. Diagnose in three steps (observed 2026-08-31, PR #878):
 
    ```bash
-   lsof +D .worktrees/issue-N/target/debug/deps   # names PID + the DEL REG fds
+   lsof +D .worktrees/issue-N/target/debug/deps   # or the .wedged-issue-N-* path that survived
    ls -l /proc/<pid>/cwd                          # confirm it is rooted in the worktree
    kill <pid> <parent-pid>                        # then rm -rf succeeds first try
    ```
@@ -77,7 +82,7 @@ branch is never pruned**. Confirm with `gh pr view <N> --json state` and delete
 the ref explicitly (`gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>`)
 rather than assuming the flag ran. Related: [[git-env-leak-breaks-worktree-tests]].
 
-**Squash-merge adds a third symptom** (observed 2026-08-27, PR #859). After a
+**Squash-merge symptom** (observed 2026-08-27, PR #859). After a
 squash merge, `git branch -d feature/issue-N` refuses with "not fully merged":
 the branch tip is not an ancestor of the squash commit, by construction. That
 warning carries no information after a squash — confirm the content actually
@@ -102,7 +107,7 @@ survives until restart, and never report "clears on container restart" without
 having done so: it implies an unbounded wait and ~200M pinned, when the real
 remedy is three commands.
 
-**Third shape (2026-10-02, #1000): `worktree-rm.sh` refuses "read unverifiable"
+**Read-unverifiable shape (2026-10-02, #1000): `worktree-rm.sh` refuses "read unverifiable"
 but deregisters anyway.** It printed "Nothing was removed", yet afterwards the
 worktree was gone from `git worktree list` and `.git/worktrees/`, and the local
 branch survived. Trap: `git -C .worktrees/issue-N status` then walks up into the
