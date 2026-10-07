@@ -52,6 +52,11 @@ _install_step() {
 
 DEV_VERSION="$(_dev_tools_version "$DEV_TOOLS")"
 
+# update_version()'s "held, nothing written" code, read from the source so the
+# refusal tests cannot drift from it.
+RC_INVALID_VERSION="$(command sed -nE 's/^RC_INVALID_VERSION=([0-9]+).*/\1/p' \
+    "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh")"
+
 test_source_of_truth_parses() {
     assert_matches "$DEV_VERSION" '^[0-9]+\.[0-9]+\.[0-9]+$' \
         "dev-tools.sh GITLEAKS_VERSION default must be X.Y.Z (got '$DEV_VERSION')"
@@ -149,17 +154,30 @@ test_updater_bumps_dev_tools_only() {
 # The version lands in a sed replacement and, via ci.yml's run-time read, the
 # download URL, so anything but plain X.Y.Z is refused before writing.
 test_updater_refuses_non_semver_version() {
-    local root="$TEST_SCRATCH_BASE/gitleaks-sync-badver" rc dev_same=yes expected
+    local root="$TEST_SCRATCH_BASE/gitleaks-sync-badver" rc dev_same bad
     /bin/mkdir -p "$root/lib/features"
-    /bin/cp "$DEV_TOOLS" "$root/lib/features/dev-tools.sh"
-    rc="$(_run_updater "$root" '9.9.9-x"y')"
-    command cmp -s "$DEV_TOOLS" "$root/lib/features/dev-tools.sh" || dev_same=no
+    for bad in '9.9.9-x"y' '8.30' '8.30.1-rc1' 'v8.30.1'; do
+        /bin/cp "$DEV_TOOLS" "$root/lib/features/dev-tools.sh"
+        rc="$(_run_updater "$root" "$bad")"
+        dev_same=yes
+        command cmp -s "$DEV_TOOLS" "$root/lib/features/dev-tools.sh" || dev_same=no
+        assert_equals "$RC_INVALID_VERSION" "$rc" "'$bad' must hold the bump (RC_INVALID_VERSION)"
+        assert_equals "yes" "$dev_same" "dev-tools.sh must be untouched after refusing '$bad'"
+    done
     /bin/rm -rf "$root"
-    expected="$(command sed -nE 's/^RC_INVALID_VERSION=([0-9]+).*/\1/p' \
-        "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh")"
+}
 
-    assert_equals "$expected" "$rc" "a non-X.Y.Z version must hold the bump (RC_INVALID_VERSION)"
-    assert_equals "yes" "$dev_same" "dev-tools.sh must be untouched after a refused version"
+# sed exits 0 on no match, so a reformatted pin line must fail the bump rather
+# than report success having written nothing.
+test_updater_fails_on_unmatched_pin() {
+    local root="$TEST_SCRATCH_BASE/gitleaks-sync-reformat" rc
+    /bin/mkdir -p "$root/lib/features"
+    command sed -E 's/^GITLEAKS_VERSION=.*/GITLEAKS_VERSION=8.30.1/' "$DEV_TOOLS" \
+        >"$root/lib/features/dev-tools.sh"
+    rc="$(_run_updater "$root")"
+    /bin/rm -rf "$root"
+
+    assert_equals "$RC_INVALID_VERSION" "$rc" "an unquoted pin line must hold the bump (RC_INVALID_VERSION)"
 }
 
 # A bare quoted pin (no ${VAR:-} default) must be rewritten into the default
@@ -206,6 +224,7 @@ run_test test_ci_install_reads_dev_tools_and_verifies "ci.yml install step reads
 run_test test_ci_scan_follows_install "ci.yml scan runs after the verified install"
 run_test test_updater_bumps_dev_tools_only "updater bumps dev-tools.sh and leaves ci.yml alone"
 run_test test_updater_refuses_non_semver_version "updater refuses a non-X.Y.Z version before writing"
+run_test test_updater_fails_on_unmatched_pin "updater fails before writing on a reformatted pin"
 run_test test_updater_normalizes_bare_pin "updater rewrites a bare pin into the default form"
 run_test test_sed_inplace_propagates_sed_failure "sed_inplace returns sed's failure status"
 

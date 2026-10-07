@@ -18,13 +18,20 @@
 #   plain X.Y.Z is accepted (validate_version allows arbitrary suffixes).
 #
 # Returns:
-#   0 on success; RC_INVALID_VERSION when the version is refused before any
-#   write; RC_UPDATE_FAILED when a write fails.
+#   0 on success; RC_INVALID_VERSION when the version or the pin line's shape
+#   is refused before any write; RC_UPDATE_FAILED when a write fails.
 bump_gitleaks_pin() {
     local script_path="$1" latest="$2"
 
     [[ $latest =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
         echo -e "${RED}    ERROR: refusing non-X.Y.Z gitleaks version '$latest'${NC}" >&2
+        return "$RC_INVALID_VERSION"
+    }
+
+    # sed exits 0 on no match, so a reformatted pin line would otherwise report
+    # a successful bump that wrote nothing. Check the shape the seds expect.
+    command grep -qE '^GITLEAKS_VERSION="(\$\{GITLEAKS_VERSION:-[^}]*\}|[0-9][^"]*)"' "$script_path" || {
+        echo -e "${RED}    ERROR: no GITLEAKS_VERSION=\"...\" pin found in $script_path — leaving it unchanged${NC}" >&2
         return "$RC_INVALID_VERSION"
     }
 
