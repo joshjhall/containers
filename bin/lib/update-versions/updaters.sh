@@ -165,12 +165,10 @@ update_luggage_catalog() {
     "$luggage_bin" catalog add-version "${tool}@${version}" --catalog "$catalog"
 }
 
-# sync_rust_minor_pins and sync_gitleaks_pins live in their own modules to keep
-# this file under the file-size ceiling (tests/unit/file-size-ceiling.sh).
+# sync_rust_minor_pins lives in its own module to keep this file under the
+# file-size ceiling (tests/unit/file-size-ceiling.sh).
 # shellcheck source=bin/lib/update-versions/rust-pins.sh
 source "$(dirname "${BASH_SOURCE[0]}")/rust-pins.sh"
-# shellcheck source=bin/lib/update-versions/gitleaks-pins.sh
-source "$(dirname "${BASH_SOURCE[0]}")/gitleaks-pins.sh"
 
 # Function to update a version in a file
 update_version() {
@@ -474,7 +472,11 @@ update_version() {
                     sed_inplace "s/^LEFTHOOK_VERSION=\"[0-9][^\"]*\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 gitleaks)
-                    sync_gitleaks_pins "$script_path" "$latest" || return
+                    # The only gitleaks pin: CI's checksum-verified scanner
+                    # reads this default at run time (#1064), so ci.yml needs
+                    # no matching edit.
+                    sed_inplace "s/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-[^}]*}\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^GITLEAKS_VERSION=\"[0-9][^\"]*\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 dprint)
                     sed_inplace "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"

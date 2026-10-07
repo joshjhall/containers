@@ -1,13 +1,13 @@
 # Gitleaks configuration
 #
 # Exists to keep documentation placeholders from failing a full-history scan
-# (#852) without weakening detection anywhere. The CI step runs
-# `gitleaks/gitleaks-action@v2`, which accepts no input parameters and so
-# discovers this file by its root location; `lefthook.yml`'s
+# (#852) without weakening detection anywhere. CI's "Run secret scanning with
+# Gitleaks" step runs a checksum-verified `gitleaks git` (#1064) from the repo
+# root and so discovers this file by its root location; `lefthook.yml`'s
 # `gitleaks protect --staged` finds it the same way. Neither needs a
 # `--config` flag.
 #
-# Why a full-history scan used to fail: on a `pull_request` event the action
+# Why a full-history scan used to fail: on a `pull_request` event CI
 # scans only the PR's own commits, so the placeholders below are never seen.
 # A `workflow_dispatch` (or any other full-history path) scans every commit,
 # reaches 184f4a3b, and exits non-zero on values that were never secrets.

@@ -247,20 +247,71 @@ jobs:
             lefthook run pre-commit --all-files
           fi
 
+      # gitleaks runs as a checksum-verified binary rather than through
+      # gitleaks/gitleaks-action, which downloads its release tarball unverified
+      # (#1064). The version is read from lib/features/dev-tools.sh — the single
+      # gitleaks pin, bumped by auto-patch — and its SHA256 from
+      # lib/checksums.json, which auto-patch's update-checksums.sh fills in for
+      # the new version. Keeping no version literal in this file also means a
+      # gitleaks bump never has to push a workflow-file change.
+      - name: Install gitleaks (checksum-verified)
+        run: |
+          set -euo pipefail
+          GITLEAKS_VERSION=$(grep -oP 'GITLEAKS_VERSION="\$\{GITLEAKS_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          if [ -z "$GITLEAKS_VERSION" ]; then
+            echo "::error::could not read GITLEAKS_VERSION from lib/features/dev-tools.sh"
+            exit 1
+          fi
+          # A missing entry is a hard error, as for yq above: an unrecorded
+          # checksum must stop CI, never fall back to trusting the download.
+          EXPECTED_SHA=$(jq -r \
+            --arg v "$GITLEAKS_VERSION" \
+            '.tools.gitleaks.versions[$v].checksums.amd64.sha256 // empty' \
+            lib/checksums.json)
+          if [ -z "$EXPECTED_SHA" ]; then
+            echo "::error::no amd64 SHA256 pinned for gitleaks $GITLEAKS_VERSION in lib/checksums.json"
+            exit 1
+          fi
+
+          echo "Installing gitleaks $GITLEAKS_VERSION"
+          TARBALL="/tmp/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o "$TARBALL"
+          echo "${EXPECTED_SHA}  ${TARBALL}" | sha256sum -c -
+
+          # Extracted and moved into place only AFTER the checksum passes.
+          mkdir -p /tmp/gitleaks-bin
+          tar -xzf "$TARBALL" -C /tmp/gitleaks-bin gitleaks
+          sudo install -m 0755 /tmp/gitleaks-bin/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
       - name: Run secret scanning with Gitleaks
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-          # Without this the action falls back to its hard-coded 8.24.3, which
-          # predates the scoped [[allowlists]] in .gitleaks.toml and fails every
-          # full-history workflow_dispatch scan (#1050). Must equal the
-          # GITLEAKS_VERSION default in lib/features/dev-tools.sh and stay
-          # >= 8.29.0 — tests/unit/gitleaks-version-sync.sh enforces both, and
-          # the auto-patch updater bumps the two together.
-          GITLEAKS_VERSION: "8.30.1"
-        # Configuration comes from .gitleaks.toml at the repo root; the action
-        # scans the event's commit range (full history on workflow_dispatch).
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        # Configuration comes from .gitleaks.toml at the repo root. The scan
+        # range matches what gitleaks-action scanned: a PR's own commits, a
+        # push's new commits, and full history everywhere else (workflow_dispatch,
+        # a newly created branch or tag, or a force-push whose old tip is gone).
+        run: |
+          set -euo pipefail
+          LOG_OPTS=""
+          case "$EVENT_NAME" in
+            pull_request)
+              LOG_OPTS="--no-merges --first-parent ${PR_BASE_SHA}..${PR_HEAD_SHA}"
+              ;;
+            push)
+              if [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ] \
+                && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+                LOG_OPTS="--no-merges --first-parent ${PUSH_BEFORE}..${PUSH_AFTER}"
+              fi
+              ;;
+          esac
+          echo "gitleaks log range: ${LOG_OPTS:-<full history>}"
+          gitleaks git --redact --verbose --exit-code 1 --log-opts="$LOG_OPTS" .
 
       - name: Upload test results
         if: always()

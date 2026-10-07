@@ -98,6 +98,24 @@ Add these secrets to your repository settings:
    - Get it from: `https://pushover.net/`
    - Example: `uQiRzpo4DXghDmr9QzzfQu27cmVRsG`
 
+1. **AUTO_PATCH_TOKEN**
+
+   - Token `auto-patch.yml` checks out and pushes the `auto-patch/*` branch
+     with (a `GITHUB_TOKEN` push would not trigger CI on that branch)
+   - Needs repository contents write **and** permission to change workflow
+     files: `repo` + `workflow` scopes on a classic PAT, or Contents: write +
+     Workflows: write on a fine-grained token. Some updaters rewrite
+     `.github/workflows/*.yml` (the trivy-action SHA pin, the Rust toolchain
+     pins from #1039), and GitHub rejects those pushes without the workflow
+     permission — the run then fails at `git push`
+   - gitleaks bumps do **not** touch workflow files: CI reads the version from
+     `lib/features/dev-tools.sh` and verifies it against `lib/checksums.json`
+     (#1064)
+   - To check a classic PAT:
+     `curl -sI -H "Authorization: token $TOKEN" https://api.github.com | grep -i x-oauth-scopes`
+     must list `workflow`. Fine-grained tokens show their permissions under
+     Settings → Developer settings → Fine-grained tokens
+
 ### Setting Up Pushover
 
 1. Create a Pushover account at `https://pushover.net`
