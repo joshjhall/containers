@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — needs its own INCLUDE_KOTLIN(_DEV) build; no merge-tier variant ships Kotlin (#1027)
 # Test kotlin container build
 #
 # This test verifies the Kotlin configuration including:

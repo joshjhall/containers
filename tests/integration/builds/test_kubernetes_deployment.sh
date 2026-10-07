@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: local-only — needs --privileged Docker-in-Docker to run a kind cluster (#1027)
 # Test Kubernetes deployment manifests with kind (Kubernetes in Docker)
 #
 # This test verifies the Kubernetes manifests work correctly by:

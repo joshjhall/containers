@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — cloud-ops variant parked from the merge tier (#508) (#1027)
 # Test cloud-ops container build
 #
 # This test verifies the cloud-ops configuration that includes:

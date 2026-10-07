@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — rust-golang variant parked from the merge tier (#508) (#1027)
 # Test rust-golang container build
 #
 # This test verifies a systems programming polyglot setup with:

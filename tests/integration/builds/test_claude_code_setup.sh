@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — builds six purpose-specific images (incl. RUST_DEV) of its own (#1027)
 # Test Claude Code setup (CLI, MCP servers, and plugin integrations)
 #
 # This test verifies the Claude Code setup installed by claude-code-setup.sh:

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — needs its own INCLUDE_NODE (non-dev) build; no merge-tier variant matches (#1027)
 # Test the node feature on a Node.js major that no longer bundles corepack
 #
 # Node.js 25+ release tarballs ship only node, npm, and npx. node.sh used to

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — builds seven production-mode images of its own; production variant parked (#508) (#1027)
 # Test production container builds
 #
 # This test verifies that production-optimized containers build successfully

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — needs its own INCLUDE_ANDROID(_DEV) build; no merge-tier variant ships Android (#1027)
 # Test android container build
 #
 # This test verifies the Android SDK configuration including:

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — builds its own luggage fixture image and downloads rustup (#1027)
 # Smoke test: `luggage install rust@<RUST_VERSION>` end-state.
 #
 # Issue #407 — once lib/features/rust.sh delegates to luggage, the

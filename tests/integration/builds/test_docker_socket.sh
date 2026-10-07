@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: local-only — mounts the host /var/run/docker.sock into a root-started container (#1027)
 # Test Docker socket access fix in entrypoint
 #
 # This test verifies that the entrypoint correctly configures Docker socket

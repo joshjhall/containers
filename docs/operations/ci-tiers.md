@@ -153,6 +153,47 @@ Same trigger as before (push to main / v5 / auto-patch, plus
 the PR tier handles that path. Branch protection rules should require both
 "PR Tier" and the merge-tier checks before allowing merge.
 
+### Integration suite coverage
+
+The merge tier runs exactly the suites named in the `integration-test`
+matrix — each variant's `test`, plus any space-separated `extra_suites` run
+against the **same** published image. `extra_suites` is how a suite rides an
+existing variant without a new build: `bindfs` runs on the `python-dev` leg
+(`INCLUDE_DEV_TOOLS=true` installs bindfs and cron), and its flag-absent check
+uses the published `minimal` image via `IMAGE_TO_TEST_MINIMAL` instead of a
+local build.
+
+The `# @tier:` header is **not** what selects merge-tier suites — no workflow
+calls `run_integration_tests.sh --tier=…` yet. So a suite outside the matrix
+must say why, with a `# @ci:` marker under its `@tier` line, and must not
+claim `merge`:
+
+```bash
+#!/usr/bin/env bash
+# @tier: weekly
+# @ci: local-only — mounts the host /var/run/docker.sock (#1027)
+```
+
+[`tests/unit/integration-ci-coverage.sh`](../../tests/unit/integration-ci-coverage.sh)
+enforces both directions: a matrix suite declares `merge` and has no marker;
+any other suite has a `scheduled` or `local-only` marker with a reason. A new
+suite with no header defaults to `merge` and therefore fails until it is
+either added to the matrix or marked.
+
+| Disposition | Suites | Why |
+| --- | --- | --- |
+| Merge tier | `minimal`, `python_dev`, `node_dev`, `polyglot`, `bindfs` | Covered by a published variant |
+| Scheduled | `java_dev`, `r_dev`, `rust_golang`, `cloud_ops`, `production` | Variant parked for v5 (#508) |
+| Scheduled | `android`, `kotlin`, `node_current`, `luggage_rust`, `mise`, `claude_code_setup`, `claude_skills_agents`, `setup_commands` | Build images of their own that no merge-tier variant matches |
+| Local-only | `docker_socket` | Mounts the host Docker socket into a root-started container |
+| Local-only | `kubernetes_deployment` | Needs `--privileged` Docker-in-Docker for kind |
+
+> **"Scheduled" does not mean "covered" today.** The weekly tier (#408-B) is
+> not implemented, so a scheduled suite currently runs in **no** CI tier — the
+> marker records that as a decision rather than an accident. Run one with
+> `just test-integration-one <name>` when touching its area. Each suite's exact
+> reason lives in its `@ci:` line.
+
 ### Cache strategy
 
 As of this PR, the global `type=gha` cache has been replaced with
@@ -345,6 +386,9 @@ caches. The historical global `type=gha` scope is no longer used.
    ```
 
    Absence of the header defaults to `merge` (the pre-tier behavior).
+   The header alone does not put a suite in CI: either add it to the
+   `integration-test` matrix (as a `test` or `extra_suites` entry) or add a
+   `# @ci:` marker — see [Integration suite coverage](#integration-suite-coverage).
 3. The PR tier's `changed_features.sh` will automatically pick up the new
    feature on diffs that touch `lib/features/<name>.sh` or
    `lib/features/lib/<name>/`.

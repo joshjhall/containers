@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — builds its own minimal + dev-tools images; IMAGE_TO_TEST/DEVTOOLS_IMAGE_TO_TEST could adopt minimal + python-dev (#1027)
 # Test setup-git, setup-gh, and setup-glab commands functionally
 #
 # This test builds two images (minimal + dev-tools) and runs the setup
