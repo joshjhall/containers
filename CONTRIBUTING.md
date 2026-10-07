@@ -34,10 +34,11 @@ and best practices for contributing to this project.
    cd containers
    ```
 
-1. Run the development environment setup:
+1. Run the development environment setup (the devcontainer runs this
+   automatically on create, via `postCreateCommand`):
 
    ```bash
-   ./.devcontainer/bin/setup-dev-environment.sh
+   bash .devcontainer/post-create.sh
    ```
 
    This will:
@@ -45,6 +46,9 @@ and best practices for contributing to this project.
    - Enable git hooks for shellcheck and credential leak prevention
    - Verify your development environment
    - Check for recommended tools
+   - Warn if the container image is stale relative to
+     `.devcontainer/docker-compose.yml` — see
+     [Rebuilding the container](docs/troubleshooting/zed-devcontainer.md#rebuilding-the-container)
 
 1. Create a feature branch:
 

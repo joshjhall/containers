@@ -17,11 +17,15 @@
   //   "SKIP_CASE_CHECK": "true"  // Disable the workspace filesystem health check entirely
   // },
 
-  // Auto-configure git hooks (lefthook), development environment, SSH keys, and GitHub CLI after container starts.
-  // `recover-entrypoint` is a no-op under VS Code (entrypoint already ran as
-  // PID 1) and replays the image ENTRYPOINT under Zed (which ignores
-  // `"overrideCommand": false`). See docs/troubleshooting/zed-devcontainer.md.
-  "postStartCommand": "bash -c 'recover-entrypoint && ./.devcontainer/bin/setup-dev-environment.sh && setup-git && setup-gh'",
+  // Lifecycle hooks (same layout as the sibling librarian repo):
+  // - post-create.sh (once): lefthook hooks, .env checks, recommended tools,
+  //   and a loud warning when the image is stale vs docker-compose.yml.
+  // - post-start.sh (every start): recover-entrypoint, setup-git, setup-gh.
+  //   `recover-entrypoint` is a no-op under VS Code (entrypoint already ran as
+  //   PID 1) and replays the image ENTRYPOINT under Zed (which ignores
+  //   `"overrideCommand": false`). See docs/troubleshooting/zed-devcontainer.md.
+  "postCreateCommand": ["bash", ".devcontainer/post-create.sh"],
+  "postStartCommand": ["bash", ".devcontainer/post-start.sh"],
 
   "customizations": {
     "vscode": {
