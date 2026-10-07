@@ -382,6 +382,38 @@ $root/tests/unit/bin/check-versions.sh" "$out" \
     /usr/bin/rm -rf "$root"
 }
 
+# Ownership must be decided by the LONGEST stem, checked at every `-` boundary,
+# not just the first trim: with bin/check-versions-checkers.sh present, the
+# check-versions-checkers-x.sh suite belongs to it, and the
+# check-versions-checkers.sh suite becomes its exact match rather than a
+# sibling of bin/check-versions.sh.
+test_bin_sibling_owner_is_longest_stem() {
+    local root out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+    root=$(_make_bin_fixture)
+    /usr/bin/touch "$root/bin/check-versions-checkers.sh" \
+        "$root/tests/unit/bin/check-versions-checkers-x.sh"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/check-versions.sh")
+    assert_equals "$root/tests/unit/bin/check-versions.sh" "$out" \
+        "bin/check-versions.sh must yield both deeper suites to bin/check-versions-checkers.sh"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/check.sh" | command sort)
+    assert_equals "$root/tests/unit/bin/check-foo.sh
+$root/tests/unit/bin/check.sh" "$out" \
+        "bin/check.sh must skip a suite owned two stems deeper"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/check-versions-checkers.sh" | command sort)
+    assert_equals "$root/tests/unit/bin/check-versions-checkers-x.sh
+$root/tests/unit/bin/check-versions-checkers.sh" "$out" \
+        "the longest stem must collect its own exact suite and sibling"
+
+    /usr/bin/rm -rf "$root"
+}
+
 # A case `*` matches `/`, so bin/lib/x.sh reaches the bin arm. It must map by
 # its path under bin/, not its basename (which would look in tests/unit/bin/).
 test_bin_nested_maps_by_relative_path() {
@@ -478,6 +510,7 @@ run_test test_collection_keeps_each_sibling_suite "runner collection keeps each 
 run_test test_collection_stops_at_all "runner collection ends with ALL for a foundational file"
 run_test test_bin_unmatched_collects_nothing "uncovered bin script maps to and collects no test path (#1024)"
 run_test test_bin_sibling_skips_longer_owned_suite "bin sibling fanout skips suites a longer bin stem owns (#1031)"
+run_test test_bin_sibling_owner_is_longest_stem "bin sibling ownership goes to the longest bin stem (#1031)"
 run_test test_bin_nested_maps_by_relative_path "nested bin/** script maps by its path under bin/ (#1031)"
 run_test test_collect_dedupes_overlapping_inputs "runner main block runs each overlapping suite once (#1031)"
 run_test test_collect_sets_run_all "runner main block sets RUN_ALL and stops at ALL (#1031)"
