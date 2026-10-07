@@ -560,7 +560,7 @@ fi
 # settings.json — shared path
 # ============================================================================
 # Two blocks below write ~/.claude/settings.json: the INCLUDE_HOST_EVENTS hook
-# wiring and the librarian additionalDirectories grant. They share one
+# wiring and the stale librarian additionalDirectories revocation. They share one
 # definition so the two cannot drift onto different files.
 CLAUDE_SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
@@ -622,62 +622,74 @@ if [ "${INCLUDE_HOST_EVENTS:-false}" = "true" ] &&
 fi
 
 # ============================================================================
-# Librarian Directory Grant (permissions.additionalDirectories)
+# Librarian Directory Grant (permissions.additionalDirectories) — REVOKED
 # ============================================================================
-# Grant the Claude Code file tools read access to $LIBRARIAN_DIR.
-#
-# Without this, the `Workflow` tool REFUSES to run a harness by its real path —
+# History. #967 merged $LIBRARIAN_DIR into permissions.additionalDirectories on
+# every boot, because the `Workflow` tool refused a harness at its real path —
 # `scriptPath must be a script path this tool returned, or a file you can
-# already read` — so every golem had to copy
-# plugins/workflow/skills/ship-issue/workflow.js into its own worktree before it
-# could run the mandatory adversarial pre-PR review (#967).
+# already read` — and every golem had to copy ship-issue/workflow.js into its
+# worktree before it could run the mandatory adversarial pre-PR review. That
+# refusal was never a filesystem-permission problem (/opt/librarian is
+# world-readable); the tool gates on cwd + additionalDirectories.
 #
-# This is NOT a filesystem-permission problem: /opt/librarian is world-readable
-# and the file reads fine from a shell. The tool gates on
-# permissions.additionalDirectories, which nothing here used to write — so no
-# chmod/chown would have fixed it. Per the Claude Code permissions docs
-# (§ Working directories), additionalDirectories is the persistent-configuration
-# equivalent of `--add-dir`: files under it "become readable without prompts".
+# #973 then noted the grant's cost: additionalDirectories extends where Claude
+# can read AND EDIT, across the whole tree (every plugin, hook, manifest), not
+# just the harness. It stayed tree-wide only because narrowing was unverified,
+# with its safety resting on the runtime user being unable to write there.
 #
-# Why it matters that this was silent: the refusal surfaces as ONE line mid-run.
-# A run that did not notice could skip the adversarial review entirely and still
-# look like a clean ship — the silent-skip class #951/#948 were filed against.
+# Finding (#1035): the grant is no longer needed, so it is removed rather than
+# narrowed. From librarian v0.15.0 (the pinned LIBRARIAN_REF) every `Workflow`
+# harness call site — ship-issue's adversarial review and CI review, ci-fixer,
+# codebase-audit, and the orchestrate train/monitor/code-reviewer paths — runs
+# plugins/workflow/scripts/harness-stage.sh first. It COPIES the harness to
+# <cwd>/.claude/tmp/harness/<id>.workflow.js whenever the source is outside cwd
+# (gitignored here via `tmp/`), and its reachability test compares against cwd
+# only; nothing in v0.15.0 reads additionalDirectories or uses --add-dir.
+# Evidence: `harness-stage.sh stage ship-issue --dir <tmp>` from the v0.15.0
+# tarball prints `staged=true path=<tmp>/.claude/tmp/harness/...`, and #1035
+# itself shipped through a pre-PR review run on that staged path in a session
+# whose settings.json carried no additionalDirectories entry.
 #
-# Scope (#973): additionalDirectories extends where Claude can read AND EDIT, and
-# it covers the whole tree (every plugin, hook, manifest), not just the harness.
-# Narrowing it to a subpath is unverified, so the grant stays tree-wide and its
-# safety rests on a checked invariant: the runtime user cannot write under
-# $LIBRARIAN_DIR. That holds because the build leaves the tree root-owned and
-# go-w, and prunes any symlink escaping the tree (claude-code-setup.sh; upstream
-# ships `.codegraph -> /cache/codegraph`). It is enforced by
-# test_librarian_escaping_symlinks_pruned (unit) and the find -L -writable /
-# touch checks in tests/integration/builds/test_claude_skills_agents.sh. A root
-# runtime user voids it — do not run this image as root with the grant in place.
+# A LIBRARIAN_REF override older than v0.15.0 has no harness-stage.sh; on such
+# an image copy the harness under the worktree before invoking it (the fallback
+# in .claude/memory/workflow-js-must-be-readable-in-worktree.md). Plain reads
+# stay covered by Read(/opt/librarian/**) in claude-code-setup.sh's
+# DEFAULT_PERMISSIONS.
 #
-# Gated on [ -d "$LIBRARIAN_DIR" ], the same check the install below performs:
-# an image built without the librarian clone is a valid configuration and must
-# not get a dangling grant to a directory that does not exist.
+# Why REVOKE rather than just stop writing: ~/.claude is a persistent volume, so
+# every container booted on a #967 image already carries the entry. Deleting
+# only the writer would leave that edit grant live indefinitely. So each boot
+# removes exactly $LIBRARIAN_DIR (and the key, if that empties it), leaving any
+# directories the user added themselves. It rewrites the file ONLY when the
+# entry is present — a settings.json that never had the grant is not touched,
+# and a missing one is never created.
 #
-# Idempotent + every-boot, exactly like the install below: the append is guarded
-# by an "is this dir already listed" test, so re-running never duplicates and a
-# fresh ~/.claude home volume is re-granted on the next boot. Any directories
-# the user added themselves are preserved.
-if [ -d "$LIBRARIAN_DIR" ] && command -v jq >/dev/null 2>&1; then
+# The #973 read-only invariant (root-owned + go-w tree, escaping symlinks
+# pruned; test_librarian_escaping_symlinks_pruned and the find -L -writable
+# checks in tests/integration/builds/test_claude_skills_agents.sh) stays in
+# place: it is what still protects the tree if a user re-adds the grant by hand.
+#
+# Not gated on [ -d "$LIBRARIAN_DIR" ]: a stale grant is worth removing even
+# from an image built without the librarian clone.
+if [ -f "$CLAUDE_SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1 &&
+    command jq -e --arg dir "$LIBRARIAN_DIR" \
+        '.permissions.additionalDirectories? // [] | index($dir) != null' \
+        "$CLAUDE_SETTINGS_FILE" >/dev/null 2>&1; then
     echo ""
-    echo "Librarian directory grant (Workflow tool access):"
-    [ -f "$CLAUDE_SETTINGS_FILE" ] || echo '{}' >"$CLAUDE_SETTINGS_FILE"
+    echo "Librarian directory grant (stale, #1035):"
     if command jq --arg dir "$LIBRARIAN_DIR" '
-        .permissions.additionalDirectories //= []
-        | if (.permissions.additionalDirectories | index($dir)) then .
-          else .permissions.additionalDirectories += [$dir]
+        .permissions.additionalDirectories -= [$dir]
+        | if (.permissions.additionalDirectories | length) == 0
+          then del(.permissions.additionalDirectories)
+          else .
           end
     ' "$CLAUDE_SETTINGS_FILE" >"${CLAUDE_SETTINGS_FILE}.tmp" 2>/dev/null &&
         mv "${CLAUDE_SETTINGS_FILE}.tmp" "$CLAUDE_SETTINGS_FILE"; then
-        echo "    ✓ $LIBRARIAN_DIR granted via permissions.additionalDirectories"
+        echo "    ✓ $LIBRARIAN_DIR removed from permissions.additionalDirectories"
     else
         rm -f "${CLAUDE_SETTINGS_FILE}.tmp" 2>/dev/null || true
-        echo "    ⚠ could not grant $LIBRARIAN_DIR (settings.json merge failed)"
-        echo "      the Workflow tool will refuse harness paths under it"
+        echo "    ⚠ could not revoke $LIBRARIAN_DIR (settings.json rewrite failed)"
+        echo "      the stale read/edit grant over the librarian tree remains"
     fi
 fi
 

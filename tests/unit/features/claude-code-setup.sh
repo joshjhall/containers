@@ -2953,96 +2953,22 @@ run_test test_host_event_wiring_preserves_existing "Host events: merge preserves
 run_test test_host_event_wiring_is_gated "Host events: wiring is gated on the build-time flag"
 
 # ============================================================================
-# Librarian directory grant — permissions.additionalDirectories (#967)
+# Librarian directory grant revocation — permissions.additionalDirectories
 # ============================================================================
-# claude-setup merges $LIBRARIAN_DIR into settings.json's
-# permissions.additionalDirectories so the Workflow tool will accept a harness
-# scriptPath under it (without the grant it refuses the real path and every
-# golem has to copy ship-issue/workflow.js into its worktree first).
+# #967 granted $LIBRARIAN_DIR via permissions.additionalDirectories; #1035
+# dropped it (librarian v0.15.0 stages Workflow harnesses under cwd with
+# harness-stage.sh) and replaced the writer with a revocation, because
+# ~/.claude is a persistent volume that still carries the old entry.
 #
-# These exercise the actual jq merge — asserting the granted directory is
-# present in the resulting JSON, that a re-run does not duplicate it, and that
-# pre-existing settings survive — plus a source guard that the block stays gated
-# on the directory existing.
+# These EXECUTE the shipped block against fixture settings files rather than
+# reproducing its jq, plus a source guard that nothing re-adds the grant.
 
-# Reproduce claude-setup's grant merge. Kept in lockstep with the jq in
-# lib/features/lib/claude/claude-setup (the "Librarian Directory Grant" block);
-# test_librarian_grant_is_gated guards the source so drift is caught.
-_librarian_grant_merge() {
-    local input="$1" dir="$2"
-    /usr/bin/jq --arg dir "$dir" '
-        .permissions.additionalDirectories //= []
-        | if (.permissions.additionalDirectories | index($dir)) then .
-          else .permissions.additionalDirectories += [$dir]
-          end
-    ' <<<"$input"
-}
-
-# Test: a fresh settings.json gains the librarian dir in additionalDirectories.
-test_librarian_grant_fresh() {
-    local result
-    result="$(_librarian_grant_merge '{}' "/opt/librarian")"
-
-    if /usr/bin/jq -e '.permissions.additionalDirectories | index("/opt/librarian") != null' \
-        >/dev/null <<<"$result"; then
-        pass_test "fresh settings.json grants /opt/librarian"
-    else
-        fail_test "fresh settings.json missing the /opt/librarian grant"
-    fi
-}
-
-# Test: re-running the merge does not duplicate the entry (AC2 — the every-boot
-# self-heal must stay idempotent).
-test_librarian_grant_idempotent() {
-    local once twice count
-    once="$(_librarian_grant_merge '{}' "/opt/librarian")"
-    twice="$(_librarian_grant_merge "$once" "/opt/librarian")"
-
-    count="$(/usr/bin/jq '[.permissions.additionalDirectories[] | select(. == "/opt/librarian")] | length' \
-        <<<"$twice")"
-    assert_equals "1" "$count" "librarian grant not duplicated on re-merge"
-
-    # The array holds exactly that one entry — a re-merge must not append a
-    # second, differently-shaped record alongside it either.
-    count="$(/usr/bin/jq '.permissions.additionalDirectories | length' <<<"$twice")"
-    assert_equals "1" "$count" "re-merge leaves a single-entry array"
-}
-
-# Test: a user's own additional directory and unrelated permission rules survive
-# the merge — the grant appends, never replaces.
-test_librarian_grant_preserves_existing() {
-    local existing result
-    existing='{"permissions":{"additionalDirectories":["/my/own/dir"],"allow":["Read(/custom/**)"]}}'
-    result="$(_librarian_grant_merge "$existing" "/opt/librarian")"
-
-    if /usr/bin/jq -e '.permissions.additionalDirectories | index("/my/own/dir") != null' \
-        >/dev/null <<<"$result"; then
-        pass_test "pre-existing additional directory preserved"
-    else
-        fail_test "pre-existing additional directory dropped"
-    fi
-    if /usr/bin/jq -e '.permissions.additionalDirectories | index("/opt/librarian") != null' \
-        >/dev/null <<<"$result"; then
-        pass_test "librarian grant appended alongside the user's directory"
-    else
-        fail_test "librarian grant not appended"
-    fi
-    if /usr/bin/jq -e '.permissions.allow | index("Read(/custom/**)") != null' \
-        >/dev/null <<<"$result"; then
-        pass_test "merge preserves an unrelated permissions.allow rule"
-    else
-        fail_test "merge dropped an unrelated permissions.allow rule"
-    fi
-}
-
-# Extract the grant block's executable body from claude-setup and run it against
-# a caller-supplied $LIBRARIAN_DIR / $CLAUDE_SETTINGS_FILE.
+# Extract the revocation block's executable body from claude-setup and run it
+# against a caller-supplied $LIBRARIAN_DIR / $CLAUDE_SETTINGS_FILE.
 #
 # This EXECUTES the real source rather than reproducing or grepping it: the
 # block is self-contained (it reads only those two variables), so the behavior
-# under test is the shipped code, not a copy that can drift from it. A source
-# grep cannot tell a working guard from a broken one that still reads right —
-# e.g. `&&` silently swapped for `||`.
+# under test is the shipped code, not a copy that can drift from it.
 #
 # Echoes the block's stdout; the caller inspects the settings file.
 _run_librarian_grant_block() {
@@ -3055,88 +2981,105 @@ _run_librarian_grant_block() {
         bash -c "$block" 2>&1
 }
 
-# Test (behavioral): with $LIBRARIAN_DIR absent the block writes NOTHING — it
-# must not create settings.json, and must not touch an existing one (AC3). A
-# dangling grant to a nonexistent directory is the failure this prevents.
-test_librarian_grant_skipped_when_absent() {
+# Test (behavioral): a settings.json carrying the stale grant loses it, and the
+# now-empty key is dropped rather than left as [].
+test_librarian_grant_revoked() {
+    local tmpdir settings out
+    tmpdir=$(command mktemp -d)
+    settings="$tmpdir/settings.json"
+    echo '{"permissions":{"additionalDirectories":["/opt/librarian"]}}' >"$settings"
+
+    out="$(_run_librarian_grant_block "/opt/librarian" "$settings")"
+
+    if /usr/bin/jq -e '.permissions | has("additionalDirectories") | not' \
+        >/dev/null <"$settings"; then
+        pass_test "stale grant removed and the emptied key dropped"
+    else
+        fail_test "stale grant still present: $(command cat "$settings")"
+    fi
+
+    # The success branch reports it — a silent rewrite would be
+    # indistinguishable from the no-op path.
+    if command grep -q '✓' <<<"$out"; then
+        pass_test "revocation reports success on stdout"
+    else
+        fail_test "revocation rewrote settings.json but reported nothing"
+    fi
+
+    command rm -rf "$tmpdir"
+}
+
+# Test (behavioral): only $LIBRARIAN_DIR goes — the user's own directories and
+# unrelated permission rules survive the rewrite.
+test_librarian_grant_revoke_preserves_existing() {
     local tmpdir settings
+    tmpdir=$(command mktemp -d)
+    settings="$tmpdir/settings.json"
+    echo '{"permissions":{"additionalDirectories":["/my/own/dir","/opt/librarian"],"allow":["Read(/custom/**)"]}}' >"$settings"
+
+    _run_librarian_grant_block "/opt/librarian" "$settings" >/dev/null
+
+    assert_equals '["/my/own/dir"]' \
+        "$(/usr/bin/jq -c '.permissions.additionalDirectories' <"$settings")" \
+        "user's directory kept, librarian grant removed"
+    if /usr/bin/jq -e '.permissions.allow | index("Read(/custom/**)") != null' \
+        >/dev/null <"$settings"; then
+        pass_test "revocation preserves an unrelated permissions.allow rule"
+    else
+        fail_test "revocation dropped an unrelated permissions.allow rule"
+    fi
+
+    command rm -rf "$tmpdir"
+}
+
+# Test (behavioral): with no grant to revoke the block writes NOTHING — it must
+# not create settings.json, must leave a grant-free file byte-identical, and a
+# second run after a revocation is a silent no-op.
+test_librarian_grant_revoke_noop() {
+    local tmpdir settings before after out
     tmpdir=$(command mktemp -d)
     settings="$tmpdir/settings.json"
 
     # Case 1: no settings.json yet — the block must not create one.
-    _run_librarian_grant_block "$tmpdir/does-not-exist" "$settings" >/dev/null
+    _run_librarian_grant_block "/opt/librarian" "$settings" >/dev/null
     if [ ! -f "$settings" ]; then
-        pass_test "absent \$LIBRARIAN_DIR: settings.json not created"
+        pass_test "no settings.json: none created"
     else
-        fail_test "absent \$LIBRARIAN_DIR: settings.json was created anyway"
+        fail_test "no settings.json: one was created anyway"
     fi
 
-    # Case 2: an existing settings.json must come back byte-identical.
-    echo '{"permissions":{"allow":["Read(/x/**)"]}}' >"$settings"
-    local before after
+    # Case 2: a grant-free file comes back byte-identical (not reformatted).
+    printf '{ "permissions": {"allow": ["Read(/x/**)"]} }\n' >"$settings"
     before="$(command cat "$settings")"
-    _run_librarian_grant_block "$tmpdir/does-not-exist" "$settings" >/dev/null
+    out="$(_run_librarian_grant_block "/opt/librarian" "$settings")"
     after="$(command cat "$settings")"
-    assert_equals "$before" "$after" "absent \$LIBRARIAN_DIR leaves settings.json untouched"
+    assert_equals "$before" "$after" "grant-free settings.json left untouched"
+    assert_equals "" "$out" "grant-free settings.json: block prints nothing"
+
+    # Case 3: idempotent — revoke, then a re-run changes nothing.
+    echo '{"permissions":{"additionalDirectories":["/opt/librarian","/a"]}}' >"$settings"
+    _run_librarian_grant_block "/opt/librarian" "$settings" >/dev/null
+    before="$(command cat "$settings")"
+    _run_librarian_grant_block "/opt/librarian" "$settings" >/dev/null
+    after="$(command cat "$settings")"
+    assert_equals "$before" "$after" "re-running the revocation is a no-op"
 
     command rm -rf "$tmpdir"
 }
 
-# Test (behavioral): with $LIBRARIAN_DIR present the block actually writes the
-# grant, and a second run does not duplicate it. This runs the shipped code
-# end-to-end — the file-level counterpart to the _librarian_grant_merge tests,
-# which only exercise the jq program.
-test_librarian_grant_writes_and_reruns_clean() {
-    local tmpdir settings out count
-    tmpdir=$(command mktemp -d)
-    settings="$tmpdir/settings.json"
-
-    out="$(_run_librarian_grant_block "$tmpdir" "$settings")"
-
-    if /usr/bin/jq -e --arg d "$tmpdir" \
-        '.permissions.additionalDirectories | index($d) != null' \
-        >/dev/null <"$settings" 2>/dev/null; then
-        pass_test "present \$LIBRARIAN_DIR: grant written to settings.json"
-    else
-        fail_test "present \$LIBRARIAN_DIR: grant missing from settings.json"
-    fi
-
-    # The success branch reports it — a silent write would be indistinguishable
-    # from the skip above.
-    if command grep -q '✓' <<<"$out"; then
-        pass_test "grant reports success on stdout"
-    else
-        fail_test "grant wrote settings.json but reported nothing"
-    fi
-
-    # Second run: idempotent at the file level, not just in the jq program.
-    _run_librarian_grant_block "$tmpdir" "$settings" >/dev/null
-    count="$(/usr/bin/jq '.permissions.additionalDirectories | length' <"$settings")"
-    assert_equals "1" "$count" "re-running the block does not duplicate the grant"
-
-    command rm -rf "$tmpdir"
-}
-
-# Test (behavioral): a malformed settings.json takes the failure branch — the
-# warning is printed, the .tmp scratch file is cleaned up, and the original file
-# is left intact rather than truncated. Without this, a regression in the
-# cleanup or the warning text would be invisible.
+# Test (behavioral): a malformed settings.json is left alone — the presence
+# probe cannot parse it, so the block neither rewrites nor truncates it, and no
+# .tmp scratch file is left behind.
 test_librarian_grant_handles_malformed_settings() {
-    local tmpdir settings out
+    local tmpdir settings
     tmpdir=$(command mktemp -d)
     settings="$tmpdir/settings.json"
-    echo 'this is not json {{{' >"$settings"
+    echo 'this is not json {{{ /opt/librarian' >"$settings"
 
-    out="$(_run_librarian_grant_block "$tmpdir" "$settings")"
-
-    if command grep -q '⚠' <<<"$out"; then
-        pass_test "malformed settings.json: failure is reported, not silent"
-    else
-        fail_test "malformed settings.json: merge failed with no warning"
-    fi
+    _run_librarian_grant_block "/opt/librarian" "$settings" >/dev/null
 
     if [ ! -f "${settings}.tmp" ]; then
-        pass_test "malformed settings.json: .tmp scratch file cleaned up"
+        pass_test "malformed settings.json: no .tmp scratch file left behind"
     else
         fail_test "malformed settings.json: .tmp scratch file left behind"
     fi
@@ -3146,78 +3089,62 @@ test_librarian_grant_handles_malformed_settings() {
     if command grep -q 'this is not json' "$settings"; then
         pass_test "malformed settings.json left intact (not truncated)"
     else
-        fail_test "malformed settings.json was clobbered by the failed merge"
+        fail_test "malformed settings.json was clobbered"
     fi
 
     command rm -rf "$tmpdir"
 }
 
 # Test (behavioral): the two settings.json writers compose. CLAUDE_SETTINGS_FILE
-# was hoisted so the host-event hook wiring and this grant target one file; this
-# confirms the second merge layers onto the first instead of replacing it —
-# the interaction neither block's own tests cover.
+# is shared by the host-event hook wiring and this revocation; this confirms the
+# revocation's rewrite keeps the hooks the first writer added.
 test_librarian_grant_composes_with_host_event_hooks() {
     local tmpdir settings hook
     tmpdir=$(command mktemp -d)
     settings="$tmpdir/settings.json"
     hook="/home/vscode/.claude/hooks/claude-host-event.sh"
 
-    # First writer: the host-event hook wiring.
-    _host_event_merge '{}' "$hook" >"$settings"
-    # Second writer: the librarian grant, onto that same file.
-    _run_librarian_grant_block "$tmpdir" "$settings" >/dev/null
+    # First writer: the host-event hook wiring, onto a file with the old grant.
+    _host_event_merge '{"permissions":{"additionalDirectories":["/opt/librarian"]}}' \
+        "$hook" >"$settings"
+    # Second writer: the revocation, onto that same file.
+    _run_librarian_grant_block "/opt/librarian" "$settings" >/dev/null
 
     if /usr/bin/jq -e --arg h "$hook" \
         '.hooks.Stop | any(.[].hooks[]?; .command | startswith($h + " "))' \
         >/dev/null <"$settings"; then
-        pass_test "host-event hooks survive the librarian grant merge"
+        pass_test "host-event hooks survive the librarian revocation"
     else
-        fail_test "librarian grant clobbered the host-event hooks"
+        fail_test "librarian revocation clobbered the host-event hooks"
     fi
-    if /usr/bin/jq -e --arg d "$tmpdir" \
-        '.permissions.additionalDirectories | index($d) != null' \
+    if /usr/bin/jq -e '.permissions.additionalDirectories // [] | index("/opt/librarian") == null' \
         >/dev/null <"$settings"; then
-        pass_test "librarian grant lands alongside the host-event hooks"
+        pass_test "librarian grant removed alongside the host-event hooks"
     else
-        fail_test "librarian grant missing after layering onto hooks"
+        fail_test "librarian grant still present after layering onto hooks"
     fi
 
     command rm -rf "$tmpdir"
 }
 
-# Test (source guard): the grant in claude-setup is gated on the librarian
-# directory existing (AC3). An image built without librarian must not receive a
-# dangling grant, so this must never become an unconditional write.
-#
-# This is the source-text companion to test_librarian_grant_skipped_when_absent,
-# which proves the same property behaviorally. The grep is kept for the second
-# assertion below ($LIBRARIAN_DIR over a literal) — a property about how the
-# code is WRITTEN, which execution cannot observe.
-test_librarian_grant_is_gated() {
+# Test (source guard, #1035): nothing in claude-setup ADDS to
+# additionalDirectories any more — a re-introduced `+=` would silently restore
+# the tree-wide read/edit grant this issue removed. The revocation also targets
+# $LIBRARIAN_DIR, not a literal, so it tracks where the image installs librarian.
+test_librarian_grant_not_written() {
     local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
-    local block
-    # The grant block runs from its section header to the librarian install
-    # header that follows it.
-    block="$(command sed -n '/^# Librarian Directory Grant/,/^# Librarian Plugin Installation/p' "$setup_file")"
 
-    if [ -z "$block" ]; then
-        fail_test "Librarian Directory Grant block not found in claude-setup"
-        return
+    if command grep -qE 'additionalDirectories[^|]*\+=' "$setup_file"; then
+        fail_test "claude-setup appends to additionalDirectories (grant re-added?)"
+    else
+        pass_test "claude-setup never appends to additionalDirectories"
     fi
 
-    if command grep -qE '^if \[ -d "\$LIBRARIAN_DIR" \] && command -v jq' <<<"$block"; then
-        pass_test "librarian grant is gated on \$LIBRARIAN_DIR existing"
+    if command grep -qE -- '--arg dir "\$LIBRARIAN_DIR"' "$setup_file" &&
+        command grep -qE 'additionalDirectories -= \[\$dir\]' "$setup_file"; then
+        pass_test "revocation removes \$LIBRARIAN_DIR rather than a hardcoded path"
     else
-        fail_test "librarian grant gate not found (must not write unconditionally)"
-    fi
-
-    # The granted path comes from $LIBRARIAN_DIR, never a hardcoded literal —
-    # a literal would bypass the LIBRARIAN_DIR_TEST_OVERRIDE seam and could
-    # drift from where the image actually installs librarian.
-    if command grep -qE -- '--arg dir "\$LIBRARIAN_DIR"' <<<"$block"; then
-        pass_test "grant uses \$LIBRARIAN_DIR rather than a hardcoded path"
-    else
-        fail_test "grant does not pass \$LIBRARIAN_DIR to jq"
+        fail_test "revocation of \$LIBRARIAN_DIR not found in claude-setup"
     fi
 }
 
@@ -3410,14 +3337,12 @@ test_default_permissions_has_librarian_read() {
     fi
 }
 
-run_test test_librarian_grant_fresh "Librarian grant: fresh settings.json grants the librarian dir"
-run_test test_librarian_grant_idempotent "Librarian grant: re-merge is idempotent (no duplicate entry)"
-run_test test_librarian_grant_preserves_existing "Librarian grant: merge preserves existing dirs and rules"
-run_test test_librarian_grant_is_gated "Librarian grant: write is gated on \$LIBRARIAN_DIR existing"
-run_test test_librarian_grant_skipped_when_absent "Librarian grant: absent \$LIBRARIAN_DIR writes nothing (executed)"
-run_test test_librarian_grant_writes_and_reruns_clean "Librarian grant: present \$LIBRARIAN_DIR writes once, re-runs clean (executed)"
-run_test test_librarian_grant_handles_malformed_settings "Librarian grant: malformed settings.json warns, cleans up, preserves"
-run_test test_librarian_grant_composes_with_host_event_hooks "Librarian grant: composes with the host-event hook writer"
+run_test test_librarian_grant_revoked "Librarian grant: a stale grant is revoked (executed, #1035)"
+run_test test_librarian_grant_revoke_preserves_existing "Librarian grant: revocation preserves the user's dirs and rules"
+run_test test_librarian_grant_revoke_noop "Librarian grant: no grant means no write; re-run is a no-op"
+run_test test_librarian_grant_handles_malformed_settings "Librarian grant: malformed settings.json is left intact"
+run_test test_librarian_grant_composes_with_host_event_hooks "Librarian grant: revocation composes with the host-event hook writer"
+run_test test_librarian_grant_not_written "Librarian grant: claude-setup never re-adds the grant (#1035)"
 run_test test_default_permissions_has_librarian_read "Librarian grant: DEFAULT_PERMISSIONS reads the real install path"
 run_test test_librarian_tree_not_group_world_writable "Librarian tree: post-extraction chmod strips group/world write (#1020)"
 run_test test_librarian_escaping_symlinks_pruned "Librarian tree: symlinks escaping the tree are pruned, in-tree kept (#973)"

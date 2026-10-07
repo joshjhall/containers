@@ -62,9 +62,10 @@ test_librarian_and_buildbound_staged() {
         "test ! -d /opt/librarian/.git && echo 'no-git'" \
         "no-git"
 
-    # --- The runtime user cannot write under /opt/librarian (#973). claude-setup
-    #     grants it via permissions.additionalDirectories, which permits EDITS,
-    #     so read-only must be a checked invariant, not an observation. Runs as
+    # --- The runtime user cannot write under /opt/librarian (#973). The #967
+    #     permissions.additionalDirectories grant (which permits EDITS) is
+    #     revoked (#1035), but a user can re-add it, so read-only stays a
+    #     checked invariant, not an observation. Runs as
     #     the image's default user; the uid guard keeps it from passing as root.
     #     find -L follows links, so a symlink escaping to a writable volume (the
     #     upstream `.codegraph -> /cache/codegraph`) is caught here. ---
