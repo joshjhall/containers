@@ -114,7 +114,7 @@ test_script_has_colors() {
 test_script_checks_gitignore() {
     local script="$PROJECT_ROOT/.devcontainer/post-create.sh"
 
-    if command grep -q "grep.*gitignore" "$script"; then
+    if command grep -q "check-ignore -q .env" "$script"; then
         assert_true true "Setup script checks .gitignore"
     else
         assert_true false "Setup script doesn't check .gitignore"
@@ -146,11 +146,22 @@ test_script_has_tool_checker() {
 # build, or git-cliff/biome) is commonly absent, so this exercises the missing
 # branch; even with all present, a regressed `return 1` on the LAST check_tool
 # call still aborts the script under set -e, which this catches.
+# Run the real post-create.sh with `lefthook` stubbed out so the test never
+# rewrites the live .git/hooks (shared with the main checkout from a worktree).
+# BASH_ENV is unset because the container's /etc/bash_env re-prepends system
+# dirs to PATH, which would let the real lefthook shadow the stub.
+_run_post_create() {
+    local stub="$TEST_TEMP_DIR/stub-bin"
+    command mkdir -p "$stub"
+    command printf '#!/bin/sh\nexit 0\n' >"$stub/lefthook"
+    command chmod +x "$stub/lefthook"
+    command env -u BASH_ENV PATH="$stub:$PATH" "$@" bash "$PROJECT_ROOT/.devcontainer/post-create.sh"
+}
+
 test_missing_recommended_tool_is_non_fatal() {
-    local script="$PROJECT_ROOT/.devcontainer/post-create.sh"
     local rc=0
 
-    ("$script") >/dev/null 2>&1 || rc=$?
+    _run_post_create >/dev/null 2>&1 || rc=$?
 
     if [ "$rc" -eq 0 ]; then
         assert_true true "Setup script exits 0 (recommended-tool checks are non-fatal)"
@@ -177,8 +188,9 @@ services:
         INCLUDE_NODE: "true"
         INCLUDE_RUST_DEV: "true"
         INCLUDE_PYTHON_DEV: false
+        INCLUDE_GOLANG_DEV: 'true'
 YAML
-    echo "$dir"
+    command echo "$dir"
 }
 
 # Runs check_image_drift in a subshell; prints its output, then "rc=<N>".
@@ -217,6 +229,16 @@ test_drift_warns_on_mismatch() {
     assert_not_contains "$out" "INCLUDE_DEV_TOOLS:" "Matching keys are not listed"
 }
 
+test_drift_parses_single_quoted_values() {
+    local dir out
+    dir=$(_drift_fixture_dir)
+    command printf '%s\n' INCLUDE_GOLANG_DEV=false >"$dir/features.conf"
+
+    out=$(_run_drift "$dir/compose.yml" "$dir/features.conf")
+
+    assert_contains "$out" "INCLUDE_GOLANG_DEV: compose=true image=false" "Single-quoted compose value is parsed"
+}
+
 test_drift_ignores_keys_absent_from_conf() {
     local dir out
     dir=$(_drift_fixture_dir)
@@ -226,7 +248,10 @@ test_drift_ignores_keys_absent_from_conf() {
     out=$(_run_drift "$dir/compose.yml" "$dir/features.conf")
 
     assert_contains "$out" "rc=0" "Keys missing from the conf are not drift"
-    assert_not_contains "$out" "INCLUDE_NODE" "Unrecorded key is not reported"
+    assert_not_contains "$out" "INCLUDE_NODE:" "Unrecorded key is not reported as a mismatch"
+    # ...but it is surfaced as unchecked, so a clean result does not overclaim.
+    assert_contains "$out" "Not checked (image does not record): INCLUDE_NODE" "Unrecorded key is listed as not checked"
+    assert_contains "$out" "on 3 recorded INCLUDE_* flag(s)" "Clean result states how many flags were compared"
 }
 
 test_drift_skips_when_conf_missing() {
@@ -239,6 +264,17 @@ test_drift_skips_when_conf_missing() {
     assert_contains "$out" "skipping image drift check" "Missing conf prints a skip note"
 }
 
+test_drift_skips_when_compose_missing() {
+    local dir out
+    dir=$(_drift_fixture_dir)
+    command printf '%s\n' INCLUDE_RUST_DEV=true >"$dir/features.conf"
+
+    out=$(_run_drift "$dir/no-such.yml" "$dir/features.conf")
+
+    assert_contains "$out" "rc=0" "Missing compose file returns 0"
+    assert_contains "$out" "skipping image drift check" "Missing compose file prints a skip note"
+}
+
 # Drift must warn, never fail: the whole script still exits 0 (see the
 # missing-tool test above for why a failing postCreateCommand is worse).
 test_drift_does_not_fail_script() {
@@ -246,7 +282,7 @@ test_drift_does_not_fail_script() {
     dir=$(_drift_fixture_dir)
     command printf '%s\n' INCLUDE_RUST_DEV=false >"$dir/features.conf"
 
-    out=$(ENABLED_FEATURES_CONF="$dir/features.conf" "$PROJECT_ROOT/.devcontainer/post-create.sh" 2>&1) || rc=$?
+    out=$(_run_post_create ENABLED_FEATURES_CONF="$dir/features.conf" 2>&1) || rc=$?
 
     assert_equals "0" "$rc" "post-create.sh exits 0 even when the image drifts"
     assert_contains "$out" "IMAGE IS STALE" "post-create.sh surfaces the drift warning"
@@ -360,8 +396,10 @@ run_test test_script_has_tool_checker "Setup script has check_tool function"
 run_test test_missing_recommended_tool_is_non_fatal "Missing recommended tool does not fail post-create"
 run_test test_drift_clean_when_image_matches "Drift check: matching image is clean"
 run_test test_drift_warns_on_mismatch "Drift check: mismatch warns and names the key"
+run_test test_drift_parses_single_quoted_values "Drift check: single-quoted compose values are parsed"
 run_test test_drift_ignores_keys_absent_from_conf "Drift check: keys absent from conf are ignored"
 run_test test_drift_skips_when_conf_missing "Drift check: missing conf is skipped"
+run_test test_drift_skips_when_compose_missing "Drift check: missing compose file is skipped"
 run_test test_drift_does_not_fail_script "Drift check: post-create still exits 0"
 run_test test_drift_parses_real_compose "Drift check: parses the real docker-compose.yml"
 run_test test_devcontainer_json_wires_hooks "devcontainer.json wires post-create/post-start"

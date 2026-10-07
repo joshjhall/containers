@@ -16,13 +16,13 @@
 # See docs/troubleshooting/zed-devcontainer.md#lifecycle-hook-behavior.
 set -euo pipefail
 
-echo "==> Replaying image entrypoint if needed..."
+command echo "==> Replaying image entrypoint if needed..."
 recover-entrypoint
 
-echo "==> Configuring git..."
+command echo "==> Configuring git..."
 setup-git
 
-echo "==> Configuring gh..."
+command echo "==> Configuring gh..."
 setup-gh
 
-echo "==> Post-start setup complete."
+command echo "==> Post-start setup complete."

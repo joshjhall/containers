@@ -8,7 +8,8 @@ If you're new to Zed + devcontainers, read [Requirements](#requirements) and
 [Open in Zed](#open-in-zed) first, then skim [Known limitations](#known-limitations)
 and the [Parity matrix](#parity-matrix). The deeper [Lifecycle hook behavior](#lifecycle-hook-behavior)
 and [Port forwarding](#port-forwarding) sections are reference material for
-when something behaves differently than VS Code.
+when something behaves differently than VS Code. To rebuild after a config
+change, see [Rebuilding the container](#rebuilding-the-container).
 
 ## Requirements
 
@@ -48,8 +49,9 @@ when something behaves differently than VS Code.
    first open and land in the `zed-extensions` named volume. They are not
    reinstalled on every container start.
 
-If you customize `postStartCommand` in `.devcontainer/devcontainer.json`,
-keep `recover-entrypoint &&` as the first link in the chain — it is what
+If you customize `.devcontainer/post-start.sh` (or write your own
+`postStartCommand` — generated templates use an inline `recover-entrypoint && …`
+chain), keep `recover-entrypoint` as the first step — it is what
 makes secrets (`OP_*_REF` → resolved env vars) and git identity work under
 Zed. See [Fix: recover-entrypoint](#fix-recover-entrypoint) for the why.
 
@@ -64,9 +66,8 @@ has well-known gaps versus VS Code. The ones that affect this build system:
   fields to avoid emitting.
 - **No auto-rebuild on `devcontainer.json` change** — Zed does not detect
   changes to `.devcontainer/devcontainer.json` and rebuild. You have to
-  stop the container from a host terminal and reopen the project. See the
-  rebuild block under [Verification procedure (Zed)](#verification-procedure-zed)
-  for the exact `docker compose down --rmi local` invocation.
+  stop the container from a host terminal and reopen the project. See
+  [Rebuilding the container](#rebuilding-the-container).
 - **Docker is the only backend** — Podman works only via the `docker`
   symlink workaround above; there is no native Podman driver.
 - **Host VS Code extensions are not mirrored** — opening the same repo in
@@ -160,9 +161,17 @@ This repo wires two lifecycle hooks, both in array form, matching the sibling
     `IMAGE IS STALE — REBUILD` block naming each mismatch (e.g.
     `INCLUDE_RUST_DEV: compose=true image=false`). It warns only; it never
     installs the missing toolchain. Fix it by
-    [rebuilding the container](#rebuilding-the-container).
+    [rebuilding the container](#rebuilding-the-container). The conf records
+    only a subset of flags (the `*_DEV` languages plus some support tools), so
+    compose keys it lacks (e.g. `INCLUDE_NODE`, `INCLUDE_OP`) are listed as
+    "not checked" rather than reported as matching.
   - Exits 0 even when a check warns: VS Code skips `postStartCommand` when
     `postCreateCommand` fails, which would also skip `setup-git` / `setup-gh`.
+  - Runs _before_ `post-start.sh`'s `recover-entrypoint`, so under Zed it sees
+    a not-yet-replayed entrypoint. None of its checks need entrypoint state:
+    `enabled-features.conf` is written at image build time, and nothing here
+    reads OP-resolved secrets. Keep it that way — anything that needs secrets
+    belongs in `post-start.sh`.
 
 - **`postStartCommand` → `.devcontainer/post-start.sh`** (every start), in
   this order:
@@ -253,10 +262,10 @@ artifacts as VS Code.
    instrumentation, which we have not added. If a delta below points to an
    ambiguity here, file a follow-up to add an opt-in trace.
 
-1. **Restart the container.** Zed has no in-editor "Rebuild Container" action;
-   tear down and rebuild from a host terminal as described in
-   [Rebuilding the container](#rebuilding-the-container) (use `down --rmi local`
-   for a fresh-state rebuild). Wait for `[ -f ~/.container-initialized ]` to be
+1. **Rebuild the container.** Zed has no in-editor "Rebuild Container" action;
+   tear down from a host terminal as described in
+   [Rebuilding the container](#rebuilding-the-container) (`teardown.sh --rmi`
+   for a fresh-state rebuild), then reopen. Wait for `[ -f ~/.container-initialized ]` to be
    true before re-running the verification commands — that's the cheapest
    "container is fully started" gate. Re-check that `.git/hooks/pre-commit` is
    present and that `post-create.sh` output appears in Zed's container log on
@@ -273,10 +282,10 @@ Zed: editor 0.231.1+, remote-server `1.1.7+stable.268`, fresh
 | Hook / aspect                                  | VS Code baseline                                                                                              | Zed observed                                                                                                                              | Notes                                                                                                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Image `ENTRYPOINT` (`/usr/local/bin/entrypoint`) | Runs (`~/.container-initialized` written; `OP_*_REF` resolved to env vars: `GITHUB_TOKEN`, `GIT_USER_EMAIL`, …) | **Does not run.** PID 1 is `docker-init -- /bin/sh -c 'echo Container started; trap "exit 0" 15; exec "$@"; while sleep 1 …' - sleep infinity` — image entrypoint replaced despite `"overrideCommand": false` | Root cause of all OP-dependent failures below; see [Root cause](#root-cause-zed-replaces-image-entrypoint). Recovered by [`recover-entrypoint`](#fix-recover-entrypoint) in this PR.                                                                                                                                                |
-| `postStartCommand` (first, lefthook stage)     | Fires; `.git/hooks/{pre-commit,pre-push,commit-msg}` installed                                                | **Fires** — same three hooks installed with fresh mtimes                                                                                  | `postStartCommand` plumbing itself works under Zed; only the OP-dependent stages fail without recovery.                                                              |
+| `postStartCommand` (first, lefthook stage; pre-#1059 — now `postCreateCommand`) | Fires; `.git/hooks/{pre-commit,pre-push,commit-msg}` installed                                                | **Fires** — same three hooks installed with fresh mtimes                                                                                  | `postStartCommand` plumbing itself works under Zed; only the OP-dependent stages fail without recovery.                                                              |
 | `postStartCommand` (first, `setup-git` stage)  | Sets `user.email` / `user.name` from resolved `OP_GIT_USER_*_REF` (e.g. `josh@yaplabs.com`)                   | Without fix: falls back to `Devcontainer <devcontainer@localhost>`. With `recover-entrypoint` prepended: sets the real identity.          | `setup-git` reads `GIT_USER_EMAIL` / `GIT_USER_NAME`; entrypoint replay populates them via `/dev/shm/op-secrets-cache` (sourced by `_wait-for-op-cache`).             |
 | `postStartCommand` (first, `setup-gh` stage)   | `gh auth status` shows logged-in account                                                                      | Without fix: "You are not logged into any GitHub hosts." With `recover-entrypoint` prepended: authenticated as expected.                  | `setup-gh` needs resolved `GITHUB_TOKEN`; same recovery path as `setup-git`.                                                                                         |
-| `postStartCommand` (restart)                   | Re-fires; lefthook re-installed                                                                               | Not separately tested in this run — first-start lefthook install confirms the hook execution path. Restart re-test deferred to bug repro. |                                                                                                                                                                      |
+| `postStartCommand` (restart)                   | Re-fired; lefthook re-installed (pre-#1059 — lefthook now installs once, at create) | Not separately tested in this run — first-start lefthook install confirms the hook execution path. Restart re-test deferred to bug repro. |                                                                                                                                                                      |
 | Working dir at hook time                       | `/workspace/containers`                                                                                       | Same (`pwd` in post-hook terminal = `/workspace/containers`)                                                                              |                                                                                                                                                                      |
 | `$SHELL` at hook time                          | `/bin/bash`                                                                                                   | `/bin/bash`                                                                                                                               |                                                                                                                                                                      |
 | `PATH` includes container PATH                 | yes (includes `/cache/cargo/bin`, `/cache/npm-global/bin`, `/opt/fzf/bin`, `~/.local/bin`)                    | Yes — same entries present                                                                                                                |                                                                                                                                                                      |
@@ -411,23 +420,33 @@ REBUILD`.
 - **VS Code** — run **"Dev Containers: Rebuild Container"** from the command
   palette.
 - **Zed** — Zed has no rebuild action and doesn't detect `devcontainer.json`
-  changes, so rebuild from a **host** terminal (not inside the container), from
-  the repo root:
+  changes, so tear the stack down from a **host** terminal (not inside the
+  container), from the repo root:
 
   ```bash
-  # Stop + remove the container. Add `--volumes` to also drop the named cache
-  # volumes (cargo, rustup, codegraph — slower rebuild), or `--rmi local` to
-  # remove the built image.
-  docker compose -f .devcontainer/docker-compose.yml down
-
-  # Rebuild the image. Add `--no-cache` for a cold build when layers are stale.
-  docker compose -f .devcontainer/docker-compose.yml build
+  # Stop + remove the container (image and cache volumes kept).
+  .devcontainer/teardown.sh
+  # Add --volumes to also drop the named cache volumes (cargo, rustup,
+  # codegraph — slower rebuild), or --rmi to remove the built image.
   ```
 
   Then reopen the project in Zed via `Cmd/Ctrl+Shift+P` → **`project: open
-  remote`** (or `Ctrl+Cmd+Shift+O` / `Alt+Ctrl+Shift+O`).
-  `.devcontainer/teardown.sh` wraps the `down` step (it discovers the compose
-  project name Zed actually used); run it with `--help` for options.
+  remote`** (or `Ctrl+Cmd+Shift+O` / `Alt+Ctrl+Shift+O`); Zed rebuilds the
+  image and recreates the container on reopen.
+
+  > **Don't run a bare `docker compose -f .devcontainer/docker-compose.yml down`.**
+  > Without `-p`, Compose names the project after the compose file's directory
+  > (`devcontainer`), but editors launch it as `<repo-folder>_devcontainer`
+  > (e.g. `containers_devcontainer`). The bare command misses the real
+  > container, and with `--volumes` / `--rmi local` it acts on _any other_
+  > project on the host that is also named `devcontainer`. `teardown.sh`
+  > discovers the real name from the running container's labels. If you must
+  > run Compose directly, pass the name explicitly:
+  >
+  > ```bash
+  > docker compose -p containers_devcontainer -f .devcontainer/docker-compose.yml down
+  > docker compose -p containers_devcontainer -f .devcontainer/docker-compose.yml build --no-cache  # optional cold pre-build
+  > ```
 
 ## Port forwarding
 

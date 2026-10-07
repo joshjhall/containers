@@ -40,9 +40,15 @@ check_tool() {
 # check_image_drift <compose_file> <features_conf>
 #   Compare the INCLUDE_* build args in the compose file against the image's
 #   build-time record in enabled-features.conf. Only keys present in BOTH are
-#   compared (the conf records a subset of features). Prints a loud warning
-#   naming each mismatch and returns 1 on drift; returns 0 when clean or when
-#   the conf is absent (nothing to compare against).
+#   compared: the conf records a subset of features (the *_DEV flags plus a few
+#   support tools), so compose keys it lacks are listed as "not checked" rather
+#   than silently counted as matching. Prints a loud warning naming each
+#   mismatch and returns 1 on drift; returns 0 when clean or when either file
+#   is absent (nothing to compare against).
+#
+#   The compose parse is line-based: it reads every `INCLUDE_*: true|false`
+#   line (quoted or not), not only those under build.args. Fine for this
+#   repo's compose, which sets INCLUDE_* only as build args.
 #
 #   Warn only — never install the missing toolchain. The fix is a rebuild.
 check_image_drift() {
@@ -59,17 +65,26 @@ check_image_drift() {
     fi
 
     local key want have
-    local -a mismatches=()
+    local -a mismatches=() unchecked=()
+    local compared=0
     while read -r key want; do
         have=$(command sed -n "s/^${key}=\\(true\\|false\\)\$/\\1/p" "$features_conf" | command tail -n 1)
-        [ -n "$have" ] || continue
+        if [ -z "$have" ]; then
+            unchecked+=("$key")
+            continue
+        fi
+        compared=$((compared + 1))
         if [ "$want" != "$have" ]; then
             mismatches+=("$key: compose=$want image=$have")
         fi
-    done < <(command sed -n -E 's/^[[:space:]]*(INCLUDE_[A-Z0-9_]+):[[:space:]]*"?(true|false)"?[[:space:]]*(#.*)?$/\1 \2/p' "$compose_file")
+    done < <(command sed -n -E 's/^[[:space:]]*(INCLUDE_[A-Z0-9_]+):[[:space:]]*["'\'']?(true|false)["'\'']?[[:space:]]*(#.*)?$/\1 \2/p' "$compose_file")
+
+    if [ ${#unchecked[@]} -gt 0 ]; then
+        echo "  Not checked (image does not record): ${unchecked[*]}"
+    fi
 
     if [ ${#mismatches[@]} -eq 0 ]; then
-        echo -e "${GREEN}✓${NC} Image features match docker-compose.yml build args"
+        echo -e "${GREEN}✓${NC} Image matches docker-compose.yml on $compared recorded INCLUDE_* flag(s)"
         return 0
     fi
 
@@ -122,12 +137,19 @@ main() {
         echo "  Copy from .env.example if needed: cp .env.example .env"
     fi
 
-    # Verify .env is in .gitignore
-    if command grep -q "^\.env$" .gitignore; then
-        echo -e "${GREEN}✓${NC} .env is in .gitignore"
+    # Verify .env is ignored. git check-ignore honors any pattern form
+    # (`.env`, `**/.env`, …) where an exact-line grep would not.
+    if git check-ignore -q .env 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} .env is ignored by .gitignore"
     else
-        echo -e "${RED}✗${NC} .env is NOT in .gitignore - adding it now..."
-        echo ".env" >>.gitignore
+        echo -e "${RED}✗${NC} .env is NOT ignored - adding it to .gitignore now..."
+        # Start on a fresh line if .gitignore lacks a trailing newline, and
+        # never fail the script on a write error (see the exit-0 note above).
+        if [ -s .gitignore ] && [ -n "$(command tail -c 1 .gitignore)" ]; then
+            echo >>.gitignore || true
+        fi
+        echo ".env" >>.gitignore ||
+            echo -e "${YELLOW}⚠${NC}  Could not write .gitignore - add .env manually"
     fi
 
     # 3. Check recommended tools
@@ -154,7 +176,9 @@ main() {
     if git config user.name >/dev/null && git config user.email >/dev/null; then
         echo -e "${GREEN}✓${NC} Git user.name and user.email are configured"
     else
-        echo -e "${YELLOW}⚠${NC}  Git user.name or user.email not configured"
+        echo -e "${YELLOW}⚠${NC}  Git user.name or user.email not configured yet"
+        echo "  On first create this is expected: post-start.sh runs setup-git next,"
+        echo "  which sets identity from secrets. Otherwise set it manually:"
         echo "  Set with: git config --global user.name \"Your Name\""
         echo "  Set with: git config --global user.email \"your@email.com\""
     fi

@@ -36,7 +36,7 @@ _make_stubs() {
 # non-interactive bash, which would let the REAL recover-entrypoint / setup-git
 # shadow the stubs (and run for real).
 _run_with_stubs() {
-    env -u BASH_ENV PATH="$1/bin:$PATH" bash "$SCRIPT"
+    command env -u BASH_ENV PATH="$1/bin:$PATH" bash "$SCRIPT"
 }
 
 test_script_exists() {
