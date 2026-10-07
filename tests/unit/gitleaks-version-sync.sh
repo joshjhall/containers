@@ -105,8 +105,25 @@ test_updater_bumps_both_pins() {
     assert_equals "99.1.2" "$ci_after" "updater must bump ci.yml GITLEAKS_VERSION alongside dev-tools.sh"
 }
 
+# The pin only works inside the gitleaks-action step's own env block: moved to
+# another step or job, the action falls back to 8.24.3 while the grep-based
+# tests above still pass. Walk from the `uses:` line to the next step and
+# require the pin to appear in between.
+test_ci_pin_is_on_the_gitleaks_step() {
+    local in_step
+    in_step="$(command awk '
+        /uses: gitleaks\/gitleaks-action@/ { inside = 1; next }
+        inside && /^[[:space:]]*- (name|uses):/ { inside = 0 }
+        inside && /^[[:space:]]*GITLEAKS_VERSION:/ { found = 1 }
+        END { print found ? "yes" : "no" }
+    ' "$CI_WORKFLOW")"
+    assert_equals "yes" "$in_step" \
+        "GITLEAKS_VERSION must be set in the gitleaks-action step's env, not elsewhere in ci.yml"
+}
+
 run_test test_source_of_truth_parses "dev-tools.sh GITLEAKS_VERSION default parses"
 run_test test_ci_sets_exactly_one_pin "ci.yml sets GITLEAKS_VERSION exactly once"
+run_test test_ci_pin_is_on_the_gitleaks_step "ci.yml pin sits on the gitleaks-action step"
 run_test test_ci_pin_matches_dev_tools "ci.yml pin equals dev-tools.sh default"
 run_test test_ci_pin_meets_floor "ci.yml pin is >= $GITLEAKS_FLOOR"
 run_test test_updater_bumps_both_pins "updater bumps both pins together"

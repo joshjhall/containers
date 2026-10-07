@@ -163,10 +163,12 @@ update_luggage_catalog() {
     "$luggage_bin" catalog add-version "${tool}@${version}" --catalog "$catalog"
 }
 
-# sync_rust_minor_pins lives in its own module to keep this file under the
-# file-size ceiling (tests/unit/file-size-ceiling.sh).
+# sync_rust_minor_pins and sync_gitleaks_pins live in their own modules to keep
+# this file under the file-size ceiling (tests/unit/file-size-ceiling.sh).
 # shellcheck source=bin/lib/update-versions/rust-pins.sh
 source "$(dirname "${BASH_SOURCE[0]}")/rust-pins.sh"
+# shellcheck source=bin/lib/update-versions/gitleaks-pins.sh
+source "$(dirname "${BASH_SOURCE[0]}")/gitleaks-pins.sh"
 
 # Function to update a version in a file
 update_version() {
@@ -470,12 +472,7 @@ update_version() {
                     sed_inplace "s/^LEFTHOOK_VERSION=\"[0-9][^\"]*\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 gitleaks)
-                    sed_inplace "s/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-[^}]*}\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^GITLEAKS_VERSION=\"[0-9][^\"]*\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
-                    # ci.yml's gitleaks-action step pins the same scanner via
-                    # env; tests/unit/gitleaks-version-sync.sh requires the two
-                    # to match, so move them together (#1050).
-                    sed_inplace "s/^\([[:space:]]*GITLEAKS_VERSION: *\"\)[0-9][^\"]*\"/\1$latest\"/" "$PROJECT_ROOT/.github/workflows/ci.yml"
+                    sync_gitleaks_pins "$script_path" "$latest" || return "$RC_UPDATE_FAILED"
                     ;;
                 dprint)
                     sed_inplace "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
