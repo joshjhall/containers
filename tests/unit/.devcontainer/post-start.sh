@@ -72,10 +72,23 @@ test_failing_step_aborts_rest() {
         "setup-git / setup-gh are skipped after recover-entrypoint fails"
 }
 
+# A failure mid-chain skips only the steps after it.
+test_failing_middle_step_skips_rest() {
+    local dir="$TEST_TEMP_DIR/mid" rc=0
+    _make_stubs "$dir" recover-entrypoint:0 setup-git:5 setup-gh:0
+
+    _run_with_stubs "$dir" >/dev/null 2>&1 || rc=$?
+
+    assert_equals "5" "$rc" "post-start.sh propagates setup-git's exit code"
+    assert_equals "recover-entrypoint setup-git" "$(command tr '\n' ' ' <"$dir/calls" | command sed 's/ $//')" \
+        "setup-gh is skipped after setup-git fails"
+}
+
 run_test test_script_exists "post-start.sh exists and is executable"
 run_test test_script_uses_strict_mode "post-start.sh uses strict mode"
 run_test test_runs_steps_in_order "Steps run in order"
 run_test test_failing_step_aborts_rest "A failing step aborts the rest"
+run_test test_failing_middle_step_skips_rest "A failing middle step skips the rest"
 
 # Generate test report
 generate_report

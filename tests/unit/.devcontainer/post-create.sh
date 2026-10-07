@@ -13,6 +13,18 @@ init_test_framework
 # Test suite
 test_suite "Devcontainer Post-Create Tests"
 
+# Run the real post-create.sh with `lefthook` stubbed out so the test never
+# rewrites the live .git/hooks (shared with the main checkout from a worktree).
+# BASH_ENV is unset because the container's /etc/bash_env re-prepends system
+# dirs to PATH, which would let the real lefthook shadow the stub.
+_run_post_create() {
+    local stub="$TEST_TEMP_DIR/stub-bin"
+    command mkdir -p "$stub"
+    command printf '#!/bin/sh\nexit 0\n' >"$stub/lefthook"
+    command chmod +x "$stub/lefthook"
+    command env -u BASH_ENV PATH="$stub:$PATH" "$@" bash "$PROJECT_ROOT/.devcontainer/post-create.sh"
+}
+
 # Test: Script exists and is executable
 test_script_exists() {
     assert_file_exists "$PROJECT_ROOT/.devcontainer/post-create.sh"
@@ -146,18 +158,6 @@ test_script_has_tool_checker() {
 # build, or git-cliff/biome) is commonly absent, so this exercises the missing
 # branch; even with all present, a regressed `return 1` on the LAST check_tool
 # call still aborts the script under set -e, which this catches.
-# Run the real post-create.sh with `lefthook` stubbed out so the test never
-# rewrites the live .git/hooks (shared with the main checkout from a worktree).
-# BASH_ENV is unset because the container's /etc/bash_env re-prepends system
-# dirs to PATH, which would let the real lefthook shadow the stub.
-_run_post_create() {
-    local stub="$TEST_TEMP_DIR/stub-bin"
-    command mkdir -p "$stub"
-    command printf '#!/bin/sh\nexit 0\n' >"$stub/lefthook"
-    command chmod +x "$stub/lefthook"
-    command env -u BASH_ENV PATH="$stub:$PATH" "$@" bash "$PROJECT_ROOT/.devcontainer/post-create.sh"
-}
-
 test_missing_recommended_tool_is_non_fatal() {
     local rc=0
 
@@ -250,7 +250,8 @@ test_drift_ignores_keys_absent_from_conf() {
     assert_contains "$out" "rc=0" "Keys missing from the conf are not drift"
     assert_not_contains "$out" "INCLUDE_NODE:" "Unrecorded key is not reported as a mismatch"
     # ...but it is surfaced as unchecked, so a clean result does not overclaim.
-    assert_contains "$out" "Not checked (image does not record): INCLUDE_NODE" "Unrecorded key is listed as not checked"
+    assert_contains "$out" "Not checked (image does not record):" "Unrecorded keys are listed as not checked"
+    assert_contains "$out" "INCLUDE_NODE" "INCLUDE_NODE is among the unchecked keys"
     assert_contains "$out" "on 3 recorded INCLUDE_* flag(s)" "Clean result states how many flags were compared"
 }
 

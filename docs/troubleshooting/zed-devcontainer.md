@@ -170,7 +170,8 @@ This repo wires two lifecycle hooks, both in array form, matching the sibling
   - Runs _before_ `post-start.sh`'s `recover-entrypoint`, so under Zed it sees
     a not-yet-replayed entrypoint. None of its checks need entrypoint state:
     `enabled-features.conf` is written at image build time, and nothing here
-    reads OP-resolved secrets. Keep it that way — anything that needs secrets
+    reads OP-resolved secrets. (The git-identity check is advisory and may
+    warn on first create; `post-start.sh`'s `setup-git` sets identity next.) Keep it that way — anything that needs secrets
     belongs in `post-start.sh`.
 
 - **`postStartCommand` → `.devcontainer/post-start.sh`** (every start), in
@@ -277,7 +278,8 @@ artifacts as VS Code.
 Captured 2026-05-10 against this repo's `.devcontainer/devcontainer.json`.
 VS Code baseline: VS Code Dev Containers extension, image built by VS Code.
 Zed: editor 0.231.1+, remote-server `1.1.7+stable.268`, fresh
-`docker compose down --rmi local` rebuild.
+`docker compose down --rmi local` rebuild (pre-#1059; use `teardown.sh --rmi`
+now — see [Rebuilding the container](#rebuilding-the-container)).
 
 | Hook / aspect                                  | VS Code baseline                                                                                              | Zed observed                                                                                                                              | Notes                                                                                                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -441,12 +443,16 @@ REBUILD`.
   > container, and with `--volumes` / `--rmi local` it acts on _any other_
   > project on the host that is also named `devcontainer`. `teardown.sh`
   > discovers the real name from the running container's labels. If you must
-  > run Compose directly, pass the name explicitly:
+  > run Compose directly, pass the name explicitly (replace `containers` with
+  > your repo folder's name):
   >
   > ```bash
   > docker compose -p containers_devcontainer -f .devcontainer/docker-compose.yml down
-  > docker compose -p containers_devcontainer -f .devcontainer/docker-compose.yml build --no-cache  # optional cold pre-build
   > ```
+  >
+  > Don't pre-build with a host-side `docker compose build`: it runs on a
+  > different builder than Zed's, so Zed does not reuse those layers on reopen.
+  > For a cold rebuild, use `teardown.sh --rmi` and reopen.
 
 ## Port forwarding
 
