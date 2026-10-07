@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# @tier: weekly
-# @ci: scheduled — polyglot ships mise, but test_no_mise_without_flag still builds a local image (#1027)
+# @tier: merge,weekly
 # Test mise (polyglot runtime version manager) container build
 #
 # This test verifies that the mise feature:
@@ -95,14 +94,23 @@ test_mise_install_runtime() {
 }
 
 # Test: Build without the mise flag does not include it
+#
+# IMAGE_TO_TEST_MINIMAL points this at a pre-built image with no mise flag
+# (CI passes the published minimal variant, #1077). Without it the test builds
+# one locally, which inside the merge-tier job would be a full extra build.
 test_no_mise_without_flag() {
-    local image="test-no-mise-$$"
-    echo "Building image without mise: $image"
+    if [ -n "${IMAGE_TO_TEST_MINIMAL:-}" ]; then
+        local image="$IMAGE_TO_TEST_MINIMAL"
+        echo "Testing pre-built image without mise: $image"
+    else
+        local image="test-no-mise-$$"
+        echo "Building image without mise: $image"
 
-    assert_build_succeeds "Dockerfile" \
-        --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-no-mise \
-        -t "$image"
+        assert_build_succeeds "Dockerfile" \
+            --build-arg PROJECT_PATH=. \
+            --build-arg PROJECT_NAME=test-no-mise \
+            -t "$image"
+    fi
 
     assert_command_in_container "$image" "which mise 2>/dev/null || echo not-found" "not-found"
     assert_command_in_container "$image" "test -f /etc/bashrc.d/70-mise.sh && echo exists || echo not-found" "not-found"

@@ -158,10 +158,12 @@ the PR tier handles that path. Branch protection rules should require both
 The merge tier runs exactly the suites named in the `integration-test`
 matrix — each variant's `test`, plus any space-separated `extra_suites` run
 against the **same** published image. `extra_suites` is how a suite rides an
-existing variant without a new build: `bindfs` runs on the `python-dev` leg
-(`INCLUDE_DEV_TOOLS=true` installs bindfs and cron), and its flag-absent check
-uses the published `minimal` image via `IMAGE_TO_TEST_MINIMAL` instead of a
-local build.
+existing variant without a new build: `bindfs` and `setup_commands` run on
+the `python-dev` leg (`INCLUDE_DEV_TOOLS=true` installs bindfs, cron, gh and
+glab), and `mise` runs on the `polyglot` leg (`INCLUDE_MISE=true`). Every rider
+also receives the published `minimal` image via `IMAGE_TO_TEST_MINIMAL`, which
+the flag-absent checks (and `setup_commands`'s no-gh/glab cases) use instead
+of a local build.
 
 The `# @tier:` header is **not** what selects merge-tier suites — no workflow
 calls `run_integration_tests.sh --tier=…` yet. So a suite outside the matrix
@@ -182,9 +184,9 @@ either added to the matrix or marked.
 
 | Disposition | Suites | Why |
 | --- | --- | --- |
-| Merge tier | `minimal`, `python_dev`, `node_dev`, `polyglot`, `bindfs` | Covered by a published variant |
+| Merge tier | `minimal`, `python_dev`, `node_dev`, `polyglot`, `bindfs`, `mise`, `setup_commands` | Covered by a published variant |
 | Scheduled | `java_dev`, `r_dev`, `rust_golang`, `cloud_ops`, `production` | Variant parked for v5 (#508) |
-| Scheduled | `android`, `kotlin`, `node_current`, `luggage_rust`, `mise`, `claude_code_setup`, `claude_skills_agents`, `setup_commands` | Build images of their own that no merge-tier variant matches |
+| Scheduled | `android`, `kotlin`, `node_current`, `luggage_rust`, `claude_code_setup`, `claude_skills_agents` | Build images of their own that no merge-tier variant matches |
 | Local-only | `docker_socket` | Mounts the host Docker socket into a root-started container |
 | Local-only | `kubernetes_deployment` | Needs `--privileged` Docker-in-Docker for kind |
 
