@@ -115,7 +115,8 @@ test_skip_when_no_git_dir() {
 # Run the health check from inside $1 with PROJECT_ROOT either exported empty
 # ("empty") or unset ("unset"), so the $PWD fallback is what is exercised.
 # HEALTH_CHECK_SCRIPT is relative, so it is resolved before the cd.
-# Returns stderr. Args: $1 = working directory, $2 = empty|unset
+# Prints stderr, then a final "rc=<status>" line so callers can assert the run
+# was not fatal. Args: $1 = working directory, $2 = empty|unset
 run_health_check_from_pwd() {
     local script
     script="$(cd "$(dirname "$HEALTH_CHECK_SCRIPT")" && pwd)/$(basename "$HEALTH_CHECK_SCRIPT")"
@@ -130,7 +131,11 @@ run_health_check_from_pwd() {
         export SKIP_PROJECT_HEALTH_CHECK=false
         export HAVE_BINDFS=false
         unset HAVE_DEV_TOOLS 2>/dev/null || true
-        { source "$script" >/dev/null; } 2>&1
+        # bash, not source: the script's own `exit` would end this subshell
+        # before the status line below could be printed.
+        local rc=0
+        { bash "$script" >/dev/null; } 2>&1 || rc=$?
+        command echo "rc=${rc}"
     )
 }
 
@@ -146,6 +151,8 @@ test_empty_project_root_skips_and_reports() {
         "An empty PROJECT_ROOT must not fall back to \$PWD"
     assert_contains "$output" "PROJECT_ROOT is set but empty" \
         "An empty PROJECT_ROOT is reported on stderr (issue #917)"
+    assert_contains "$output" "rc=0" \
+        "An empty PROJECT_ROOT is reported, never fatal to startup"
 }
 
 test_unset_project_root_falls_back_to_pwd() {
