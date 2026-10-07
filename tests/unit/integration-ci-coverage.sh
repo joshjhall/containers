@@ -14,7 +14,8 @@
 #   - any other suite carries `# @ci: <scheduled|local-only> — <reason>` and
 #     does NOT declare `merge` — including by omission, since a suite with no
 #     @tier header defaults to merge (test_in_tier in run_integration_tests.sh);
-#   - every suite the matrix names exists.
+#   - every suite the matrix names exists, and reads IMAGE_TO_TEST (so it tests
+#     the published image rather than building its own inside the job).
 #
 # The checker runs against fixtures as well as the real tree, so each rule is
 # shown to FAIL on the defect it exists for.
@@ -192,6 +193,7 @@ test_runner_tier_filter_splits_multi_tier_header() {
     local dir fn
     dir=$(command mktemp -d)
     printf '#!/usr/bin/env bash\n# @tier: pr, merge,weekly\n' >"$dir/test_x.sh"
+    printf '#!/usr/bin/env bash\n# no tier header\n' >"$dir/test_bare.sh"
     fn=$(command sed -n '/^test_in_tier() {/,/^}/p' "$PROJECT_ROOT/tests/run_integration_tests.sh")
     if [ -z "$fn" ]; then
         command rm -rf "$dir"
@@ -199,12 +201,51 @@ test_runner_tier_filter_splits_multi_tier_header() {
         return
     fi
     eval "$fn"
-    local hits=""
-    for t in pr merge weekly monthly; do
-        test_in_tier "$dir/test_x.sh" "$t" && hits+="$t "
+    local f t runner mine mismatch=""
+    for f in "$dir/test_x.sh" "$dir/test_bare.sh"; do
+        runner="" mine=""
+        for t in pr merge weekly monthly; do
+            test_in_tier "$f" "$t" && runner+="$t "
+        done
+        # The guard's own parser must agree with the runner, file by file.
+        mine=$(declared_tiers "$f" | command tr '\n' ' ')
+        [ "$runner" = "$mine" ] || mismatch+="$(command basename "$f"): runner='$runner' guard='$mine' "
+        case "$f" in
+            */test_x.sh) assert_equals "pr merge weekly " "$runner" \
+                "--tier matches each tier of a comma-separated header" ;;
+            */test_bare.sh) assert_equals "merge " "$runner" \
+                "a header-less suite defaults to the merge tier only" ;;
+        esac
     done
     command rm -rf "$dir"
-    assert_equals "pr merge weekly " "$hits" "--tier matches each tier of a comma-separated header"
+    assert_equals "" "$mismatch" "declared_tiers agrees with the runner's test_in_tier"
+}
+
+# matrix_suites_ignoring_image CI_FILE BUILDS_DIR — prints each matrix suite
+# whose file never reads IMAGE_TO_TEST. Such a suite would silently build its
+# own image inside the merge-tier job instead of testing the published one.
+matrix_suites_ignoring_image() {
+    local suite
+    while IFS= read -r suite; do
+        [ -f "$2/test_${suite}.sh" ] || continue
+        command grep -q 'IMAGE_TO_TEST' "$2/test_${suite}.sh" || command echo "$suite"
+    done < <(matrix_suites "$1")
+}
+
+test_checker_flags_suite_ignoring_image() {
+    local dir got
+    dir=$(command mktemp -d)
+    make_fixture "$dir"
+    printf 'image="${IMAGE_TO_TEST:-local}"\n' >>"$dir/builds/test_covered.sh"
+    got=$(matrix_suites_ignoring_image "$dir/ci.yml" "$dir/builds")
+    command rm -rf "$dir"
+    assert_equals "rider" "$got" "a matrix suite that never reads IMAGE_TO_TEST is flagged"
+}
+
+test_matrix_suites_test_published_image() {
+    local got
+    got=$(matrix_suites_ignoring_image "$CI_WORKFLOW" "$BUILDS_DIR")
+    assert_equals "" "$got" "every merge-tier suite honors IMAGE_TO_TEST"
 }
 
 # ---------------------------------------------------------------------------
@@ -241,7 +282,9 @@ run_test test_checker_flags_reasonless_marker "Checker flags an @ci: marker with
 run_test test_checker_flags_matrix_suite_drift "Checker flags a matrix suite with drifted headers"
 run_test test_checker_flags_missing_matrix_suite "Checker flags a matrix suite with no file"
 run_test test_runner_tier_filter_splits_multi_tier_header "Runner --tier filter splits multi-tier headers"
+run_test test_checker_flags_suite_ignoring_image "Checker flags a matrix suite ignoring IMAGE_TO_TEST"
 run_test test_real_matrix_is_parsed "Real integration-test matrix parses"
 run_test test_every_suite_has_ci_disposition "Every integration suite has a CI disposition"
+run_test test_matrix_suites_test_published_image "Every merge-tier suite honors IMAGE_TO_TEST"
 
 generate_report
