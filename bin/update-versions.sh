@@ -256,9 +256,7 @@ if [ "$FAILED_UPDATES" -gt 0 ]; then
     #
     # In practice a dry run cannot reach exit 3: both rewrite-failure sources
     # (pin_action's SHA resolution, update_luggage_catalog's binary probe)
-    # short-circuit before doing the work that could fail. sync_gitleaks_pins'
-    # preflight does run on a dry run, but it reports RC_INVALID_VERSION (exit
-    # 2), since it refuses before writing anything.
+    # short-circuit before doing the work that could fail.
     if [ "$UPDATE_ERRORS" -gt 0 ]; then
         exit 3
     fi

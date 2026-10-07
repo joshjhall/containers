@@ -165,7 +165,7 @@ update_luggage_catalog() {
     "$luggage_bin" catalog add-version "${tool}@${version}" --catalog "$catalog"
 }
 
-# sync_rust_minor_pins and sync_gitleaks_pins live in their own modules to keep
+# sync_rust_minor_pins and bump_gitleaks_pin live in their own modules to keep
 # this file under the file-size ceiling (tests/unit/file-size-ceiling.sh).
 # shellcheck source=bin/lib/update-versions/rust-pins.sh
 source "$(dirname "${BASH_SOURCE[0]}")/rust-pins.sh"
@@ -474,7 +474,7 @@ update_version() {
                     sed_inplace "s/^LEFTHOOK_VERSION=\"[0-9][^\"]*\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 gitleaks)
-                    sync_gitleaks_pins "$script_path" "$latest" || return
+                    bump_gitleaks_pin "$script_path" "$latest" || return
                     ;;
                 dprint)
                     sed_inplace "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
