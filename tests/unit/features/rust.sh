@@ -518,6 +518,28 @@ test_reconciler_profile_default() {
     fi
 }
 
+# #1060: with no rustup on PATH (stale image / emptied volume) the reconciler
+# must say "rebuild" rather than exit silently — and still exit 0, since it
+# runs as a first-startup hook that must never block the container.
+test_reconciler_missing_rustup_hint() {
+    local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
+    local helper="$TEST_TEMP_DIR/rust-ensure-pinned-components"
+    local stderr_file="$TEST_TEMP_DIR/reconciler.err"
+    local rc=0
+
+    # Extract the heredoc body the build writes to /usr/local/bin.
+    command sed -n '/^command cat >\/usr\/local\/bin\/rust-ensure-pinned-components <<.EOF.$/,/^EOF$/p' \
+        "$rust_script" | command sed '1d;$d' >"$helper"
+    assert_not_empty "$(command cat "$helper")" "reconciler heredoc extracted from rust.sh"
+
+    # -u BASH_ENV: a container BASH_ENV re-exports PATH and would find rustup.
+    env -u BASH_ENV PATH=/nonexistent /bin/bash "$helper" "$TEST_TEMP_DIR" >/dev/null 2>"$stderr_file" || rc=$?
+
+    assert_equals "0" "$rc" "reconciler exits 0 without rustup (startup hook must not block)"
+    assert_contains "$(command cat "$stderr_file")" "rebuild the image" \
+        "reconciler tells the user to rebuild when rustup is missing"
+}
+
 # Run all tests
 run_test_with_setup test_rust_version_handling "Rust version handling works correctly"
 run_test_with_setup test_rustup_installation "Rustup installation process"
@@ -536,6 +558,7 @@ run_test test_toolchain_bin_fallback "rust.sh symlinks core toolchain via a CARG
 run_test test_no_inline_rustup_install "rust.sh strips inline rustup-init download/verify logic"
 run_test test_channel_routing "Channel names (stable/beta/nightly) route through --channel"
 run_test test_reconciler_profile_default "Pinned-toolchain reconciler installs with --profile default"
+run_test_with_setup test_reconciler_missing_rustup_hint "Reconciler prints a rebuild hint when rustup is missing (#1060)"
 run_test test_rust_script_installed "test-rust is installed (#1001)"
 run_test test_rust_script_passes_when_all_tools_present "test-rust exits 0 with all tools"
 run_test test_rust_script_fails_on_missing_tool "test-rust exits 1 on a missing tool"

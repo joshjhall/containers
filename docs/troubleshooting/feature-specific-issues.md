@@ -83,6 +83,35 @@ df -h /cache/cargo
 cargo build --verbose
 ```
 
+## Rust: `cargo` not found in the devcontainer
+
+**Symptom**: The `cargo-lint` (pre-commit) or `cargo-test` (pre-push) hook
+fails with `cargo not found: this image was built without the Rust feature
+(stale image?)`, or startup logs
+`rust-ensure-pinned-components: rustup not found`.
+
+**Cause**: The running image is stale relative to
+`.devcontainer/docker-compose.yml`. Compose sets `INCLUDE_RUST_DEV: "true"`,
+but the image was built before that, so `enabled-features.conf` records
+`INCLUDE_RUST_DEV=false`. The image/compose drift check (`post-create.sh`, step
+4) reports this mismatch at container create.
+
+**Solution**: Rebuild the devcontainer (for example, "Rebuild Container" in
+your editor, or `docker compose build` and then recreate the container). Don't
+install rustup by hand into `/cache/rustup`.
+
+**Decision: no `rustup` in post-create** (#1060). Post-create deliberately
+does not install a Rust toolchain:
+
+- `lib/features/rust.sh` already owns the toolchain: the version pin, checksum
+  verification, components, and MSRV holds. A first-startup hook,
+  `rust-ensure-pinned-components`, also reconciles a `rust-toolchain.toml`
+  pin. A second install path in post-create would duplicate that work and
+  drift from it.
+- It would only hide a stale image. The same image would still lack anything
+  else that changed in compose. A rebuild fixes everything at once, and the
+  drift check (#1059) points you to the rebuild.
+
 ## Docker: Cannot start Docker daemon in container
 
 **Symptom**: docker: Cannot connect to the Docker daemon.
