@@ -257,12 +257,17 @@ _cosign_guard_scan_safe() {
             # env/sudo/xargs/nohup/time/coproc options take arguments that
             # cannot be told apart from the command, so after one of them
             # any later absolute-path word on the line is refused.
-            if ((q == 0 && (!cont || opcont) && $0 ~ /^[[:space:]]*["\047]?\//) ||
-                $0 ~ /[;&|({!`][[:space:]]*["\047]?\// ||
-                $0 ~ /\)[[:space:]]+["\047]?\// ||
-                $0 ~ /(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|command|builtin)[[:space:]]+((-[^[:space:]]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*["\047]?\// ||
-                $0 ~ /(^|[^[:alnum:]_.-])(env|sudo|xargs|nohup|time|coproc)[[:space:]](.*[[:space:]=])?["\047]?\// ||
-                $0 ~ /(^|[;&|({!`[:space:]])[A-Za-z_][A-Za-z0-9_]*=[^[:space:]()`]*[[:space:]]+["\047]?\//)
+            # A redirection is not a command word: `2>/dev/null /usr/bin/x`
+            # still runs /usr/bin/x. Drop redirections (operator plus target)
+            # from a copy before looking for command position.
+            cp = $0
+            gsub(/[0-9]*(>>?|<|>&|&>)[[:space:]]*[^[:space:];|&)]+/, " ", cp)
+            if ((q == 0 && (!cont || opcont) && cp ~ /^[[:space:]]*["\047]?\//) ||
+                cp ~ /[;&|({!`][[:space:]]*["\047]?\// ||
+                cp ~ /\)[[:space:]]+["\047]?\// ||
+                cp ~ /(^|[^[:alnum:]_.-])(then|do|else|elif|if|while|until|command|builtin)[[:space:]]+((-[^[:space:]]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*["\047]?\// ||
+                cp ~ /(^|[^[:alnum:]_.-])(env|sudo|xargs|nohup|time|coproc)[[:space:]](.*[[:space:]=])?["\047]?\// ||
+                cp ~ /(^|[;&|({!`[:space:]])[A-Za-z_][A-Za-z0-9_]*=[^[:space:]()`]*[[:space:]]+["\047]?\//)
                 refuse("absolute-path command")
             if (heredoc != "") next
             # Remember the delimiter (`<<EOF`, `<<-"EOF"`, `<< EOF`); a
@@ -514,6 +519,8 @@ test_cosign_guard_scan() {
         'cmd --keyring /etc/apt/x' '[ -f "/tmp/x" ]' \
         'v=$(. /etc/os-release && echo "$V")' 'echo "a # b"' \
         'if [ -f "$(dirname x)/../y.sh" ]; then :; fi' \
+        'cmd --exec x' 'is_enabled=1' 'executable=1' 'my_eval_helper x' \
+        'cmd 2>/dev/null --keyring /etc/apt/x' \
         "cat <<-EOF|	don't|	EOF|# after a here-doc: x >y"; do
         command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
         _cosign_guard_scan_safe "$f" 2>/dev/null
@@ -537,7 +544,8 @@ test_cosign_guard_scan() {
         'env -i HOME=/h /usr/bin/x' '{ /usr/bin/x; }' '! /usr/bin/x' \
         'x=`/usr/bin/x`' 'command -vp mv' 'case $x in a) /usr/bin/x ;; esac' \
         'command -p mv a b' 'hash -p /usr/bin/mv mv' 'exec /bin/sh' \
-        'enable -f x y'; do
+        'enable -f x y' '2>/dev/null /usr/bin/x' '>/dev/null /usr/bin/x' \
+        'x; 2>&1 /usr/bin/x' '</dev/null /usr/bin/x'; do
         command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
         _cosign_guard_scan_safe "$f" 2>/dev/null
         assert_equals "1" "$?" "refused: $case"
@@ -549,6 +557,15 @@ test_cosign_guard_scan() {
         _cosign_guard_scan_safe "$f" 2>/dev/null
         assert_equals "1" "$?" "refused: absolute path continued after $case"
     done
+    # State resets per file: the harness scans two files in one call, and an
+    # open quote at the end of one must not leave the next "inside a string".
+    local g
+    g=$(command mktemp)
+    command printf 'x="\n' >"$f"
+    command printf '/usr/bin/x\n' >"$g"
+    _cosign_guard_scan_safe "$f" "$g" 2>/dev/null
+    assert_equals "1" "$?" "refused: per-file state does not leak across files"
+    command rm -f "$g"
     # A scan that cannot run must refuse, not approve.
     command rm -f "$f"
     _cosign_guard_scan_safe "$f" 2>/dev/null
