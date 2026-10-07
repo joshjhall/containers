@@ -183,6 +183,45 @@ test_updater_refuses_non_semver_version() {
     assert_equals "yes" "$ci_same" "ci.yml must be untouched after a refused version"
 }
 
+# A write that fails after the preflight passes must surface as a real failure
+# (RC_UPDATE_FAILED -> update-versions exit 3), never as a successful bump that
+# left the pins divergent. Making the workflows dir read-only lets the preflight
+# (a read) pass and the dev-tools.sh write land, then fails the real ci.yml
+# write: the half-update exit 3 exists to catch. Skipped as root, where the
+# read-only bit does not stop writes.
+test_updater_reports_failed_write() {
+    if [ "$(command id -u)" = "0" ]; then
+        skip_test "running as root: a read-only directory does not block writes"
+        return
+    fi
+    local root rc expected
+    root="$(_scratch_root gitleaks-sync-writefail)"
+    expected="$(command sed -nE 's/^RC_UPDATE_FAILED=([0-9]+).*/\1/p' \
+        "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh")"
+    /bin/chmod a-w "$root/.github/workflows"
+    rc="$(_run_updater "$root" false)"
+    /bin/chmod u+w "$root/.github/workflows"
+    /bin/rm -rf "$root"
+
+    assert_equals "$expected" "$rc" "a failed pin write must return RC_UPDATE_FAILED, not success"
+}
+
+# sed_inplace must return sed's own status. Its cleanup loop used to run last,
+# so a failed sed reported 0 and every `sed_inplace ... || return` guard in
+# rust-pins.sh and gitleaks-pins.sh was dead code.
+test_sed_inplace_propagates_sed_failure() {
+    local rc=0
+    (
+        source "$PROJECT_ROOT/bin/lib/common.sh"
+        source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+        source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+        # shellcheck disable=SC2034 # read by sed_inplace()
+        DRY_RUN=false
+        sed_inplace 's/a/b/' "$TEST_SCRATCH_BASE/does-not-exist/file"
+    ) >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "sed_inplace must return non-zero when sed fails"
+}
+
 test_updater_dry_run_writes_nothing() {
     local root rc dev_same=yes ci_same=yes
     root="$(_scratch_root gitleaks-sync-dry)"
@@ -222,6 +261,8 @@ run_test test_updater_fails_cleanly_without_ci_yml "updater fails before writing
 run_test test_updater_fails_on_unmatched_ci_pin "updater fails before writing on a reformatted ci.yml pin"
 run_test test_updater_fails_on_unmatched_dev_tools_pin "updater fails before writing on a reformatted dev-tools.sh pin"
 run_test test_updater_refuses_non_semver_version "updater refuses a non-X.Y.Z version before writing"
+run_test test_updater_reports_failed_write "updater reports a failed pin write as RC_UPDATE_FAILED"
+run_test test_sed_inplace_propagates_sed_failure "sed_inplace returns sed's failure status"
 run_test test_updater_dry_run_writes_nothing "updater dry run writes nothing"
 
 generate_report

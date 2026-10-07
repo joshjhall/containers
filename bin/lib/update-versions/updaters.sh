@@ -30,16 +30,16 @@ RC_UPDATE_FAILED=4   # a case matched but the rewrite itself failed
 # Portable in-place sed across GNU sed (Linux) and BSD sed (macOS).
 # Usage: sed_inplace 'EXPRESSION' file [file ...]
 sed_inplace() {
-    local expr="$1"
+    local expr="$1" rc=0
     shift
     if [ "${DRY_RUN:-false}" = true ]; then
         return 0
     fi
-    command sed -i.bak "$expr" "$@"
-    local f
-    for f in "$@"; do
-        command rm -f "$f.bak"
-    done
+    # Return sed's status, not the cleanup's: callers guard writes with
+    # `sed_inplace ... || return`, which a trailing rm would always mask.
+    command sed -i.bak "$expr" "$@" || rc=$?
+    command rm -f "${@/%/.bak}"
+    return "$rc"
 }
 
 # resolve_action_sha - Resolve a GitHub Actions release tag to its commit SHA.
