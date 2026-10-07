@@ -222,13 +222,15 @@ test_runner_tier_filter_splits_multi_tier_header() {
 }
 
 # matrix_suites_ignoring_image CI_FILE BUILDS_DIR — prints each matrix suite
-# whose file never reads IMAGE_TO_TEST. Such a suite would silently build its
-# own image inside the merge-tier job instead of testing the published one.
+# whose file never EXPANDS $IMAGE_TO_TEST on a non-comment line. Such a suite
+# would silently build its own image inside the merge-tier job instead of
+# testing the published one; a mention in a comment does not count.
 matrix_suites_ignoring_image() {
     local suite
     while IFS= read -r suite; do
         [ -f "$2/test_${suite}.sh" ] || continue
-        command grep -q 'IMAGE_TO_TEST' "$2/test_${suite}.sh" || command echo "$suite"
+        command grep -vE '^[[:space:]]*#' "$2/test_${suite}.sh" |
+            command grep -qE '\$\{?IMAGE_TO_TEST' || command echo "$suite"
     done < <(matrix_suites "$1")
 }
 
@@ -237,9 +239,12 @@ test_checker_flags_suite_ignoring_image() {
     dir=$(command mktemp -d)
     make_fixture "$dir"
     printf 'image="${IMAGE_TO_TEST:-local}"\n' >>"$dir/builds/test_covered.sh"
+    # A comment-only mention must not satisfy the check.
+    printf '# honors IMAGE_TO_TEST (it does not)\n' >>"$dir/builds/test_rider.sh"
     got=$(matrix_suites_ignoring_image "$dir/ci.yml" "$dir/builds")
     command rm -rf "$dir"
-    assert_equals "rider" "$got" "a matrix suite that never reads IMAGE_TO_TEST is flagged"
+    assert_equals "rider" "$got" \
+        "a matrix suite that never expands IMAGE_TO_TEST (comment-only mention) is flagged"
 }
 
 test_matrix_suites_test_published_image() {
