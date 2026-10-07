@@ -487,6 +487,38 @@ test_other_user_owned_dir_refused() {
 
 # The cleanup fence itself: it must refuse anything outside the scratch tree
 # BEFORE invoking rm, so it is exercised with no privilege at all.
+# Ownership half of the per-entry rule (#1026): a 0644 (not writable) entry
+# owned by another non-root user inside our own 0755 dir is refused — that user
+# can rewrite the file the justfile is about to exec.
+test_other_user_owned_entry_refused() {
+    setup
+    if ! have_root; then
+        skip_test "needs a root runner or passwordless sudo to create another user's entry"
+        teardown
+        return 0
+    fi
+    local other
+    if /usr/bin/id nobody >/dev/null 2>&1 && [ "$(/usr/bin/id -u nobody)" != "$(/usr/bin/id -u)" ]; then
+        other="$(/usr/bin/id -u nobody):$(/usr/bin/id -g nobody)"
+    else
+        skip_test "no 'nobody' account distinct from the invoking user"
+        teardown
+        return 0
+    fi
+    local fixture rc=0 err
+    command mkdir -p "$TEST_SCRATCH_BASE"
+    fixture="$(command mktemp -d "$TEST_SCRATCH_BASE/wsd-entry.XXXXXX")"
+    command chmod 0755 "$fixture"
+    make_scripts_dir "$fixture/scripts"
+    "${as_root[@]}" /usr/bin/chown "$other" "$fixture/scripts/config.sh"
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a 0644 entry owned by another non-root user is refused"
+    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "refusing $fixture/scripts" "stderr names the dir refused for its foreign-owned entry"
+    guarded_privileged_rm "$fixture"
+    teardown
+}
+
 test_guarded_privileged_rm_refuses_outside_scratch() {
     setup
     local victim="$TEST_DIR/outside-scratch"
@@ -545,7 +577,7 @@ test_writable_sibling_script_refused() {
 # a link to a world-writable file outside the dir is refused.
 test_symlink_to_writable_target_refused() {
     setup
-    local d="$TEST_DIR/symlinked" target="$TEST_DIR/outside-config.sh" rc=0
+    local d="$TEST_DIR/symlinked" target="$TEST_DIR/outside-config.sh" rc=0 err
     command mkdir -p "$d"
     command chmod 0755 "$d"
     command touch "$target"
@@ -596,6 +628,36 @@ test_nested_writable_entry_refused() {
     rc=0
     run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
     assert_not_equals "0" "$rc" "a group-writable subdirectory is refused"
+    teardown
+}
+
+# The scan depth is pinned: a writable file at depth 3 (the deepest level
+# examined) is refused, and ANY entry at depth 4 refuses the dir even when it is
+# safe — the scan never examined it, so it cannot be vouched for.
+test_scan_depth_boundary() {
+    setup
+    local d="$TEST_DIR/deep" rc
+    make_scripts_dir "$d"
+    command mkdir -p "$d/a/b"
+    command chmod 0755 "$d/a" "$d/a/b"
+    command touch "$d/a/b/at-depth-3.sh"
+    command chmod 0666 "$d/a/b/at-depth-3.sh"
+    rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a 0666 file at depth 3 is refused"
+
+    command chmod 0644 "$d/a/b/at-depth-3.sh"
+    local got
+    got="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$d")"
+    assert_equals "$d" "$got" "a safe tree exactly 3 levels deep is trusted"
+
+    command mkdir -p "$d/a/b/c"
+    command chmod 0755 "$d/a/b/c"
+    command touch "$d/a/b/c/at-depth-4.sh"
+    command chmod 0644 "$d/a/b/c/at-depth-4.sh"
+    rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "an entry beyond the scan depth fails closed"
     teardown
 }
 
@@ -671,6 +733,7 @@ run_test test_writable_sibling_script_refused
 run_test test_symlink_to_writable_target_refused
 run_test test_dangling_symlink_refused
 run_test test_nested_writable_entry_refused
+run_test test_scan_depth_boundary
 run_test test_writable_entry_falls_through_to_trusted
 run_test test_trusted_dir_with_safe_entries_accepted
 run_test test_opt_librarian_resolves
@@ -680,6 +743,7 @@ run_test test_opt_librarian_default_matches_build_install
 run_test test_root_owned_dir_accepted
 run_test test_root_owned_writable_refused
 run_test test_other_user_owned_dir_refused
+run_test test_other_user_owned_entry_refused
 run_test test_guarded_privileged_rm_refuses_outside_scratch
 run_test test_not_found
 

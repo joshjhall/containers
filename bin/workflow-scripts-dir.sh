@@ -46,8 +46,9 @@
 # The gate also covers what is INSIDE the dir (#1026): a 0755 dir holding a
 # 0666 config.sh, a 0775 sibling script, or a symlink to a writable file is
 # just as exec-able by another principal, so any entry beneath the candidate
-# (bounded depth, symlinks judged by their target) that is foreign-owned or
-# group/world-writable distrusts the whole dir. /opt/librarian is normalized
+# (up to 3 levels, symlinks judged by their target) that is foreign-owned or
+# group/world-writable distrusts the whole dir, as does any entry deeper than
+# the scan reaches. /opt/librarian is normalized
 # with `chmod -R go-w` at build; the cache, $CLAUDE_PLUGIN_ROOT, the override,
 # and the dev mount get no such normalization, hence the per-entry check.
 #
@@ -85,7 +86,10 @@ is_trusted_dir() {
     # the (flat, today) scripts tree while keeping a large dev mount cheap.
     [ -z "$(/usr/bin/find -L "$dir" -mindepth 1 -maxdepth 3 \
         \( ! \( -user 0 -o -user "$owner" \) -o -perm -0020 -o -perm -0002 \) \
-        -print 2>/dev/null | /usr/bin/head -n 1)" ]
+        -print 2>/dev/null | /usr/bin/head -n 1)" ] || return 1
+    # ...and nothing beyond that depth, so an entry the scan never examined can
+    # never be trusted by default: a deeper tree fails closed, not open.
+    [ -z "$(/usr/bin/find -L "$dir" -mindepth 4 -maxdepth 4 -print 2>/dev/null | /usr/bin/head -n 1)" ]
 }
 
 # Accept a candidate only when it both holds the bundled scripts AND is trusted.
@@ -95,7 +99,7 @@ accept() {
     local dir="${1:-}"
     is_scripts_dir "$dir" || return 1
     if ! is_trusted_dir "$dir"; then
-        command echo "workflow-scripts-dir: refusing $dir — not owned by root or $(/usr/bin/id -un), or it (or an entry in it) is group/world-writable; skipping (#667/#1026)." >&2
+        command echo "workflow-scripts-dir: refusing $dir — not owned by root or $(/usr/bin/id -un), or it (or an entry in it) is foreign-owned or group/world-writable, or it nests deeper than 3 levels; skipping (#667/#1026)." >&2
         return 1
     fi
     return 0
@@ -157,6 +161,6 @@ fi
 command echo "workflow-scripts-dir: could not locate a trusted librarian 'workflow' plugin scripts dir." >&2
 command echo "  Looked in: \$WORKFLOW_SCRIPTS_DIR, \$CLAUDE_PLUGIN_ROOT/scripts, $opt_librarian," >&2
 command echo "  $cache_base/*/scripts, and $dev_mount." >&2
-command echo "  A candidate must contain config.sh AND be owned by root or $(/usr/bin/id -un) and not group/world-writable — the dir and every entry in it (#667/#1026)." >&2
+command echo "  A candidate must contain config.sh AND be owned by root or $(/usr/bin/id -un) and not group/world-writable — the dir and every entry in it, nested at most 3 levels deep (#667/#1026)." >&2
 command echo "  Install the librarian marketplace (see docs/claude-code/) or set WORKFLOW_SCRIPTS_DIR." >&2
 exit 1
