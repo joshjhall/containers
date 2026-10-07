@@ -238,18 +238,19 @@ test_verify_sigstore_invokes_cosign_bin() {
     echo "fake bundle" >"$TEST_TEMP_DIR/testfile.tar.gz.sigstore"
 
     local exit_code=0
-    local output
-    output=$(run_sigstore "
+    run_sigstore "
         require_cosign() { export COSIGN_BIN='$TEST_TEMP_DIR/bin/cosign'; }
-        cosign() { echo IMPOSTOR; echo 'Verified OK'; }
+        cosign() { : >'$TEST_TEMP_DIR/impostor.ran'; echo 'Verified OK'; }
     " "verify_sigstore_signature \
         '$TEST_TEMP_DIR/testfile.tar.gz' '$TEST_TEMP_DIR/testfile.tar.gz.sigstore' \
-        'user@example.org' 'https://accounts.google.com'") || exit_code=$?
+        'user@example.org' 'https://accounts.google.com'" >/dev/null || exit_code=$?
 
     assert_equals "0" "$exit_code" "verify_sigstore_signature succeeds via COSIGN_BIN"
     assert_file_exists "$TEST_TEMP_DIR/cosign.args" \
         "The binary at COSIGN_BIN was invoked"
-    assert_not_contains "$output" "IMPOSTOR" \
+    # cosign's output goes into `tee | grep -q`, never to $output, so the
+    # impostor leaves a marker file rather than printing.
+    assert_file_not_exists "$TEST_TEMP_DIR/impostor.ran" \
         "A bare-name cosign (function/PATH) was not invoked"
 }
 
