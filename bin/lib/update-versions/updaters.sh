@@ -472,7 +472,7 @@ update_version() {
                     sed_inplace "s/^LEFTHOOK_VERSION=\"[0-9][^\"]*\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 gitleaks)
-                    sync_gitleaks_pins "$script_path" "$latest" || return "$RC_UPDATE_FAILED"
+                    sync_gitleaks_pins "$script_path" "$latest" || return
                     ;;
                 dprint)
                     sed_inplace "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"

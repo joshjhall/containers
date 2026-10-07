@@ -46,6 +46,11 @@ _ci_pins() {
 
 DEV_VERSION="$(_dev_tools_version "$DEV_TOOLS")"
 
+# update_version()'s "held, nothing written" code, read from the source so the
+# refusal tests below cannot drift from it.
+RC_INVALID_VERSION="$(command sed -nE 's/^RC_INVALID_VERSION=([0-9]+).*/\1/p' \
+    "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh")"
+
 test_source_of_truth_parses() {
     assert_matches "$DEV_VERSION" '^[0-9]+\.[0-9]+\.[0-9]+$' \
         "dev-tools.sh GITLEAKS_VERSION default must be X.Y.Z (got '$DEV_VERSION')"
@@ -126,7 +131,7 @@ test_updater_fails_cleanly_without_ci_yml() {
     dev_after="$(_dev_tools_version "$root/lib/features/dev-tools.sh")"
     /bin/rm -rf "$root"
 
-    assert_not_equals "0" "$rc" "update_version gitleaks must fail when ci.yml is missing"
+    assert_equals "$RC_INVALID_VERSION" "$rc" "a missing ci.yml must hold the bump (RC_INVALID_VERSION), not fail the run"
     assert_equals "$DEV_VERSION" "$dev_after" "dev-tools.sh must be left untouched when ci.yml is missing"
 }
 
@@ -146,7 +151,7 @@ test_updater_fails_on_unmatched_ci_pin() {
     dev_after="$(_dev_tools_version "$root/lib/features/dev-tools.sh")"
     /bin/rm -rf "$root"
 
-    assert_not_equals "0" "$rc" "update_version gitleaks must fail when the ci.yml pin line has an unexpected shape"
+    assert_equals "$RC_INVALID_VERSION" "$rc" "a reformatted ci.yml pin must hold the bump (RC_INVALID_VERSION)"
     assert_equals "$DEV_VERSION" "$dev_after" "dev-tools.sh must be left untouched when the ci.yml pin cannot be rewritten"
 }
 
@@ -158,7 +163,7 @@ test_updater_fails_on_unmatched_dev_tools_pin() {
     command cmp -s "$CI_WORKFLOW" "$root/.github/workflows/ci.yml" || ci_same=no
     /bin/rm -rf "$root"
 
-    assert_not_equals "0" "$rc" "update_version gitleaks must fail when the dev-tools.sh pin line has an unexpected shape"
+    assert_equals "$RC_INVALID_VERSION" "$rc" "a reformatted dev-tools.sh pin must hold the bump (RC_INVALID_VERSION)"
     assert_equals "yes" "$ci_same" "ci.yml must be left untouched when the dev-tools.sh pin cannot be rewritten"
 }
 
@@ -173,7 +178,7 @@ test_updater_refuses_non_semver_version() {
     command cmp -s "$CI_WORKFLOW" "$root/.github/workflows/ci.yml" || ci_same=no
     /bin/rm -rf "$root"
 
-    assert_not_equals "0" "$rc" "update_version gitleaks must refuse a non-X.Y.Z version"
+    assert_equals "$RC_INVALID_VERSION" "$rc" "a non-X.Y.Z version must hold the bump (RC_INVALID_VERSION)"
     assert_equals "yes" "$dev_same" "dev-tools.sh must be untouched after a refused version"
     assert_equals "yes" "$ci_same" "ci.yml must be untouched after a refused version"
 }
@@ -199,7 +204,7 @@ test_ci_pin_is_on_the_gitleaks_step() {
     local in_step
     in_step="$(command awk '
         /uses: gitleaks\/gitleaks-action@/ { inside = 1; next }
-        inside && /^[[:space:]]*- (name|uses):/ { inside = 0 }
+        inside && /^[[:space:]]*- / { inside = 0 }
         inside && /^[[:space:]]*GITLEAKS_VERSION:/ { found = 1 }
         END { print found ? "yes" : "no" }
     ' "$CI_WORKFLOW")"
