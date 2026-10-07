@@ -553,6 +553,49 @@ test_symlink_to_writable_target_refused() {
     command ln -s "$target" "$d/config.sh"
     run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
     assert_not_equals "0" "$rc" "config.sh symlinked to a writable file is refused"
+    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$d" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "refusing $d" "stderr names the dir refused for its symlinked writable config.sh"
+
+    # ...while a link to a SAFE (0644, ours) target leaves the dir trusted —
+    # judging the target must not mean refusing every symlink.
+    command chmod 0644 "$target"
+    local got
+    got="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$d")"
+    assert_equals "$d" "$got" "config.sh symlinked to a safe file is still trusted"
+    teardown
+}
+
+# A dangling link can't be judged by its target, so `find -L` reports the link
+# inode itself (0777) and the dir is refused: the gate fails closed.
+test_dangling_symlink_refused() {
+    setup
+    local d="$TEST_DIR/dangling" rc=0
+    make_scripts_dir "$d"
+    command ln -s "$TEST_DIR/does-not-exist" "$d/golem-status.sh"
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a dangling symlink inside the dir fails closed"
+    teardown
+}
+
+# The entry scan is recursive, not depth-1 only: a writable file inside a
+# subdirectory (depth 2) or a group-writable subdirectory refuses the dir.
+test_nested_writable_entry_refused() {
+    setup
+    local d="$TEST_DIR/nested" rc
+    make_scripts_dir "$d"
+    command mkdir -p "$d/lib"
+    command chmod 0755 "$d/lib"
+    command touch "$d/lib/helper.sh"
+    command chmod 0666 "$d/lib/helper.sh"
+    rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a 0666 file in a subdirectory is refused"
+
+    command chmod 0644 "$d/lib/helper.sh"
+    command chmod 0775 "$d/lib"
+    rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a group-writable subdirectory is refused"
     teardown
 }
 
@@ -626,6 +669,8 @@ run_test test_untrusted_dev_mount_refused
 run_test test_writable_config_refused
 run_test test_writable_sibling_script_refused
 run_test test_symlink_to_writable_target_refused
+run_test test_dangling_symlink_refused
+run_test test_nested_writable_entry_refused
 run_test test_writable_entry_falls_through_to_trusted
 run_test test_trusted_dir_with_safe_entries_accepted
 run_test test_opt_librarian_resolves
