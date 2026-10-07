@@ -259,9 +259,11 @@ _cosign_guard_scan_safe() {
             # any later absolute-path word on the line is refused.
             # A redirection is not a command word: `2>/dev/null /usr/bin/x`
             # still runs /usr/bin/x. Drop redirections (operator plus target)
-            # from a copy before looking for command position.
+            # from a copy before looking for command position. A target never
+            # starts with `(` or a backtick: `<(/usr/bin/x)` is a process
+            # substitution, and its command must stay visible.
             cp = $0
-            gsub(/[0-9]*(>>?|<|>&|&>)[[:space:]]*[^[:space:];|&)]+/, " ", cp)
+            gsub(/[0-9]*(>>?|<|>&|&>)[[:space:]]*[^[:space:];|&()`][^[:space:];|&)]*/, " ", cp)
             if ((q == 0 && (!cont || opcont) && cp ~ /^[[:space:]]*["\047]?\//) ||
                 cp ~ /[;&|({!`][[:space:]]*["\047]?\// ||
                 cp ~ /\)[[:space:]]+["\047]?\// ||
@@ -545,7 +547,10 @@ test_cosign_guard_scan() {
         'x=`/usr/bin/x`' 'command -vp mv' 'case $x in a) /usr/bin/x ;; esac' \
         'command -p mv a b' 'hash -p /usr/bin/mv mv' 'exec /bin/sh' \
         'enable -f x y' '2>/dev/null /usr/bin/x' '>/dev/null /usr/bin/x' \
-        'x; 2>&1 /usr/bin/x' '</dev/null /usr/bin/x'; do
+        'x; 2>&1 /usr/bin/x' '</dev/null /usr/bin/x' 'cat <(/usr/bin/x)' \
+        'diff <(/usr/bin/x) y' 'tee >(/usr/bin/x)' '>>/tmp/l /usr/bin/x' \
+        '&>/dev/null /usr/bin/x' 'a=1 >/dev/null /usr/bin/x' \
+        'if x; then >/dev/null /usr/bin/x; fi'; do
         command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
         _cosign_guard_scan_safe "$f" 2>/dev/null
         assert_equals "1" "$?" "refused: $case"
