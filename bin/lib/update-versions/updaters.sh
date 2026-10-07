@@ -472,6 +472,10 @@ update_version() {
                 gitleaks)
                     sed_inplace "s/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-[^}]*}\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^GITLEAKS_VERSION=\"[0-9][^\"]*\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
+                    # ci.yml's gitleaks-action step pins the same scanner via
+                    # env; tests/unit/gitleaks-version-sync.sh requires the two
+                    # to match, so move them together (#1050).
+                    sed_inplace "s/^\([[:space:]]*GITLEAKS_VERSION: *\"\)[0-9][^\"]*\"/\1$latest\"/" "$PROJECT_ROOT/.github/workflows/ci.yml"
                     ;;
                 dprint)
                     sed_inplace "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
