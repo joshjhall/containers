@@ -339,6 +339,126 @@ test_collection_stops_at_all() {
         "a foundational file must end the collection with ALL and nothing after"
 }
 
+# ============================================================================
+# bin sibling ownership + nested paths, and the main-block collection (#1031)
+# ============================================================================
+
+# Build a throwaway tree: bin/check.sh and bin/check-versions.sh, with
+# check.sh's own split suite (check-foo.sh, no bin/check-foo.sh) beside
+# check-versions' two suites. Prints the root.
+_make_bin_fixture() {
+    local root
+    root=$(/usr/bin/mktemp -d)
+    /usr/bin/mkdir -p "$root/bin" "$root/tests/unit/bin"
+    /usr/bin/touch "$root/bin/check.sh" "$root/bin/check-versions.sh" \
+        "$root/tests/unit/bin/check.sh" \
+        "$root/tests/unit/bin/check-foo.sh" \
+        "$root/tests/unit/bin/check-versions.sh" \
+        "$root/tests/unit/bin/check-versions-checkers.sh"
+    command echo "$root"
+}
+
+# A stem that is a prefix of another bin script's stem must not collect that
+# script's suites: check-versions.sh and check-versions-checkers.sh belong to
+# bin/check-versions.sh, the longer matching stem.
+test_bin_sibling_skips_longer_owned_suite() {
+    local root out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+    root=$(_make_bin_fixture)
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/check.sh" | command sort)
+    assert_equals "$root/tests/unit/bin/check-foo.sh
+$root/tests/unit/bin/check.sh" "$out" \
+        "bin/check.sh must keep its own split suite and skip check-versions*"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/check-versions.sh" | command sort)
+    assert_equals "$root/tests/unit/bin/check-versions-checkers.sh
+$root/tests/unit/bin/check-versions.sh" "$out" \
+        "bin/check-versions.sh must still own both of its suites"
+
+    /usr/bin/rm -rf "$root"
+}
+
+# A case `*` matches `/`, so bin/lib/x.sh reaches the bin arm. It must map by
+# its path under bin/, not its basename (which would look in tests/unit/bin/).
+test_bin_nested_maps_by_relative_path() {
+    local out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    out=$(map_to_test "bin/lib/common.sh")
+    assert_equals "$TESTS_DIR/unit/bin/lib/common.sh" "$out" \
+        "bin/lib/common.sh must map to tests/unit/bin/lib/common.sh only"
+}
+
+# Extract collect_test_files (the main block's dedupe / ALL / GO_TEST step).
+# Same trust boundary as _load_map_to_test above.
+_load_collect_test_files() {
+    local body
+    _load_map_changed_files || return 1
+    body=$(/usr/bin/awk '/^collect_test_files\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$RUNNER")
+    [ -n "$body" ] || return 1
+    eval "$body"
+}
+
+# A changed script plus its own changed suite map to the same path twice; the
+# runner must run each suite once.
+test_collect_dedupes_overlapping_inputs() {
+    if ! _load_collect_test_files; then
+        fail_test "could not extract collect_test_files from $RUNNER"
+        return 0
+    fi
+
+    collect_test_files < <(command printf '%s\n' bin/check-versions.sh \
+        tests/unit/bin/check-versions.sh | map_changed_files)
+    assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
+$TESTS_DIR/unit/bin/check-versions.sh" "$(command printf '%s\n' "${TEST_FILES[@]}")" \
+        "overlapping changed files must collect one entry per suite"
+}
+
+# Fed directly, with a real suite AFTER the ALL line: map_changed_files already
+# stops at ALL, so going through it would hide a collect_test_files that keeps
+# reading past ALL.
+test_collect_sets_run_all() {
+    if ! _load_collect_test_files; then
+        fail_test "could not extract collect_test_files from $RUNNER"
+        return 0
+    fi
+
+    collect_test_files < <(command printf '%s\n' ALL "$TESTS_DIR/unit/bin/check-versions.sh")
+    assert_equals "true" "$RUN_ALL" "an ALL line must set RUN_ALL"
+    assert_equals "0" "${#TEST_FILES[@]}" "input after ALL must not be collected"
+}
+
+# GO_TEST is a sentinel, not a path: it must flip RUN_GO_TESTS and never reach
+# TEST_FILES. Fed directly — no current map_to_test arm emits it. Run from a
+# directory holding a file literally named GO_TEST, so the -f filter cannot
+# mask a missing unset of the sentinel.
+test_collect_go_test_sentinel() {
+    local scratch
+    if ! _load_collect_test_files; then
+        fail_test "could not extract collect_test_files from $RUNNER"
+        return 0
+    fi
+    scratch=$(/usr/bin/mktemp -d)
+    /usr/bin/touch "$scratch/GO_TEST"
+
+    pushd "$scratch" >/dev/null || return 1
+    collect_test_files < <(command printf '%s\n' GO_TEST "$TESTS_DIR/unit/bin/check-versions.sh")
+    popd >/dev/null || return 1
+    /usr/bin/rm -rf "$scratch"
+
+    assert_equals "true" "$RUN_GO_TESTS" "the GO_TEST sentinel must set RUN_GO_TESTS"
+    assert_equals "$TESTS_DIR/unit/bin/check-versions.sh" "$(command printf '%s\n' "${TEST_FILES[@]}")" \
+        "the GO_TEST sentinel must not become a TEST_FILES entry"
+    assert_equals "false" "$RUN_ALL" "RUN_ALL must stay false without an ALL line"
+}
+
 run_test test_runner_exports_flag "Pre-push runner exports SKIP_NETWORK_TESTS"
 run_test test_framework_defines_helper "framework.sh defines network_tests_disabled"
 run_test test_framework_exports_helper "framework.sh exports network_tests_disabled"
@@ -357,6 +477,11 @@ run_test test_bin_mapping_emits_all_siblings "bin mapping emits every sibling su
 run_test test_collection_keeps_each_sibling_suite "runner collection keeps each sibling suite as its own path (#1024)"
 run_test test_collection_stops_at_all "runner collection ends with ALL for a foundational file"
 run_test test_bin_unmatched_collects_nothing "uncovered bin script maps to and collects no test path (#1024)"
+run_test test_bin_sibling_skips_longer_owned_suite "bin sibling fanout skips suites a longer bin stem owns (#1031)"
+run_test test_bin_nested_maps_by_relative_path "nested bin/** script maps by its path under bin/ (#1031)"
+run_test test_collect_dedupes_overlapping_inputs "runner main block runs each overlapping suite once (#1031)"
+run_test test_collect_sets_run_all "runner main block sets RUN_ALL and stops at ALL (#1031)"
+run_test test_collect_go_test_sentinel "runner main block handles the GO_TEST sentinel (#1031)"
 
 # Generate test report
 generate_report

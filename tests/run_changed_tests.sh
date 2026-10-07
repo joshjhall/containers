@@ -173,6 +173,14 @@ map_to_test() {
         #    runtime script ran no tests at push time with no error to notice.
         #    That is the whole bug class this arm now guards against, which is
         #    why it is covered by tests in tests/unit/run-changed-tests.sh.
+        #
+        # Unlike the bin arm, this fanout deliberately has NO longest-stem
+        # ownership guard (#1031). The guard would drop
+        # workspace-fs-health-cron-entry.sh from 42-workspace-fs-health.sh,
+        # because lib/runtime/workspace-fs-health-cron.sh is a longer matching
+        # stem — yet that suite is fs-health coverage the #832 pin expects. The
+        # over-match only ever runs EXTRA suites, never skips one, so it is
+        # accepted here.
         lib/runtime/*.sh)
             local base stripped candidate match
             base=$(basename "$file")
@@ -199,21 +207,45 @@ map_to_test() {
             return
             ;;
 
-        # bin/foo.sh → tests/unit/bin/foo.sh plus every foo-*.sh sibling suite.
+        # bin/foo.sh → tests/unit/bin/foo.sh plus its foo-*.sh sibling suites.
         # Same reasoning as the lib/runtime arm's point 2: a suite split along a
         # seam (check-versions.sh / check-versions-checkers.sh, #1024) must not
-        # silently drop the moved half from the push-time run.
+        # silently drop the moved half from the push-time run. Two guards keep
+        # the fanout from collecting suites that belong to another script (#1031):
+        #
+        # 1. MAP BY PATH UNDER bin/, NOT BASENAME. A case `*` also matches `/`,
+        #    so bin/lib/x.sh lands here; its suite lives at tests/unit/bin/lib/x.sh,
+        #    and a basename lookup would either miss it or hit an unrelated
+        #    top-level suite of the same name.
+        #
+        # 2. LONGEST STEM OWNS THE SUITE. A sibling <stem>-<rest>.sh is skipped
+        #    when some longer stem between it and ours (<stem>-<rest> trimmed at
+        #    each `-` from the right) is a real bin script — that script owns
+        #    the suite. So a future bin/check.sh does not collect check-versions*.sh,
+        #    while check-versions-checkers.sh stays with bin/check-versions.sh
+        #    because no bin/check-versions-checkers.sh exists.
         bin/*.sh)
-            local base match
-            base=$(basename "$file")
-            local test_path="${TESTS_DIR}/unit/bin/${base}"
+            local rel own match mstem candidate owned
+            rel="${file#bin/}"
+            own="${rel%.sh}"
+            local test_path="${TESTS_DIR}/unit/bin/${rel}"
             if [ -f "$test_path" ]; then
                 echo "$test_path"
             fi
-            for match in "${TESTS_DIR}"/unit/bin/"${base%.sh}"-*.sh; do
-                if [ -f "$match" ]; then
-                    echo "$match"
-                fi
+            for match in "${TESTS_DIR}"/unit/bin/"${own}"-*.sh; do
+                [ -f "$match" ] || continue
+                mstem="${match#"${TESTS_DIR}"/unit/bin/}"
+                mstem="${mstem%.sh}"
+                owned=false
+                candidate="$mstem"
+                while [ ${#candidate} -gt ${#own} ]; do
+                    if [ -f "${PROJECT_ROOT}/bin/${candidate}.sh" ]; then
+                        owned=true
+                        break
+                    fi
+                    candidate="${candidate%-*}"
+                done
+                [ "$owned" = true ] || echo "$match"
             done
             return
             ;;
@@ -263,6 +295,48 @@ map_changed_files() {
     done
 }
 
+# collect_test_files - read mapped test paths (map_changed_files output) on
+# stdin and set the globals the main block acts on:
+#   RUN_ALL       true when an "ALL" line was seen (remaining input ignored)
+#   RUN_GO_TESTS  true when the GO_TEST sentinel was seen (never a TEST_FILES entry)
+#   TEST_FILES    deduplicated, existing test files, sorted
+# Overlapping changed files (bin/check-versions.sh plus its own suite) map to
+# the same path; the associative array collapses them to one run. Kept as a
+# function so tests/unit/run-changed-tests.sh can pin this step (#1031). Feed it
+# with `< <(...)`, not a pipe — a pipeline subshell would discard the globals.
+collect_test_files() {
+    local path tf
+    local -A seen=()
+    RUN_ALL=false
+    RUN_GO_TESTS=false
+    TEST_FILES=()
+
+    while IFS= read -r path; do
+        if [ "$path" = "ALL" ]; then
+            RUN_ALL=true
+            return 0
+        fi
+        seen["$path"]=1
+    done
+
+    if [[ -v "seen[GO_TEST]" ]]; then
+        RUN_GO_TESTS=true
+        unset 'seen[GO_TEST]'
+    fi
+
+    for tf in "${!seen[@]}"; do
+        # Skip empty keys (defensive - should not happen)
+        [ -z "$tf" ] && continue
+        [ ! -f "$tf" ] && continue
+        TEST_FILES+=("$tf")
+    done
+
+    # Sort for deterministic order (guard against empty array producing a blank line)
+    if [ ${#TEST_FILES[@]} -gt 0 ]; then
+        mapfile -t TEST_FILES < <(printf '%s\n' "${TEST_FILES[@]}" | command sort)
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -285,43 +359,13 @@ done
 echo ""
 
 # Map changed files to test files
-RUN_ALL=false
-declare -A TEST_FILES_MAP # associative array for deduplication
-
-while IFS= read -r path; do
-    if [ "$path" = "ALL" ]; then
-        RUN_ALL=true
-        break
-    fi
-    TEST_FILES_MAP["$path"]=1
-done < <(echo "$CHANGED_FILES" | command sort -u | map_changed_files)
+collect_test_files < <(echo "$CHANGED_FILES" | command sort -u | map_changed_files)
 
 # If foundational file changed, fall back to full suite
 if [ "$RUN_ALL" = true ]; then
     echo -e "${YELLOW}Foundational file changed — running full unit test suite.${NC}"
     echo ""
     exec "$TESTS_DIR/run_unit_tests.sh"
-fi
-
-# Handle Go tests if igor files changed
-RUN_GO_TESTS=false
-if [[ -v "TEST_FILES_MAP[GO_TEST]" ]]; then
-    RUN_GO_TESTS=true
-    unset 'TEST_FILES_MAP[GO_TEST]'
-fi
-
-# Collect deduplicated test files
-TEST_FILES=()
-for tf in "${!TEST_FILES_MAP[@]}"; do
-    # Skip empty keys (defensive - should not happen)
-    [ -z "$tf" ] && continue
-    [ ! -f "$tf" ] && continue
-    TEST_FILES+=("$tf")
-done
-
-# Sort for deterministic order (guard against empty array producing a blank line)
-if [ ${#TEST_FILES[@]} -gt 0 ]; then
-    mapfile -t TEST_FILES < <(printf '%s\n' "${TEST_FILES[@]}" | sort)
 fi
 
 if [ ${#TEST_FILES[@]} -eq 0 ] && [ "$RUN_GO_TESTS" = false ]; then
