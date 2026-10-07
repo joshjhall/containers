@@ -55,6 +55,11 @@ test_exported_empty_project_root_stays_single_scope() {
     # test in the suite.
     seed_workspace
 
+    # A snapshot left by an earlier boot. Without it the "cleared" assertion
+    # below holds whether or not the empty-root branch removes anything.
+    command mkdir -p "$(command dirname "$FS_HEALTH_ENV_FILE")"
+    command echo "PROJECT_ROOT='/stale'" >"$FS_HEALTH_ENV_FILE"
+
     run_fs_health_empty_root "$WS_ROOT" >/dev/null
 
     assert_equals "unset" "$(get_ignorecase_at "$WS_ROOT/repo-a")" \
@@ -62,7 +67,7 @@ test_exported_empty_project_root_stays_single_scope() {
     assert_equals "unset" "$(get_ignorecase_at "$WS_ROOT/repo-b")" \
         "No repo under the workspace should be touched on the empty-path branch"
     assert_file_not_exists "$FS_HEALTH_ENV_FILE" \
-        "The empty path is not a repo, so the run should clear the snapshot"
+        "An empty PROJECT_ROOT should clear a stale snapshot (cron leg off)"
     unseed_workspace
 }
 
