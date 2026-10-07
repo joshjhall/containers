@@ -53,11 +53,28 @@ assert_hook_fails_with_rebuild_hint() {
     fi
 
     # -u BASH_ENV: a container BASH_ENV re-exports PATH and would find cargo.
-    stderr=$(env -u BASH_ENV PATH=/nonexistent /bin/bash -c "$body" 2>&1 >/dev/null) || rc=$?
+    stderr=$(/usr/bin/env -u BASH_ENV PATH=/nonexistent /bin/bash -c "$body" 2>&1 >/dev/null) || rc=$?
 
     assert_equals "1" "$rc" "$hook must fail (not skip or pass) when cargo is missing"
     assert_contains "$stderr" "Rebuild the devcontainer" \
         "$hook must tell the user to rebuild rather than install rustup"
+}
+
+# Inverse: with a (stub) cargo on PATH the guard must stay silent. The rest of
+# the body then fails on its own (no `just` on the stub PATH) — irrelevant here;
+# only the absence of the hint is asserted, so an always-firing guard is caught.
+assert_hook_silent_when_cargo_present() {
+    local hook="$1" body stderr stub_dir
+    body=$(lh_field "$hook" run)
+    stub_dir=$(command mktemp -d)
+    /usr/bin/printf '#!/bin/sh\nexit 0\n' >"$stub_dir/cargo"
+    command chmod +x "$stub_dir/cargo"
+
+    stderr=$(/usr/bin/env -u BASH_ENV PATH="$stub_dir" /bin/bash -c "$body" 2>&1 >/dev/null) || true
+    command rm -rf "$stub_dir"
+
+    assert_not_contains "$stderr" "Rebuild the devcontainer" \
+        "$hook must not print the rebuild hint when cargo is present"
 }
 
 test_cargo_lint_hint() {
@@ -66,6 +83,11 @@ test_cargo_lint_hint() {
 
 test_cargo_test_hint() {
     assert_hook_fails_with_rebuild_hint "cargo-test"
+}
+
+test_cargo_hooks_silent_with_cargo() {
+    assert_hook_silent_when_cargo_present "cargo-lint"
+    assert_hook_silent_when_cargo_present "cargo-test"
 }
 
 # A skip: guard would turn a stale image into a silent pass — the opposite of
@@ -79,6 +101,7 @@ test_cargo_hooks_have_no_skip_guard() {
 
 run_test test_cargo_lint_hint "cargo-lint fails with a rebuild hint when cargo is missing"
 run_test test_cargo_test_hint "cargo-test fails with a rebuild hint when cargo is missing"
+run_test test_cargo_hooks_silent_with_cargo "cargo hooks print no hint when cargo is present"
 run_test test_cargo_hooks_have_no_skip_guard "cargo hooks fail rather than skip"
 
 generate_report

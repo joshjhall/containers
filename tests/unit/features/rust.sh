@@ -533,11 +533,24 @@ test_reconciler_missing_rustup_hint() {
     assert_not_empty "$(command cat "$helper")" "reconciler heredoc extracted from rust.sh"
 
     # -u BASH_ENV: a container BASH_ENV re-exports PATH and would find rustup.
-    env -u BASH_ENV PATH=/nonexistent /bin/bash "$helper" "$TEST_TEMP_DIR" >/dev/null 2>"$stderr_file" || rc=$?
+    /usr/bin/env -u BASH_ENV PATH=/nonexistent /bin/bash "$helper" "$TEST_TEMP_DIR" >/dev/null 2>"$stderr_file" || rc=$?
 
     assert_equals "0" "$rc" "reconciler exits 0 without rustup (startup hook must not block)"
     assert_contains "$(command cat "$stderr_file")" "rebuild the image" \
         "reconciler tells the user to rebuild when rustup is missing"
+
+    # Inverse: with a (stub) rustup present the hint must not appear. No
+    # rust-toolchain file in the project dir, so the helper exits 0 early.
+    local stub_dir="$TEST_TEMP_DIR/stub-bin"
+    command mkdir -p "$stub_dir"
+    /usr/bin/printf '#!/bin/sh\nexit 0\n' >"$stub_dir/rustup"
+    command chmod +x "$stub_dir/rustup"
+    rc=0
+    /usr/bin/env -u BASH_ENV PATH="$stub_dir" /bin/bash "$helper" "$TEST_TEMP_DIR" >/dev/null 2>"$stderr_file" || rc=$?
+
+    assert_equals "0" "$rc" "reconciler exits 0 with rustup present"
+    assert_not_contains "$(command cat "$stderr_file")" "rebuild the image" \
+        "reconciler prints no rebuild hint when rustup is present"
 }
 
 # Run all tests
