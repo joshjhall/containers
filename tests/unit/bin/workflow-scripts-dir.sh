@@ -62,6 +62,14 @@ run_resolver() {
         bash "$SCRIPT"
 }
 
+# Assert the resolver's stderr names $1 as refused — proof the trust gate (not
+# some unrelated rejection, e.g. a missing config.sh) is what turned it away.
+assert_refusing() {
+    local err
+    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$1" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "refusing $1" "stderr names the dir refused for its $2"
+}
+
 # ---------------------------------------------------------------------------
 # 1. Explicit override wins and must be a valid scripts dir.
 # ---------------------------------------------------------------------------
@@ -606,6 +614,7 @@ test_dangling_symlink_refused() {
     command ln -s "$TEST_DIR/does-not-exist" "$d/golem-status.sh"
     run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
     assert_not_equals "0" "$rc" "a dangling symlink inside the dir fails closed"
+    assert_refusing "$d" "dangling symlink"
     teardown
 }
 
@@ -622,12 +631,14 @@ test_nested_writable_entry_refused() {
     rc=0
     run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
     assert_not_equals "0" "$rc" "a 0666 file in a subdirectory is refused"
+    assert_refusing "$d" "0666 nested file"
 
     command chmod 0644 "$d/lib/helper.sh"
     command chmod 0775 "$d/lib"
     rc=0
     run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
     assert_not_equals "0" "$rc" "a group-writable subdirectory is refused"
+    assert_refusing "$d" "group-writable subdirectory"
     teardown
 }
 
@@ -645,6 +656,7 @@ test_scan_depth_boundary() {
     rc=0
     run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
     assert_not_equals "0" "$rc" "a 0666 file at depth 3 is refused"
+    assert_refusing "$d" "0666 file at depth 3"
 
     command chmod 0644 "$d/a/b/at-depth-3.sh"
     local got
@@ -658,6 +670,7 @@ test_scan_depth_boundary() {
     rc=0
     run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
     assert_not_equals "0" "$rc" "an entry beyond the scan depth fails closed"
+    assert_refusing "$d" "entry beyond the scan depth"
     teardown
 }
 
