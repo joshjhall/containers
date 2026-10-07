@@ -48,9 +48,9 @@
 # just as exec-able by another principal, so any entry beneath the candidate
 # (up to 3 levels, symlinks judged by their target) that is foreign-owned or
 # group/world-writable distrusts the whole dir, as does any entry deeper than
-# the scan reaches. /opt/librarian is normalized
-# with `chmod -R go-w` at build; the cache, $CLAUDE_PLUGIN_ROOT, the override,
-# and the dev mount get no such normalization, hence the per-entry check.
+# the scan reaches. /opt/librarian is normalized with `chmod -R go-w` at build;
+# the cache, $CLAUDE_PLUGIN_ROOT, the override, and the dev mount get no such
+# normalization, hence the per-entry check.
 #
 # Usage: workflow-scripts-dir.sh        # prints the dir, or fails with guidance
 #        scripts="$(workflow-scripts-dir.sh)"

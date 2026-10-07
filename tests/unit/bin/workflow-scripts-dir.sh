@@ -485,8 +485,6 @@ test_other_user_owned_dir_refused() {
     teardown
 }
 
-# The cleanup fence itself: it must refuse anything outside the scratch tree
-# BEFORE invoking rm, so it is exercised with no privilege at all.
 # Ownership half of the per-entry rule (#1026): a 0644 (not writable) entry
 # owned by another non-root user inside our own 0755 dir is refused — that user
 # can rewrite the file the justfile is about to exec.
@@ -519,6 +517,8 @@ test_other_user_owned_entry_refused() {
     teardown
 }
 
+# The cleanup fence itself: it must refuse anything outside the scratch tree
+# BEFORE invoking rm, so it is exercised with no privilege at all.
 test_guarded_privileged_rm_refuses_outside_scratch() {
     setup
     local victim="$TEST_DIR/outside-scratch"
