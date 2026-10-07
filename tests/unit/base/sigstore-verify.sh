@@ -254,6 +254,44 @@ test_verify_sigstore_invokes_cosign_bin() {
         "A bare-name cosign (function/PATH) was not invoked"
 }
 
+# Fails closed when cosign-require.sh cannot be sourced: require_cosign is then
+# undefined (127), which the guard treats as failure, so nothing is verified
+# with an unpinned cosign. A copy of sigstore-verify.sh alone in a scratch dir
+# has no sibling cosign-require.sh to find. Skipped on a host whose
+# /tmp/build-scripts/base/ already provides one.
+test_verify_sigstore_fails_closed_without_cosign_require() {
+    if [ -f /tmp/build-scripts/base/cosign-require.sh ]; then
+        skip_test "host /tmp/build-scripts provides cosign-require.sh"
+        return
+    fi
+    local lone="$TEST_TEMP_DIR/lone"
+    command mkdir -p "$lone"
+    command cp "$SOURCE_FILE" "$lone/sigstore-verify.sh"
+    echo "test content" >"$TEST_TEMP_DIR/testfile.tar.gz"
+    echo "fake bundle" >"$TEST_TEMP_DIR/testfile.tar.gz.sigstore"
+
+    local exit_code=0
+    local output
+    # unset -f: this suite's own top-level source exports require_cosign, and
+    # the subshell would otherwise inherit it.
+    output=$(bash -c "
+        unset -f require_cosign
+        _SIGSTORE_VERIFY_LOADED=''
+        _COSIGN_REQUIRE_LOADED=''
+        source '$PROJECT_ROOT/lib/base/logging.sh' 2>/dev/null || true
+        source '$lone/sigstore-verify.sh'
+        cosign() { echo 'Verified OK'; }
+        verify_sigstore_signature '$TEST_TEMP_DIR/testfile.tar.gz' \
+            '$TEST_TEMP_DIR/testfile.tar.gz.sigstore' \
+            'user@example.org' 'https://accounts.google.com'
+    " 2>&1) || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "verify_sigstore_signature fails closed when require_cosign is unavailable"
+    assert_contains "$output" "Sigstore verification unavailable" \
+        "The failure comes from the require_cosign guard"
+}
+
 # ============================================================================
 # download_and_verify_kubectl_sigstore - Rejection Paths
 # ============================================================================
@@ -428,6 +466,7 @@ run_test_with_setup test_verify_sigstore_missing_cert_file "verify_sigstore_sign
 run_test_with_setup test_verify_sigstore_uses_pinned_cosign "verify_sigstore_signature: uses pinned cosign"
 run_test_with_setup test_verify_sigstore_rejects_shadowed_cosign "verify_sigstore_signature: rejects shadowed cosign"
 run_test_with_setup test_verify_sigstore_invokes_cosign_bin "verify_sigstore_signature: invokes COSIGN_BIN"
+run_test_with_setup test_verify_sigstore_fails_closed_without_cosign_require "verify_sigstore_signature: fails closed without cosign-require.sh"
 
 # download_and_verify_kubectl_sigstore rejection paths
 run_test_with_setup test_kubectl_sigstore_cosign_not_installed "kubectl_sigstore: cosign not installed"
