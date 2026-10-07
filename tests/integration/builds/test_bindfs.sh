@@ -93,8 +93,8 @@ test_fuse_conf() {
 #
 # The BINDFS_ENABLED logic moved out of entrypoint.sh into the sourced
 # lib/runtime/lib/setup-bindfs.sh in #108; this test kept grepping the
-# entrypoint and failed from then on, unnoticed because no CI tier runs this
-# suite (#976, #1027). Pin both halves: the module ships with the logic in it,
+# entrypoint and failed from then on, unnoticed because no CI tier ran this
+# suite until #1027 put it on the merge tier (#976). Pin both halves: the module ships with the logic in it,
 # AND the entrypoint sources it — either alone would pass with bindfs dead.
 test_entrypoint_has_bindfs() {
     local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
@@ -154,7 +154,7 @@ test_fuse_cleanup_shared_script_runs() {
 # under a scratch root (via the FUSE_CLEANUP_ROOTS test seam, so no live mount
 # is touched) and requires exit 0, an exact count of 2, AND both files gone.
 # Compared in-container for the substring reason given in
-# test_no_bindfs_without_flag. The walk logic itself, the fuser held-open skip
+# assert_fuse_cleanup_cleans_none. The walk logic itself, the fuser held-open skip
 # and findmnt discovery are covered in tests/unit/runtime/fuse-cleanup.sh; this
 # pins that the binary the image ships is that logic.
 test_fuse_cleanup_sweeps_seeded_files() {
@@ -184,15 +184,24 @@ test_fuse_cleanup_cron_runs() {
 # permanent "FUSE cleanup skipped" warning at boot on every non-bindfs
 # container. Until this test existed, a minimalism pass could add that gate and
 # the whole suite would stay green.
+#
+# IMAGE_TO_TEST_MINIMAL points this at a pre-built image with no bindfs flag
+# (CI passes the published minimal variant, #1027). Without it the test builds
+# one locally, which inside the merge-tier job would be a full extra build.
 test_no_bindfs_without_flag() {
-    local image="test-no-bindfs-$$"
-    echo "Building image without bindfs: $image"
+    if [ -n "${IMAGE_TO_TEST_MINIMAL:-}" ]; then
+        local image="$IMAGE_TO_TEST_MINIMAL"
+        echo "Testing pre-built image without bindfs: $image"
+    else
+        local image="test-no-bindfs-$$"
+        echo "Building image without bindfs: $image"
 
-    # Build minimal container without bindfs
-    assert_build_succeeds "Dockerfile" \
-        --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-no-bindfs \
-        -t "$image"
+        # Build minimal container without bindfs
+        assert_build_succeeds "Dockerfile" \
+            --build-arg PROJECT_PATH=. \
+            --build-arg PROJECT_NAME=test-no-bindfs \
+            -t "$image"
+    fi
 
     # bindfs should NOT be available
     assert_command_in_container "$image" "which bindfs 2>/dev/null || echo not-found" "not-found"

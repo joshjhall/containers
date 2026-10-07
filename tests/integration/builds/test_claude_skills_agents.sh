@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — builds five purpose-specific images (incl. AWS/kubernetes) of its own (#1027)
 # Test Claude Code librarian plugins + build-bound skills installation
 #
 # The general-purpose skills/agents ship as the librarian plugin marketplace,

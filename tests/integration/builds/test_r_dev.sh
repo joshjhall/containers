@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — r-dev variant parked from the merge tier (#508) (#1027)
 # Test r-dev container build
 #
 # This test verifies the R development environment that includes:

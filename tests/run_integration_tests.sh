@@ -98,7 +98,7 @@ test_in_tier() {
         command sed -E 's/^#[[:space:]]*@tier:[[:space:]]*//' || true)
     [ -z "$declared" ] && declared="merge"
 
-    echo "$declared" | command tr ',' '\n' | command tr -d '[:space:]' | command grep -Fxq "$want"
+    echo "$declared" | command tr ',' '\n' | command tr -d '[:blank:]' | command grep -Fxq "$want"
 }
 
 # Find all integration test files (then filter by tier if requested).

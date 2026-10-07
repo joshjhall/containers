@@ -613,8 +613,17 @@ jobs:
           # =====================================================
           - name: minimal
             test: minimal
+          # `extra_suites` (space-separated) runs further suites against the
+          # SAME published image, so a suite covered by an existing variant
+          # gates the merge tier without a new build. Every suite in
+          # tests/integration/builds/ must appear here as `test`/`extra_suites`
+          # or carry an `# @ci:` disposition marker — enforced by
+          # tests/unit/integration-ci-coverage.sh (#1027).
           - name: python-dev
             test: python_dev
+            # python-dev sets INCLUDE_DEV_TOOLS=true, which installs bindfs
+            # and cron (Dockerfile) — no bindfs-specific image needed.
+            extra_suites: bindfs
           - name: node-dev
             test: node_dev
           - name: polyglot
@@ -643,6 +652,26 @@ jobs:
 
           echo "Running integration test for ${{ matrix.variant.name }}..."
           IMAGE_TO_TEST="$IMAGE" ./tests/run_integration_tests.sh ${{ matrix.variant.test }}
+
+      - name: Run extra integration suites
+        if: matrix.variant.extra_suites
+        env:
+          EXTRA_SUITES: ${{ matrix.variant.extra_suites }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          TAG_NAME="${REF_NAME//\//-}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG_NAME}-${{ matrix.variant.name }}"
+          # Suites that also assert the flag-absent case (e.g. bindfs's
+          # test_no_bindfs_without_flag) use the published minimal image
+          # instead of a local build, keeping the job inside its timeout.
+          MINIMAL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG_NAME}-minimal"
+          docker pull "$MINIMAL"
+
+          for suite in $EXTRA_SUITES; do
+            echo "Running integration suite ${suite} against ${IMAGE}..."
+            IMAGE_TO_TEST="$IMAGE" IMAGE_TO_TEST_MINIMAL="$MINIMAL" \
+              ./tests/run_integration_tests.sh "$suite"
+          done
 
       - name: Test shell completions
         run: |

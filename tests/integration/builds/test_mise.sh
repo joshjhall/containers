@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — polyglot ships mise, but test_no_mise_without_flag still builds a local image (#1027)
 # Test mise (polyglot runtime version manager) container build
 #
 # This test verifies that the mise feature:

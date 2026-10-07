@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# @tier: merge,weekly
+# @tier: weekly
+# @ci: scheduled — java-dev variant parked from the merge tier (#508) (#1027)
 # Test java-dev container build
 #
 # This test verifies the Java development environment that includes:

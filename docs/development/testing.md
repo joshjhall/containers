@@ -258,6 +258,11 @@ The test framework is designed to run in CI/CD pipelines:
 - Machine-parseable output in results directory
 - No interactive prompts or manual intervention required
 
+Not every integration suite runs in CI. Which ones do — and the recorded reason
+for each that doesn't (`# @ci:` header marker) — is in
+[CI tiers § Integration suite coverage](../operations/ci-tiers.md#integration-suite-coverage),
+enforced by `tests/unit/integration-ci-coverage.sh`.
+
 ## Debugging Failed Tests
 
 ### Run Single Test with Debug Output
