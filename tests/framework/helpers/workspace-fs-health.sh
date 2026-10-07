@@ -12,6 +12,7 @@
 # Sourced by:
 #   tests/unit/runtime/workspace-fs-health.sh            (ignorecase, symlinks, cron, root re-exec)
 #   tests/unit/runtime/workspace-fs-health-submodules.sh (staleness predicate, submodule traversal)
+#   tests/unit/runtime/workspace-fs-health-scope.sh      (PROJECT_ROOT scope resolution)
 #
 # Source it AFTER framework.sh + init_test_framework — setup() reads
 # TEST_SCRATCH_BASE, which init_test_framework establishes.
@@ -350,6 +351,27 @@ run_fs_health_workspace() {
         export FS_HEALTH_XATTR_PROBE="${FS_HEALTH_XATTR_PROBE:-}"
         { bash "$FS_HEALTH_SCRIPT" >/dev/null; } 2>&1
     )
+}
+
+# A workspace holding two repos plus two directories that are not repos, so
+# assertions against it distinguish "found the repos" from "walked everything".
+# Returns the workspace root via the WS_ROOT global.
+seed_workspace() {
+    WS_ROOT="$TEST_TEMP_DIR/ws"
+    command mkdir -p "$WS_ROOT/plain-dir"
+    make_repo "$WS_ROOT/repo-a"
+    make_repo "$WS_ROOT/repo-b"
+
+    # A directory that cannot be read at all. Discovery must skip it silently
+    # rather than erroring — the run is unattended and must never be fatal.
+    command mkdir -p "$WS_ROOT/unreadable"
+    command chmod 000 "$WS_ROOT/unreadable"
+}
+
+# chmod the unreadable fixture back so teardown's rm -rf can remove it.
+unseed_workspace() {
+    [ -n "${WS_ROOT:-}" ] || return 0
+    command chmod 755 "$WS_ROOT/unreadable" 2>/dev/null || true
 }
 
 # Create tracked symlinks of each shape in the fixture repo.

@@ -351,27 +351,6 @@ test_regular_files_untouched() {
 # and the reporting that makes an empty workspace distinguishable from a healthy
 # one.
 
-# A workspace holding two repos plus two directories that are not repos, so
-# every assertion below distinguishes "found the repos" from "walked everything".
-# Returns the workspace root via the WS_ROOT global.
-seed_workspace() {
-    WS_ROOT="$TEST_TEMP_DIR/ws"
-    command mkdir -p "$WS_ROOT/plain-dir"
-    make_repo "$WS_ROOT/repo-a"
-    make_repo "$WS_ROOT/repo-b"
-
-    # A directory that cannot be read at all. Discovery must skip it silently
-    # rather than erroring — the run is unattended and must never be fatal.
-    command mkdir -p "$WS_ROOT/unreadable"
-    command chmod 000 "$WS_ROOT/unreadable"
-}
-
-# chmod the unreadable fixture back so teardown's rm -rf can remove it.
-unseed_workspace() {
-    [ -n "${WS_ROOT:-}" ] || return 0
-    command chmod 755 "$WS_ROOT/unreadable" 2>/dev/null || true
-}
-
 test_workspace_scan_repairs_every_repo() {
     # THE ISSUE: with WORKING_DIR naming a non-repo, sibling repos that were
     # mounted, decayed, and never looked at.
@@ -1043,34 +1022,6 @@ test_single_scope_symlink_report_stays_relative() {
         "Single scope should not gain a redundant absolute prefix"
 }
 
-test_exported_empty_project_root_stays_single_scope() {
-    # The scope check reads ${PROJECT_ROOT+x} (SET, including empty) rather than
-    # ${PROJECT_ROOT:-} (set AND non-empty), deliberately: an exported-but-empty
-    # PROJECT_ROOT is a caller mistake, and pinning single scope on the empty
-    # path surfaces it. Treating it as unset would instead silently scan the
-    # whole workspace — writing to repos the caller never named.
-    #
-    # Without this test, "simplifying" +x back to :- would pass every other
-    # test in the suite.
-    seed_workspace
-
-    (
-        export PROJECT_ROOT=""
-        export WORKSPACE_ROOT="$WS_ROOT"
-        export FS_CASE_STATE=insensitive
-        export FS_HEALTH_ENV_FILE
-        bash "$FS_HEALTH_SCRIPT"
-    ) >/dev/null 2>&1
-
-    assert_equals "unset" "$(get_ignorecase_at "$WS_ROOT/repo-a")" \
-        "An exported-but-empty PROJECT_ROOT must not widen into a workspace scan"
-    assert_equals "unset" "$(get_ignorecase_at "$WS_ROOT/repo-b")" \
-        "No repo under the workspace should be touched on the empty-path branch"
-    assert_file_not_exists "$FS_HEALTH_ENV_FILE" \
-        "The empty path is not a repo, so the run should clear the snapshot"
-    unseed_workspace
-}
-
 test_workspace_skip_case_check_removes_snapshot() {
     # The opt-out must still disable BOTH legs under the new default scope.
     local ws="$TEST_TEMP_DIR/ws-optout"
@@ -1675,7 +1626,6 @@ run_test_with_setup test_zero_repos_still_writes_snapshot "Zero repos still arms
 run_test_with_setup test_workspace_snapshot_records_empty_project_root "Workspace scope records an empty PROJECT_ROOT"
 run_test_with_setup test_explicit_project_root_restricts_scan "Explicit PROJECT_ROOT restricts the scan to one repo"
 run_test_with_setup test_case_detection_runs_per_repo "Case detection runs per repo"
-run_test_with_setup test_exported_empty_project_root_stays_single_scope "Exported-but-empty PROJECT_ROOT stays single-scope"
 run_test_with_setup test_workspace_scan_does_not_double_scan_nested_worktree "A nested worktree is scanned once, not twice"
 run_test_with_setup test_workspace_scan_does_not_double_scan_submodule "A nested submodule is scanned once, not twice"
 run_test_with_setup test_workspace_scan_dedups_sibling_worktree_either_order "A sibling worktree is deduped regardless of discovery order"
