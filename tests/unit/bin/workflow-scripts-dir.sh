@@ -694,6 +694,21 @@ test_unreadable_subdir_refused() {
     assert_not_equals "0" "$rc" "a subdir the scan cannot read fails closed"
     assert_refusing "$d" "unreadable subdirectory"
     command chmod 0755 "$d/sub" # let teardown's rm -rf descend
+
+    # The depth-4 probe fails closed on its own: a 0000 dir AT depth 3 is listed
+    # (and clean) for the depth-1..3 scan, which never reads it — only the
+    # depth-4 probe must descend into it, so only its error status can refuse.
+    local deep="$TEST_DIR/unreadable-deep"
+    make_scripts_dir "$deep"
+    command mkdir -p "$deep/a/b/locked"
+    command chmod 0755 "$deep/a" "$deep/a/b"
+    command touch "$deep/a/b/locked/hidden.sh"
+    command chmod 0000 "$deep/a/b/locked"
+    rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$deep" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "an unreadable dir at the scan boundary fails closed"
+    assert_refusing "$deep" "unreadable dir at the scan boundary"
+    command chmod 0755 "$deep/a/b/locked"
     teardown
 }
 
