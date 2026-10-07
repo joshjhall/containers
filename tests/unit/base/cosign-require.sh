@@ -98,6 +98,52 @@ MOCK
     " 2>&1
 }
 
+# run_require_cosign_with - Run require_cosign under a caller-built environment
+#
+# The two-cosign and shell-function cases need more than one stub dir or a
+# preamble before the call, which run_require_cosign's three positional modes
+# do not express. Same clean-subshell rules: logging stubbed, PATH replaced.
+#
+# Args:
+#   $1: PATH for the subshell (colon-separated, in lookup order)
+#   $2: value assigned to _COSIGN_BASE_PATH after sourcing
+#   $3: shell code run after sourcing, before require_cosign (may be "")
+#
+# After require_cosign, prints "COSIGN_BIN=<value>" or "COSIGN_BIN unset", so
+# tests can assert the exported contract. Returns require_cosign's exit code.
+run_require_cosign_with() {
+    local path="$1"
+    local base_path="$2"
+    local preamble="${3:-}"
+
+    bash -c "
+        export PATH='$path'
+        _COSIGN_REQUIRE_LOADED=''
+        log_message() { echo \"\$*\"; }
+        log_error() { echo \"\$*\"; }
+        protected_export() { :; }
+
+        source '$SOURCE_FILE'
+        _COSIGN_BASE_PATH='$base_path'
+        $preamble
+        rc=0
+        require_cosign || rc=\$?
+        if [ -n \"\${COSIGN_BIN+set}\" ]; then
+            echo \"COSIGN_BIN=\$COSIGN_BIN\"
+        else
+            echo 'COSIGN_BIN unset'
+        fi
+        exit \$rc
+    " 2>&1
+}
+
+# write_cosign_stub - Create an executable mock cosign at the given path
+write_cosign_stub() {
+    command mkdir -p "$(command dirname "$1")"
+    command printf '#!/usr/bin/env bash\necho cosign mock\n' >"$1"
+    command chmod +x "$1"
+}
+
 # ============================================================================
 # Static Analysis Tests
 # ============================================================================
@@ -184,6 +230,100 @@ test_present_outside_base_returns_one() {
         "require_cosign does not report using the substitute"
 }
 
+# A real PATH-order shadow (#1029): two cosigns exist, the base one at the
+# pinned location and a substitute in a directory earlier on PATH. Unlike
+# test_present_outside_base_returns_one, the pinned binary is really there, so
+# this proves PATH order alone is enough to be rejected. Without the
+# resolved-path check this returns 0.
+test_path_order_shadow_returns_one() {
+    local shadow="$TEST_TEMP_DIR/shadow/cosign"
+    local pinned="$TEST_TEMP_DIR/bin/cosign"
+    write_cosign_stub "$shadow"
+    write_cosign_stub "$pinned"
+
+    local exit_code=0
+    local output
+    output=$(run_require_cosign_with "$TEST_TEMP_DIR/shadow:$TEST_TEMP_DIR/bin" "$pinned") ||
+        exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "require_cosign returns 1 when a substitute precedes the base cosign on PATH (#1029)"
+    assert_contains "$output" "cosign resolved to $shadow, not the base install at $pinned" \
+        "Error names the substitute that shadows the base install"
+    assert_contains "$output" "COSIGN_BIN unset" \
+        "COSIGN_BIN is not exported when the guard fails"
+}
+
+# Control for the shadow test: the same two stubs in the opposite PATH order
+# pass, so the shadow test fails because of order, not because of the stubs.
+test_path_order_base_first_returns_zero() {
+    local pinned="$TEST_TEMP_DIR/bin/cosign"
+    write_cosign_stub "$TEST_TEMP_DIR/shadow/cosign"
+    write_cosign_stub "$pinned"
+
+    local exit_code=0
+    local output
+    output=$(run_require_cosign_with "$TEST_TEMP_DIR/bin:$TEST_TEMP_DIR/shadow" "$pinned") ||
+        exit_code=$?
+
+    assert_equals "0" "$exit_code" \
+        "require_cosign returns 0 when the base cosign comes first on PATH"
+    assert_contains "$output" "COSIGN_BIN=$pinned" \
+        "COSIGN_BIN is exported as the verified absolute path"
+}
+
+# A cosign shell function wins over every PATH entry, and `command -v` then
+# prints the bare name. It must be rejected even with the base binary present.
+test_shell_function_cosign_returns_one() {
+    local pinned="$TEST_TEMP_DIR/bin/cosign"
+    write_cosign_stub "$pinned"
+
+    local exit_code=0
+    local output
+    output=$(run_require_cosign_with "$TEST_TEMP_DIR/bin" "$pinned" \
+        "cosign() { echo impostor; }") || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "require_cosign returns 1 when cosign is a shell function (#1029)"
+    assert_contains "$output" "cosign resolved to cosign, not the base install" \
+        "Error names the function (bare name) as the resolution"
+}
+
+# A symlink at the pinned path passes the string comparison while running
+# whatever it points at. Without the symlink check this returns 0.
+test_symlink_at_pin_returns_one() {
+    local pinned="$TEST_TEMP_DIR/bin/cosign"
+    write_cosign_stub "$TEST_TEMP_DIR/elsewhere/cosign"
+    command ln -s "$TEST_TEMP_DIR/elsewhere/cosign" "$pinned"
+
+    local exit_code=0
+    local output
+    output=$(run_require_cosign_with "$TEST_TEMP_DIR/bin" "$pinned") || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "require_cosign returns 1 when the pinned path is a symlink (#1029)"
+    assert_contains "$output" "cosign at $pinned is a symlink or not a regular file" \
+        "Error names the symlinked pin"
+    assert_contains "$output" "COSIGN_BIN unset" \
+        "COSIGN_BIN is not exported for a symlinked pin"
+}
+
+# A COSIGN_BIN left over from an earlier call (or the environment) must not
+# survive a failed check, or a caller that ignores the return code would still
+# run it. Without the unset at the top of require_cosign this keeps the value.
+test_failure_clears_stale_cosign_bin() {
+    local pinned="$TEST_TEMP_DIR/bin/cosign"
+    write_cosign_stub "$TEST_TEMP_DIR/shadow/cosign"
+    write_cosign_stub "$pinned"
+
+    local output
+    output=$(run_require_cosign_with "$TEST_TEMP_DIR/shadow:$TEST_TEMP_DIR/bin" "$pinned" \
+        "export COSIGN_BIN='$TEST_TEMP_DIR/shadow/cosign'") || true
+
+    assert_contains "$output" "COSIGN_BIN unset" \
+        "A pre-set COSIGN_BIN is cleared when require_cosign fails"
+}
+
 # The pin is assigned unconditionally at source time, so a _COSIGN_BASE_PATH
 # exported by the build environment cannot redirect it to a substitute. With a
 # ${_COSIGN_BASE_PATH:-...} default instead, this returns 0.
@@ -261,6 +401,11 @@ run_test_with_setup test_does_not_reference_sigstore_releases "No sigstore relea
 run_test_with_setup test_present_returns_zero "Present: returns 0 and reports base install"
 run_test_with_setup test_present_outside_base_returns_one "Present outside base: returns 1 (#940)"
 run_test_with_setup test_env_cannot_widen_pin "Env cannot widen the path pin (#940)"
+run_test_with_setup test_path_order_shadow_returns_one "PATH-order shadow: returns 1 (#1029)"
+run_test_with_setup test_path_order_base_first_returns_zero "PATH order, base first: returns 0, exports COSIGN_BIN"
+run_test_with_setup test_shell_function_cosign_returns_one "Shell-function cosign: returns 1 (#1029)"
+run_test_with_setup test_symlink_at_pin_returns_one "Symlink at pin: returns 1 (#1029)"
+run_test_with_setup test_failure_clears_stale_cosign_bin "Failure clears a stale COSIGN_BIN (#1029)"
 run_test_with_setup test_pin_matches_setup_install_target "Pin matches setup.sh install target"
 run_test_with_setup test_absent_returns_one "Absent: returns 1 with actionable error"
 run_test_with_setup test_absent_does_not_create_cosign "Absent: installs nothing"
