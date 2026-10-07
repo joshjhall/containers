@@ -67,6 +67,19 @@ map_to_test() {
             return
             ;;
 
+        # lefthook.yml → every tests/unit/lefthook-*.sh policy suite (#1075).
+        # Globbed rather than listed, so a new lefthook policy suite runs at
+        # push time without another edit here.
+        lefthook.yml)
+            local match
+            for match in "${TESTS_DIR}"/unit/lefthook-*.sh; do
+                if [ -f "$match" ]; then
+                    echo "$match"
+                fi
+            done
+            return
+            ;;
+
         # Test files themselves — run directly
         tests/unit/*.sh)
             if [ -f "${PROJECT_ROOT}/${file}" ]; then
