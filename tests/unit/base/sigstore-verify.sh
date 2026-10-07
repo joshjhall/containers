@@ -257,16 +257,14 @@ test_verify_sigstore_invokes_cosign_bin() {
 # Fails closed when cosign-require.sh cannot be sourced: require_cosign is then
 # undefined (127), which the guard treats as failure, so nothing is verified
 # with an unpinned cosign. A copy of sigstore-verify.sh alone in a scratch dir
-# has no sibling cosign-require.sh to find. Skipped on a host whose
-# /tmp/build-scripts/base/ already provides one.
+# has no sibling cosign-require.sh to find.
 test_verify_sigstore_fails_closed_without_cosign_require() {
-    if [ -f /tmp/build-scripts/base/cosign-require.sh ]; then
-        skip_test "host /tmp/build-scripts provides cosign-require.sh"
-        return
-    fi
     local lone="$TEST_TEMP_DIR/lone"
     command mkdir -p "$lone"
-    command cp "$SOURCE_FILE" "$lone/sigstore-verify.sh"
+    # The scratch copy's build-scripts path points at an empty dir, so neither
+    # source branch can find cosign-require.sh on any host.
+    command sed "s|/tmp/build-scripts/|$TEST_TEMP_DIR/no-build-scripts/|g" \
+        "$SOURCE_FILE" >"$lone/sigstore-verify.sh"
     echo "test content" >"$TEST_TEMP_DIR/testfile.tar.gz"
     echo "fake bundle" >"$TEST_TEMP_DIR/testfile.tar.gz.sigstore"
 
@@ -317,13 +315,12 @@ test_kubectl_sigstore_cosign_not_installed() {
 # The kubectl twin of test_verify_sigstore_fails_closed_without_cosign_require:
 # with cosign-require.sh unsourced the guard fails before any download.
 test_kubectl_sigstore_fails_closed_without_cosign_require() {
-    if [ -f /tmp/build-scripts/base/cosign-require.sh ]; then
-        skip_test "host /tmp/build-scripts provides cosign-require.sh"
-        return
-    fi
     local lone="$TEST_TEMP_DIR/lone"
     command mkdir -p "$lone"
-    command cp "$SOURCE_FILE" "$lone/sigstore-verify.sh"
+    # The scratch copy's build-scripts path points at an empty dir, so neither
+    # source branch can find cosign-require.sh on any host.
+    command sed "s|/tmp/build-scripts/|$TEST_TEMP_DIR/no-build-scripts/|g" \
+        "$SOURCE_FILE" >"$lone/sigstore-verify.sh"
     write_curl_stub "echo CURL_CALLED"
 
     local exit_code=0
