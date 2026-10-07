@@ -184,10 +184,26 @@ pre-commit:
     # duplicate the compile these two hooks already perform. If `cargo-lint`
     # is ever scoped to a subset of crates, restore explicit stibbons build
     # coverage here so this AC does not silently regress.
+    #
+    # Unlike the optional tools below (#831), cargo-lint and cargo-test have
+    # NO `skip:` guard: Rust is required in this repo, so a missing cargo
+    # must fail rather than let unlinted/untested Rust through. A missing
+    # cargo almost always means the image is stale relative to
+    # .devcontainer/docker-compose.yml, so the run: body fails with a rebuild
+    # hint instead of a bare "command not found" (#1060).
 
     cargo-lint:
       glob: "{crates/**/*.rs,.rustfmt.toml,Cargo.toml}"
       run: |
+        # cargo missing means a stale image, not a skippable optional tool:
+        # print the rebuild hint and FAIL (#1060). See the note above cargo-lint.
+        if ! command -v cargo >/dev/null 2>&1; then
+          /usr/bin/printf '%s\n' \
+            "cargo not found: this image was built without the Rust feature (stale image?)." \
+            "Rebuild the devcontainer (docker-compose.yml sets INCLUDE_RUST_DEV=true) rather than installing rustup by hand." \
+            "See docs/troubleshooting/feature-specific-issues.md" >&2
+          exit 1
+        fi
         crates=$(/usr/bin/printf '%s\n' {staged_files} \
           | /usr/bin/grep '^crates/' \
           | /usr/bin/cut -d/ -f2 \
@@ -271,6 +287,15 @@ pre-push:
     cargo-test:
       glob: "{crates/**/*.rs,Cargo.toml}"
       run: |
+        # cargo missing means a stale image, not a skippable optional tool:
+        # print the rebuild hint and FAIL (#1060). See the note above cargo-lint.
+        if ! command -v cargo >/dev/null 2>&1; then
+          /usr/bin/printf '%s\n' \
+            "cargo not found: this image was built without the Rust feature (stale image?)." \
+            "Rebuild the devcontainer (docker-compose.yml sets INCLUDE_RUST_DEV=true) rather than installing rustup by hand." \
+            "See docs/troubleshooting/feature-specific-issues.md" >&2
+          exit 1
+        fi
         crates=$(/usr/bin/printf '%s\n' {push_files} \
           | /usr/bin/grep '^crates/' \
           | /usr/bin/cut -d/ -f2 \

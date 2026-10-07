@@ -304,7 +304,11 @@ if [ "${#components[@]}" -eq 0 ]; then
     components=(rust-src rust-analyzer clippy rustfmt)
 fi
 
+# No rustup means the toolchain is missing from this container — almost always
+# a stale image or an emptied rustup volume. Say so (the fix is a rebuild, not a
+# hand-run rustup; #1060), but still exit 0: a startup hook must never block.
 if ! command -v rustup >/dev/null 2>&1; then
+    command echo "rust-ensure-pinned-components: rustup not found — Rust toolchain missing from this container; rebuild the image rather than installing rustup by hand." >&2
     exit 0
 fi
 
