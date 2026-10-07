@@ -7,7 +7,8 @@
 # resolution order (override > CLAUDE_PLUGIN_ROOT > /opt/librarian > newest
 # installed cache > dev mount), the "must actually contain config.sh" validity
 # rule, and the #667/#1020 trust rule (owned by root or the invoking user, never
-# group/world-writable) are the contract these tests pin.
+# group/world-writable — for the dir AND every entry in it, #1026) are the
+# contract these tests pin.
 
 set -euo pipefail
 
@@ -34,12 +35,14 @@ teardown() {
 }
 
 # Make $1 look like a real bundled scripts dir (config.sh is the validity marker).
-# chmod 0755 explicitly so a group-writable CI umask can't leave the dir
-# group/world-writable and trip the #667 trust gate (which refuses such dirs).
+# chmod 0755/0644 explicitly so a group-writable CI umask can't leave the dir or
+# config.sh group/world-writable and trip the #667/#1026 trust gate (which
+# refuses such dirs, and dirs holding such entries).
 make_scripts_dir() {
     command mkdir -p "$1"
     command chmod 0755 "$1"
     command touch "$1/config.sh"
+    command chmod 0644 "$1/config.sh"
 }
 
 # Run the resolver with a clean, fully-controlled environment so a real
@@ -57,6 +60,14 @@ run_resolver() {
         WORKFLOW_OPT_LIBRARIAN="$TEST_DIR/no-opt-librarian" \
         "$@" \
         bash "$SCRIPT"
+}
+
+# Assert the resolver's stderr names $1 as refused — proof the trust gate (not
+# some unrelated rejection, e.g. a missing config.sh) is what turned it away.
+assert_refusing() {
+    local err
+    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$1" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "refusing $1" "stderr names the dir refused for its $2"
 }
 
 # ---------------------------------------------------------------------------
@@ -482,6 +493,38 @@ test_other_user_owned_dir_refused() {
     teardown
 }
 
+# Ownership half of the per-entry rule (#1026): a 0644 (not writable) entry
+# owned by another non-root user inside our own 0755 dir is refused — that user
+# can rewrite the file the justfile is about to exec.
+test_other_user_owned_entry_refused() {
+    setup
+    if ! have_root; then
+        skip_test "needs a root runner or passwordless sudo to create another user's entry"
+        teardown
+        return 0
+    fi
+    local other
+    if /usr/bin/id nobody >/dev/null 2>&1 && [ "$(/usr/bin/id -u nobody)" != "$(/usr/bin/id -u)" ]; then
+        other="$(/usr/bin/id -u nobody):$(/usr/bin/id -g nobody)"
+    else
+        skip_test "no 'nobody' account distinct from the invoking user"
+        teardown
+        return 0
+    fi
+    local fixture rc=0 err
+    command mkdir -p "$TEST_SCRATCH_BASE"
+    fixture="$(command mktemp -d "$TEST_SCRATCH_BASE/wsd-entry.XXXXXX")"
+    command chmod 0755 "$fixture"
+    make_scripts_dir "$fixture/scripts"
+    "${as_root[@]}" /usr/bin/chown "$other" "$fixture/scripts/config.sh"
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a 0644 entry owned by another non-root user is refused"
+    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$fixture/scripts" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "refusing $fixture/scripts" "stderr names the dir refused for its foreign-owned entry"
+    guarded_privileged_rm "$fixture"
+    teardown
+}
+
 # The cleanup fence itself: it must refuse anything outside the scratch tree
 # BEFORE invoking rm, so it is exercised with no privilege at all.
 test_guarded_privileged_rm_refuses_outside_scratch() {
@@ -502,6 +545,208 @@ test_guarded_privileged_rm_refuses_outside_scratch() {
     else
         fail_test "guarded_privileged_rm deleted a directory outside the scratch base"
     fi
+    teardown
+}
+
+# ---------------------------------------------------------------------------
+# 4j. The trust gate covers entries INSIDE the dir (#1026): a trusted 0755 dir
+#     holding a group/world-writable config.sh or sibling script is refused with
+#     a visible warning — the justfile would exec that writable file.
+# ---------------------------------------------------------------------------
+test_writable_config_refused() {
+    setup
+    local d="$TEST_DIR/writable-config" mode rc err
+    make_scripts_dir "$d"
+    for mode in 0666 0664; do
+        command chmod "$mode" "$d/config.sh"
+        rc=0
+        run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+        assert_not_equals "0" "$rc" "0755 dir with a $mode config.sh is refused"
+        err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$d" 2>&1 >/dev/null || true)"
+        assert_contains "$err" "refusing $d" "stderr names the dir refused for its $mode config.sh"
+    done
+    teardown
+}
+
+test_writable_sibling_script_refused() {
+    setup
+    local d="$TEST_DIR/writable-sibling" rc=0 err
+    make_scripts_dir "$d"
+    command touch "$d/golem-status.sh"
+    command chmod 0775 "$d/golem-status.sh" # group-writable exec'd sibling
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "0755 dir with a 0775 sibling script is refused"
+    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$d" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "refusing $d" "stderr names the dir refused for its writable sibling"
+    teardown
+}
+
+# A symlink inode is always 0777 on Linux, so the gate must judge the TARGET:
+# a link to a world-writable file outside the dir is refused.
+test_symlink_to_writable_target_refused() {
+    setup
+    local d="$TEST_DIR/symlinked" target="$TEST_DIR/outside-config.sh" rc=0 err
+    command mkdir -p "$d"
+    command chmod 0755 "$d"
+    command touch "$target"
+    command chmod 0666 "$target"
+    command ln -s "$target" "$d/config.sh"
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "config.sh symlinked to a writable file is refused"
+    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$d" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "refusing $d" "stderr names the dir refused for its symlinked writable config.sh"
+
+    # ...while a link to a SAFE (0644, ours) target leaves the dir trusted —
+    # judging the target must not mean refusing every symlink.
+    command chmod 0644 "$target"
+    local got
+    got="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$d")"
+    assert_equals "$d" "$got" "config.sh symlinked to a safe file is still trusted"
+    teardown
+}
+
+# A dangling link can't be judged by its target, so `find -L` reports the link
+# inode itself (0777) and the dir is refused: the gate fails closed.
+test_dangling_symlink_refused() {
+    setup
+    local d="$TEST_DIR/dangling" rc=0
+    make_scripts_dir "$d"
+    command ln -s "$TEST_DIR/does-not-exist" "$d/golem-status.sh"
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a dangling symlink inside the dir fails closed"
+    assert_refusing "$d" "dangling symlink"
+    teardown
+}
+
+# The entry scan is recursive, not depth-1 only: a writable file inside a
+# subdirectory (depth 2) or a group-writable subdirectory refuses the dir.
+test_nested_writable_entry_refused() {
+    setup
+    local d="$TEST_DIR/nested" rc
+    make_scripts_dir "$d"
+    command mkdir -p "$d/lib"
+    command chmod 0755 "$d/lib"
+    command touch "$d/lib/helper.sh"
+    command chmod 0666 "$d/lib/helper.sh"
+    rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a 0666 file in a subdirectory is refused"
+    assert_refusing "$d" "0666 nested file"
+
+    command chmod 0644 "$d/lib/helper.sh"
+    command chmod 0775 "$d/lib"
+    rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a group-writable subdirectory is refused"
+    assert_refusing "$d" "group-writable subdirectory"
+    teardown
+}
+
+# The scan depth is pinned: a writable file at depth 3 (the deepest level
+# examined) is refused, and ANY entry at depth 4 refuses the dir even when it is
+# safe — the scan never examined it, so it cannot be vouched for.
+test_scan_depth_boundary() {
+    setup
+    local d="$TEST_DIR/deep" rc
+    make_scripts_dir "$d"
+    command mkdir -p "$d/a/b"
+    command chmod 0755 "$d/a" "$d/a/b"
+    command touch "$d/a/b/at-depth-3.sh"
+    command chmod 0666 "$d/a/b/at-depth-3.sh"
+    rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a 0666 file at depth 3 is refused"
+    assert_refusing "$d" "0666 file at depth 3"
+
+    command chmod 0644 "$d/a/b/at-depth-3.sh"
+    local got
+    got="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$d")"
+    assert_equals "$d" "$got" "a safe tree exactly 3 levels deep is trusted"
+
+    command mkdir -p "$d/a/b/c"
+    command chmod 0755 "$d/a/b/c"
+    command touch "$d/a/b/c/at-depth-4.sh"
+    command chmod 0644 "$d/a/b/c/at-depth-4.sh"
+    rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "an entry beyond the scan depth fails closed"
+    assert_refusing "$d" "entry beyond the scan depth"
+    teardown
+}
+
+# A find error fails CLOSED: a 0000 subdir hides a 0666 file from the scan, and
+# find exits non-zero — that unexamined entry must not be trusted by default.
+# (Root reads through 0000, so the fixture cannot hide anything there.)
+test_unreadable_subdir_refused() {
+    setup
+    if [ "$(/usr/bin/id -u)" = "0" ]; then
+        skip_test "running as root: a 0000 subdir is still readable, nothing is hidden"
+        teardown
+        return 0
+    fi
+    local d="$TEST_DIR/unreadable" rc=0
+    make_scripts_dir "$d"
+    command mkdir -p "$d/sub"
+    command touch "$d/sub/hidden.sh"
+    command chmod 0666 "$d/sub/hidden.sh"
+    command chmod 0000 "$d/sub"
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a subdir the scan cannot read fails closed"
+    assert_refusing "$d" "unreadable subdirectory"
+    command chmod 0755 "$d/sub" # let teardown's rm -rf descend
+
+    # The depth-4 probe fails closed on its own: a 0000 dir AT depth 3 is listed
+    # (and clean) for the depth-1..3 scan, which never reads it — only the
+    # depth-4 probe must descend into it, so only its error status can refuse.
+    local deep="$TEST_DIR/unreadable-deep"
+    make_scripts_dir "$deep"
+    command mkdir -p "$deep/a/b/locked"
+    command chmod 0755 "$deep/a" "$deep/a/b"
+    command touch "$deep/a/b/locked/hidden.sh"
+    command chmod 0000 "$deep/a/b/locked"
+    rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$deep" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "an unreadable dir at the scan boundary fails closed"
+    assert_refusing "$deep" "unreadable dir at the scan boundary"
+    command chmod 0755 "$deep/a/b/locked"
+    teardown
+}
+
+# Writable entry ⇒ fall through, not hard-fail: a plugin root whose config.sh is
+# world-writable is skipped and a trusted installed-cache dir still wins.
+test_writable_entry_falls_through_to_trusted() {
+    setup
+    local home="$TEST_DIR/home-we"
+    local base="$home/.claude/plugins/cache/librarian/workflow"
+    make_scripts_dir "$base/0.4.0/scripts" # trusted
+
+    local root="$TEST_DIR/plugin-we"
+    make_scripts_dir "$root/scripts"
+    command chmod 0666 "$root/scripts/config.sh" # dir is 0755, entry is not
+
+    local got
+    got="$(env -i PATH="$PATH" WORKFLOW_OPT_LIBRARIAN="$TEST_DIR/no-opt-librarian" HOME="$home" \
+        CLAUDE_PLUGIN_ROOT="$root" \
+        WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" bash "$SCRIPT")"
+    assert_equals "$base/0.4.0/scripts" "$got" \
+        "plugin-root with a writable config.sh is skipped for the trusted cache"
+    teardown
+}
+
+# Guard against over-refusal: safe entries (0644 config, 0755 scripts, a 0755
+# subdir with a 0644 file) leave a trusted dir trusted.
+test_trusted_dir_with_safe_entries_accepted() {
+    setup
+    local d="$TEST_DIR/safe-entries" got
+    make_scripts_dir "$d"
+    command touch "$d/golem-status.sh"
+    command chmod 0755 "$d/golem-status.sh"
+    command mkdir -p "$d/lib"
+    command chmod 0755 "$d/lib"
+    command touch "$d/lib/helper.sh"
+    command chmod 0644 "$d/lib/helper.sh"
+    got="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$d")"
+    assert_equals "$d" "$got" "a 0755 dir with only safe entries is still trusted"
     teardown
 }
 
@@ -534,6 +779,15 @@ run_test test_world_writable_override_refused
 run_test test_distrusted_source_falls_through_to_trusted
 run_test test_installed_cache_skips_untrusted_version
 run_test test_untrusted_dev_mount_refused
+run_test test_writable_config_refused
+run_test test_writable_sibling_script_refused
+run_test test_symlink_to_writable_target_refused
+run_test test_dangling_symlink_refused
+run_test test_nested_writable_entry_refused
+run_test test_scan_depth_boundary
+run_test test_unreadable_subdir_refused
+run_test test_writable_entry_falls_through_to_trusted
+run_test test_trusted_dir_with_safe_entries_accepted
 run_test test_opt_librarian_resolves
 run_test test_opt_librarian_ranks_between_plugin_root_and_cache
 run_test test_distrusted_opt_librarian_falls_through_to_cache
@@ -541,6 +795,7 @@ run_test test_opt_librarian_default_matches_build_install
 run_test test_root_owned_dir_accepted
 run_test test_root_owned_writable_refused
 run_test test_other_user_owned_dir_refused
+run_test test_other_user_owned_entry_refused
 run_test test_guarded_privileged_rm_refuses_outside_scratch
 run_test test_not_found
 

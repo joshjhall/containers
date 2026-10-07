@@ -43,6 +43,15 @@
 # still wins (a trusted lower-priority dir beats an untrusted higher-priority
 # one).
 #
+# The gate also covers what is INSIDE the dir (#1026): a 0755 dir holding a
+# 0666 config.sh, a 0775 sibling script, or a symlink to a writable file is
+# just as exec-able by another principal, so any entry beneath the candidate
+# (up to 3 levels, symlinks judged by their target) that is foreign-owned or
+# group/world-writable distrusts the whole dir, as does any entry deeper than
+# the scan reaches. /opt/librarian is normalized with `chmod -R go-w` at build;
+# the cache, $CLAUDE_PLUGIN_ROOT, the override, and the dev mount get no such
+# normalization, hence the per-entry check.
+#
 # Usage: workflow-scripts-dir.sh        # prints the dir, or fails with guidance
 #        scripts="$(workflow-scripts-dir.sh)"
 set -euo pipefail
@@ -60,15 +69,33 @@ is_scripts_dir() {
 # `stat`'s formatting flags differ (`-c` GNU vs `-f` BSD), while these `find`
 # primitives are common to GNU/BSD/busybox. `-perm -0020`/`-perm -0002` match
 # when the group-/other-write bit is set; a match means "writable" ⇒ distrusted.
+# The same rule is then applied to every entry beneath the dir (#1026).
 is_trusted_dir() {
-    local dir="${1:-}" owner
+    local dir="${1:-}" owner hits
     [ -n "$dir" ] && [ -d "$dir" ] || return 1
     owner="$(/usr/bin/id -un)"
     # Owned by root or by us? (`-user 0` takes the numeric uid, so it holds even
     # where root's account name differs.)
     [ -n "$(/usr/bin/find "$dir" -maxdepth 0 \( -user 0 -o -user "$owner" \) 2>/dev/null)" ] || return 1
     # Group- or world-writable? (any match ⇒ not trusted)
-    [ -z "$(/usr/bin/find "$dir" -maxdepth 0 \( -perm -0020 -o -perm -0002 \) 2>/dev/null)" ]
+    [ -z "$(/usr/bin/find "$dir" -maxdepth 0 \( -perm -0020 -o -perm -0002 \) 2>/dev/null)" ] || return 1
+    # Any entry beneath it foreign-owned or group/world-writable? (#1026) `-L`
+    # judges a symlink by its target — a Linux symlink inode is always 0777, and
+    # the target is what gets exec'd. A dangling link is reported as the link
+    # itself, matches -perm -0002, and is refused: fails closed. Depth 3 covers
+    # the (flat, today) scripts tree while keeping a large dev mount cheap.
+    # find's exit status is checked, not just its output: an unreadable subdir
+    # makes find skip what it cannot see and exit non-zero, and treating that
+    # empty output as "clean" would fail OPEN on exactly the unexamined entries.
+    # (No `| head` here — it would mask that status.)
+    hits="$(/usr/bin/find -L "$dir" -mindepth 1 -maxdepth 3 \
+        \( ! \( -user 0 -o -user "$owner" \) -o -perm -0020 -o -perm -0002 \) \
+        -print 2>/dev/null)" || return 1
+    [ -z "$hits" ] || return 1
+    # ...and nothing beyond that depth, so an entry the scan never examined can
+    # never be trusted by default: a deeper tree fails closed, not open.
+    hits="$(/usr/bin/find -L "$dir" -mindepth 4 -maxdepth 4 -print 2>/dev/null)" || return 1
+    [ -z "$hits" ]
 }
 
 # Accept a candidate only when it both holds the bundled scripts AND is trusted.
@@ -78,7 +105,7 @@ accept() {
     local dir="${1:-}"
     is_scripts_dir "$dir" || return 1
     if ! is_trusted_dir "$dir"; then
-        command echo "workflow-scripts-dir: refusing $dir — not owned by root or $(/usr/bin/id -un), or is group/world-writable; skipping (#667)." >&2
+        command echo "workflow-scripts-dir: refusing $dir — not owned by root or $(/usr/bin/id -un), or it (or an entry in it) is foreign-owned or group/world-writable, or it nests deeper than 3 levels; skipping (#667/#1026)." >&2
         return 1
     fi
     return 0
@@ -140,6 +167,6 @@ fi
 command echo "workflow-scripts-dir: could not locate a trusted librarian 'workflow' plugin scripts dir." >&2
 command echo "  Looked in: \$WORKFLOW_SCRIPTS_DIR, \$CLAUDE_PLUGIN_ROOT/scripts, $opt_librarian," >&2
 command echo "  $cache_base/*/scripts, and $dev_mount." >&2
-command echo "  A candidate must contain config.sh AND be owned by root or $(/usr/bin/id -un) and not group/world-writable (#667)." >&2
+command echo "  A candidate must contain config.sh AND be owned by root or $(/usr/bin/id -un) and not group/world-writable — the dir and every entry in it, nested at most 3 levels deep (#667/#1026)." >&2
 command echo "  Install the librarian marketplace (see docs/claude-code/) or set WORKFLOW_SCRIPTS_DIR." >&2
 exit 1
