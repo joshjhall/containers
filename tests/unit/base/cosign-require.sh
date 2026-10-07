@@ -308,6 +308,26 @@ test_symlink_at_pin_returns_one() {
         "COSIGN_BIN is not exported for a symlinked pin"
 }
 
+# The other half of the pin check: a non-symlink that is not a regular file. A
+# FIFO marked executable resolves through `command -v` like a binary would, so
+# it reaches the check. Without the `! -f` clause this returns 0.
+test_non_regular_file_at_pin_returns_one() {
+    local pinned="$TEST_TEMP_DIR/bin/cosign"
+    command mkfifo "$pinned"
+    command chmod +x "$pinned"
+
+    local exit_code=0
+    local output
+    output=$(run_require_cosign_with "$TEST_TEMP_DIR/bin" "$pinned") || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "require_cosign returns 1 when the pinned path is not a regular file (#1029)"
+    assert_contains "$output" "cosign at $pinned is a symlink or not a regular file" \
+        "Error names the non-regular pin"
+    assert_contains "$output" "COSIGN_BIN unset" \
+        "COSIGN_BIN is not exported for a non-regular pin"
+}
+
 # A COSIGN_BIN left over from an earlier call (or the environment) must not
 # survive a failed check, or a caller that ignores the return code would still
 # run it. Without the unset at the top of require_cosign this keeps the value.
@@ -405,6 +425,7 @@ run_test_with_setup test_path_order_shadow_returns_one "PATH-order shadow: retur
 run_test_with_setup test_path_order_base_first_returns_zero "PATH order, base first: returns 0, exports COSIGN_BIN"
 run_test_with_setup test_shell_function_cosign_returns_one "Shell-function cosign: returns 1 (#1029)"
 run_test_with_setup test_symlink_at_pin_returns_one "Symlink at pin: returns 1 (#1029)"
+run_test_with_setup test_non_regular_file_at_pin_returns_one "Non-regular file at pin: returns 1 (#1029)"
 run_test_with_setup test_failure_clears_stale_cosign_bin "Failure clears a stale COSIGN_BIN (#1029)"
 run_test_with_setup test_pin_matches_setup_install_target "Pin matches setup.sh install target"
 run_test_with_setup test_absent_returns_one "Absent: returns 1 with actionable error"
