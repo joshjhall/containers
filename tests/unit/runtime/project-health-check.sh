@@ -112,6 +112,60 @@ test_skip_when_no_git_dir() {
     assert_file_not_exists "$PROJECT_ROOT/.gitignore" "Should not create .gitignore without .git/"
 }
 
+# Run the health check from inside $1 with PROJECT_ROOT either exported empty
+# ("empty") or unset ("unset"), so the $PWD fallback is what is exercised.
+# HEALTH_CHECK_SCRIPT is relative, so it is resolved before the cd.
+# Prints stderr, then a final "rc=<status>" line so callers can assert the run
+# was not fatal. Args: $1 = working directory, $2 = empty|unset
+run_health_check_from_pwd() {
+    local script
+    script="$(cd "$(dirname "$HEALTH_CHECK_SCRIPT")" && pwd)/$(basename "$HEALTH_CHECK_SCRIPT")"
+    (
+        command cd "$1" || exit 1
+        if [ "$2" = "empty" ]; then
+            export PROJECT_ROOT=""
+        else
+            unset PROJECT_ROOT
+        fi
+        export ENABLED_FEATURES_FILE
+        export SKIP_PROJECT_HEALTH_CHECK=false
+        export HAVE_BINDFS=false
+        unset HAVE_DEV_TOOLS 2>/dev/null || true
+        # bash, not source: the script's own `exit` would end this subshell
+        # before the status line below could be printed.
+        local rc=0
+        { bash "$script" >/dev/null; } 2>&1 || rc=$?
+        command echo "rc=${rc}"
+    )
+}
+
+test_empty_project_root_skips_and_reports() {
+    # Exported-but-empty PROJECT_ROOT is a caller mistake (issue #917). It must
+    # not widen to $PWD — that would write ignore files into a directory nobody
+    # named — and must say why nothing happened. 42-workspace-fs-health.sh
+    # draws the same set-vs-empty line.
+    local output
+    output=$(run_health_check_from_pwd "$PROJECT_ROOT" empty)
+
+    assert_file_not_exists "$PROJECT_ROOT/.gitignore" \
+        "An empty PROJECT_ROOT must not fall back to \$PWD"
+    assert_contains "$output" "PROJECT_ROOT is set but empty" \
+        "An empty PROJECT_ROOT is reported on stderr (issue #917)"
+    assert_contains "$output" "rc=0" \
+        "An empty PROJECT_ROOT is reported, never fatal to startup"
+}
+
+test_unset_project_root_falls_back_to_pwd() {
+    # The other half of the distinction: unset still means "check \$PWD".
+    local output
+    output=$(run_health_check_from_pwd "$PROJECT_ROOT" unset)
+
+    assert_file_exists "$PROJECT_ROOT/.gitignore" \
+        "An unset PROJECT_ROOT should fall back to \$PWD"
+    assert_not_contains "$output" "set but empty" \
+        "An unset PROJECT_ROOT is not the empty case"
+}
+
 # ============================================================================
 # Gitignore Creation Tests
 # ============================================================================
@@ -313,6 +367,8 @@ test_partial_match_not_false_positive() {
 
 run_test test_skip_when_env_set "Skip when SKIP_PROJECT_HEALTH_CHECK=true"
 run_test test_skip_when_no_git_dir "Skip when no .git/ directory"
+run_test test_empty_project_root_skips_and_reports "Empty PROJECT_ROOT skips and reports (#917)"
+run_test test_unset_project_root_falls_back_to_pwd "Unset PROJECT_ROOT falls back to \$PWD (#917)"
 run_test test_creates_gitignore_when_missing "Creates .gitignore when missing"
 run_test test_appends_to_existing_gitignore "Appends to existing .gitignore"
 run_test test_unconditional_env_entries "Unconditional .env entries"

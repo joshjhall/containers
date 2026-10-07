@@ -177,11 +177,11 @@ test_runtime_mapping_emits_all_siblings() {
     out=$(map_to_test "lib/runtime/42-workspace-fs-health.sh")
 
     # Pin every known sibling by NAME, not a loose count. A bare `count > 1`
-    # would stay green if the glob silently dropped one of the five, which is
+    # would stay green if the glob silently dropped one of the six, which is
     # the same "coverage narrows and nobody notices" failure this arm exists to
-    # prevent. Five suites cover this script today: the split pair (#832), the
-    # pre-existing cron-entry suite, the worktree suite (#882), and the xattr
-    # ELOOP diagnostic suite (#980).
+    # prevent. Six suites cover this script today: the split pair (#832), the
+    # pre-existing cron-entry suite, the worktree suite (#882), the xattr
+    # ELOOP diagnostic suite (#980), and the PROJECT_ROOT scope suite (#917).
     assert_contains "$out" "workspace-fs-health.sh" \
         "the exact-match suite must be included"
     assert_contains "$out" "workspace-fs-health-submodules.sh" \
@@ -192,6 +192,8 @@ test_runtime_mapping_emits_all_siblings() {
         "linked-worktree sibling suite must be included (#882)"
     assert_contains "$out" "workspace-fs-health-xattr.sh" \
         "xattr ELOOP diagnostic sibling suite must be included (#980)"
+    assert_contains "$out" "workspace-fs-health-scope.sh" \
+        "PROJECT_ROOT scope sibling suite must be included (#917)"
 
     # Every emitted path must be a real file — a stale glob would otherwise
     # feed a nonexistent path to the runner.
@@ -202,8 +204,8 @@ test_runtime_mapping_emits_all_siblings() {
         assert_file_exists "$path" "mapped test path must exist: $path"
     done <<<"$out"
 
-    assert_equals "5" "$count" \
-        "exactly the five known workspace-fs-health suites must be mapped"
+    assert_equals "6" "$count" \
+        "exactly the six known workspace-fs-health suites must be mapped"
 }
 
 test_runtime_mapping_keeps_prefixed_suites() {
@@ -300,6 +302,7 @@ test_collection_keeps_each_sibling_suite() {
     assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
 $TESTS_DIR/unit/bin/check-versions.sh
 $TESTS_DIR/unit/runtime/workspace-fs-health-cron-entry.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health-scope.sh
 $TESTS_DIR/unit/runtime/workspace-fs-health-submodules.sh
 $TESTS_DIR/unit/runtime/workspace-fs-health-worktrees.sh
 $TESTS_DIR/unit/runtime/workspace-fs-health-xattr.sh

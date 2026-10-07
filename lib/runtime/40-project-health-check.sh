@@ -18,6 +18,16 @@ fi
 # Configuration
 # ============================================================================
 
+# Unset falls back to $PWD; exported-but-empty is a caller mistake (typically an
+# unresolved compose interpolation) and is reported rather than widened to $PWD,
+# which would write ignore files into a directory nobody named (issue #917).
+# 42-workspace-fs-health.sh draws the same set-vs-empty line via
+# ${PROJECT_ROOT+x}. Unlike 42, this script still checks only ONE root — the
+# multi-repo workspace scan from #828 has not been ported here.
+if [ -n "${PROJECT_ROOT+x}" ] && [ -z "$PROJECT_ROOT" ]; then
+    command echo "[health-check] PROJECT_ROOT is set but empty — skipping (unset it to check \$PWD)" >&2
+    exit 0
+fi
 PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
 ENABLED_FEATURES_FILE="${ENABLED_FEATURES_FILE:-/etc/container/config/enabled-features.conf}"
 COMMENT_MARKER="# Added by devcontainer health check"

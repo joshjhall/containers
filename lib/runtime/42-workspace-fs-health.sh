@@ -172,7 +172,9 @@ fi
 # `${PROJECT_ROOT+x}` (set, including empty) rather than `${PROJECT_ROOT:-}`:
 # an exported-but-empty PROJECT_ROOT is a caller mistake, and treating it as
 # "single scope on the empty path" surfaces that, where treating it as unset
-# would quietly scan the whole workspace instead.
+# would quietly scan the whole workspace instead. The single-scope bail-out
+# reports it on stderr (issue #917). 40-project-health-check.sh shares this
+# set-vs-empty distinction, so one bad env value gets one outcome per boot.
 if [ -n "${PROJECT_ROOT+x}" ]; then
     FS_HEALTH_SCOPE=single
 else
@@ -1417,6 +1419,18 @@ if [ "$FS_HEALTH_SCOPE" = "single" ]; then
     # so — a workspace-scope run that finds no repos writes the snapshot instead
     # (see below), because "no repos under the workspace right now" is not the
     # same claim as "the single root you named is gone".
+    #
+    # An exported-but-empty PROJECT_ROOT takes the same bail-out, but REPORTS
+    # it rather than exiting silently (issue #917): clearing the snapshot turns
+    # both legs off with no output — the shape #828 fixed, reached through an
+    # unresolved compose interpolation instead of an empty WORKING_DIR. Checked
+    # on its own, before the .git test, because "${PROJECT_ROOT}/.git" with an
+    # empty root is /.git, which a repo mounted at / would satisfy.
+    if [ -z "$PROJECT_ROOT" ]; then
+        command echo "$LOG_PREFIX PROJECT_ROOT is set but empty — nothing to inspect (unset it to scan $WORKSPACE_ROOT)" >&2
+        remove_env_snapshot
+        exit 0
+    fi
     if [ ! -e "${PROJECT_ROOT}/.git" ]; then
         remove_env_snapshot
         exit 0
