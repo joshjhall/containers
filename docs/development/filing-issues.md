@@ -287,9 +287,10 @@ them; once labeled, the flag clears automatically on the next run.
 
 The automation depends on the labels already existing in the project. The
 `severity/*`, `effort/*`, and `type/*` taxonomy is created by `stibbons labels
-sync` (or by hand). The `needs-triage` label is GitLab-specific and not owned by
-any skill, so create it by hand — matching the colour used by the GitHub
-counterpart in `.github/workflows/issue-labeler.yml`:
+sync` (or by hand). On GitHub, the `needs-triage` label is created
+automatically by `.github/workflows/issue-labeler.yml` the first time an issue
+needs it. GitLab's `gitlab-triage` has no equivalent create-if-missing step, so
+on GitLab create it by hand — matching the colour the GitHub counterpart uses:
 
 ```bash
 glab label create "needs-triage" --color '#D4C5F9' \
