@@ -73,6 +73,9 @@ pub use containers_common::tooldb::VerificationWarning;
 /// - [`LuggageError::NotImplemented`] for tier 1, and
 ///   [`LuggageError::Catalog`] for a tier outside `1..=4` — the same variants
 ///   [`dispatch`] returns for those tiers.
+/// - [`LuggageError::Catalog`] for a tier-2 entry with no `pinned_checksum` —
+///   the same error [`tier2::verify`] raises, built by the same
+///   [`tier2::require_pin`], so the guard and dispatch cannot disagree about it.
 /// - [`LuggageError::VerificationFailed`] for tier 4 when `require_verified`
 ///   is set. This is a *policy* refusal of a supported tier, not an
 ///   unimplemented one, so it is deliberately not a `NotImplemented`: it maps
@@ -97,13 +100,16 @@ pub fn ensure_supported(
                      REQUIRE_VERIFIED_DOWNLOADS=false"
                 .to_owned(),
         }),
-        // All three are implemented and, at this point, permitted. Tier 4's
-        // *weakness* is not this guard's business — it is surfaced at
-        // verification time as a warning (see `tier4`), not by refusing here.
+        // A tier-2 entry with no pin can never pass, and that is knowable from
+        // the catalog alone — refuse it now rather than after the download.
         // Tier 2 needs no `require_verified` arm: a pinned checksum *is* a
         // verified download, so it satisfies the strict posture rather than
         // being excused from it.
-        2..=4 => Ok(()),
+        2 => tier2::require_pin(tool, version, verification).map(|_| ()),
+        // Both are implemented and, at this point, permitted. Tier 4's
+        // *weakness* is not this guard's business — it is surfaced at
+        // verification time as a warning (see `tier4`), not by refusing here.
+        3..=4 => Ok(()),
         other => Err(unsupported_tier(other)),
     }
 }
@@ -325,9 +331,54 @@ mod tests {
         assert!(matches!(err, LuggageError::Catalog(_)));
     }
 
+    /// A tier-2 entry carrying a pin — what every real tier-2 catalog entry
+    /// looks like. `verification(2)` alone has no pin and is refused.
+    fn pinned_tier_2() -> Verification {
+        Verification {
+            pinned_checksum: Some(super::sha::digest_hex(Some("sha256"), b"pinned").unwrap()),
+            ..verification(2)
+        }
+    }
+
     #[test]
     fn ensure_supported_accepts_tier_2() {
-        ensure_supported("node", "24.0.0", &verification(2), false).unwrap();
+        ensure_supported("node", "24.0.0", &pinned_tier_2(), false).unwrap();
+    }
+
+    /// A pinless tier-2 entry can never pass dispatch, so the guard must refuse
+    /// it before the download — in both postures, since strict mode only ever
+    /// adds refusals.
+    #[test]
+    fn ensure_supported_refuses_tier_2_without_a_pin() {
+        for strict in [false, true] {
+            let err = ensure_supported("node", "24.0.0", &verification(2), strict).unwrap_err();
+            match err {
+                LuggageError::Catalog(ref msg) => {
+                    assert!(msg.contains("pinned_checksum"), "got: {msg}");
+                    assert!(msg.contains("node@24.0.0"), "got: {msg}");
+                }
+                other => panic!("expected Catalog (strict={strict}), got {other:?}"),
+            }
+        }
+    }
+
+    /// The early refusal must be the error dispatch raises for the same entry,
+    /// not a near-copy of it.
+    #[test]
+    fn ensure_supported_refuses_a_pinless_tier_2_exactly_as_dispatch_does() {
+        let v = verification(2);
+        let guard = ensure_supported("node", "24.0.0", &v, false).unwrap_err();
+        let dispatched = dispatch(
+            "node",
+            "24.0.0",
+            "deadbeef",
+            "artifact.tar.gz",
+            &v,
+            &Substitutions::default(),
+            &DeadClient,
+        )
+        .unwrap_err();
+        assert_eq!(guard.to_string(), dispatched.to_string());
     }
 
     /// Strict mode demands verified downloads; a pinned checksum *is* one, so
@@ -337,7 +388,7 @@ mod tests {
     /// with a build that passes.
     #[test]
     fn strict_mode_accepts_tier_2() {
-        ensure_supported("node", "24.0.0", &verification(2), true).unwrap();
+        ensure_supported("node", "24.0.0", &pinned_tier_2(), true).unwrap();
     }
 
     #[test]
@@ -391,11 +442,10 @@ mod tests {
     /// `unsupported_tier`.
     #[test]
     fn ensure_supported_rejects_the_same_tiers_dispatch_does() {
-        // Tier 2 left this set in #849. The guard answers "is this tier
-        // supported", which tier 2 now is; whether a *particular* tier-2 entry
-        // carries a usable pin is a dispatch-time question (see
-        // `tier_2_without_a_pin_is_a_catalog_error`), so the two legitimately
-        // differ there and only the unsupported tiers belong here.
+        // Tier 2 left this set in #849: it is supported, so a pinless tier-2
+        // entry is refused for its missing pin rather than for its tier — that
+        // equivalence is covered by
+        // `ensure_supported_refuses_a_pinless_tier_2_exactly_as_dispatch_does`.
         for tier in [1u8, 9] {
             let v = verification(tier);
             let guard = ensure_supported("rust", "1.95.0", &v, false).unwrap_err();
