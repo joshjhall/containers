@@ -3095,6 +3095,41 @@ test_librarian_grant_handles_malformed_settings() {
     command rm -rf "$tmpdir"
 }
 
+# Test (behavioral): the probe finds the grant but the rewrite fails (the
+# settings dir is read-only, so the .tmp write is refused). The failure branch
+# must warn, leave no .tmp behind, and leave the original file intact — the
+# malformed-JSON case above never reaches this branch because its probe fails.
+test_librarian_grant_revoke_failure_branch() {
+    local tmpdir settings before after out
+    if [ "$(id -u)" -eq 0 ]; then
+        skip_test "root ignores the read-only directory this test relies on"
+        return
+    fi
+    tmpdir=$(command mktemp -d)
+    settings="$tmpdir/settings.json"
+    echo '{"permissions":{"additionalDirectories":["/opt/librarian"]}}' >"$settings"
+    before="$(command cat "$settings")"
+    command chmod a-w "$tmpdir"
+
+    out="$(_run_librarian_grant_block "/opt/librarian" "$settings")"
+    after="$(command cat "$settings")"
+    command chmod u+w "$tmpdir"
+
+    if command grep -q '⚠ could not revoke' <<<"$out"; then
+        pass_test "failed rewrite is reported, not silent"
+    else
+        fail_test "failed rewrite printed no warning: $out"
+    fi
+    if [ ! -f "${settings}.tmp" ]; then
+        pass_test "failed rewrite leaves no .tmp scratch file"
+    else
+        fail_test "failed rewrite left a .tmp scratch file behind"
+    fi
+    assert_equals "$before" "$after" "failed rewrite leaves settings.json intact"
+
+    command rm -rf "$tmpdir"
+}
+
 # Test (behavioral): the two settings.json writers compose. CLAUDE_SETTINGS_FILE
 # is shared by the host-event hook wiring and this revocation; this confirms the
 # revocation's rewrite keeps the hooks the first writer added.
@@ -3341,6 +3376,7 @@ run_test test_librarian_grant_revoked "Librarian grant: a stale grant is revoked
 run_test test_librarian_grant_revoke_preserves_existing "Librarian grant: revocation preserves the user's dirs and rules"
 run_test test_librarian_grant_revoke_noop "Librarian grant: no grant means no write; re-run is a no-op"
 run_test test_librarian_grant_handles_malformed_settings "Librarian grant: malformed settings.json is left intact"
+run_test test_librarian_grant_revoke_failure_branch "Librarian grant: a failed rewrite warns, cleans up, preserves"
 run_test test_librarian_grant_composes_with_host_event_hooks "Librarian grant: revocation composes with the host-event hook writer"
 run_test test_librarian_grant_not_written "Librarian grant: claude-setup never re-adds the grant (#1035)"
 run_test test_default_permissions_has_librarian_read "Librarian grant: DEFAULT_PERMISSIONS reads the real install path"
