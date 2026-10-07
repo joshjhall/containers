@@ -75,8 +75,8 @@ test_ci_pin_meets_floor() {
         "ci.yml GITLEAKS_VERSION ($pin) must be >= $GITLEAKS_FLOOR, or .gitleaks.toml's scoped allowlists are ignored"
 }
 
-# _run_updater <root> <dry_run> — run the real gitleaks updater case against a
-# scratch PROJECT_ROOT, bumping to 99.1.2. Prints the return code.
+# _run_updater <root> <dry_run> [version] — run the real gitleaks updater case
+# against a scratch PROJECT_ROOT (default bump: 99.1.2). Prints the return code.
 _run_updater() {
     local rc=0
     (
@@ -86,7 +86,7 @@ _run_updater() {
         PROJECT_ROOT="$1"
         # shellcheck disable=SC2034 # consumed by update_version()
         DRY_RUN="$2"
-        update_version "gitleaks" "$DEV_VERSION" "99.1.2" "dev-tools.sh"
+        update_version "gitleaks" "$DEV_VERSION" "${3:-99.1.2}" "dev-tools.sh"
     ) >/dev/null 2>&1 || rc=$?
     printf '%s\n' "$rc"
 }
@@ -162,6 +162,22 @@ test_updater_fails_on_unmatched_dev_tools_pin() {
     assert_equals "yes" "$ci_same" "ci.yml must be left untouched when the dev-tools.sh pin cannot be rewritten"
 }
 
+# validate_version lets any suffix through after -/+, and $latest is written
+# into ci.yml's quoted YAML value. Anything but plain X.Y.Z must be refused
+# before either file is touched.
+test_updater_refuses_non_semver_version() {
+    local root rc dev_same=yes ci_same=yes
+    root="$(_scratch_root gitleaks-sync-badver)"
+    rc="$(_run_updater "$root" false '9.9.9-x"y')"
+    command cmp -s "$DEV_TOOLS" "$root/lib/features/dev-tools.sh" || dev_same=no
+    command cmp -s "$CI_WORKFLOW" "$root/.github/workflows/ci.yml" || ci_same=no
+    /bin/rm -rf "$root"
+
+    assert_not_equals "0" "$rc" "update_version gitleaks must refuse a non-X.Y.Z version"
+    assert_equals "yes" "$dev_same" "dev-tools.sh must be untouched after a refused version"
+    assert_equals "yes" "$ci_same" "ci.yml must be untouched after a refused version"
+}
+
 test_updater_dry_run_writes_nothing() {
     local root rc dev_same=yes ci_same=yes
     root="$(_scratch_root gitleaks-sync-dry)"
@@ -200,6 +216,7 @@ run_test test_updater_bumps_both_pins "updater bumps both pins together"
 run_test test_updater_fails_cleanly_without_ci_yml "updater fails before writing when ci.yml is missing"
 run_test test_updater_fails_on_unmatched_ci_pin "updater fails before writing on a reformatted ci.yml pin"
 run_test test_updater_fails_on_unmatched_dev_tools_pin "updater fails before writing on a reformatted dev-tools.sh pin"
+run_test test_updater_refuses_non_semver_version "updater refuses a non-X.Y.Z version before writing"
 run_test test_updater_dry_run_writes_nothing "updater dry run writes nothing"
 
 generate_report

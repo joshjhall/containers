@@ -21,6 +21,13 @@ sync_gitleaks_pins() {
     local script_path="$1" latest="$2"
     local ci="$PROJECT_ROOT/.github/workflows/ci.yml"
 
+    # $latest lands in a sed replacement and a quoted YAML value in ci.yml, so
+    # accept a plain X.Y.Z only (validate_version allows arbitrary suffixes).
+    [[ $latest =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+        echo -e "${RED}    ERROR: refusing non-X.Y.Z gitleaks version '$latest'${NC}" >&2
+        return 1
+    }
+
     # Check both pin lines exist in the shape the seds below expect BEFORE any
     # write, so a missing or reformatted file fails the bump instead of leaving
     # one pin bumped alone (sed exits 0 on no match).
