@@ -71,7 +71,7 @@ is_scripts_dir() {
 # when the group-/other-write bit is set; a match means "writable" ⇒ distrusted.
 # The same rule is then applied to every entry beneath the dir (#1026).
 is_trusted_dir() {
-    local dir="${1:-}" owner
+    local dir="${1:-}" owner hits
     [ -n "$dir" ] && [ -d "$dir" ] || return 1
     owner="$(/usr/bin/id -un)"
     # Owned by root or by us? (`-user 0` takes the numeric uid, so it holds even
@@ -84,12 +84,18 @@ is_trusted_dir() {
     # the target is what gets exec'd. A dangling link is reported as the link
     # itself, matches -perm -0002, and is refused: fails closed. Depth 3 covers
     # the (flat, today) scripts tree while keeping a large dev mount cheap.
-    [ -z "$(/usr/bin/find -L "$dir" -mindepth 1 -maxdepth 3 \
+    # find's exit status is checked, not just its output: an unreadable subdir
+    # makes find skip what it cannot see and exit non-zero, and treating that
+    # empty output as "clean" would fail OPEN on exactly the unexamined entries.
+    # (No `| head` here — it would mask that status.)
+    hits="$(/usr/bin/find -L "$dir" -mindepth 1 -maxdepth 3 \
         \( ! \( -user 0 -o -user "$owner" \) -o -perm -0020 -o -perm -0002 \) \
-        -print 2>/dev/null | /usr/bin/head -n 1)" ] || return 1
+        -print 2>/dev/null)" || return 1
+    [ -z "$hits" ] || return 1
     # ...and nothing beyond that depth, so an entry the scan never examined can
     # never be trusted by default: a deeper tree fails closed, not open.
-    [ -z "$(/usr/bin/find -L "$dir" -mindepth 4 -maxdepth 4 -print 2>/dev/null | /usr/bin/head -n 1)" ]
+    hits="$(/usr/bin/find -L "$dir" -mindepth 4 -maxdepth 4 -print 2>/dev/null)" || return 1
+    [ -z "$hits" ]
 }
 
 # Accept a candidate only when it both holds the bundled scripts AND is trusted.

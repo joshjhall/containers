@@ -674,6 +674,29 @@ test_scan_depth_boundary() {
     teardown
 }
 
+# A find error fails CLOSED: a 0000 subdir hides a 0666 file from the scan, and
+# find exits non-zero — that unexamined entry must not be trusted by default.
+# (Root reads through 0000, so the fixture cannot hide anything there.)
+test_unreadable_subdir_refused() {
+    setup
+    if [ "$(/usr/bin/id -u)" = "0" ]; then
+        skip_test "running as root: a 0000 subdir is still readable, nothing is hidden"
+        teardown
+        return 0
+    fi
+    local d="$TEST_DIR/unreadable" rc=0
+    make_scripts_dir "$d"
+    command mkdir -p "$d/sub"
+    command touch "$d/sub/hidden.sh"
+    command chmod 0666 "$d/sub/hidden.sh"
+    command chmod 0000 "$d/sub"
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "a subdir the scan cannot read fails closed"
+    assert_refusing "$d" "unreadable subdirectory"
+    command chmod 0755 "$d/sub" # let teardown's rm -rf descend
+    teardown
+}
+
 # Writable entry ⇒ fall through, not hard-fail: a plugin root whose config.sh is
 # world-writable is skipped and a trusted installed-cache dir still wins.
 test_writable_entry_falls_through_to_trusted() {
@@ -747,6 +770,7 @@ run_test test_symlink_to_writable_target_refused
 run_test test_dangling_symlink_refused
 run_test test_nested_writable_entry_refused
 run_test test_scan_depth_boundary
+run_test test_unreadable_subdir_refused
 run_test test_writable_entry_falls_through_to_trusted
 run_test test_trusted_dir_with_safe_entries_accepted
 run_test test_opt_librarian_resolves
