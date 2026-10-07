@@ -261,8 +261,12 @@ _cosign_guard_scan_safe() {
             # still runs /usr/bin/x. Drop redirections (operator plus target)
             # from a copy before looking for command position. A target never
             # starts with `(` or a backtick: `<(/usr/bin/x)` is a process
-            # substitution, and its command must stay visible.
+            # substitution, and its command must stay visible. Nor does it
+            # start with `$(` or `"$(`: rewrite that opening to ` (` first, so
+            # the strip stops there and `<$(/usr/bin/x)` stays visible too.
             cp = $0
+            while (match(cp, /(>>?|<|>&|&>)[[:space:]]*"?\$\(/))
+                cp = substr(cp, 1, RSTART - 1) " (" substr(cp, RSTART + RLENGTH)
             gsub(/[0-9]*(>>?|<|>&|&>)[[:space:]]*[^[:space:];|&()`][^[:space:];|&)]*/, " ", cp)
             if ((q == 0 && (!cont || opcont) && cp ~ /^[[:space:]]*["\047]?\//) ||
                 cp ~ /[;&|({!`][[:space:]]*["\047]?\// ||
@@ -522,7 +526,7 @@ test_cosign_guard_scan() {
         'v=$(. /etc/os-release && echo "$V")' 'echo "a # b"' \
         'if [ -f "$(dirname x)/../y.sh" ]; then :; fi' \
         'cmd --exec x' 'is_enabled=1' 'executable=1' 'my_eval_helper x' \
-        'cmd 2>/dev/null --keyring /etc/apt/x' \
+        'cmd 2>/dev/null --keyring /etc/apt/x' 'cat <"$(dirname x)/y"' \
         "cat <<-EOF|	don't|	EOF|# after a here-doc: x >y"; do
         command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
         _cosign_guard_scan_safe "$f" 2>/dev/null
@@ -550,7 +554,8 @@ test_cosign_guard_scan() {
         'x; 2>&1 /usr/bin/x' '</dev/null /usr/bin/x' 'cat <(/usr/bin/x)' \
         'diff <(/usr/bin/x) y' 'tee >(/usr/bin/x)' '>>/tmp/l /usr/bin/x' \
         '&>/dev/null /usr/bin/x' 'a=1 >/dev/null /usr/bin/x' \
-        'if x; then >/dev/null /usr/bin/x; fi'; do
+        'if x; then >/dev/null /usr/bin/x; fi' 'cat <$(/usr/bin/x)' \
+        'cat < "$(/usr/bin/x)"' 'cat <"$(/usr/bin/x)"'; do
         command printf '%s\n' "$case" | command tr '|' '\n' >"$f"
         _cosign_guard_scan_safe "$f" 2>/dev/null
         assert_equals "1" "$?" "refused: $case"
