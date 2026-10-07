@@ -1,29 +1,30 @@
 ---
 name: worktree-rm-blocked-by-held-build-artifacts
-description: "worktree-rm.sh can report \"uncommitted changes\" for an already-deregistered worktree; leftover cargo artifacts resist rm because a rust-analyzer holds them open — find it with lsof +D, do not wait for a restart"
+description: "leftover cargo artifacts in a deregistered worktree resist rm because a rust-analyzer holds them open — find it with lsof +D, do not wait for a restart"
 metadata:
   node_type: memory
   type: project
   originSessionId: 70fff190-ee3f-408b-b8e8-d31247eeaa88
-  modified: 2026-09-04T04:06:41.627Z
+  modified: 2026-10-07T00:00:00.000Z
 ---
 
 Post-merge teardown of a golem worktree can leave `.worktrees/issue-N/` behind
 even after the branch and git registration are gone (observed 2026-08-21,
 PR #795).
 
-Two distinct symptoms, both cosmetic once diagnosed:
+A deregistered leftover is no longer misreported as "has uncommitted changes":
+since librarian#813 (shipped in 0.12.0; present in the current pin)
+`worktree-rm.sh` says "no longer registered as a worktree" and removes the
+leftover itself (#864 is a duplicate of it). What remains is cosmetic once
+diagnosed:
 
-1. `worktree-rm.sh N` prints "has uncommitted changes" when the worktree is
-   *already* deregistered — `git worktree list` doesn't show it and
-   `.git/worktrees/<name>` is absent, so the script's status probe fails
-   (`fatal: not a git repository: (null)`) and is read as dirty. Verify with
-   `git worktree list` + `ls .git/worktrees/` before believing the dirty
-   report; diff the worktree's changed files against merged `origin/main` to
-   confirm nothing unmerged is stranded, then remove the directory directly.
-2. `rm -rf` then fails on `target/debug/**` — either **Bad file descriptor**
-   (EBADF) or `Directory not empty` on a dir holding only `.fuse_hidden*`
-   entries — leaving an artifacts-only shell (~200M).
+**Held-open artifacts.** The script's own leftover removal fails on
+`target/debug/**` — either **Bad file descriptor** (EBADF) or `Directory not
+empty` on a dir holding only `.fuse_hidden*` entries. It then reports
+"cleared leftover directory ... (N entries could not be removed)", says this is
+"expected on the macOS virtiofs mount stack", and may rename the tree aside to
+`.worktrees/.wedged-issue-N-<epoch>-<pid>` (#936), leaving an artifacts-only
+shell (~200M). That "expected" message does **not** rule out a killable holder.
 
    **This is a held-open file, not a filesystem state, and not something to
    wait out.** `.fuse_hidden*` is FUSE's marker for a file that has been
@@ -31,7 +32,7 @@ Two distinct symptoms, both cosmetic once diagnosed:
    the holder does. Diagnose in three steps (observed 2026-08-31, PR #878):
 
    ```bash
-   lsof +D .worktrees/issue-N/target/debug/deps   # names PID + the DEL REG fds
+   lsof +D .worktrees/issue-N/target/debug/deps   # or the .wedged-issue-N-* path that survived
    ls -l /proc/<pid>/cwd                          # confirm it is rooted in the worktree
    kill <pid> <parent-pid>                        # then rm -rf succeeds first try
    ```
@@ -49,8 +50,7 @@ Two distinct symptoms, both cosmetic once diagnosed:
    PID directly. The `/proc/*/cwd` scan is a useful *confirmation* that the
    process belongs to the worktree, not the primary way to find it.
 
-   Filed as a suggested improvement on #864: teardown should name the holding
-   PIDs instead of leaving the operator to find them. Related: [[stale-symlink-attrs-virtiofs]].
+   Teardown still does not name the holding PIDs — find them yourself. Related: [[stale-symlink-attrs-virtiofs]].
 
    **`lsof` clean + deletes still failing is a DIFFERENT symptom — stop, do not
    retry** (observed 2026-09-04, PR #896). When `lsof +D` on the whole worktree
@@ -82,7 +82,7 @@ branch is never pruned**. Confirm with `gh pr view <N> --json state` and delete
 the ref explicitly (`gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>`)
 rather than assuming the flag ran. Related: [[git-env-leak-breaks-worktree-tests]].
 
-**Squash-merge adds a third symptom** (observed 2026-08-27, PR #859). After a
+**Squash-merge symptom** (observed 2026-08-27, PR #859). After a
 squash merge, `git branch -d feature/issue-N` refuses with "not fully merged":
 the branch tip is not an ancestor of the squash commit, by construction. That
 warning carries no information after a squash — confirm the content actually
@@ -107,7 +107,7 @@ survives until restart, and never report "clears on container restart" without
 having done so: it implies an unbounded wait and ~200M pinned, when the real
 remedy is three commands.
 
-**Third shape (2026-10-02, #1000): `worktree-rm.sh` refuses "read unverifiable"
+**Read-unverifiable shape (2026-10-02, #1000): `worktree-rm.sh` refuses "read unverifiable"
 but deregisters anyway.** It printed "Nothing was removed", yet afterwards the
 worktree was gone from `git worktree list` and `.git/worktrees/`, and the local
 branch survived. Trap: `git -C .worktrees/issue-N status` then walks up into the
