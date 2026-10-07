@@ -66,7 +66,8 @@ assert_hook_fails_with_rebuild_hint() {
 assert_hook_silent_when_cargo_present() {
     local hook="$1" body stderr stub_dir
     body=$(lh_field "$hook" run)
-    stub_dir=$(command mktemp -d)
+    command mkdir -p "$TEST_SCRATCH_BASE"
+    stub_dir=$(command mktemp -d -p "$TEST_SCRATCH_BASE")
     /usr/bin/printf '#!/bin/sh\nexit 0\n' >"$stub_dir/cargo"
     command chmod +x "$stub_dir/cargo"
 
