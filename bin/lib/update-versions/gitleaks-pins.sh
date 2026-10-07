@@ -21,8 +21,16 @@ sync_gitleaks_pins() {
     local script_path="$1" latest="$2"
     local ci="$PROJECT_ROOT/.github/workflows/ci.yml"
 
+    # Check before any write, so a missing ci.yml never leaves dev-tools.sh
+    # bumped alone.
+    [ -f "$ci" ] || return 1
+
     sed_inplace "s/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-[^}]*}\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path" || return 1
     sed_inplace "s/^GITLEAKS_VERSION=\"[0-9][^\"]*\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path" || return 1
-    [ -f "$ci" ] || return 1
     sed_inplace "s/^\([[:space:]]*GITLEAKS_VERSION: *\"\)[0-9][^\"]*\"/\1$latest\"/" "$ci" || return 1
+
+    # sed exits 0 when nothing matched, so a reformatted pin line would pass
+    # silently. Confirm the rewrite landed (nothing to confirm on a dry run).
+    [ "${DRY_RUN:-false}" = true ] && return 0
+    command grep -qE "^[[:space:]]*GITLEAKS_VERSION: *\"$latest\"" "$ci"
 }

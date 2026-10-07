@@ -75,27 +75,38 @@ test_ci_pin_meets_floor() {
         "ci.yml GITLEAKS_VERSION ($pin) must be >= $GITLEAKS_FLOOR, or .gitleaks.toml's scoped allowlists are ignored"
 }
 
-# The updater must move both pins, or the first weekly auto-patch that bumps
-# gitleaks red-lights its own branch on the tests above. Run the real gitleaks
-# case against a scratch PROJECT_ROOT holding copies of both files.
-test_updater_bumps_both_pins() {
-    local root="$TEST_SCRATCH_BASE/gitleaks-sync-root"
-    /bin/mkdir -p "$root/lib/features" "$root/.github/workflows"
-    /bin/cp "$DEV_TOOLS" "$root/lib/features/dev-tools.sh"
-    /bin/cp "$CI_WORKFLOW" "$root/.github/workflows/ci.yml"
-
+# _run_updater <root> <dry_run> — run the real gitleaks updater case against a
+# scratch PROJECT_ROOT, bumping to 99.1.2. Prints the return code.
+_run_updater() {
     local rc=0
     (
         source "$PROJECT_ROOT/bin/lib/common.sh"
         source "$PROJECT_ROOT/bin/lib/version-utils.sh"
         source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
-        PROJECT_ROOT="$root"
+        PROJECT_ROOT="$1"
         # shellcheck disable=SC2034 # consumed by update_version()
-        DRY_RUN=false
+        DRY_RUN="$2"
         update_version "gitleaks" "$DEV_VERSION" "99.1.2" "dev-tools.sh"
     ) >/dev/null 2>&1 || rc=$?
+    printf '%s\n' "$rc"
+}
 
-    local dev_after ci_after
+# _scratch_root <name> — copy dev-tools.sh and ci.yml into a fresh scratch
+# PROJECT_ROOT and print its path.
+_scratch_root() {
+    local root="$TEST_SCRATCH_BASE/$1"
+    /bin/mkdir -p "$root/lib/features" "$root/.github/workflows"
+    /bin/cp "$DEV_TOOLS" "$root/lib/features/dev-tools.sh"
+    /bin/cp "$CI_WORKFLOW" "$root/.github/workflows/ci.yml"
+    printf '%s\n' "$root"
+}
+
+# The updater must move both pins, or the first weekly auto-patch that bumps
+# gitleaks red-lights its own branch on the tests above.
+test_updater_bumps_both_pins() {
+    local root rc dev_after ci_after
+    root="$(_scratch_root gitleaks-sync-ok)"
+    rc="$(_run_updater "$root" false)"
     dev_after="$(_dev_tools_version "$root/lib/features/dev-tools.sh")"
     ci_after="$(_ci_pins "$root/.github/workflows/ci.yml" | command head -n 1)"
     /bin/rm -rf "$root"
@@ -103,6 +114,45 @@ test_updater_bumps_both_pins() {
     assert_equals "0" "$rc" "update_version gitleaks must succeed"
     assert_equals "99.1.2" "$dev_after" "updater must bump dev-tools.sh GITLEAKS_VERSION"
     assert_equals "99.1.2" "$ci_after" "updater must bump ci.yml GITLEAKS_VERSION alongside dev-tools.sh"
+}
+
+# A missing ci.yml must fail the bump BEFORE dev-tools.sh is touched, or the
+# auto-patch branch carries a half-applied, divergent pair.
+test_updater_fails_cleanly_without_ci_yml() {
+    local root rc dev_after
+    root="$(_scratch_root gitleaks-sync-noci)"
+    /bin/rm -f "$root/.github/workflows/ci.yml"
+    rc="$(_run_updater "$root" false)"
+    dev_after="$(_dev_tools_version "$root/lib/features/dev-tools.sh")"
+    /bin/rm -rf "$root"
+
+    assert_not_equals "0" "$rc" "update_version gitleaks must fail when ci.yml is missing"
+    assert_equals "$DEV_VERSION" "$dev_after" "dev-tools.sh must be left untouched when ci.yml is missing"
+}
+
+# sed exits 0 on no match, so a reformatted pin line (here: unquoted) must be
+# caught by the post-write check rather than reported as a successful bump.
+test_updater_fails_on_unmatched_ci_pin() {
+    local root rc
+    root="$(_scratch_root gitleaks-sync-reformat)"
+    command sed -i -E 's/(GITLEAKS_VERSION: *)"([^"]*)"/\1\2/' "$root/.github/workflows/ci.yml"
+    rc="$(_run_updater "$root" false)"
+    /bin/rm -rf "$root"
+
+    assert_not_equals "0" "$rc" "update_version gitleaks must fail when the ci.yml pin line did not match"
+}
+
+test_updater_dry_run_writes_nothing() {
+    local root rc dev_same=yes ci_same=yes
+    root="$(_scratch_root gitleaks-sync-dry)"
+    rc="$(_run_updater "$root" true)"
+    command cmp -s "$DEV_TOOLS" "$root/lib/features/dev-tools.sh" || dev_same=no
+    command cmp -s "$CI_WORKFLOW" "$root/.github/workflows/ci.yml" || ci_same=no
+    /bin/rm -rf "$root"
+
+    assert_equals "0" "$rc" "a dry-run gitleaks update must succeed"
+    assert_equals "yes" "$dev_same" "a dry run must leave dev-tools.sh byte-identical"
+    assert_equals "yes" "$ci_same" "a dry run must leave ci.yml byte-identical"
 }
 
 # The pin only works inside the gitleaks-action step's own env block: moved to
@@ -127,5 +177,8 @@ run_test test_ci_pin_is_on_the_gitleaks_step "ci.yml pin sits on the gitleaks-ac
 run_test test_ci_pin_matches_dev_tools "ci.yml pin equals dev-tools.sh default"
 run_test test_ci_pin_meets_floor "ci.yml pin is >= $GITLEAKS_FLOOR"
 run_test test_updater_bumps_both_pins "updater bumps both pins together"
+run_test test_updater_fails_cleanly_without_ci_yml "updater fails before writing when ci.yml is missing"
+run_test test_updater_fails_on_unmatched_ci_pin "updater fails when the ci.yml pin did not match"
+run_test test_updater_dry_run_writes_nothing "updater dry run writes nothing"
 
 generate_report
