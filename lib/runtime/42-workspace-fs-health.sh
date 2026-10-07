@@ -1419,15 +1419,19 @@ if [ "$FS_HEALTH_SCOPE" = "single" ]; then
     # so — a workspace-scope run that finds no repos writes the snapshot instead
     # (see below), because "no repos under the workspace right now" is not the
     # same claim as "the single root you named is gone".
+    #
+    # An exported-but-empty PROJECT_ROOT takes the same bail-out, but REPORTS
+    # it rather than exiting silently (issue #917): clearing the snapshot turns
+    # both legs off with no output — the shape #828 fixed, reached through an
+    # unresolved compose interpolation instead of an empty WORKING_DIR. Checked
+    # on its own, before the .git test, because "${PROJECT_ROOT}/.git" with an
+    # empty root is /.git, which a repo mounted at / would satisfy.
+    if [ -z "$PROJECT_ROOT" ]; then
+        command echo "$LOG_PREFIX PROJECT_ROOT is set but empty — nothing to inspect (unset it to scan $WORKSPACE_ROOT)" >&2
+        remove_env_snapshot
+        exit 0
+    fi
     if [ ! -e "${PROJECT_ROOT}/.git" ]; then
-        # An exported-but-empty PROJECT_ROOT lands here (see scope resolution).
-        # Say so rather than exit silently (issue #917): this branch clears the
-        # snapshot, so without a line here both legs go dead with no output —
-        # the shape #828 fixed, reached through an unresolved compose
-        # interpolation instead of an empty WORKING_DIR.
-        if [ -z "$PROJECT_ROOT" ]; then
-            command echo "$LOG_PREFIX PROJECT_ROOT is set but empty — nothing to inspect (unset it to scan $WORKSPACE_ROOT)" >&2
-        fi
         remove_env_snapshot
         exit 0
     fi
