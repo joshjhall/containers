@@ -107,15 +107,15 @@ test_ci_install_reads_dev_tools_and_verifies() {
 test_ci_scan_follows_install() {
     local install_line scan_line
     install_line="$(command grep -n -- '- name: Install gitleaks' "$CI_WORKFLOW" | command head -n 1 | command cut -d: -f1)"
-    scan_line="$(command grep -n 'gitleaks git ' "$CI_WORKFLOW" | command head -n 1 | command cut -d: -f1)"
+    scan_line="$(command grep -nE '^[[:space:]]*gitleaks git ' "$CI_WORKFLOW" | command head -n 1 | command cut -d: -f1)"
     assert_not_empty "$install_line" "ci.yml must install gitleaks"
     assert_not_empty "$scan_line" "ci.yml must run 'gitleaks git'"
     assert_true "[ ${install_line:-0} -lt ${scan_line:-0} ]" \
         "the gitleaks scan must run after the checksum-verified install"
 }
 
-# _run_updater <root> — run the real gitleaks updater case against a scratch
-# PROJECT_ROOT (bump to 99.1.2). Prints the return code.
+# _run_updater <root> [version] — run the real gitleaks updater case against a
+# scratch PROJECT_ROOT (default bump: 99.1.2). Prints the return code.
 _run_updater() {
     local rc=0
     (
@@ -125,7 +125,7 @@ _run_updater() {
         PROJECT_ROOT="$1"
         # shellcheck disable=SC2034 # consumed by update_version()
         DRY_RUN=false
-        update_version "gitleaks" "$DEV_VERSION" "99.1.2" "dev-tools.sh"
+        update_version "gitleaks" "$DEV_VERSION" "${2:-99.1.2}" "dev-tools.sh"
     ) >/dev/null 2>&1 || rc=$?
     printf '%s\n' "$rc"
 }
@@ -146,6 +146,22 @@ test_updater_bumps_dev_tools_only() {
     assert_equals "yes" "$ci_same" "a gitleaks bump must leave ci.yml byte-identical"
 }
 
+# The version lands in a sed replacement and, via ci.yml's run-time read, the
+# download URL, so anything but plain X.Y.Z is refused before writing.
+test_updater_refuses_non_semver_version() {
+    local root="$TEST_SCRATCH_BASE/gitleaks-sync-badver" rc dev_same=yes expected
+    /bin/mkdir -p "$root/lib/features"
+    /bin/cp "$DEV_TOOLS" "$root/lib/features/dev-tools.sh"
+    rc="$(_run_updater "$root" '9.9.9-x"y')"
+    command cmp -s "$DEV_TOOLS" "$root/lib/features/dev-tools.sh" || dev_same=no
+    /bin/rm -rf "$root"
+    expected="$(command sed -nE 's/^RC_INVALID_VERSION=([0-9]+).*/\1/p' \
+        "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh")"
+
+    assert_equals "$expected" "$rc" "a non-X.Y.Z version must hold the bump (RC_INVALID_VERSION)"
+    assert_equals "yes" "$dev_same" "dev-tools.sh must be untouched after a refused version"
+}
+
 # A bare quoted pin (no ${VAR:-} default) must be rewritten into the default
 # form, exercising the updater's second sed branch.
 test_updater_normalizes_bare_pin() {
@@ -164,7 +180,7 @@ test_updater_normalizes_bare_pin() {
 
 # sed_inplace must return sed's own status. Its cleanup loop used to run last,
 # so a failed sed reported 0 and every `sed_inplace ... || return` guard in
-# rust-pins.sh was dead code.
+# rust-pins.sh and gitleaks-pins.sh was dead code.
 test_sed_inplace_propagates_sed_failure() {
     local rc=0
     (
@@ -189,6 +205,7 @@ run_test test_ci_has_no_version_literal "ci.yml carries no gitleaks version lite
 run_test test_ci_install_reads_dev_tools_and_verifies "ci.yml install step reads dev-tools.sh and verifies sha256"
 run_test test_ci_scan_follows_install "ci.yml scan runs after the verified install"
 run_test test_updater_bumps_dev_tools_only "updater bumps dev-tools.sh and leaves ci.yml alone"
+run_test test_updater_refuses_non_semver_version "updater refuses a non-X.Y.Z version before writing"
 run_test test_updater_normalizes_bare_pin "updater rewrites a bare pin into the default form"
 run_test test_sed_inplace_propagates_sed_failure "sed_inplace returns sed's failure status"
 
