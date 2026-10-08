@@ -672,7 +672,11 @@ RUN if [ -f /opt/container-runtime/40-project-health-check.sh ]; then \
     fi
 
 # Install workspace filesystem health startup script (core.ignorecase alignment
-# on case-insensitive host mounts + stale symlink attribute repair)
+# on case-insensitive host mounts + stale symlink attribute repair). Only the
+# script is copied here; it sources its repo-tree checks from the fixed path
+# /opt/container-runtime/lib/workspace-fs-health-repo-tree.sh (#1090), which
+# the runtime-tree copy above already installs. The cron and on-demand legs
+# exec this same installed script, so they need nothing extra.
 RUN if [ -f /opt/container-runtime/42-workspace-fs-health.sh ]; then \
     cp /opt/container-runtime/42-workspace-fs-health.sh /etc/container/startup/42-workspace-fs-health.sh && \
     chmod 755 /etc/container/startup/42-workspace-fs-health.sh; \

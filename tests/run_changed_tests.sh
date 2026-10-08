@@ -159,6 +159,18 @@ map_to_test() {
             return
             ;;
 
+        # lib/runtime/lib/workspace-fs-health-*.sh → every fs-health suite.
+        # These are fragments SOURCED by 42-workspace-fs-health.sh (#1090), with
+        # no suite of their own: their coverage is the script's coverage, so map
+        # as if the script itself changed. Without this arm they fall into the
+        # basename arm below, find no workspace-fs-health-repo-tree*.sh suite,
+        # and an edit to the moved checks runs no tests at push time. Must sit
+        # ABOVE that arm — `*` in a case pattern also matches `/`.
+        lib/runtime/lib/workspace-fs-health-*.sh)
+            map_to_test "lib/runtime/42-workspace-fs-health.sh"
+            return
+            ;;
+
         # lib/runtime/foo.sh → tests/unit/runtime/foo*.sh (all sibling suites)
         #
         # Three things beyond a plain basename match, all load-bearing (#832):
