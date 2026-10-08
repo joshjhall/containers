@@ -158,25 +158,36 @@ fi
 # injection path, so unsetting before it would leave the values it sets intact.
 #
 # FUSE_CLEANUP_DISABLE is NOT dropped - it is a documented operator control, and
-# the /etc/cron.d entry's own comment advertises it. FUSE_CLEANUP_BIN is left
-# open knowingly (#968); see the boot leg in lib/runtime/lib/setup-bindfs.sh.
+# the /etc/cron.d entry's own comment advertises it.
 #
 # Unlike the boot leg this needs no subshell: the wrapper is a standalone
 # process that does nothing else, and it supplies no fallback root of its own.
 unset FUSE_CLEANUP_ROOTS FUSE_CLEANUP_FINDMNT FUSE_CLEANUP_FALLBACK_ROOT
 
-FUSE_CLEANUP_BIN="${FUSE_CLEANUP_BIN:-/usr/local/bin/fuse-cleanup}"
+# The GC this leg runs is a literal, not an input (#968). It used to be
+# FUSE_CLEANUP_BIN, read from the ambient env or from cron-env above, which let
+# whoever sets container env choose the binary that runs here. The assignment
+# sits AFTER the cron-env source for the same reason the unset does. Tests
+# inject a stub by rewriting this one line in an extracted copy of the wrapper.
+fuse_cleanup_gc=/usr/local/bin/fuse-cleanup
 
-if [ ! -x "$FUSE_CLEANUP_BIN" ]; then
+# A leftover FUSE_CLEANUP_BIN is reported rather than silently ignored, so a
+# config that used to redirect the GC does not quietly change meaning. Only
+# emptiness is tested; the value is never executed or logged.
+if [ -n "${FUSE_CLEANUP_BIN:-}" ]; then
+    command echo "$(command date -Is) fuse-cleanup: FUSE_CLEANUP_BIN is ignored - always using /usr/local/bin/fuse-cleanup (issue #968)"
+fi
+
+if [ ! -x "$fuse_cleanup_gc" ]; then
     # Shared GC not installed. Report it and exit 0: a missing GC is not a cron
     # failure, but an UNREPORTED one leaves this leg permanently disabled while
     # looking like a clean run - which is how the stranded .fuse_hidden* files
     # of issue #948 became invisible in the first place (issue #951).
-    command echo "$(command date -Is) fuse-cleanup: $FUSE_CLEANUP_BIN missing or not executable - sweep skipped"
+    command echo "$(command date -Is) fuse-cleanup: $fuse_cleanup_gc missing or not executable - sweep skipped"
     exit 0
 fi
 
-cleaned=$("$FUSE_CLEANUP_BIN" 2>/dev/null || echo 0)
+cleaned=$("$fuse_cleanup_gc" 2>/dev/null || echo 0)
 
 if [ "${cleaned:-0}" -gt 0 ] 2>/dev/null; then
     command echo "$(command date -Is) fuse-cleanup: cleaned $cleaned stale .fuse_hidden file(s)"

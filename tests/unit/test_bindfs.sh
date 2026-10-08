@@ -111,12 +111,11 @@ test_cron_wrapper_missing_gc_executes() {
     tmpdir=$(mktemp -d)
     wrapper="$tmpdir/fuse-cleanup-cron"
 
-    # Pull the heredoc body out of the feature script.
-    command sed -n "/^command cat >\/usr\/local\/bin\/fuse-cleanup-cron <<'FUSE_CLEANUP_EOF'\$/,/^FUSE_CLEANUP_EOF\$/p" \
-        "$FEATURE_FILE" | command sed '1d;$d' >"$wrapper"
-    chmod +x "$wrapper"
+    # Pull the heredoc body out of the feature script, pointed at a GC that
+    # does not exist.
+    extract_cron_wrapper "$wrapper" /nonexistent/fuse-cleanup
 
-    output=$(FUSE_CLEANUP_BIN=/nonexistent/fuse-cleanup bash "$wrapper" 2>&1)
+    output=$(bash "$wrapper" 2>&1)
     rc=$?
     command rm -rf "$tmpdir"
 
@@ -140,11 +139,24 @@ test_cron_wrapper_missing_gc_executes() {
 # a value that file sets would survive it — which is the ordering bug most worth
 # catching here.
 
-# Write the generated cron wrapper to $1.
+# Write the generated cron wrapper to $1. With $2, the wrapper's pinned GC path
+# is rewritten to $2 in that extracted copy — the suite's only way to inject a
+# stub GC, since the wrapper no longer reads one from the environment (#968).
+#
+# The rewrite is verified rather than trusted: if the pinned line were ever
+# renamed, a silent sed no-op would leave these tests running the REAL GC (or
+# reporting it missing) while still passing for the wrong reason.
 extract_cron_wrapper() {
     command sed -n "/^command cat >\/usr\/local\/bin\/fuse-cleanup-cron <<'FUSE_CLEANUP_EOF'\$/,/^FUSE_CLEANUP_EOF\$/p" \
         "$FEATURE_FILE" | command sed '1d;$d' >"$1"
     command chmod +x "$1"
+    if [ -n "${2:-}" ]; then
+        command sed -i "s#^fuse_cleanup_gc=/usr/local/bin/fuse-cleanup\$#fuse_cleanup_gc=$2#" "$1"
+        if ! command grep -qxF "fuse_cleanup_gc=$2" "$1"; then
+            echo "extract_cron_wrapper: GC seam rewrite did not apply" >&2
+            return 1
+        fi
+    fi
 }
 
 # Echo what the GC saw for each named variable, one per line in argument order,
@@ -158,14 +170,14 @@ observe_cron_gc_env() {
     stub="$tmpdir/fuse-cleanup"
     obs="$tmpdir/observed"
 
-    extract_cron_wrapper "$wrapper"
     for var in "$@"; do
         report+=("command printf '%s\\n' \"\${$var:-UNSET}\" >>'$obs'")
     done
     command printf '%s\n' '#!/bin/bash' "${report[@]}" 'echo 0' >"$stub"
     command chmod +x "$stub"
+    extract_cron_wrapper "$wrapper" "$stub"
 
-    FUSE_CLEANUP_BIN="$stub" bash "$wrapper" >/dev/null 2>&1
+    bash "$wrapper" >/dev/null 2>&1
     command cat "$obs"
     command rm -rf "$tmpdir"
 }
@@ -240,7 +252,7 @@ test_cron_wrapper_unsets_after_sourcing_env() {
     obs="$tmpdir/observed"
     env_file="$tmpdir/cron-env"
 
-    extract_cron_wrapper "$wrapper"
+    extract_cron_wrapper "$wrapper" "$stub"
     command sed -i "s#/etc/container/cron-env#$env_file#g" "$wrapper"
 
     # Stands in for a compromised or careless cron-env.
@@ -250,12 +262,95 @@ test_cron_wrapper_unsets_after_sourcing_env() {
         "command printf '%s\\n' \"\${FUSE_CLEANUP_ROOTS:-UNSET}\" >'$obs'" 'echo 0' >"$stub"
     command chmod +x "$stub"
 
-    FUSE_CLEANUP_BIN="$stub" bash "$wrapper" >/dev/null 2>&1
+    bash "$wrapper" >/dev/null 2>&1
     seen=$(command cat "$obs")
     command rm -rf "$tmpdir"
 
     assert_equals "UNSET" "$seen" \
         "Cron wrapper unsets AFTER sourcing cron-env, so a root set there is dropped (issue #953)"
+}
+
+# ============================================================================
+# The GC binary is not an env input in the cron leg (issue #968)
+# ============================================================================
+# FUSE_CLEANUP_BIN used to name the binary this wrapper runs, from the ambient
+# env OR from /etc/container/cron-env. Each case below offers a fully working
+# injected GC that drops a marker if executed, and pins which binary RAN — plus
+# the one-line warning that the variable is ignored.
+
+# Run the extracted wrapper with a seam GC and an injected FUSE_CLEANUP_BIN GC.
+# $1 is "env" (ambient) or "cron-env" (set by the sourced env file). Prints
+# the wrapper's output, then one line per marker that exists.
+run_cron_with_injected_bin() {
+    local mode="$1" tmpdir wrapper good evil env_file output
+    tmpdir=$(mktemp -d)
+    wrapper="$tmpdir/fuse-cleanup-cron"
+    good="$tmpdir/seam-gc"
+    evil="$tmpdir/evil-gc"
+    env_file="$tmpdir/cron-env"
+
+    command printf '%s\n' '#!/bin/bash' "command touch '$tmpdir/seam-ran'" 'echo 0' >"$good"
+    command printf '%s\n' '#!/bin/bash' "command touch '$tmpdir/evil-ran'" 'echo 0' >"$evil"
+    command chmod +x "$good" "$evil"
+
+    extract_cron_wrapper "$wrapper" "$good" || return 1
+    command sed -i "s#/etc/container/cron-env#$env_file#g" "$wrapper"
+
+    if [ "$mode" = "cron-env" ]; then
+        command printf '%s\n' "export FUSE_CLEANUP_BIN='$evil'" >"$env_file"
+        output=$(env -u FUSE_CLEANUP_BIN bash "$wrapper" 2>&1)
+    else
+        output=$(FUSE_CLEANUP_BIN="$evil" bash "$wrapper" 2>&1)
+    fi
+
+    command printf '%s\n' "$output"
+    [ -e "$tmpdir/seam-ran" ] && echo "MARKER:seam-ran"
+    [ -e "$tmpdir/evil-ran" ] && echo "MARKER:evil-ran"
+    # Echo the injected path so callers can check it was not logged.
+    echo "EVIL_PATH:$evil"
+    command rm -rf "$tmpdir"
+}
+
+assert_cron_ignored_bin() {
+    local result="$1" source_label="$2" evil body
+    evil=$(command printf '%s\n' "$result" | command sed -n 's/^EVIL_PATH://p')
+    body=$(command printf '%s\n' "$result" | command grep -v '^EVIL_PATH:')
+
+    assert_not_contains "$body" "MARKER:evil-ran" \
+        "Cron wrapper never executes FUSE_CLEANUP_BIN from $source_label (issue #968)"
+    assert_contains "$body" "MARKER:seam-ran" \
+        "Cron wrapper still runs the pinned GC with FUSE_CLEANUP_BIN set in $source_label (issue #968)"
+    assert_contains "$body" "FUSE_CLEANUP_BIN is ignored" \
+        "Cron wrapper warns that FUSE_CLEANUP_BIN from $source_label is ignored (issue #968)"
+    assert_not_contains "$body" "$evil" \
+        "Cron warning does not echo the injected value (issue #968)"
+}
+
+test_cron_wrapper_ignores_injected_bin() {
+    assert_cron_ignored_bin "$(run_cron_with_injected_bin env)" "the environment"
+}
+
+test_cron_wrapper_ignores_bin_from_cron_env() {
+    # The more interesting path: cron-env is sourced by the wrapper itself, so
+    # a value there arrives after anything the caller's env could strip.
+    assert_cron_ignored_bin "$(run_cron_with_injected_bin cron-env)" "cron-env"
+}
+
+test_cron_wrapper_no_bin_warning_when_unset() {
+    local tmpdir wrapper stub output
+    tmpdir=$(mktemp -d)
+    wrapper="$tmpdir/fuse-cleanup-cron"
+    stub="$tmpdir/fuse-cleanup"
+    command printf '%s\n' '#!/bin/bash' 'echo 0' >"$stub"
+    command chmod +x "$stub"
+    extract_cron_wrapper "$wrapper" "$stub"
+    command sed -i "s#/etc/container/cron-env#$tmpdir/absent-cron-env#g" "$wrapper"
+
+    output=$(env -u FUSE_CLEANUP_BIN bash "$wrapper" 2>&1)
+    command rm -rf "$tmpdir"
+
+    assert_not_contains "$output" "FUSE_CLEANUP_BIN is ignored" \
+        "No ignored-variable warning when FUSE_CLEANUP_BIN is unset (issue #968)"
 }
 
 # Test: the cron job can actually WRITE the log file (issue #951)
@@ -496,6 +591,9 @@ run_test test_cron_wrapper_drops_injected_fallback_root "Cron wrapper drops inje
 run_test test_cron_wrapper_drops_all_seams_together "Cron wrapper drops all three seams together (#970)"
 run_test test_cron_wrapper_preserves_disable "Cron wrapper preserves FUSE_CLEANUP_DISABLE (#953)"
 run_test test_cron_wrapper_unsets_after_sourcing_env "Cron wrapper unsets after sourcing cron-env (#953)"
+run_test test_cron_wrapper_ignores_injected_bin "Cron wrapper ignores and warns on env FUSE_CLEANUP_BIN (#968)"
+run_test test_cron_wrapper_ignores_bin_from_cron_env "Cron wrapper ignores and warns on cron-env FUSE_CLEANUP_BIN (#968)"
+run_test test_cron_wrapper_no_bin_warning_when_unset "Cron wrapper stays quiet when FUSE_CLEANUP_BIN is unset (#968)"
 run_test test_cron_log_file_is_writable_by_cron_user "Cron log file is writable by the cron user (#951)"
 run_test test_creates_fuse_cleanup_cron_job "Feature script creates fuse-cleanup cron job"
 run_test test_creates_fuse_cleanup_lock "Feature script creates the sweep lock (#950)"
