@@ -908,7 +908,7 @@ FS_HEALTH_INDEX_LOCK_STALE_SECS=600
 # Args: $1 = repo root. No display prefix: the lock path is reported absolute.
 check_stale_index_lock() {
     local root="$1"
-    local git_dir lock quoted mtime now age
+    local git_dir lock quoted qroot mtime now age
 
     # --absolute-git-dir, not "$root/.git": in a linked worktree or submodule
     # .git is a FILE, and the lock lives in the git dir it points at.
@@ -924,16 +924,17 @@ check_stale_index_lock() {
     age=$((now - mtime))
     [ "$age" -ge "$FS_HEALTH_INDEX_LOCK_STALE_SECS" ] || return 0
 
-    # %q so the pasteable rm survives a path with spaces or quotes.
+    # %q so the pasteable commands survive a path with spaces or quotes.
     quoted=$(command printf '%q' "$lock")
+    qroot=$(command printf '%q' "$root")
 
     command echo "$LOG_PREFIX stale git index lock (${age}s old): $lock (issue #1086)" >&2
     command echo "$LOG_PREFIX   Git writes will fail with \"Unable to create '$lock': File exists\"." >&2
     command echo "$LOG_PREFIX   Likely cause: the virtiofs host mount misreported a rename (Docker Desktop on macOS)." >&2
     command echo "$LOG_PREFIX   If no git command is running against this repo, remove it:" >&2
     command echo "$LOG_PREFIX     rm -f -- $quoted" >&2
-    command echo "$LOG_PREFIX   Then check 'git -C $root status' BEFORE committing. If every tracked file shows" >&2
-    command echo "$LOG_PREFIX   as a staged deletion, the index was emptied: rebuild it with 'git -C $root reset'" >&2
+    command echo "$LOG_PREFIX   Then check 'git -C $qroot status' BEFORE committing. If every tracked file shows" >&2
+    command echo "$LOG_PREFIX   as a staged deletion, the index was emptied: rebuild it with 'git -C $qroot reset'" >&2
     command echo "$LOG_PREFIX   (keeps the working tree) — committing it would delete the whole tree." >&2
 
     return 0
