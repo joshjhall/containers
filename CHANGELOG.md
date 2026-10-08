@@ -5,6 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.21.0] - 2026-10-08
+
+### CI/CD
+
+- Skip golang-dev on PR tier and fix stale coverage claim (#1012)
+- Run mise and setup_commands in the merge tier on published images (#1080)
+
+### Changed
+
+- Ignore HEALTHCHECK_RUNTIME_LIB when the healthcheck runs as root (#999)
+- Fail fast on a tier-2 entry with no pinned_checksum (#1040)
+- Revoke the /opt/librarian additionalDirectories grant (#1058)
+- Split setup into post-create.sh / post-start.sh, add image-drift check (#1073)
+- Extract repo-tree checks into a sourced fragment (#1091)
+
+### Documentation
+
+- Correct published image tags and variant list
+- Record the #986-#993 release-cycle lessons
+- Record the cargo target/ FUSE and worktree-rm lessons
+- Document the ENOENT phantom-entry worktree wedge (#1013)
+- Per-checkout build-artifact dirs under /cache + artifact-dir helper (#1005) (#1014)
+- Record the mutation-checks-on-scratch-copies lesson
+- Record the empty-review-dimension and golem-prompt lessons
+- Drop stale skill count and dead CLAUDE_AGENTS knob (#1052)
+- Drop the deregistered-worktree misreport fixed upstream (#1053)
+- Scope needs-triage hand-creation to GitLab (#1056)
+
+### Fixed
+
+- Probe sudo per-command and stop pinning the container UID (#997)
+- Install Node for python-dev so pyright stops fetching its own (#1007)
+- Count a verdict-less non-zero test return as a failure (#1009)
+- Install the test-* scripts that feature summaries advertise (#1003)
+- Verify the corepack npm install and harden its tests (#1022)
+- Trust root-owned librarian scripts dirs and strip group-write at build (#1025)
+- Pin require_cosign to the base-installed cosign (#1028)
+- Install cron on bindfs images and test the real fuse-cleanup sweep (#1030)
+- Prune librarian symlinks escaping the tree and assert it is read-only (#1034)
+- Sync Rust X.Y pins in auto-patch and hold MSRV moves for review (#1039)
+- Trust-gate the entries inside a workflow scripts dir, not just the dir (#1043)
+- Bind cosign callers to the pinned path and cover PATH-order shadowing (#1044)
+- Pin gitleaks-action to dev-tools.sh's GITLEAKS_VERSION (#1054)
+- Report an exported-but-empty PROJECT_ROOT instead of exiting silently (#1071)
+- Checksum-verify the gitleaks scanner instead of gitleaks-action (#1068)
+- Run test_bindfs.sh in merge tier, record suite CI disposition (#1047)
+- Refuse sed metacharacters in validate_version (#1085)
+- Stop honoring FUSE_CLEANUP_BIN in the root-run GC callers (#1087)
+- Report stale git index.lock left by virtiofs rename (#1089)
+- Report failures in every write, label pin-shape refusals (#1088)
+- Stop grep -q SIGPIPE flake in integration-ci-coverage (#1096)
+
+### Miscellaneous
+
+- Bump LIBRARIAN_REF v0.15.0 → v0.16.0 (#1065)
+- Surface a missing Rust toolchain as a stale-image error (#1074)
+- Update 27 tool versions, bump librarian to v0.17.0
+
+### Testing
+
+- Cover mixed-suite backstop and bare-pin updater form (#1011)
+- Cover every ARG the python-dev Node condition reads (#1017)
+- Guard drift between docs and emitted #977 workaround (#1016)
+- Cover the just worktree-rm artifact-dir prune tail (#1018)
+- Exercise worktree-rm prune wiring behaviorally (#1023)
+- Split check-versions checker mocks, fix push-time sibling-suite collection (#1032)
+- Pin the fuse-cleanup unset set, not one seam at a time (#1033)
+- Cover the require_cosign failure path in the feature scripts (#1036)
+- Share the fuse-cleanup cleans-none assertion in test_bindfs (#1038)
+- Cover tier-2 failures through dispatch, co-locate is_hex_digest test (#1048)
+- Harden the cosign guard harness scan and cover uid-0/env -i (#1055)
+- Scope bin sibling fanout and pin the runner main block (#1066)
+- Run lefthook policy suites when lefthook.yml changes (#1079)
+- Sandbox post-create.sh tests and cover remaining branches (#1078)
+- Map .devcontainer/*.sh to tests/unit/.devcontainer/<base> (#1084)
+- Pin runtime lib fragments installed at /opt/container-runtime/lib (#1094)
+
 ## [4.20.3] - 2026-09-29
 
 ### Changed
@@ -2514,6 +2591,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.21.0]: https://github.com/joshjhall/containers/compare/v4.20.3...v4.21.0
 [4.20.3]: https://github.com/joshjhall/containers/compare/v4.20.2...v4.20.3
 [4.20.2]: https://github.com/joshjhall/containers/compare/v4.20.1...v4.20.2
 [4.20.1]: https://github.com/joshjhall/containers/compare/v4.20.0...v4.20.1
