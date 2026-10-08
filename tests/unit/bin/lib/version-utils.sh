@@ -106,7 +106,7 @@ test_validate_version_rejects_sed_metachars() {
 
     local bad
     for bad in '1.2.3-a/b' '1.2.3-a&b' '1.2.3-a\b' '1.2.3-a"b' $'1.2.3\n/x' \
-        '2025-11-07/x' '11.0.1"x' '1_8&x' '1.2.3 x'; do
+        $'1.2.3\n' '1.2.3|x' '1.2.3#x' '2025-11-07/x' '11.0.1"x' '1_8&x' '1.2.3 x'; do
         if validate_version "$bad"; then
             assert_true false "validate_version should reject '$bad'"
         else
