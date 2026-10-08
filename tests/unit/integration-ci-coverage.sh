@@ -262,12 +262,18 @@ test_runner_tier_filter_splits_multi_tier_header() {
 # whose file never EXPANDS $IMAGE_TO_TEST on a non-comment line. Such a suite
 # would silently build its own image inside the merge-tier job instead of
 # testing the published one; a mention in a comment does not count.
+#
+# The filtered body is captured, then matched via a herestring — never piped
+# into `grep -q`. grep -q exits on its first match; a producer with output still
+# unwritten then takes SIGPIPE, pipefail fails the pipeline, and the suite is
+# falsely reported. bindfs (two pipe writes, match in the first) flaked this
+# way under load (#1092).
 matrix_suites_ignoring_image() {
-    local suite
+    local suite body
     while IFS= read -r suite; do
         [ -f "$2/test_${suite}.sh" ] || continue
-        command grep -vE '^[[:space:]]*#' "$2/test_${suite}.sh" |
-            command grep -qE '\$\{?IMAGE_TO_TEST' || command echo "$suite"
+        body=$(command grep -vE '^[[:space:]]*#' "$2/test_${suite}.sh" || true)
+        command grep -qE '\$\{?IMAGE_TO_TEST' <<<"$body" || command echo "$suite"
     done < <(matrix_suites "$1")
 }
 
@@ -277,12 +283,13 @@ matrix_suites_ignoring_image() {
 # flag-absent check (bindfs's test_no_bindfs_without_flag) needs no local
 # build; a rider that stops reading it silently brings that full build back
 # inside the merge-tier job's 30-minute budget.
+# Captured, not piped into grep -q, for the SIGPIPE reason above (#1092).
 extra_suites_ignoring_minimal() {
-    local suite
+    local suite body
     while IFS= read -r suite; do
         [ -f "$2/test_${suite}.sh" ] || continue
-        command grep -vE '^[[:space:]]*#' "$2/test_${suite}.sh" |
-            command grep -qE '\$\{?IMAGE_TO_TEST_MINIMAL' || command echo "$suite"
+        body=$(command grep -vE '^[[:space:]]*#' "$2/test_${suite}.sh" || true)
+        command grep -qE '\$\{?IMAGE_TO_TEST_MINIMAL' <<<"$body" || command echo "$suite"
     done < <(yq -r '.jobs["integration-test"].strategy.matrix.variant // [] | .[] | .extra_suites // ""' "$1" |
         command tr ' ' '\n' | command sed '/^$/d' | command sort -u)
 }
@@ -298,6 +305,28 @@ test_checker_flags_suite_ignoring_image() {
     command rm -rf "$dir"
     assert_equals "rider" "$got" \
         "a matrix suite that never expands IMAGE_TO_TEST (comment-only mention) is flagged"
+}
+
+# A long suite whose expansion sits on line 1: grep -q matches and exits while
+# the comment filter still has >64 KiB (a full pipe buffer) left to write. The
+# old `grep -v | grep -q` shape then died of SIGPIPE, pipefail turned that into
+# a failure, and the suite was misreported as ignoring its image — the bindfs
+# flake of #1092, made deterministic.
+test_checker_immune_to_early_exit_sigpipe() {
+    local dir got
+    dir=$(command mktemp -d)
+    make_fixture "$dir"
+    local f
+    for f in "$dir/builds/test_covered.sh" "$dir/builds/test_rider.sh"; do
+        printf 'image="${IMAGE_TO_TEST:-x}" minimal="${IMAGE_TO_TEST_MINIMAL:-x}"\n' >>"$f"
+        command yes ': filler line long enough to overflow the pipe buffer' |
+            command head -n 4096 >>"$f" || true
+    done
+    got=$(matrix_suites_ignoring_image "$dir/ci.yml" "$dir/builds")
+    got+="|$(extra_suites_ignoring_minimal "$dir/ci.yml" "$dir/builds")"
+    command rm -rf "$dir"
+    assert_equals "|" "$got" \
+        "an early match in a long suite is not misreported (grep -q SIGPIPE, #1092)"
 }
 
 test_extra_suites_step_gates() {
@@ -399,6 +428,7 @@ run_test test_checker_flags_missing_matrix_suite "Checker flags a matrix suite w
 run_test test_runner_tier_filter_splits_multi_tier_header "Runner --tier filter splits multi-tier headers"
 run_test test_checker_flags_suite_ignoring_image "Checker flags a matrix suite ignoring IMAGE_TO_TEST"
 run_test test_checker_flags_rider_ignoring_minimal "Checker flags a rider ignoring IMAGE_TO_TEST_MINIMAL"
+run_test test_checker_immune_to_early_exit_sigpipe "Checker survives grep -q early exit on a long suite"
 run_test test_checker_flags_missing_extra_suites_step "Checker flags extra_suites with no consuming step"
 run_test test_checker_flags_weak_extra_suites_step "Checker flags a non-gating extra_suites step"
 run_test test_real_matrix_is_parsed "Real integration-test matrix parses"
