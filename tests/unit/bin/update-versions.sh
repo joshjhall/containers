@@ -1093,6 +1093,13 @@ test_sed_metachar_version_refused_before_write() {
     [ "$(command cat "$root/Dockerfile")" = "ARG PYTHON_VERSION=3.12.7" ] || ok=false
     [ "$(command cat "$root/lib/features/python.sh")" = 'PYTHON_VERSION="${PYTHON_VERSION:-3.12.7}"' ] || ok=false
 
+    # Positive control: the same fixture still takes a clean version, so the
+    # refusals above are not just a gate that rejects everything.
+    rc=0
+    update_version "Python" "3.12.7" "3.12.8" "Dockerfile" >/dev/null 2>&1 || rc=$?
+    [ "$rc" -eq 0 ] || ok=false
+    [ "$(command cat "$root/Dockerfile")" = "ARG PYTHON_VERSION=3.12.8" ] || ok=false
+
     command rm -rf "$root"
     assert_true "$ok" "sed metacharacters in a version return RC_INVALID_VERSION and write nothing"
 }
