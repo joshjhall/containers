@@ -15,7 +15,7 @@
 #   dev-tools.sh's GITLEAKS_VERSION default is the only gitleaks pin: CI's
 #   checksum-verified scanner reads it at run time (#1064), so ci.yml needs
 #   no matching edit. That run-time read builds the download URL, so only a
-#   plain X.Y.Z is accepted (validate_version allows arbitrary suffixes).
+#   plain X.Y.Z is accepted (validate_version still allows -rc1/+build tails).
 #
 # Returns:
 #   0 on success; RC_INVALID_VERSION when the version or the pin line's shape

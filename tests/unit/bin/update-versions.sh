@@ -1064,6 +1064,40 @@ test_invalid_version_returns_distinct_code() {
 }
 
 # ============================================================================
+# Test: sed metacharacters in $latest are refused before any write
+# ============================================================================
+# $latest comes from upstream tags and is spliced into sed replacements in
+# every arm. validate_version() is the single gate, so a `/ & \ "` or newline
+# must stop update_version() with the targets left byte-identical (#1062).
+test_sed_metachar_version_refused_before_write() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+    source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+
+    local root="$TEST_SCRATCH_BASE/metachar_root"
+    command mkdir -p "$root/lib/features"
+    printf 'ARG PYTHON_VERSION=3.12.7\n' >"$root/Dockerfile"
+    printf 'PYTHON_VERSION="${PYTHON_VERSION:-3.12.7}"\n' >"$root/lib/features/python.sh"
+
+    # shellcheck disable=SC2034 # consumed by update_version() from the sourced updaters.sh
+    local DRY_RUN=false PROJECT_ROOT="$root"
+    local ok=true bad rc
+    for bad in '3.12.8-a/b' '3.12.8-a&b' '3.12.8-a\b' '3.12.8-a"b' $'3.12.8\n/x'; do
+        rc=0
+        update_version "Python" "3.12.7" "$bad" "Dockerfile" >/dev/null 2>&1 || rc=$?
+        [ "$rc" -eq "$RC_INVALID_VERSION" ] || {
+            echo "    '$bad': expected RC_INVALID_VERSION, got $rc"
+            ok=false
+        }
+    done
+    [ "$(command cat "$root/Dockerfile")" = "ARG PYTHON_VERSION=3.12.7" ] || ok=false
+    [ "$(command cat "$root/lib/features/python.sh")" = 'PYTHON_VERSION="${PYTHON_VERSION:-3.12.7}"' ] || ok=false
+
+    command rm -rf "$root"
+    assert_true "$ok" "sed metacharacters in a version return RC_INVALID_VERSION and write nothing"
+}
+
+# ============================================================================
 # Test: the exit-code contract auto-patch.yml depends on
 # ============================================================================
 # .github/workflows/auto-patch.yml treats exit 2 as "some tools were skipped,
@@ -1790,6 +1824,7 @@ run_test test_pin_action_rewrites_sha_pin "pin_action rewrites SHA-pinned action
 run_test test_pin_action_preserves_pin_on_resolution_failure "pin_action preserves pin when SHA resolution fails"
 run_test test_unknown_tool_returns_no_updater_case_for_every_file_type "Every file-type branch returns RC_NO_UPDATER_CASE for an unmapped tool"
 run_test test_invalid_version_returns_distinct_code "Invalid version returns a code distinct from a missing case"
+run_test test_sed_metachar_version_refused_before_write "sed metacharacters in a version are refused before any write"
 run_test test_exit_code_contract "Exit-code contract: 2 on skipped updates (real and dry), 0 on clean runs"
 run_test test_dry_run_reports_missing_case_without_writing "Dry run reports a missing updater case without writing"
 run_test test_dry_run_short_circuits_network_and_binary "Dry run skips pin_action's network call and the luggage binary probe"

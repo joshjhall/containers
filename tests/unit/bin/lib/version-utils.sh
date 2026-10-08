@@ -98,6 +98,37 @@ test_validate_version_edge_cases() {
     fi
 }
 
+# validate_version gates every sed rewrite in update_version(), so a
+# metacharacter anywhere — including after a newline or past the unanchored
+# date/Java branches — must be refused (#1062).
+test_validate_version_rejects_sed_metachars() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local bad
+    for bad in '1.2.3-a/b' '1.2.3-a&b' '1.2.3-a\b' '1.2.3-a"b' $'1.2.3\n/x' \
+        '2025-11-07/x' '11.0.1"x' '1_8&x' '1.2.3 x'; do
+        if validate_version "$bad"; then
+            assert_true false "validate_version should reject '$bad'"
+        else
+            assert_true true "validate_version rejects '$bad'"
+        fi
+    done
+}
+
+test_validate_version_accepts_legit_suffixes() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local good
+    for good in '1.2.3' '1.2.3-rc1' '1.2.3+build.5' '1.x' '1.2.X' '21.0.5+11' \
+        '2025-11-07' '1.0.0-beta.2' '1_8'; do
+        if validate_version "$good"; then
+            assert_true true "validate_version accepts '$good'"
+        else
+            assert_true false "validate_version rejected legitimate '$good'"
+        fi
+    done
+}
+
 # ============================================================================
 # Test: validate_sha256 function
 # ============================================================================
@@ -394,6 +425,8 @@ test_validate_sha512_empty() {
 run_test test_validate_version_valid "validate_version accepts valid versions"
 run_test test_validate_version_invalid "validate_version rejects invalid versions"
 run_test test_validate_version_edge_cases "validate_version handles edge cases"
+run_test test_validate_version_rejects_sed_metachars "validate_version rejects sed/quote metacharacters"
+run_test test_validate_version_accepts_legit_suffixes "validate_version accepts semver suffixes and x wildcards"
 run_test test_validate_sha256_valid "validate_sha256 accepts valid SHA256"
 run_test test_validate_sha256_invalid "validate_sha256 rejects invalid SHA256"
 run_test test_version_matches_exact "version_matches handles exact matches"

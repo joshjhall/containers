@@ -34,11 +34,21 @@ set -euo pipefail
 # Description:
 #   Checks for invalid values and basic version format.
 #   Used by update-versions.sh to validate before updating.
+#
+#   update_version() splices the result into ~70 sed replacements and quoted
+#   shell/YAML values, so the whole string is held to [0-9A-Za-z._+-]: a `/`,
+#   `&`, `\`, `"` or newline from an upstream tag would otherwise end or rewrite
+#   those expressions (#1062). Checked with [[ =~ ]] because grep matches line
+#   by line and would pass "1.2.3<newline>/x" on its first line.
 validate_version() {
     local version="$1"
 
     # Check for invalid values
     if [ -z "$version" ] || [ "$version" = "null" ] || [ "$version" = "undefined" ] || [ "$version" = "error" ]; then
+        return 1
+    fi
+
+    if ! [[ $version =~ ^[0-9A-Za-z._+-]+$ ]]; then
         return 1
     fi
 
@@ -48,7 +58,7 @@ validate_version() {
     fi
 
     # Check for common version patterns
-    if echo "$version" | command grep -qE '^[0-9]+(\.([0-9]+|[xX]))*([+-].*)?$|^[0-9]{4}-[0-9]{2}-[0-9]{2}'; then
+    if echo "$version" | command grep -qE '^[0-9]+(\.([0-9]+|[xX]))*([+-][0-9A-Za-z.+-]*)?$|^[0-9]{4}-[0-9]{2}-[0-9]{2}'; then
         return 0
     fi
 
