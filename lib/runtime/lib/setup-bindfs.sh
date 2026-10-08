@@ -141,6 +141,13 @@ apply_bindfs_overlay() {
         # sole xattr present on the mount is com.apple.provenance — a macOS host
         # artifact with no meaning inside the container. Re-check that before
         # removing this flag; dropping it silently restores the build failure.
+        #
+        # No FUSE cache options (entry_timeout/attr_timeout/negative_timeout=0)
+        # on purpose: they were measured against #1086's stale .git/index.lock
+        # and do not help (22 rename anomalies per 10k vs 18 without; raw
+        # virtiofs with no bindfs at all shows 6-10). The misreported rename is
+        # a virtiofs defect — see check_stale_index_lock in
+        # lib/runtime/42-workspace-fs-health.sh.
         if run_privileged bindfs \
             --force-user="$USERNAME" \
             --force-group="$USERNAME" \

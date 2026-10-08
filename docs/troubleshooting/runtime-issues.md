@@ -125,6 +125,58 @@ permissions.
 **Note**: On Linux hosts, bindfs is a safe no-op — the entrypoint detects that
 permissions work correctly and skips the overlay.
 
+### `Unable to create '.git/index.lock': File exists` on macOS
+
+**Symptom**: Every git write fails with `fatal: Unable to create
+'/workspace/<repo>/.git/index.lock': File exists`, even though no git command
+is running. Less often, `git status` shows every tracked file as a staged
+deletion (the index was emptied).
+
+**Cause**: Docker Desktop's virtiofs mount occasionally misreports
+`rename(2)`. Git commits an index write by renaming `index.lock` over `index`.
+When the rename is misreported, `index` already has the new content but
+`index.lock` reappears and stays, so the next git write can't take the lock.
+The defect is in virtiofs, not in the bindfs overlay (issue #1086). Measured
+with a loop that mirrors git's index write, anomalies per 10,000 cycles:
+
+| Mount                                                       | Anomalies |
+| ----------------------------------------------------------- | --------: |
+| raw virtiofs (no bindfs)                                    |      6-10 |
+| bindfs overlay (default)                                    |        18 |
+| bindfs + `entry_timeout=0,attr_timeout=0,negative_timeout=0` |        22 |
+
+So disabling FUSE caches does not help, and neither does excluding the repo
+with `BINDFS_SKIP_PATHS`: the mount underneath has the same problem.
+
+**Solution**:
+
+1. Make sure no git command is running against the repo (including from
+   another container or the host), then remove the lock:
+
+   ```bash
+   rm -f /workspace/<repo>/.git/index.lock
+   ```
+
+1. Run `git status` **before committing**. If every tracked file shows as a
+   staged deletion, the index was emptied; rebuild it from `HEAD` without
+   touching the working tree:
+
+   ```bash
+   git reset
+   ```
+
+   Never commit that state: it would delete the whole tree.
+
+On every container start and hourly, `workspace-fs-health` reports any
+`index.lock` older than ten minutes, with the exact path and these steps:
+
+```text
+[fs-health] stale git index lock (3600s old): /workspace/app/.git/index.lock (issue #1086)
+```
+
+It never deletes the lock itself, because it can't tell whether a git process
+in another container still holds it.
+
 ### Stale `.fuse_hidden*` files
 
 **Symptom**: Files named `.fuse_hidden0000000300000003` (or similar) appear in
