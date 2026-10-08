@@ -102,9 +102,10 @@ test_runtime_lib_installed() {
 
     # Capture and judge the output INSIDE the container: TEST_OUTPUT also holds
     # the entrypoint's own boot run of this same script, so matching "not found"
-    # against it directly would conflate the two runs.
+    # against it directly would conflate the two runs. The script exits 0 by
+    # design, so a non-zero status (a crash before the fragment loads) fails too.
     assert_command_in_container "$image" \
-        "out=\$($script 2>&1); if command grep -q 'not found' <<<\"\$out\"; then command echo \"fragment-missing: \$out\"; else command echo fragment-ok; fi" \
+        "out=\$($script 2>&1); rc=\$?; if [ \"\$rc\" -ne 0 ] || command grep -q 'not found' <<<\"\$out\"; then command echo \"fragment-missing (rc=\$rc): \$out\"; else command echo fragment-ok; fi" \
         "fragment-ok" \
         "Installed $script should load its repo-tree fragment"
 }
