@@ -3,7 +3,8 @@
 #
 # Description:
 #   Sourced by updaters.sh. Relies on its sed_inplace() (dry-run aware),
-#   RC_INVALID_VERSION and RC_UPDATE_FAILED, all resolved at call time.
+#   RC_INVALID_VERSION, RC_PIN_UNREWRITABLE and RC_UPDATE_FAILED, all
+#   resolved at call time.
 
 # bump_gitleaks_pin - Rewrite the gitleaks version pin in dev-tools.sh.
 #
@@ -18,8 +19,9 @@
 #   plain X.Y.Z is accepted (validate_version still allows -rc1/+build tails).
 #
 # Returns:
-#   0 on success; RC_INVALID_VERSION when the version or the pin line's shape
-#   is refused before any write; RC_UPDATE_FAILED when a write fails.
+#   0 on success; RC_INVALID_VERSION when the version is refused, or
+#   RC_PIN_UNREWRITABLE when the pin line's shape is refused (both before any
+#   write); RC_UPDATE_FAILED when a write fails.
 bump_gitleaks_pin() {
     local script_path="$1" latest="$2"
 
@@ -32,7 +34,7 @@ bump_gitleaks_pin() {
     # a successful bump that wrote nothing. Check the shape the seds expect.
     command grep -qE '^GITLEAKS_VERSION="(\$\{GITLEAKS_VERSION:-[^}]*\}|[0-9][^"]*)"' "$script_path" || {
         echo -e "${RED}    ERROR: no GITLEAKS_VERSION=\"...\" pin found in $script_path — leaving it unchanged${NC}" >&2
-        return "$RC_INVALID_VERSION"
+        return "$RC_PIN_UNREWRITABLE"
     }
 
     sed_inplace "s/^GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-[^}]*}\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"

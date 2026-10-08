@@ -152,7 +152,7 @@ jobs:
           UPDATE_STATUS=0
           ./bin/update-versions.sh --input /tmp/version-check-output.json --no-commit --no-bump || UPDATE_STATUS=$?
           if [ "$UPDATE_STATUS" -eq 2 ]; then
-            echo "::warning::Some version updates were skipped — check the log above; a tool is likely missing a case in bin/lib/update-versions/updaters.sh (issue #781)"
+            echo "::warning::Some version updates were held — the summary above names the cause per tool: no updater case, an invalid upstream version, or a pin line its case cannot rewrite (issues #781, #1063)"
             UPDATE_SKIPS=true
           elif [ "$UPDATE_STATUS" -ne 0 ]; then
             echo "::error::update-versions.sh failed with status $UPDATE_STATUS"

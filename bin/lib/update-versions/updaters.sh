@@ -16,6 +16,10 @@
 RC_INVALID_VERSION=1 # $latest failed validate_version()
 RC_NO_UPDATER_CASE=3 # no case for this tool/file — add one in this file
 RC_UPDATE_FAILED=4   # a case matched but the rewrite itself failed
+# The pin line is not in the shape the case's sed expects, so it was refused
+# before any write. Held like RC_INVALID_VERSION (exit 2), but reported on its
+# own line: the upstream version is fine and the fix is to the pin (#1063).
+RC_PIN_UNREWRITABLE=5
 
 # Dry-run write suppression is centralized in the three helpers below
 # (sed_inplace, pin_action, update_luggage_catalog) rather than in the ~70 arms
@@ -37,8 +41,9 @@ sed_inplace() {
     fi
     # Report a failed write as RC_UPDATE_FAILED, not the cleanup's status (a
     # trailing rm always masked it) nor sed's raw code (1 would collide with
-    # RC_INVALID_VERSION). Most arms end in a sed_inplace, so this is also
-    # what update_version returns when their last write fails.
+    # RC_INVALID_VERSION). Every write in update_version is guarded with
+    # `|| return "$RC_UPDATE_FAILED"`, so a failure in any write of a
+    # multi-write arm is reported, not just the arm's last one (#1063).
     command sed -i.bak "$expr" "$@" || rc=$RC_UPDATE_FAILED
     command rm -f "${@/%/.bak}"
     return "$rc"
@@ -95,7 +100,7 @@ resolve_action_sha() {
 # Returns:
 #   0 on success (file rewritten), 1 if the SHA could not be resolved (in
 #   which case the file is left untouched — a stale-but-valid SHA pin is far
-#   safer than a corrupted ref or a mutable tag).
+#   safer than a corrupted ref or a mutable tag) or the rewrite failed.
 pin_action() {
     local workflow_path="$1"
     local repo="$2"
@@ -118,7 +123,7 @@ pin_action() {
     # `# v<version>` comment the pinning policy (and action-pinning.sh) requires.
     sed_inplace \
         "s|uses: ${repo}@[^[:space:]]*\([[:space:]]*#.*\)\{0,1\}|uses: ${repo}@${sha} # v${version}|g" \
-        "$workflow_path"
+        "$workflow_path" || return 1
     echo -e "${BLUE}    Pinned ${repo} → ${sha} # v${version}${NC}"
 }
 
@@ -202,29 +207,34 @@ update_version() {
     # suppressed inside sed_inplace/pin_action/update_luggage_catalog — so that
     # it reaches the `*)` fallbacks and reports a missing updater case instead of
     # returning a false all-clear (issue #783).
+    #
+    # Guard EVERY write with `|| return "$RC_UPDATE_FAILED"`, not just an arm's
+    # last: an unguarded earlier write that fails is otherwise masked by a later
+    # one that succeeds, leaving a half-updated tree reported as success (#1063).
+    # tests/unit/bin/lib/update-versions/updaters.sh enforces this.
     case "$file" in
         Dockerfile)
             # Update ARG lines in Dockerfile
             case "$tool" in
                 Python)
-                    sed_inplace "s/^ARG PYTHON_VERSION=.*/ARG PYTHON_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG PYTHON_VERSION=.*/ARG PYTHON_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in python.sh
-                    sed_inplace "s/PYTHON_VERSION=\"\${PYTHON_VERSION:-[^}]*}\"/PYTHON_VERSION=\"\${PYTHON_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/python.sh"
+                    sed_inplace "s/PYTHON_VERSION=\"\${PYTHON_VERSION:-[^}]*}\"/PYTHON_VERSION=\"\${PYTHON_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/python.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 Node.js)
-                    sed_inplace "s/^ARG NODE_VERSION=.*/ARG NODE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG NODE_VERSION=.*/ARG NODE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in node.sh
-                    sed_inplace "s/NODE_VERSION=\"\${NODE_VERSION:-[^}]*}\"/NODE_VERSION=\"\${NODE_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/node.sh"
+                    sed_inplace "s/NODE_VERSION=\"\${NODE_VERSION:-[^}]*}\"/NODE_VERSION=\"\${NODE_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/node.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 Go)
-                    sed_inplace "s/^ARG GO_VERSION=.*/ARG GO_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG GO_VERSION=.*/ARG GO_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in golang.sh
-                    sed_inplace "s/GO_VERSION=\"\${GO_VERSION:-[^}]*}\"/GO_VERSION=\"\${GO_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/golang.sh"
+                    sed_inplace "s/GO_VERSION=\"\${GO_VERSION:-[^}]*}\"/GO_VERSION=\"\${GO_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/golang.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 Rust)
-                    sed_inplace "s/^ARG RUST_VERSION=.*/ARG RUST_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG RUST_VERSION=.*/ARG RUST_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in rust.sh
-                    sed_inplace "s/RUST_VERSION=\"\${RUST_VERSION:-[^}]*}\"/RUST_VERSION=\"\${RUST_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
+                    sed_inplace "s/RUST_VERSION=\"\${RUST_VERSION:-[^}]*}\"/RUST_VERSION=\"\${RUST_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh" || return "$RC_UPDATE_FAILED"
                     # Rust installs via luggage — keep the vendored catalog in
                     # lockstep with the pin (issue #506). Future luggage-managed
                     # tools add the same one-liner to their case.
@@ -233,7 +243,7 @@ update_version() {
                     # asserted against the Dockerfile ARG by
                     # tests/unit/rust-version-sync.sh, so leaving it out made every
                     # Rust bump fail that suite until fixed by hand.
-                    sed_inplace "s/RUST_VERSION: \"[0-9][^\"]*\"/RUST_VERSION: \"$latest\"/" "$PROJECT_ROOT/.devcontainer/docker-compose.yml"
+                    sed_inplace "s/RUST_VERSION: \"[0-9][^\"]*\"/RUST_VERSION: \"$latest\"/" "$PROJECT_ROOT/.devcontainer/docker-compose.yml" || return "$RC_UPDATE_FAILED"
                     # The X.Y-only pins are asserted by the same suite, so a minor
                     # bump that skipped them red-lit the whole auto-patch branch and
                     # stranded every other tool's update with it (1.98 -> 1.99).
@@ -242,87 +252,87 @@ update_version() {
                     sync_rust_minor_pins "$latest" || return "$RC_UPDATE_FAILED"
                     ;;
                 Ruby)
-                    sed_inplace "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in ruby.sh
-                    sed_inplace "s/RUBY_VERSION=\"\${RUBY_VERSION:-[^}]*}\"/RUBY_VERSION=\"\${RUBY_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/ruby.sh"
+                    sed_inplace "s/RUBY_VERSION=\"\${RUBY_VERSION:-[^}]*}\"/RUBY_VERSION=\"\${RUBY_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/ruby.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 Java)
-                    sed_inplace "s/^ARG JAVA_VERSION=.*/ARG JAVA_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG JAVA_VERSION=.*/ARG JAVA_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in java.sh
-                    sed_inplace "s/JAVA_VERSION=\"\${JAVA_VERSION:-[^}]*}\"/JAVA_VERSION=\"\${JAVA_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/java.sh"
+                    sed_inplace "s/JAVA_VERSION=\"\${JAVA_VERSION:-[^}]*}\"/JAVA_VERSION=\"\${JAVA_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/java.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 R)
-                    sed_inplace "s/^ARG R_VERSION=.*/ARG R_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG R_VERSION=.*/ARG R_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in r.sh
-                    sed_inplace "s/R_VERSION=\"\${R_VERSION:-[^}]*}\"/R_VERSION=\"\${R_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/r.sh"
+                    sed_inplace "s/R_VERSION=\"\${R_VERSION:-[^}]*}\"/R_VERSION=\"\${R_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/r.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 Kotlin)
-                    sed_inplace "s/^ARG KOTLIN_VERSION=.*/ARG KOTLIN_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG KOTLIN_VERSION=.*/ARG KOTLIN_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in kotlin.sh
-                    sed_inplace "s/KOTLIN_VERSION=\"\${KOTLIN_VERSION:-[^}]*}\"/KOTLIN_VERSION=\"\${KOTLIN_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kotlin.sh"
+                    sed_inplace "s/KOTLIN_VERSION=\"\${KOTLIN_VERSION:-[^}]*}\"/KOTLIN_VERSION=\"\${KOTLIN_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kotlin.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 android-cmdline-tools)
-                    sed_inplace "s/^ARG ANDROID_CMDLINE_TOOLS_VERSION=.*/ARG ANDROID_CMDLINE_TOOLS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG ANDROID_CMDLINE_TOOLS_VERSION=.*/ARG ANDROID_CMDLINE_TOOLS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in android.sh
-                    sed_inplace "s/ANDROID_CMDLINE_TOOLS_VERSION=\"\${ANDROID_CMDLINE_TOOLS_VERSION:-[^}]*}\"/ANDROID_CMDLINE_TOOLS_VERSION=\"\${ANDROID_CMDLINE_TOOLS_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/android.sh"
+                    sed_inplace "s/ANDROID_CMDLINE_TOOLS_VERSION=\"\${ANDROID_CMDLINE_TOOLS_VERSION:-[^}]*}\"/ANDROID_CMDLINE_TOOLS_VERSION=\"\${ANDROID_CMDLINE_TOOLS_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/android.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 android-ndk)
-                    sed_inplace "s/^ARG ANDROID_NDK_VERSION=.*/ARG ANDROID_NDK_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG ANDROID_NDK_VERSION=.*/ARG ANDROID_NDK_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in android.sh
-                    sed_inplace "s/ANDROID_NDK_VERSION=\"\${ANDROID_NDK_VERSION:-[^}]*}\"/ANDROID_NDK_VERSION=\"\${ANDROID_NDK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/android.sh"
+                    sed_inplace "s/ANDROID_NDK_VERSION=\"\${ANDROID_NDK_VERSION:-[^}]*}\"/ANDROID_NDK_VERSION=\"\${ANDROID_NDK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/android.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 kubectl)
-                    sed_inplace "s/^ARG KUBECTL_VERSION=.*/ARG KUBECTL_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG KUBECTL_VERSION=.*/ARG KUBECTL_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in kubernetes.sh
-                    sed_inplace "s/KUBECTL_VERSION=\"\${KUBECTL_VERSION:-[^}]*}\"/KUBECTL_VERSION=\"\${KUBECTL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
+                    sed_inplace "s/KUBECTL_VERSION=\"\${KUBECTL_VERSION:-[^}]*}\"/KUBECTL_VERSION=\"\${KUBECTL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 k9s)
-                    sed_inplace "s/^ARG K9S_VERSION=.*/ARG K9S_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG K9S_VERSION=.*/ARG K9S_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in kubernetes.sh
-                    sed_inplace "s/K9S_VERSION=\"\${K9S_VERSION:-[^}]*}\"/K9S_VERSION=\"\${K9S_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
+                    sed_inplace "s/K9S_VERSION=\"\${K9S_VERSION:-[^}]*}\"/K9S_VERSION=\"\${K9S_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 krew)
-                    sed_inplace "s/^ARG KREW_VERSION=.*/ARG KREW_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG KREW_VERSION=.*/ARG KREW_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in kubernetes.sh
-                    sed_inplace "s/KREW_VERSION=\"\${KREW_VERSION:-[^}]*}\"/KREW_VERSION=\"\${KREW_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
+                    sed_inplace "s/KREW_VERSION=\"\${KREW_VERSION:-[^}]*}\"/KREW_VERSION=\"\${KREW_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 Helm)
-                    sed_inplace "s/^ARG HELM_VERSION=.*/ARG HELM_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG HELM_VERSION=.*/ARG HELM_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in kubernetes.sh
-                    sed_inplace "s/HELM_VERSION=\"\${HELM_VERSION:-[^}]*}\"/HELM_VERSION=\"\${HELM_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
+                    sed_inplace "s/HELM_VERSION=\"\${HELM_VERSION:-[^}]*}\"/HELM_VERSION=\"\${HELM_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 Terragrunt)
-                    sed_inplace "s/^ARG TERRAGRUNT_VERSION=.*/ARG TERRAGRUNT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG TERRAGRUNT_VERSION=.*/ARG TERRAGRUNT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in terraform.sh
-                    sed_inplace "s/TERRAGRUNT_VERSION=\"\${TERRAGRUNT_VERSION:-[^}]*}\"/TERRAGRUNT_VERSION=\"\${TERRAGRUNT_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
+                    sed_inplace "s/TERRAGRUNT_VERSION=\"\${TERRAGRUNT_VERSION:-[^}]*}\"/TERRAGRUNT_VERSION=\"\${TERRAGRUNT_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 terraform-docs)
-                    sed_inplace "s/^ARG TFDOCS_VERSION=.*/ARG TFDOCS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG TFDOCS_VERSION=.*/ARG TFDOCS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in terraform.sh
-                    sed_inplace "s/TFDOCS_VERSION=\"\${TFDOCS_VERSION:-[^}]*}\"/TFDOCS_VERSION=\"\${TFDOCS_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
+                    sed_inplace "s/TFDOCS_VERSION=\"\${TFDOCS_VERSION:-[^}]*}\"/TFDOCS_VERSION=\"\${TFDOCS_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 tflint)
-                    sed_inplace "s/^ARG TFLINT_VERSION=.*/ARG TFLINT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG TFLINT_VERSION=.*/ARG TFLINT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in terraform.sh
-                    sed_inplace "s/TFLINT_VERSION=\"\${TFLINT_VERSION:-[^}]*}\"/TFLINT_VERSION=\"\${TFLINT_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
+                    sed_inplace "s/TFLINT_VERSION=\"\${TFLINT_VERSION:-[^}]*}\"/TFLINT_VERSION=\"\${TFLINT_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 pixi)
-                    sed_inplace "s/^ARG PIXI_VERSION=.*/ARG PIXI_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG PIXI_VERSION=.*/ARG PIXI_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in mojo.sh
-                    sed_inplace "s/PIXI_VERSION=\"\${PIXI_VERSION:-[^}]*}\"/PIXI_VERSION=\"\${PIXI_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/mojo.sh"
+                    sed_inplace "s/PIXI_VERSION=\"\${PIXI_VERSION:-[^}]*}\"/PIXI_VERSION=\"\${PIXI_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/mojo.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 Mise)
-                    sed_inplace "s/^ARG MISE_VERSION=.*/ARG MISE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG MISE_VERSION=.*/ARG MISE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in mise.sh
-                    sed_inplace "s/MISE_VERSION=\"\${MISE_VERSION:-[^}]*}\"/MISE_VERSION=\"\${MISE_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/mise.sh"
+                    sed_inplace "s/MISE_VERSION=\"\${MISE_VERSION:-[^}]*}\"/MISE_VERSION=\"\${MISE_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/mise.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 librarian)
                     # LIBRARIAN_REF is stored stripped of `v` for comparison but is
                     # used directly as a git tag, so re-add the `v` on writeback.
-                    sed_inplace "s/^ARG LIBRARIAN_REF=.*/ARG LIBRARIAN_REF=v$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG LIBRARIAN_REF=.*/ARG LIBRARIAN_REF=v$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in claude-code-setup.sh so it
                     # stays in sync with the ARG (enforced by version-drift.sh).
-                    sed_inplace "s/LIBRARIAN_REF=\"\${LIBRARIAN_REF:-[^}]*}\"/LIBRARIAN_REF=\"\${LIBRARIAN_REF:-v$latest}\"/" "$PROJECT_ROOT/lib/features/claude-code-setup.sh"
+                    sed_inplace "s/LIBRARIAN_REF=\"\${LIBRARIAN_REF:-[^}]*}\"/LIBRARIAN_REF=\"\${LIBRARIAN_REF:-v$latest}\"/" "$PROJECT_ROOT/lib/features/claude-code-setup.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 *)
                     echo -e "${RED}    ERROR: Unknown Dockerfile tool: $tool — add a case in updaters.sh${NC}" >&2
@@ -336,12 +346,12 @@ update_version() {
             local script_path="$PROJECT_ROOT/lib/base/$file"
             case "$tool" in
                 zoxide)
-                    sed_inplace "s/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-[^}]*}\"/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^ZOXIDE_VERSION=\"[0-9][^\"]*\"/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-[^}]*}\"/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^ZOXIDE_VERSION=\"[0-9][^\"]*\"/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cosign)
-                    sed_inplace "s/COSIGN_VERSION=\"\${COSIGN_VERSION:-[^}]*}\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^COSIGN_VERSION=\"[0-9][^\"]*\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/COSIGN_VERSION=\"\${COSIGN_VERSION:-[^}]*}\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^COSIGN_VERSION=\"[0-9][^\"]*\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 *)
                     echo -e "${RED}    ERROR: Unknown base setup tool: $tool — add a case in updaters.sh${NC}" >&2
@@ -355,48 +365,48 @@ update_version() {
             local script_path="$PROJECT_ROOT/lib/features/$file"
             case "$tool" in
                 lazygit)
-                    sed_inplace "s/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-[^}]*}\"/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^LAZYGIT_VERSION=\"[0-9][^\"]*\"/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-[^}]*}\"/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^LAZYGIT_VERSION=\"[0-9][^\"]*\"/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 direnv)
-                    sed_inplace "s/DIRENV_VERSION=\"\${DIRENV_VERSION:-[^}]*}\"/DIRENV_VERSION=\"\${DIRENV_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^DIRENV_VERSION=\"[0-9][^\"]*\"/DIRENV_VERSION=\"\${DIRENV_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DIRENV_VERSION=\"\${DIRENV_VERSION:-[^}]*}\"/DIRENV_VERSION=\"\${DIRENV_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^DIRENV_VERSION=\"[0-9][^\"]*\"/DIRENV_VERSION=\"\${DIRENV_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 act)
-                    sed_inplace "s/ACT_VERSION=\"\${ACT_VERSION:-[^}]*}\"/ACT_VERSION=\"\${ACT_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^ACT_VERSION=\"[0-9][^\"]*\"/ACT_VERSION=\"\${ACT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/ACT_VERSION=\"\${ACT_VERSION:-[^}]*}\"/ACT_VERSION=\"\${ACT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^ACT_VERSION=\"[0-9][^\"]*\"/ACT_VERSION=\"\${ACT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 delta)
-                    sed_inplace "s/DELTA_VERSION=\"\${DELTA_VERSION:-[^}]*}\"/DELTA_VERSION=\"\${DELTA_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^DELTA_VERSION=\"[0-9][^\"]*\"/DELTA_VERSION=\"\${DELTA_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DELTA_VERSION=\"\${DELTA_VERSION:-[^}]*}\"/DELTA_VERSION=\"\${DELTA_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^DELTA_VERSION=\"[0-9][^\"]*\"/DELTA_VERSION=\"\${DELTA_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 glab)
-                    sed_inplace "s/GLAB_VERSION=\"\${GLAB_VERSION:-[^}]*}\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^GLAB_VERSION=\"[0-9][^\"]*\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/GLAB_VERSION=\"\${GLAB_VERSION:-[^}]*}\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^GLAB_VERSION=\"[0-9][^\"]*\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 just)
-                    sed_inplace "s/JUST_VERSION=\"\${JUST_VERSION:-[^}]*}\"/JUST_VERSION=\"\${JUST_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^JUST_VERSION=\"[0-9][^\"]*\"/JUST_VERSION=\"\${JUST_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/JUST_VERSION=\"\${JUST_VERSION:-[^}]*}\"/JUST_VERSION=\"\${JUST_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^JUST_VERSION=\"[0-9][^\"]*\"/JUST_VERSION=\"\${JUST_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 rumdl)
-                    sed_inplace "s/RUMDL_VERSION=\"\${RUMDL_VERSION:-[^}]*}\"/RUMDL_VERSION=\"\${RUMDL_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^RUMDL_VERSION=\"[0-9][^\"]*\"/RUMDL_VERSION=\"\${RUMDL_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/RUMDL_VERSION=\"\${RUMDL_VERSION:-[^}]*}\"/RUMDL_VERSION=\"\${RUMDL_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^RUMDL_VERSION=\"[0-9][^\"]*\"/RUMDL_VERSION=\"\${RUMDL_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 conform)
-                    sed_inplace "s/CONFORM_VERSION=\"\${CONFORM_VERSION:-[^}]*}\"/CONFORM_VERSION=\"\${CONFORM_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^CONFORM_VERSION=\"[0-9][^\"]*\"/CONFORM_VERSION=\"\${CONFORM_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CONFORM_VERSION=\"\${CONFORM_VERSION:-[^}]*}\"/CONFORM_VERSION=\"\${CONFORM_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^CONFORM_VERSION=\"[0-9][^\"]*\"/CONFORM_VERSION=\"\${CONFORM_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 hadolint)
-                    sed_inplace "s/HADOLINT_VERSION=\"\${HADOLINT_VERSION:-[^}]*}\"/HADOLINT_VERSION=\"\${HADOLINT_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^HADOLINT_VERSION=\"[0-9][^\"]*\"/HADOLINT_VERSION=\"\${HADOLINT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/HADOLINT_VERSION=\"\${HADOLINT_VERSION:-[^}]*}\"/HADOLINT_VERSION=\"\${HADOLINT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^HADOLINT_VERSION=\"[0-9][^\"]*\"/HADOLINT_VERSION=\"\${HADOLINT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 actionlint)
-                    sed_inplace "s/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-[^}]*}\"/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^ACTIONLINT_VERSION=\"[0-9][^\"]*\"/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-[^}]*}\"/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^ACTIONLINT_VERSION=\"[0-9][^\"]*\"/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 shfmt)
-                    sed_inplace "s/SHFMT_VERSION=\"\${SHFMT_VERSION:-[^}]*}\"/SHFMT_VERSION=\"\${SHFMT_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^SHFMT_VERSION=\"[0-9][^\"]*\"/SHFMT_VERSION=\"\${SHFMT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/SHFMT_VERSION=\"\${SHFMT_VERSION:-[^}]*}\"/SHFMT_VERSION=\"\${SHFMT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^SHFMT_VERSION=\"[0-9][^\"]*\"/SHFMT_VERSION=\"\${SHFMT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 # Distinct from the `hyperfine-cargo` case below, which bumps
                 # HYPERFINE_CARGO_VERSION in rust-dev.sh. Neither pattern can
@@ -405,92 +415,92 @@ update_version() {
                 # receive different $script_path values (the registry's `file`
                 # field routes them). Asserted by tests/unit/version-updater-parity.sh.
                 hyperfine)
-                    sed_inplace "s/HYPERFINE_VERSION=\"\${HYPERFINE_VERSION:-[^}]*}\"/HYPERFINE_VERSION=\"\${HYPERFINE_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^HYPERFINE_VERSION=\"[0-9][^\"]*\"/HYPERFINE_VERSION=\"\${HYPERFINE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/HYPERFINE_VERSION=\"\${HYPERFINE_VERSION:-[^}]*}\"/HYPERFINE_VERSION=\"\${HYPERFINE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^HYPERFINE_VERSION=\"[0-9][^\"]*\"/HYPERFINE_VERSION=\"\${HYPERFINE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 jsonc-parser)
-                    sed_inplace "s/JSONC_PARSER_VERSION=\"\${JSONC_PARSER_VERSION:-[^}]*}\"/JSONC_PARSER_VERSION=\"\${JSONC_PARSER_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^JSONC_PARSER_VERSION=\"[0-9][^\"]*\"/JSONC_PARSER_VERSION=\"\${JSONC_PARSER_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/JSONC_PARSER_VERSION=\"\${JSONC_PARSER_VERSION:-[^}]*}\"/JSONC_PARSER_VERSION=\"\${JSONC_PARSER_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^JSONC_PARSER_VERSION=\"[0-9][^\"]*\"/JSONC_PARSER_VERSION=\"\${JSONC_PARSER_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 sd)
-                    sed_inplace "s/SD_VERSION=\"\${SD_VERSION:-[^}]*}\"/SD_VERSION=\"\${SD_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^SD_VERSION=\"[0-9][^\"]*\"/SD_VERSION=\"\${SD_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/SD_VERSION=\"\${SD_VERSION:-[^}]*}\"/SD_VERSION=\"\${SD_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^SD_VERSION=\"[0-9][^\"]*\"/SD_VERSION=\"\${SD_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 mkcert)
-                    sed_inplace "s/MKCERT_VERSION=\"\${MKCERT_VERSION:-[^}]*}\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^MKCERT_VERSION=\"[0-9][^\"]*\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/MKCERT_VERSION=\"\${MKCERT_VERSION:-[^}]*}\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^MKCERT_VERSION=\"[0-9][^\"]*\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 dive)
-                    sed_inplace "s/DIVE_VERSION=\"\${DIVE_VERSION:-[^}]*}\"/DIVE_VERSION=\"\${DIVE_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^DIVE_VERSION=\"[0-9][^\"]*\"/DIVE_VERSION=\"\${DIVE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DIVE_VERSION=\"\${DIVE_VERSION:-[^}]*}\"/DIVE_VERSION=\"\${DIVE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^DIVE_VERSION=\"[0-9][^\"]*\"/DIVE_VERSION=\"\${DIVE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 lazydocker)
-                    sed_inplace "s/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-[^}]*}\"/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^LAZYDOCKER_VERSION=\"[0-9][^\"]*\"/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-[^}]*}\"/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^LAZYDOCKER_VERSION=\"[0-9][^\"]*\"/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 spring-boot-cli)
-                    sed_inplace "s/SPRING_VERSION=\"\${SPRING_VERSION:-[^}]*}\"/SPRING_VERSION=\"\${SPRING_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^SPRING_VERSION=\"[0-9][^\"]*\"/SPRING_VERSION=\"\${SPRING_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/SPRING_VERSION=\"\${SPRING_VERSION:-[^}]*}\"/SPRING_VERSION=\"\${SPRING_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^SPRING_VERSION=\"[0-9][^\"]*\"/SPRING_VERSION=\"\${SPRING_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 jbang)
-                    sed_inplace "s/JBANG_VERSION=\"\${JBANG_VERSION:-[^}]*}\"/JBANG_VERSION=\"\${JBANG_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^JBANG_VERSION=\"[0-9][^\"]*\"/JBANG_VERSION=\"\${JBANG_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/JBANG_VERSION=\"\${JBANG_VERSION:-[^}]*}\"/JBANG_VERSION=\"\${JBANG_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^JBANG_VERSION=\"[0-9][^\"]*\"/JBANG_VERSION=\"\${JBANG_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 mvnd)
-                    sed_inplace "s/MVND_VERSION=\"\${MVND_VERSION:-[^}]*}\"/MVND_VERSION=\"\${MVND_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/MVND_VERSION=\"\${MVND_VERSION:-[^}]*}\"/MVND_VERSION=\"\${MVND_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     # mvnd version may be indented (inside if block), so don't anchor to ^
-                    sed_inplace "s/MVND_VERSION=\"[0-9][^\"]*\"/MVND_VERSION=\"$latest\"/" "$script_path"
+                    sed_inplace "s/MVND_VERSION=\"[0-9][^\"]*\"/MVND_VERSION=\"$latest\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 google-java-format)
-                    sed_inplace "s/GJF_VERSION=\"\${GJF_VERSION:-[^}]*}\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^GJF_VERSION=\"[0-9][^\"]*\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/GJF_VERSION=\"\${GJF_VERSION:-[^}]*}\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^GJF_VERSION=\"[0-9][^\"]*\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 jmh)
-                    sed_inplace "s/JMH_VERSION=\"\${JMH_VERSION:-[^}]*}\"/JMH_VERSION=\"\${JMH_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^JMH_VERSION=\"[0-9][^\"]*\"/JMH_VERSION=\"\${JMH_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/JMH_VERSION=\"\${JMH_VERSION:-[^}]*}\"/JMH_VERSION=\"\${JMH_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^JMH_VERSION=\"[0-9][^\"]*\"/JMH_VERSION=\"\${JMH_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 duf)
-                    sed_inplace "s/DUF_VERSION=\"\${DUF_VERSION:-[^}]*}\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^DUF_VERSION=\"[0-9][^\"]*\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DUF_VERSION=\"\${DUF_VERSION:-[^}]*}\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^DUF_VERSION=\"[0-9][^\"]*\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 dua)
-                    sed_inplace "s/DUA_VERSION=\"\${DUA_VERSION:-[^}]*}\"/DUA_VERSION=\"\${DUA_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^DUA_VERSION=\"[0-9][^\"]*\"/DUA_VERSION=\"\${DUA_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DUA_VERSION=\"\${DUA_VERSION:-[^}]*}\"/DUA_VERSION=\"\${DUA_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^DUA_VERSION=\"[0-9][^\"]*\"/DUA_VERSION=\"\${DUA_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 entr)
-                    sed_inplace "s/ENTR_VERSION=\"\${ENTR_VERSION:-[^}]*}\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^ENTR_VERSION=\"[0-9][^\"]*\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/ENTR_VERSION=\"\${ENTR_VERSION:-[^}]*}\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^ENTR_VERSION=\"[0-9][^\"]*\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 biome)
-                    sed_inplace "s/BIOME_VERSION=\"\${BIOME_VERSION:-[^}]*}\"/BIOME_VERSION=\"\${BIOME_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^BIOME_VERSION=\"[0-9][^\"]*\"/BIOME_VERSION=\"\${BIOME_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/BIOME_VERSION=\"\${BIOME_VERSION:-[^}]*}\"/BIOME_VERSION=\"\${BIOME_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^BIOME_VERSION=\"[0-9][^\"]*\"/BIOME_VERSION=\"\${BIOME_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 taplo)
-                    sed_inplace "s/TAPLO_VERSION=\"\${TAPLO_VERSION:-[^}]*}\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^TAPLO_VERSION=\"[0-9][^\"]*\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/TAPLO_VERSION=\"\${TAPLO_VERSION:-[^}]*}\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^TAPLO_VERSION=\"[0-9][^\"]*\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 lefthook)
-                    sed_inplace "s/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-[^}]*}\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^LEFTHOOK_VERSION=\"[0-9][^\"]*\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-[^}]*}\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^LEFTHOOK_VERSION=\"[0-9][^\"]*\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 gitleaks)
                     bump_gitleaks_pin "$script_path" "$latest" || return
                     ;;
                 dprint)
-                    sed_inplace "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^DPRINT_VERSION=\"[0-9][^\"]*\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^DPRINT_VERSION=\"[0-9][^\"]*\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 osv-scanner)
-                    sed_inplace "s/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-[^}]*}\"/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^OSV_SCANNER_VERSION=\"[0-9][^\"]*\"/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-[^}]*}\"/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^OSV_SCANNER_VERSION=\"[0-9][^\"]*\"/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 yq)
-                    sed_inplace "s/YQ_VERSION=\"\${YQ_VERSION:-[^}]*}\"/YQ_VERSION=\"\${YQ_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^YQ_VERSION=\"[0-9][^\"]*\"/YQ_VERSION=\"\${YQ_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/YQ_VERSION=\"\${YQ_VERSION:-[^}]*}\"/YQ_VERSION=\"\${YQ_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^YQ_VERSION=\"[0-9][^\"]*\"/YQ_VERSION=\"\${YQ_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 Poetry)
-                    sed_inplace "s/POETRY_VERSION=\"\${POETRY_VERSION:-[^}]*}\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^POETRY_VERSION=\"[0-9][^\"]*\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/POETRY_VERSION=\"\${POETRY_VERSION:-[^}]*}\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^POETRY_VERSION=\"[0-9][^\"]*\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 # Two independent uv pins exist: dev-tools.sh (tool "uv") and
                 # lib/python/install-tools.sh (tool "uv-python"). The sed is
@@ -501,28 +511,28 @@ update_version() {
                 # the `|` — a spaced alternation reads as zero cases and makes
                 # the parity guard report both tools as unhandled.
                 uv)
-                    sed_inplace "s/UV_VERSION=\"\${UV_VERSION:-[^}]*}\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^UV_VERSION=\"[0-9][^\"]*\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/UV_VERSION=\"\${UV_VERSION:-[^}]*}\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^UV_VERSION=\"[0-9][^\"]*\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 uv-python)
-                    sed_inplace "s/UV_VERSION=\"\${UV_VERSION:-[^}]*}\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^UV_VERSION=\"[0-9][^\"]*\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/UV_VERSION=\"\${UV_VERSION:-[^}]*}\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^UV_VERSION=\"[0-9][^\"]*\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 ktlint)
-                    sed_inplace "s/KTLINT_VERSION=\"\${KTLINT_VERSION:-[^}]*}\"/KTLINT_VERSION=\"\${KTLINT_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^KTLINT_VERSION=\"[0-9][^\"]*\"/KTLINT_VERSION=\"\${KTLINT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/KTLINT_VERSION=\"\${KTLINT_VERSION:-[^}]*}\"/KTLINT_VERSION=\"\${KTLINT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^KTLINT_VERSION=\"[0-9][^\"]*\"/KTLINT_VERSION=\"\${KTLINT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 detekt)
-                    sed_inplace "s/DETEKT_VERSION=\"\${DETEKT_VERSION:-[^}]*}\"/DETEKT_VERSION=\"\${DETEKT_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^DETEKT_VERSION=\"[0-9][^\"]*\"/DETEKT_VERSION=\"\${DETEKT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DETEKT_VERSION=\"\${DETEKT_VERSION:-[^}]*}\"/DETEKT_VERSION=\"\${DETEKT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^DETEKT_VERSION=\"[0-9][^\"]*\"/DETEKT_VERSION=\"\${DETEKT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 kotlin-language-server)
-                    sed_inplace "s/KLS_VERSION=\"\${KLS_VERSION:-[^}]*}\"/KLS_VERSION=\"\${KLS_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^KLS_VERSION=\"[0-9][^\"]*\"/KLS_VERSION=\"\${KLS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/KLS_VERSION=\"\${KLS_VERSION:-[^}]*}\"/KLS_VERSION=\"\${KLS_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^KLS_VERSION=\"[0-9][^\"]*\"/KLS_VERSION=\"\${KLS_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 jdtls)
-                    sed_inplace "s/JDTLS_VERSION=\"\${JDTLS_VERSION:-[^}]*}\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^JDTLS_VERSION=\"[0-9][^\"]*\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/JDTLS_VERSION=\"\${JDTLS_VERSION:-[^}]*}\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^JDTLS_VERSION=\"[0-9][^\"]*\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 # Cargo tools pinned in rust.sh and rust-dev.sh. cargo-watch,
                 # mdbook and cargo-binstall are defined in both files and must
@@ -530,101 +540,101 @@ update_version() {
                 cargo-binstall)
                     # Prebuilt installer for the other cargo tools; its musl
                     # tarball checksums are refreshed by update-checksums.sh (#991).
-                    sed_inplace "s/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-[^}]*}\"/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
-                    sed_inplace "s/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-[^}]*}\"/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust-dev.sh"
+                    sed_inplace "s/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-[^}]*}\"/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-[^}]*}\"/CARGO_BINSTALL_VERSION=\"\${CARGO_BINSTALL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust-dev.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-watch)
-                    sed_inplace "s/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-[^}]*}\"/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
-                    sed_inplace "s/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-[^}]*}\"/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust-dev.sh"
+                    sed_inplace "s/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-[^}]*}\"/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-[^}]*}\"/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust-dev.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 mdbook)
-                    sed_inplace "s/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-[^}]*}\"/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
-                    sed_inplace "s/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-[^}]*}\"/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust-dev.sh"
+                    sed_inplace "s/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-[^}]*}\"/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-[^}]*}\"/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust-dev.sh" || return "$RC_UPDATE_FAILED"
                     ;;
                 mdbook-mermaid)
-                    sed_inplace "s/MDBOOK_MERMAID_VERSION=\"\${MDBOOK_MERMAID_VERSION:-[^}]*}\"/MDBOOK_MERMAID_VERSION=\"\${MDBOOK_MERMAID_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/MDBOOK_MERMAID_VERSION=\"\${MDBOOK_MERMAID_VERSION:-[^}]*}\"/MDBOOK_MERMAID_VERSION=\"\${MDBOOK_MERMAID_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 mdbook-toc)
-                    sed_inplace "s/MDBOOK_TOC_VERSION=\"\${MDBOOK_TOC_VERSION:-[^}]*}\"/MDBOOK_TOC_VERSION=\"\${MDBOOK_TOC_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/MDBOOK_TOC_VERSION=\"\${MDBOOK_TOC_VERSION:-[^}]*}\"/MDBOOK_TOC_VERSION=\"\${MDBOOK_TOC_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 mdbook-admonish)
-                    sed_inplace "s/MDBOOK_ADMONISH_VERSION=\"\${MDBOOK_ADMONISH_VERSION:-[^}]*}\"/MDBOOK_ADMONISH_VERSION=\"\${MDBOOK_ADMONISH_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/MDBOOK_ADMONISH_VERSION=\"\${MDBOOK_ADMONISH_VERSION:-[^}]*}\"/MDBOOK_ADMONISH_VERSION=\"\${MDBOOK_ADMONISH_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 tree-sitter-cli)
-                    sed_inplace "s/TREE_SITTER_CLI_VERSION=\"\${TREE_SITTER_CLI_VERSION:-[^}]*}\"/TREE_SITTER_CLI_VERSION=\"\${TREE_SITTER_CLI_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/TREE_SITTER_CLI_VERSION=\"\${TREE_SITTER_CLI_VERSION:-[^}]*}\"/TREE_SITTER_CLI_VERSION=\"\${TREE_SITTER_CLI_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-expand)
-                    sed_inplace "s/CARGO_EXPAND_VERSION=\"\${CARGO_EXPAND_VERSION:-[^}]*}\"/CARGO_EXPAND_VERSION=\"\${CARGO_EXPAND_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CARGO_EXPAND_VERSION=\"\${CARGO_EXPAND_VERSION:-[^}]*}\"/CARGO_EXPAND_VERSION=\"\${CARGO_EXPAND_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-modules)
-                    sed_inplace "s/CARGO_MODULES_VERSION=\"\${CARGO_MODULES_VERSION:-[^}]*}\"/CARGO_MODULES_VERSION=\"\${CARGO_MODULES_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CARGO_MODULES_VERSION=\"\${CARGO_MODULES_VERSION:-[^}]*}\"/CARGO_MODULES_VERSION=\"\${CARGO_MODULES_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-outdated)
-                    sed_inplace "s/CARGO_OUTDATED_VERSION=\"\${CARGO_OUTDATED_VERSION:-[^}]*}\"/CARGO_OUTDATED_VERSION=\"\${CARGO_OUTDATED_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CARGO_OUTDATED_VERSION=\"\${CARGO_OUTDATED_VERSION:-[^}]*}\"/CARGO_OUTDATED_VERSION=\"\${CARGO_OUTDATED_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-sweep)
-                    sed_inplace "s/CARGO_SWEEP_VERSION=\"\${CARGO_SWEEP_VERSION:-[^}]*}\"/CARGO_SWEEP_VERSION=\"\${CARGO_SWEEP_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CARGO_SWEEP_VERSION=\"\${CARGO_SWEEP_VERSION:-[^}]*}\"/CARGO_SWEEP_VERSION=\"\${CARGO_SWEEP_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-audit)
-                    sed_inplace "s/CARGO_AUDIT_VERSION=\"\${CARGO_AUDIT_VERSION:-[^}]*}\"/CARGO_AUDIT_VERSION=\"\${CARGO_AUDIT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CARGO_AUDIT_VERSION=\"\${CARGO_AUDIT_VERSION:-[^}]*}\"/CARGO_AUDIT_VERSION=\"\${CARGO_AUDIT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-deny)
-                    sed_inplace "s/CARGO_DENY_VERSION=\"\${CARGO_DENY_VERSION:-[^}]*}\"/CARGO_DENY_VERSION=\"\${CARGO_DENY_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CARGO_DENY_VERSION=\"\${CARGO_DENY_VERSION:-[^}]*}\"/CARGO_DENY_VERSION=\"\${CARGO_DENY_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-geiger)
-                    sed_inplace "s/CARGO_GEIGER_VERSION=\"\${CARGO_GEIGER_VERSION:-[^}]*}\"/CARGO_GEIGER_VERSION=\"\${CARGO_GEIGER_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CARGO_GEIGER_VERSION=\"\${CARGO_GEIGER_VERSION:-[^}]*}\"/CARGO_GEIGER_VERSION=\"\${CARGO_GEIGER_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-machete)
-                    sed_inplace "s/CARGO_MACHETE_VERSION=\"\${CARGO_MACHETE_VERSION:-[^}]*}\"/CARGO_MACHETE_VERSION=\"\${CARGO_MACHETE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CARGO_MACHETE_VERSION=\"\${CARGO_MACHETE_VERSION:-[^}]*}\"/CARGO_MACHETE_VERSION=\"\${CARGO_MACHETE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-nextest)
-                    sed_inplace "s/NEXTEST_VERSION=\"\${NEXTEST_VERSION:-[^}]*}\"/NEXTEST_VERSION=\"\${NEXTEST_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/NEXTEST_VERSION=\"\${NEXTEST_VERSION:-[^}]*}\"/NEXTEST_VERSION=\"\${NEXTEST_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-llvm-cov)
-                    sed_inplace "s/LLVM_COV_VERSION=\"\${LLVM_COV_VERSION:-[^}]*}\"/LLVM_COV_VERSION=\"\${LLVM_COV_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/LLVM_COV_VERSION=\"\${LLVM_COV_VERSION:-[^}]*}\"/LLVM_COV_VERSION=\"\${LLVM_COV_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 bacon)
-                    sed_inplace "s/BACON_VERSION=\"\${BACON_VERSION:-[^}]*}\"/BACON_VERSION=\"\${BACON_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/BACON_VERSION=\"\${BACON_VERSION:-[^}]*}\"/BACON_VERSION=\"\${BACON_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 tokei)
-                    sed_inplace "s/TOKEI_VERSION=\"\${TOKEI_VERSION:-[^}]*}\"/TOKEI_VERSION=\"\${TOKEI_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/TOKEI_VERSION=\"\${TOKEI_VERSION:-[^}]*}\"/TOKEI_VERSION=\"\${TOKEI_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 hyperfine-cargo)
-                    sed_inplace "s/HYPERFINE_CARGO_VERSION=\"\${HYPERFINE_CARGO_VERSION:-[^}]*}\"/HYPERFINE_CARGO_VERSION=\"\${HYPERFINE_CARGO_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/HYPERFINE_CARGO_VERSION=\"\${HYPERFINE_CARGO_VERSION:-[^}]*}\"/HYPERFINE_CARGO_VERSION=\"\${HYPERFINE_CARGO_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 just-cargo)
-                    sed_inplace "s/JUST_CARGO_VERSION=\"\${JUST_CARGO_VERSION:-[^}]*}\"/JUST_CARGO_VERSION=\"\${JUST_CARGO_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/JUST_CARGO_VERSION=\"\${JUST_CARGO_VERSION:-[^}]*}\"/JUST_CARGO_VERSION=\"\${JUST_CARGO_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 mold)
-                    sed_inplace "s/MOLD_VERSION=\"\${MOLD_VERSION:-[^}]*}\"/MOLD_VERSION=\"\${MOLD_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/MOLD_VERSION=\"\${MOLD_VERSION:-[^}]*}\"/MOLD_VERSION=\"\${MOLD_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 sccache)
-                    sed_inplace "s/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-[^}]*}\"/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-[^}]*}\"/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 cargo-release)
-                    sed_inplace "s/CARGO_RELEASE_VERSION=\"\${CARGO_RELEASE_VERSION:-[^}]*}\"/CARGO_RELEASE_VERSION=\"\${CARGO_RELEASE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CARGO_RELEASE_VERSION=\"\${CARGO_RELEASE_VERSION:-[^}]*}\"/CARGO_RELEASE_VERSION=\"\${CARGO_RELEASE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 taplo-cli)
-                    sed_inplace "s/TAPLO_CLI_VERSION=\"\${TAPLO_CLI_VERSION:-[^}]*}\"/TAPLO_CLI_VERSION=\"\${TAPLO_CLI_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/TAPLO_CLI_VERSION=\"\${TAPLO_CLI_VERSION:-[^}]*}\"/TAPLO_CLI_VERSION=\"\${TAPLO_CLI_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 vale)
-                    sed_inplace "s/VALE_VERSION=\"\${VALE_VERSION:-[^}]*}\"/VALE_VERSION=\"\${VALE_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^VALE_VERSION=\"[0-9][^\"]*\"/VALE_VERSION=\"\${VALE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/VALE_VERSION=\"\${VALE_VERSION:-[^}]*}\"/VALE_VERSION=\"\${VALE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^VALE_VERSION=\"[0-9][^\"]*\"/VALE_VERSION=\"\${VALE_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 typos)
-                    sed_inplace "s/TYPOS_VERSION=\"\${TYPOS_VERSION:-[^}]*}\"/TYPOS_VERSION=\"\${TYPOS_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^TYPOS_VERSION=\"[0-9][^\"]*\"/TYPOS_VERSION=\"\${TYPOS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/TYPOS_VERSION=\"\${TYPOS_VERSION:-[^}]*}\"/TYPOS_VERSION=\"\${TYPOS_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^TYPOS_VERSION=\"[0-9][^\"]*\"/TYPOS_VERSION=\"\${TYPOS_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 codegraph)
-                    sed_inplace "s/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-[^}]*}\"/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^CODEGRAPH_VERSION=\"[0-9][^\"]*\"/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-[^}]*}\"/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^CODEGRAPH_VERSION=\"[0-9][^\"]*\"/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 agnix)
-                    sed_inplace "s/AGNIX_VERSION=\"\${AGNIX_VERSION:-[^}]*}\"/AGNIX_VERSION=\"\${AGNIX_VERSION:-$latest}\"/" "$script_path"
-                    sed_inplace "s/^AGNIX_VERSION=\"[0-9][^\"]*\"/AGNIX_VERSION=\"\${AGNIX_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/AGNIX_VERSION=\"\${AGNIX_VERSION:-[^}]*}\"/AGNIX_VERSION=\"\${AGNIX_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^AGNIX_VERSION=\"[0-9][^\"]*\"/AGNIX_VERSION=\"\${AGNIX_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 corepack)
-                    sed_inplace "s/COREPACK_VERSION=\"\${COREPACK_VERSION:-[^}]*}\"/COREPACK_VERSION=\"\${COREPACK_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/COREPACK_VERSION=\"\${COREPACK_VERSION:-[^}]*}\"/COREPACK_VERSION=\"\${COREPACK_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
                 Trivy)
                     ;; # Trivy is installed via APT (no version to update in script)
@@ -669,7 +679,7 @@ update_version() {
                     # (issue #986). A local run without the workflow must run it
                     # by hand; tests/unit/gitlab-templates.sh catches the drift
                     # at commit time if that is forgotten.
-                    sed_inplace "s/^gem \"gitlab-triage\", \"[^\"]*\"/gem \"gitlab-triage\", \"$latest\"/" "$gemfile_path"
+                    sed_inplace "s/^gem \"gitlab-triage\", \"[^\"]*\"/gem \"gitlab-triage\", \"$latest\"/" "$gemfile_path" || return "$RC_UPDATE_FAILED"
                     # The CI include's cache key is derived from the Gemfile pin
                     # at job runtime, so there is no second copy of the version
                     # to keep in step here — deliberately, since an updater that

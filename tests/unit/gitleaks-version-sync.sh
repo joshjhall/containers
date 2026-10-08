@@ -52,9 +52,11 @@ _install_step() {
 
 DEV_VERSION="$(_dev_tools_version "$DEV_TOOLS")"
 
-# update_version()'s "held, nothing written" code, read from the source so the
-# refusal tests cannot drift from it.
+# update_version()'s "held, nothing written" codes, read from the source so the
+# refusal tests cannot drift from them.
 RC_INVALID_VERSION="$(command sed -nE 's/^RC_INVALID_VERSION=([0-9]+).*/\1/p' \
+    "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh")"
+RC_PIN_UNREWRITABLE="$(command sed -nE 's/^RC_PIN_UNREWRITABLE=([0-9]+).*/\1/p' \
     "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh")"
 
 test_source_of_truth_parses() {
@@ -177,7 +179,7 @@ test_updater_fails_on_unmatched_pin() {
     rc="$(_run_updater "$root")"
     /bin/rm -rf "$root"
 
-    assert_equals "$RC_INVALID_VERSION" "$rc" "an unquoted pin line must hold the bump (RC_INVALID_VERSION)"
+    assert_equals "$RC_PIN_UNREWRITABLE" "$rc" "an unquoted pin line must hold the bump (RC_PIN_UNREWRITABLE)"
 }
 
 # A bare quoted pin (no ${VAR:-} default) must be rewritten into the default
