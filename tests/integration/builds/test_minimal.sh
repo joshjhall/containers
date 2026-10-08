@@ -82,6 +82,33 @@ test_runtime_initialization() {
     assert_command_in_container "$image" "ls /workspace" ""
 }
 
+# Test: Runtime lib fragments are installed where the installed scripts look
+# (issue #1093). The startup scripts are copied alone into
+# /etc/container/startup/, so they source their fragments from the fixed path
+# /opt/container-runtime/lib. A missing fragment is reported and skipped, never
+# fatal — so without this test a packaging regression would silently disable
+# e.g. every fs-health repair while the container still boots.
+test_runtime_lib_installed() {
+    local image="${IMAGE_TO_TEST:-test-minimal-base-$$}"
+    local fragment
+
+    # Derived from the source tree so a newly added fragment is covered too.
+    for fragment in "$CONTAINERS_DIR"/lib/runtime/lib/*.sh; do
+        assert_file_in_image "$image" "/opt/container-runtime/lib/${fragment##*/}"
+    done
+
+    local script="/etc/container/startup/42-workspace-fs-health.sh"
+    assert_file_in_image "$image" "$script"
+
+    # Capture and judge the output INSIDE the container: TEST_OUTPUT also holds
+    # the entrypoint's own boot run of this same script, so matching "not found"
+    # against it directly would conflate the two runs.
+    assert_command_in_container "$image" \
+        "out=\$($script 2>&1); if command grep -q 'not found' <<<\"\$out\"; then command echo \"fragment-missing: \$out\"; else command echo fragment-ok; fi" \
+        "fragment-ok" \
+        "Installed $script should load its repo-tree fragment"
+}
+
 # Test: User permissions and environment
 test_user_environment() {
     local image="${IMAGE_TO_TEST:-test-minimal-base-$$}"
@@ -124,6 +151,7 @@ test_essential_utilities() {
 run_test test_base_container_only "Base container builds with no features"
 run_test test_cache_directories "Cache directories are configured"
 run_test test_runtime_initialization "Runtime initialization completes"
+run_test test_runtime_lib_installed "Runtime lib fragments installed at /opt/container-runtime/lib"
 run_test test_user_environment "User environment is properly configured"
 run_test test_essential_utilities "Essential utilities are available"
 
