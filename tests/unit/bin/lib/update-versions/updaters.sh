@@ -192,6 +192,72 @@ EOF
 }
 
 # ============================================================================
+# Test: a held pin does not disturb an update applied in the same run
+# ============================================================================
+# Exit 2 means "the tree is consistent, keep what applied" — auto-patch.yml
+# relies on that. A dry run must report the same hold while writing nothing:
+# the pin-shape refusal happens before any write, so it is not dry-run gated.
+_write_held_with_success_fixture() {
+    local root="$1"
+    /bin/mkdir -p "$root/lib/features"
+    command cat >"$root/Dockerfile" <<'EOF'
+ARG PYTHON_VERSION=3.12.7
+EOF
+    command cat >"$root/lib/features/python.sh" <<'EOF'
+#!/bin/bash
+PYTHON_VERSION="${PYTHON_VERSION:-3.12.7}"
+EOF
+    command cat >"$root/lib/features/dev-tools.sh" <<'EOF'
+#!/bin/bash
+GITLEAKS_VERSION=8.30.1
+EOF
+    command cat >"$root/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "gitleaks", "current": "8.30.1", "latest": "8.31.0", "file": "dev-tools.sh", "status": "outdated"},
+    {"tool": "Python", "current": "3.12.7", "latest": "3.12.8", "file": "Dockerfile", "status": "outdated"}
+  ]
+}
+EOF
+}
+
+# _run_held_with_success <root> [extra update-versions.sh args...]
+# Prints "<exit code> <Dockerfile ARG line> <dev-tools pin line>".
+_run_held_with_success() {
+    local root="$1" rc=0
+    shift
+    (
+        cd "$root" || exit 1
+        # shellcheck disable=SC2031 # separate subshell
+        PROJECT_ROOT_OVERRIDE="$root" "$PROJECT_ROOT/bin/update-versions.sh" \
+            --no-commit --no-bump --input test.json "$@"
+    ) >/dev/null 2>&1 || rc=$?
+    printf '%s %s %s\n' "$rc" \
+        "$(command grep -E '^ARG PYTHON_VERSION=' "$root/Dockerfile")" \
+        "$(command grep -E '^GITLEAKS_VERSION=' "$root/lib/features/dev-tools.sh")"
+}
+
+test_held_pin_keeps_applied_update() {
+    local root="$TEST_SCRATCH_BASE/updaters-held-real" result
+    _write_held_with_success_fixture "$root"
+    result="$(_run_held_with_success "$root")"
+    /bin/rm -rf "$root"
+
+    assert_equals "2 ARG PYTHON_VERSION=3.12.8 GITLEAKS_VERSION=8.30.1" "$result" \
+        "a held pin must exit 2, keep the applied Python bump, and leave the pin untouched"
+}
+
+test_held_pin_reported_in_dry_run() {
+    local root="$TEST_SCRATCH_BASE/updaters-held-dry" result
+    _write_held_with_success_fixture "$root"
+    result="$(_run_held_with_success "$root" --dry-run)"
+    /bin/rm -rf "$root"
+
+    assert_equals "2 ARG PYTHON_VERSION=3.12.7 GITLEAKS_VERSION=8.30.1" "$result" \
+        "a dry run must report the held pin (exit 2) and write nothing"
+}
+
+# ============================================================================
 # Test: the return codes stay distinct
 # ============================================================================
 test_return_codes_distinct() {
@@ -206,6 +272,8 @@ run_test test_failed_non_final_write_returns_update_failed "Failed non-final wri
 run_test test_failed_non_final_write_exits_three "Failed non-final write exits 3"
 run_test test_pin_refusal_reported_as_unrewritable_pin "Pin-shape refusal is held under its own label"
 run_test test_mixed_failures_exit_three_and_report_both "Write failure outranks a pin-shape hold"
+run_test test_held_pin_keeps_applied_update "Held pin keeps an update applied in the same run"
+run_test test_held_pin_reported_in_dry_run "Held pin is reported under --dry-run, nothing written"
 run_test test_return_codes_distinct "Return codes are distinct"
 
 # Generate test report
