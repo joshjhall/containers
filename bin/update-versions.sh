@@ -103,9 +103,11 @@ UPDATES_APPLIED=false
 # old version — so they are counted and reported separately (issue #781).
 SUCCESSFUL_UPDATES=0
 INVALID_VERSIONS=0
+UNREWRITABLE_PINS=0
 MISSING_CASES=0
 UPDATE_ERRORS=0
 INVALID_VERSION_TOOLS=""
+UNREWRITABLE_PIN_TOOLS=""
 MISSING_CASE_TOOLS=""
 ERROR_TOOLS=""
 
@@ -134,6 +136,10 @@ while IFS= read -r update; do
             INVALID_VERSIONS=$((INVALID_VERSIONS + 1))
             INVALID_VERSION_TOOLS="${INVALID_VERSION_TOOLS}${INVALID_VERSION_TOOLS:+, }${TOOL}"
             ;;
+        "$RC_PIN_UNREWRITABLE")
+            UNREWRITABLE_PINS=$((UNREWRITABLE_PINS + 1))
+            UNREWRITABLE_PIN_TOOLS="${UNREWRITABLE_PIN_TOOLS}${UNREWRITABLE_PIN_TOOLS:+, }${TOOL}"
+            ;;
         # Catch-all: RC_UPDATE_FAILED (4) and any code a future updaters.sh
         # adds. Deliberately unnamed — anything unrecognized is treated as a
         # real failure rather than silently ignored. Note the two number
@@ -148,7 +154,7 @@ while IFS= read -r update; do
 done < <(echo "$OUTDATED" | jq -c '.[]')
 
 # Total failures across all causes — drives the summary and the exit code.
-FAILED_UPDATES=$((INVALID_VERSIONS + MISSING_CASES + UPDATE_ERRORS))
+FAILED_UPDATES=$((INVALID_VERSIONS + UNREWRITABLE_PINS + MISSING_CASES + UPDATE_ERRORS))
 
 echo ""
 
@@ -223,6 +229,10 @@ if [ "$FAILED_UPDATES" -gt 0 ]; then
         echo -e "${YELLOW}Updates skipped (invalid version strings): $INVALID_VERSIONS${NC}" >&2
         echo -e "${YELLOW}  ${INVALID_VERSION_TOOLS}${NC}" >&2
     fi
+    if [ "$UNREWRITABLE_PINS" -gt 0 ]; then
+        echo -e "${YELLOW}Updates held (pin line not in the shape its updater case expects — fix the pin, then re-run): $UNREWRITABLE_PINS${NC}" >&2
+        echo -e "${YELLOW}  ${UNREWRITABLE_PIN_TOOLS}${NC}" >&2
+    fi
     if [ "$UPDATE_ERRORS" -gt 0 ]; then
         echo -e "${RED}Updates failed (rewrite error): $UPDATE_ERRORS${NC}" >&2
         echo -e "${RED}  ${ERROR_TOOLS}${NC}" >&2
@@ -235,9 +245,9 @@ if [ "$FAILED_UPDATES" -gt 0 ]; then
     # Two distinct codes, because the two situations warrant different CI
     # handling:
     #
-    #   2 — nothing was rewritten for some tool (no updater case, or a
-    #       malformed upstream version). The tree is consistent; the tools just
-    #       stalled. auto-patch.yml keeps the updates that DID apply and warns.
+    #   2 — nothing was rewritten for some tool (no updater case, a malformed
+    #       upstream version, or a pin line its case cannot rewrite). The tree
+    #       is consistent; the tools just stalled. auto-patch.yml keeps the updates that DID apply and warns.
     #   3 — a matching case ran and its rewrite FAILED (e.g. pin_action could
     #       not resolve a SHA, the luggage catalog update failed, or a
     #       sed_inplace write failed). The tree
