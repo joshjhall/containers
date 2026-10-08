@@ -143,8 +143,11 @@ main() {
     fi
 
     # Verify .env is ignored. git check-ignore honors any pattern form
-    # (`.env`, `**/.env`, …) where an exact-line grep would not.
-    if git check-ignore -q .env 2>/dev/null; then
+    # (`.env`, `**/.env`, …) where an exact-line grep would not. Outside a
+    # work tree it exits 128, which must not read as "not ignored".
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠${NC}  Not inside a git work tree - skipping .gitignore check"
+    elif git check-ignore -q .env 2>/dev/null; then
         echo -e "${GREEN}✓${NC} .env is ignored by .gitignore"
     else
         echo -e "${RED}✗${NC} .env is NOT ignored - adding it to .gitignore now..."
