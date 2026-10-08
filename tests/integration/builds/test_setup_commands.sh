@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# @tier: weekly
-# @ci: scheduled — builds its own minimal + dev-tools images; IMAGE_TO_TEST/DEVTOOLS_IMAGE_TO_TEST could adopt minimal + python-dev (#1027)
+# @tier: merge,weekly
 # Test setup-git, setup-gh, and setup-glab commands functionally
 #
-# This test builds two images (minimal + dev-tools) and runs the setup
-# commands in persistent containers to verify actual configuration:
-# git config values, SSH files, bashrc persistence, graceful skips.
+# This test uses two images — dev-tools (gh + glab installed) and minimal
+# (neither installed) — and runs the setup commands in persistent containers
+# to verify actual configuration: git config values, SSH files, bashrc
+# persistence, graceful skips.
+#
+# Image selection follows the extra_suites rider contract (#1077):
+#   IMAGE_TO_TEST          — dev-tools image (CI: the published python-dev)
+#   IMAGE_TO_TEST_MINIMAL  — minimal image   (CI: the published minimal)
+# Either one unset builds that image locally.
 #
 # Uses the `docker run -d` + `docker exec` pattern for stateful verification.
 
@@ -37,9 +42,9 @@ DEVTOOLS_IMAGE="test-setup-devtools-$$"
 # Build images
 # ---------------------------------------------------------------------------
 test_build_minimal_image() {
-    if [ -n "${IMAGE_TO_TEST:-}" ]; then
-        MINIMAL_IMAGE="$IMAGE_TO_TEST"
-        echo "Testing pre-built image: $MINIMAL_IMAGE"
+    if [ -n "${IMAGE_TO_TEST_MINIMAL:-}" ]; then
+        MINIMAL_IMAGE="$IMAGE_TO_TEST_MINIMAL"
+        echo "Testing pre-built minimal image: $MINIMAL_IMAGE"
     else
         echo "Building minimal image: $MINIMAL_IMAGE"
         assert_build_succeeds "Dockerfile" \
@@ -53,8 +58,8 @@ test_build_minimal_image() {
 }
 
 test_build_devtools_image() {
-    if [ -n "${DEVTOOLS_IMAGE_TO_TEST:-}" ]; then
-        DEVTOOLS_IMAGE="$DEVTOOLS_IMAGE_TO_TEST"
+    if [ -n "${IMAGE_TO_TEST:-}" ]; then
+        DEVTOOLS_IMAGE="$IMAGE_TO_TEST"
         echo "Testing pre-built dev-tools image: $DEVTOOLS_IMAGE"
     else
         echo "Building dev-tools image: $DEVTOOLS_IMAGE"

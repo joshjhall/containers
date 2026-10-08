@@ -623,11 +623,16 @@ jobs:
             test: python_dev
             # python-dev sets INCLUDE_DEV_TOOLS=true, which installs bindfs
             # and cron (Dockerfile) — no bindfs-specific image needed.
-            extra_suites: bindfs
+            # It also ships gh + glab, so setup_commands gets its dev-tools
+            # image here and its minimal image via IMAGE_TO_TEST_MINIMAL.
+            extra_suites: bindfs setup_commands
           - name: node-dev
             test: node_dev
           - name: polyglot
             test: polyglot
+            # polyglot sets INCLUDE_MISE=true; mise's flag-absent check uses
+            # the published minimal image (IMAGE_TO_TEST_MINIMAL).
+            extra_suites: mise
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -661,9 +666,10 @@ jobs:
         run: |
           TAG_NAME="${REF_NAME//\//-}"
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG_NAME}-${{ matrix.variant.name }}"
-          # Suites that also assert the flag-absent case (e.g. bindfs's
-          # test_no_bindfs_without_flag) use the published minimal image
-          # instead of a local build, keeping the job inside its timeout.
+          # Suites that also need a minimal image (a flag-absent check such
+          # as test_no_bindfs_without_flag, or setup_commands's no-gh/glab
+          # cases) use the published minimal image instead of a local build,
+          # keeping the job inside its timeout.
           MINIMAL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG_NAME}-minimal"
           docker pull "$MINIMAL"
 
