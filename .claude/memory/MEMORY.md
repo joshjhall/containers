@@ -129,3 +129,4 @@
 - [Container UID fixed, not remapped](container-uid-fixed-not-remapped.md) — updateRemoteUserUID:false keeps 1000:1000; runtime remap rejected (no root in container, rootless hosts)
 - [Mutation checks on scratch copies](mutation-checks-on-scratch-copies.md) — prove a guard by mutating a mktemp copy, never sed -i/cp over a tracked file + restore
 - [Empty review dimension is not a pass](empty-review-dimension-is-not-a-pass.md) — reviewers submit {findings:[]} unread (21% Sonnet, 17 security); audit tool calls ≠ StructuredOutput; decline golem prompts with Esc, not a digit
+- [grep -q pipefail SIGPIPE needs load](grep-q-pipefail-sigpipe-needs-load.md) — `x | grep -q` flake only shows under scheduler pressure; capture + herestring instead
