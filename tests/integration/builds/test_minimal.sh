@@ -104,6 +104,9 @@ test_runtime_lib_installed() {
     # the entrypoint's own boot run of this same script, so matching "not found"
     # against it directly would conflate the two runs. The script exits 0 by
     # design, so a non-zero status (a crash before the fragment loads) fails too.
+    # The warning's exact wording is pinned by
+    # tests/unit/runtime/workspace-fs-health-fragment.sh, so a rewording that
+    # would blind this broader "not found" match fails there first.
     assert_command_in_container "$image" \
         "out=\$($script 2>&1); rc=\$?; if [ \"\$rc\" -ne 0 ] || command grep -q 'not found' <<<\"\$out\"; then command echo \"fragment-missing (rc=\$rc): \$out\"; else command echo fragment-ok; fi" \
         "fragment-ok" \
