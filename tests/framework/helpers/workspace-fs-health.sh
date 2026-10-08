@@ -13,6 +13,7 @@
 #   tests/unit/runtime/workspace-fs-health.sh            (ignorecase, symlinks, cron, root re-exec)
 #   tests/unit/runtime/workspace-fs-health-submodules.sh (staleness predicate, submodule traversal)
 #   tests/unit/runtime/workspace-fs-health-scope.sh      (PROJECT_ROOT scope resolution)
+#   tests/unit/runtime/workspace-fs-health-index-lock.sh (stale index.lock diagnostic, #1086)
 #
 # Source it AFTER framework.sh + init_test_framework — setup() reads
 # TEST_SCRATCH_BASE, which init_test_framework establishes.

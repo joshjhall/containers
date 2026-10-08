@@ -25,6 +25,10 @@
 # NOT part of repair 2 — see check_symlink_xattr for why conflating them would
 # misclassify the condition and trigger a rewrite that cannot help.
 #
+# And a second DIAGNOSTIC (issue #1086): a git index.lock older than ten minutes,
+# the residue of virtiofs misreporting the rename that commits an index write.
+# Reported with the recovery steps, never deleted — see check_stale_index_lock.
+#
 # Both repairs run against the superproject AND every initialized submodule,
 # recursively (issue #827). `git ls-files` stops at a 160000 gitlink, so a
 # superproject-only pass never even enumerates a submodule's symlinks — they
@@ -866,6 +870,76 @@ except Exception:
 }
 
 # ============================================================================
+# Diagnostic: stale index.lock left by a misreported rename (issue #1086)
+# ============================================================================
+
+# A lock older than this is not a live git operation. Index writes hold the
+# lock for milliseconds; even a large rebase or `git add` of a big tree is done
+# well inside ten minutes.
+FS_HEALTH_INDEX_LOCK_STALE_SECS=600
+
+# On Docker Desktop virtiofs, rename(2) is occasionally misreported: `mv
+# index.lock index` returns an error although `index` already holds the new
+# content, and `index.lock` then REAPPEARS and persists with those same bytes.
+# Git's next exclusive create of the lock fails, and every later write dies with
+# "Unable to create '.git/index.lock': File exists".
+#
+# Measured in-container with a probe that mirrors git's index write (exclusive
+# create, write, rename over index), anomalies per 10,000 cycles:
+#
+#   raw virtiofs (bindfs unmounted in a private mount ns)         6, 10
+#   bindfs overlay, current options                               18
+#   bindfs + entry_timeout=0,attr_timeout=0,negative_timeout=0    22
+#
+# So the defect lives in the virtiofs layer, NOT in bindfs: disabling the FUSE
+# caches does not help, and neither does BINDFS_SKIP_PATHS — the raw mount
+# underneath fails the same way. Nothing in this image can make the rename
+# reliable, which is why this is a DIAGNOSTIC and not a repair.
+#
+# It deliberately does not delete the lock. A lock can belong to a git process
+# in another container sharing the mount, which no process check here can see,
+# and the index next to a phantom lock may itself be damaged (#1086 once
+# observed an emptied index staging every tracked file as a deletion) — removing
+# the lock silently would let the next commit record that damage.
+#
+# Age, not pgrep, decides "stale": the hourly cron leg cannot attribute a git
+# process to one repo, and the mtime answers the question on both legs.
+#
+# Args: $1 = repo root. No display prefix: the lock path is reported absolute.
+check_stale_index_lock() {
+    local root="$1"
+    local git_dir lock quoted mtime now age
+
+    # --absolute-git-dir, not "$root/.git": in a linked worktree or submodule
+    # .git is a FILE, and the lock lives in the git dir it points at.
+    git_dir=$(git -C "$root" rev-parse --absolute-git-dir 2>/dev/null) || return 0
+    lock="${git_dir}/index.lock"
+    [ -e "$lock" ] || return 0
+
+    mtime=$("$FS_HEALTH_STAT" -c '%Y' "$lock" 2>/dev/null) || return 0
+    case "$mtime" in
+        '' | *[!0-9]*) return 0 ;;
+    esac
+    now=$(/usr/bin/date +%s)
+    age=$((now - mtime))
+    [ "$age" -ge "$FS_HEALTH_INDEX_LOCK_STALE_SECS" ] || return 0
+
+    # %q so the pasteable rm survives a path with spaces or quotes.
+    quoted=$(command printf '%q' "$lock")
+
+    command echo "$LOG_PREFIX stale git index lock (${age}s old): $lock (issue #1086)" >&2
+    command echo "$LOG_PREFIX   Git writes will fail with \"Unable to create '$lock': File exists\"." >&2
+    command echo "$LOG_PREFIX   Likely cause: the virtiofs host mount misreported a rename (Docker Desktop on macOS)." >&2
+    command echo "$LOG_PREFIX   If no git command is running against this repo, remove it:" >&2
+    command echo "$LOG_PREFIX     rm -f -- $quoted" >&2
+    command echo "$LOG_PREFIX   Then check 'git -C $root status' BEFORE committing. If every tracked file shows" >&2
+    command echo "$LOG_PREFIX   as a staged deletion, the index was emptied: rebuild it with 'git -C $root reset'" >&2
+    command echo "$LOG_PREFIX   (keeps the working tree) — committing it would delete the whole tree." >&2
+
+    return 0
+}
+
+# ============================================================================
 # Repo traversal: superproject + every initialized submodule, recursively
 # ============================================================================
 
@@ -886,6 +960,7 @@ repair_repo_tree() {
     check_ignorecase "$root"
     check_symlinks "$root" "$label_prefix"
     check_symlink_xattr "$root" "$label_prefix"
+    check_stale_index_lock "$root"
 
     # Containment backstop, not an expected condition.
     [ "$depth" -lt "$FS_HEALTH_MAX_DEPTH" ] || return 0
