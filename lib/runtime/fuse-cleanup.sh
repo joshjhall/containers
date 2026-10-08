@@ -71,6 +71,12 @@
 # injected root from a test's. The tests for the neutralization therefore live
 # with the callers, not with this file.
 #
+# Which binary the callers run is not an input either. Both used to honor a
+# FUSE_CLEANUP_BIN override, which made container env choose the program the
+# boot leg executes as root. Both now run /usr/local/bin/fuse-cleanup
+# unconditionally and only warn if FUSE_CLEANUP_BIN is set (#968); their tests
+# inject a stub through a non-env seam instead.
+#
 # Environment:
 #   FUSE_CLEANUP_DISABLE       - "true" to do nothing and exit 0. An operator
 #                                control, NOT a testing seam — production keeps it

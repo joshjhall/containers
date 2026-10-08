@@ -21,6 +21,20 @@
 # Depends on globals from entrypoint.sh:
 #   RUNNING_AS_ROOT, USERNAME, run_privileged()
 
+# The shared .fuse_hidden* GC the boot pass runs. Assigned unconditionally at
+# source time — never `${...:-}`, never read from the environment — because the
+# boot pass runs it ROOT-PRIVILEGED, before the entrypoint drops to $USERNAME.
+# A path taken from container env (compose `environment:`, .env, a runtime arg)
+# would be arbitrary root code execution, not a scoped delete (#968). An
+# inherited value of this very name is clobbered here too.
+#
+# This used to be FUSE_CLEANUP_BIN, which doubled as the tests' injection point.
+# The seam is now this plain shell variable, which a test reassigns AFTER
+# sourcing this file — the same way it already redefines probe_mount_needs_fix.
+# Production has no such step: the entrypoint sources this file and calls
+# setup_bindfs_overlays directly, so nothing between the two can reassign it.
+_FUSE_CLEANUP_GC=/usr/local/bin/fuse-cleanup
+
 # Parse BINDFS_SKIP_PATHS env var into associative array for O(1) lookup
 # Sets global: BINDFS_SKIP_MAP
 parse_bindfs_skip_paths() {
@@ -247,16 +261,25 @@ setup_bindfs_overlays() {
     # operator control, not a walk-redirector. The set is defined by what can
     # redirect the walk, not by the name prefix.
     #
-    # FUSE_CLEANUP_BIN is a known larger hole left open on purpose (#968): it is
-    # read HERE rather than by the GC, both callers' test suites inject through
-    # it, and it grants arbitrary root code execution rather than deletion of
-    # .fuse_hidden* — a different fix with a different design.
+    # The binary itself is not an input at all: _FUSE_CLEANUP_GC is pinned to
+    # /usr/local/bin/fuse-cleanup when this file is sourced, and the old
+    # FUSE_CLEANUP_BIN env override is no longer read (#968). Dropping a
+    # variable at the call point cannot close that one — this leg is the
+    # reader — so it is closed by not reading it.
+    #
+    # A non-empty FUSE_CLEANUP_BIN is still REPORTED, though: a config that used
+    # to redirect the GC and now silently does nothing is the kind of quiet
+    # behavior change #951 exists to avoid. Only emptiness is tested — the value
+    # is never executed, stat'ed, or echoed into the startup log.
     #
     # The unset precedes the assignment on purpose, so this leg's own
     # FUSE_CLEANUP_FALLBACK_ROOT=/workspace still reaches the GC. That fallback
     # is what makes the boot pass able to clear files a previous session
     # stranded, which is the one thing this leg uniquely does.
-    _fuse_cleanup_bin="${FUSE_CLEANUP_BIN:-/usr/local/bin/fuse-cleanup}"
+    if [ -n "${FUSE_CLEANUP_BIN:-}" ]; then
+        echo "   ⚠️  FUSE_CLEANUP_BIN is ignored - always using /usr/local/bin/fuse-cleanup (issue #968)"
+    fi
+    _fuse_cleanup_bin="$_FUSE_CLEANUP_GC"
     if [ -x "$_fuse_cleanup_bin" ]; then
         _fuse_cleaned=$(
             unset FUSE_CLEANUP_ROOTS FUSE_CLEANUP_FINDMNT FUSE_CLEANUP_FALLBACK_ROOT

@@ -271,9 +271,8 @@ test_missing_gc_warns_and_succeeds() {
     local output
     output=$(
         source "$SOURCE_FILE"
-        BINDFS_ENABLED=false \
-            FUSE_CLEANUP_BIN=/nonexistent/fuse-cleanup \
-            setup_bindfs_overlays 2>&1
+        _FUSE_CLEANUP_GC=/nonexistent/fuse-cleanup
+        BINDFS_ENABLED=false setup_bindfs_overlays 2>&1
     )
     local rc=$?
 
@@ -294,7 +293,8 @@ test_present_gc_warns_nothing() {
 
     output=$(
         source "$SOURCE_FILE"
-        BINDFS_ENABLED=false FUSE_CLEANUP_BIN="$stub" setup_bindfs_overlays 2>&1
+        _FUSE_CLEANUP_GC="$stub"
+        BINDFS_ENABLED=false setup_bindfs_overlays 2>&1
     )
     command rm -rf "$stub_dir"
 
@@ -309,7 +309,7 @@ test_present_gc_warns_nothing() {
 # prints a message behind a `-gt 0` guard. Until #952 that was only string-matched
 # against the source: the parse and the guard never executed. These drive them.
 #
-# FUSE_CLEANUP_BIN makes the call point injectable, so each case is just a stub
+# _FUSE_CLEANUP_GC makes the call point injectable, so each case is just a stub
 # that prints (or fails) in a particular way. BINDFS_ENABLED=false keeps the
 # overlay half of the function out of the picture.
 
@@ -331,7 +331,10 @@ run_boot_pass() {
     local stub="$1"
     (
         source "$SOURCE_FILE"
-        BINDFS_ENABLED=false FUSE_CLEANUP_BIN="$stub" setup_bindfs_overlays 2>&1
+        # The seam is reassigned AFTER sourcing, which is what the file's own
+        # unconditional assignment requires (#968).
+        _FUSE_CLEANUP_GC="$stub"
+        BINDFS_ENABLED=false setup_bindfs_overlays 2>&1
     )
 }
 
@@ -514,7 +517,8 @@ test_boot_pass_unset_does_not_leak_to_caller() {
         export FUSE_CLEANUP_FALLBACK_ROOT=/etc
         # shellcheck source=/dev/null
         source "$SOURCE_FILE"
-        BINDFS_ENABLED=false FUSE_CLEANUP_BIN="$stub" setup_bindfs_overlays >/dev/null 2>&1
+        _FUSE_CLEANUP_GC="$stub"
+        BINDFS_ENABLED=false setup_bindfs_overlays >/dev/null 2>&1
         command printf '%s\n' "${FUSE_CLEANUP_ROOTS:-UNSET}" \
             "${FUSE_CLEANUP_FINDMNT:-UNSET}" "${FUSE_CLEANUP_FALLBACK_ROOT:-UNSET}"
     )
@@ -523,6 +527,74 @@ test_boot_pass_unset_does_not_leak_to_caller() {
 
     assert_equals "$expected" "$after" \
         "Neutralization of all three seams is scoped to the GC call, not the caller's environment"
+}
+
+# ============================================================================
+# The GC binary is not an env input (issue #968)
+# ============================================================================
+# FUSE_CLEANUP_BIN used to name the binary this ROOT-PRIVILEGED pass executes.
+# These pin which binary actually RAN, via marker files, not the source text:
+# an `assert_file_not_contains "FUSE_CLEANUP_BIN"` would pass against a leg that
+# read the same override under any other name.
+
+test_sourcing_pins_canonical_gc() {
+    # The seam variable is assigned unconditionally at source time, so neither
+    # the old public name nor an inherited copy of the internal one survives.
+    local seen
+    seen=$(
+        export FUSE_CLEANUP_BIN=/tmp/evil-gc
+        export _FUSE_CLEANUP_GC=/tmp/evil-gc
+        # shellcheck source=/dev/null
+        source "$SOURCE_FILE"
+        command printf '%s' "$_FUSE_CLEANUP_GC"
+    )
+
+    assert_equals "/usr/local/bin/fuse-cleanup" "$seen" \
+        "Sourcing pins the GC path regardless of inherited env (issue #968)"
+}
+
+test_boot_pass_ignores_injected_bin() {
+    # The injected stub is a fully working GC that would be run if anything
+    # still honored the env var, so "did not run" is decided by its marker
+    # alone — not by a missing-binary branch masking the call.
+    local tmpdir evil good output
+    tmpdir=$(mktemp -d)
+    evil=$(stub_fuse_cleanup_bin "command touch '$tmpdir/evil-ran'" 'echo 0')
+    good=$(stub_fuse_cleanup_bin "command touch '$tmpdir/seam-ran'" 'echo 0')
+
+    output=$(
+        export FUSE_CLEANUP_BIN="$evil"
+        # shellcheck source=/dev/null
+        source "$SOURCE_FILE"
+        _FUSE_CLEANUP_GC="$good"
+        BINDFS_ENABLED=false setup_bindfs_overlays 2>&1
+    )
+
+    assert_file_not_exists "$tmpdir/evil-ran" \
+        "Boot pass never executes an injected FUSE_CLEANUP_BIN (issue #968)"
+    assert_file_exists "$tmpdir/seam-ran" \
+        "Boot pass still runs the pinned GC (issue #968)"
+    assert_contains "$output" "FUSE_CLEANUP_BIN is ignored" \
+        "Boot pass warns that FUSE_CLEANUP_BIN is ignored (issue #968)"
+    assert_not_contains "$output" "$evil" \
+        "The warning does not echo the injected value (issue #968)"
+    command rm -rf "$tmpdir" "$(dirname "$evil")" "$(dirname "$good")"
+}
+
+test_boot_pass_no_bin_warning_when_unset() {
+    # The complement: the warning must not fire on a clean environment, or it
+    # becomes startup noise on every boot.
+    local stub output
+    stub=$(stub_fuse_cleanup_bin 'echo 0')
+
+    output=$(
+        unset FUSE_CLEANUP_BIN
+        run_boot_pass "$stub"
+    )
+    command rm -rf "$(dirname "$stub")"
+
+    assert_not_contains "$output" "FUSE_CLEANUP_BIN is ignored" \
+        "No ignored-variable warning when FUSE_CLEANUP_BIN is unset (issue #968)"
 }
 
 # ============================================================================
@@ -653,7 +725,8 @@ EOF
             command printf 'can_sudo=%s\n' "$BINDFS_CAN_SUDO"
             return 1
         }
-        BINDFS_ENABLED=true FUSE_CLEANUP_BIN=/nonexistent setup_bindfs_overlays 2>/dev/null
+        _FUSE_CLEANUP_GC=/nonexistent
+        BINDFS_ENABLED=true setup_bindfs_overlays 2>/dev/null
     ) | command grep -o 'can_sudo=[a-z]*'
     command rm -rf "$stub_dir"
 }
@@ -720,6 +793,11 @@ run_test test_boot_pass_overrides_injected_fallback_root "Boot pass replaces an 
 run_test test_boot_pass_preserves_disable "Boot pass preserves FUSE_CLEANUP_DISABLE (#953)"
 run_test test_boot_pass_neutralizes_all_seams_together "Boot pass neutralizes all three seams together (#970)"
 run_test test_boot_pass_unset_does_not_leak_to_caller "Neutralization does not leak to the caller (#953)"
+
+# The GC binary is not an env input (#968)
+run_test test_sourcing_pins_canonical_gc "Sourcing pins the canonical GC path (#968)"
+run_test test_boot_pass_ignores_injected_bin "Boot pass ignores and warns on FUSE_CLEANUP_BIN (#968)"
+run_test test_boot_pass_no_bin_warning_when_unset "Boot pass stays quiet when FUSE_CLEANUP_BIN is unset (#968)"
 
 # Overlay argv (#977)
 run_test test_overlay_passes_xattr_none "Overlay passes --xattr-none (#977)"
