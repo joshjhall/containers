@@ -36,24 +36,32 @@ RC_PIN_UNREWRITABLE="$(_rc RC_PIN_UNREWRITABLE)"
 # helpers — must end in `|| return`. A bare `|| return` passes the helper's own
 # code through (bump_gitleaks_pin distinguishes refusal from write failure).
 test_every_write_is_guarded() {
-    local unguarded writes
-    unguarded="$(command awk '
+    local writer='^[[:space:]]+(sed_inplace|pin_action|update_luggage_catalog|sync_[a-z_]+|bump_[a-z_]+) '
+    local unguarded seds helpers
+    unguarded="$(command awk -v w="$writer" '
         /^update_version\(\)/ { inside = 1 }
         inside && /^}/ { inside = 0 }
-        inside && /^[[:space:]]+(sed_inplace|pin_action|update_luggage_catalog|sync_[a-z_]+|bump_[a-z_]+) / &&
-            !/\|\| return( "\$RC_UPDATE_FAILED")?$/ {
+        inside && $0 ~ w && !/\|\| return( "\$RC_UPDATE_FAILED")?$/ {
             print FILENAME ":" NR
         }
     ' "$UPDATERS")"
-    # Guard against the scan silently matching nothing (e.g. a renamed function).
-    writes="$(command awk '
+    # Guard against either half of the scan silently matching nothing (e.g. a
+    # renamed or re-indented call), which would pass with nothing checked.
+    seds="$(command awk -v w="$writer" '
         /^update_version\(\)/ { inside = 1 }
         inside && /^}/ { inside = 0 }
-        inside && /^[[:space:]]+sed_inplace / { n++ }
+        inside && $0 ~ w && /^[[:space:]]+sed_inplace / { n++ }
+        END { print n + 0 }
+    ' "$UPDATERS")"
+    helpers="$(command awk -v w="$writer" '
+        /^update_version\(\)/ { inside = 1 }
+        inside && /^}/ { inside = 0 }
+        inside && $0 ~ w && !/^[[:space:]]+sed_inplace / { n++ }
         END { print n + 0 }
     ' "$UPDATERS")"
 
-    assert_not_equals "0" "$writes" "the guard scan must find update_version()'s writes"
+    assert_not_equals "0" "$seds" "the guard scan must find update_version()'s sed_inplace writes"
+    assert_not_equals "0" "$helpers" "the guard scan must find update_version()'s writer-helper calls"
     assert_equals "" "$unguarded" \
         "every write in update_version() must end in || return"
 }
