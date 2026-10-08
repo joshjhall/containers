@@ -179,10 +179,11 @@ test_runtime_mapping_emits_all_siblings() {
     # Pin every known sibling by NAME, not a loose count. A bare `count > 1`
     # would stay green if the glob silently dropped one of the seven, which is
     # the same "coverage narrows and nobody notices" failure this arm exists to
-    # prevent. Seven suites cover this script today: the split pair (#832), the
+    # prevent. Eight suites cover this script today: the split pair (#832), the
     # pre-existing cron-entry suite, the worktree suite (#882), the xattr
-    # ELOOP diagnostic suite (#980), the PROJECT_ROOT scope suite (#917), and
-    # the stale index.lock diagnostic suite (#1086).
+    # ELOOP diagnostic suite (#980), the PROJECT_ROOT scope suite (#917), the
+    # stale index.lock diagnostic suite (#1086), and the fragment-loading
+    # suite (#1090).
     assert_contains "$out" "workspace-fs-health.sh" \
         "the exact-match suite must be included"
     assert_contains "$out" "workspace-fs-health-submodules.sh" \
@@ -197,6 +198,8 @@ test_runtime_mapping_emits_all_siblings() {
         "PROJECT_ROOT scope sibling suite must be included (#917)"
     assert_contains "$out" "workspace-fs-health-index-lock.sh" \
         "stale index.lock diagnostic sibling suite must be included (#1086)"
+    assert_contains "$out" "workspace-fs-health-fragment.sh" \
+        "fragment-loading sibling suite must be included (#1090)"
 
     # Every emitted path must be a real file — a stale glob would otherwise
     # feed a nonexistent path to the runner.
@@ -207,8 +210,8 @@ test_runtime_mapping_emits_all_siblings() {
         assert_file_exists "$path" "mapped test path must exist: $path"
     done <<<"$out"
 
-    assert_equals "7" "$count" \
-        "exactly the seven known workspace-fs-health suites must be mapped"
+    assert_equals "8" "$count" \
+        "exactly the eight known workspace-fs-health suites must be mapped"
 }
 
 test_runtime_mapping_keeps_prefixed_suites() {
@@ -259,6 +262,28 @@ test_runtime_mapping_unmatched_is_silent() {
     assert_empty "$out" "an uncovered runtime script must map to no test path"
 }
 
+# A fragment sourced by 42-workspace-fs-health.sh (#1090) has no suite named
+# after it, so the basename arm would map it to nothing. It must map to exactly
+# the script's own suite set — the moved checks ARE that script's coverage.
+test_runtime_lib_fragment_maps_to_script_suites() {
+    local out expected
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    out=$(map_to_test "lib/runtime/lib/workspace-fs-health-repo-tree.sh" | command sort)
+    expected=$(map_to_test "lib/runtime/42-workspace-fs-health.sh" | command sort)
+    assert_not_empty "$out" "a fs-health fragment must map to at least one suite"
+    assert_equals "$expected" "$out" \
+        "a fs-health fragment must map to exactly the script's suites (#1090)"
+
+    # Other runtime libs keep their basename mapping.
+    out=$(map_to_test "lib/runtime/lib/setup-bindfs.sh")
+    assert_not_contains "$out" "workspace-fs-health" \
+        "an unrelated runtime lib must not pick up the fs-health suites"
+}
+
 # The bin arm fans out to <stem>-*.sh siblings for the same reason the runtime
 # arm does: check-versions.sh was split (#1024), and a changed
 # bin/check-versions.sh must still run the moved checker-mock suite at push time.
@@ -305,6 +330,7 @@ test_collection_keeps_each_sibling_suite() {
     assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
 $TESTS_DIR/unit/bin/check-versions.sh
 $TESTS_DIR/unit/runtime/workspace-fs-health-cron-entry.sh
+$TESTS_DIR/unit/runtime/workspace-fs-health-fragment.sh
 $TESTS_DIR/unit/runtime/workspace-fs-health-index-lock.sh
 $TESTS_DIR/unit/runtime/workspace-fs-health-scope.sh
 $TESTS_DIR/unit/runtime/workspace-fs-health-submodules.sh
@@ -632,6 +658,7 @@ run_test test_runtime_mapping_emits_all_siblings "runtime mapping emits every si
 run_test test_runtime_mapping_unmatched_is_silent "uncovered runtime script maps to no test path (#832)"
 run_test test_runtime_mapping_keeps_prefixed_suites "runtime mapping finds suites that keep the NN- prefix (#832)"
 run_test test_runtime_mapping_no_duplicate_paths "runtime mapping emits no duplicate test paths (#832)"
+run_test test_runtime_lib_fragment_maps_to_script_suites "fs-health fragment maps to the script's suites (#1090)"
 run_test test_bin_mapping_emits_all_siblings "bin mapping emits every sibling suite (#1024)"
 run_test test_collection_keeps_each_sibling_suite "runner collection keeps each sibling suite as its own path (#1024)"
 run_test test_collection_stops_at_all "runner collection ends with ALL for a foundational file"
