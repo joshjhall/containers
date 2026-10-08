@@ -37,6 +37,20 @@ plant_stale_lock() {
     command touch -d '1 hour ago' "$1"
 }
 
+# Plant a lock at $1 aged $2 seconds.
+plant_lock_aged() {
+    echo "phantom" >"$1"
+    command touch -d "@$(($(/usr/bin/date +%s) - $2))" "$1"
+}
+
+# A stat stand-in that prints $1 for every call, via the FS_HEALTH_STAT seam.
+stat_stub() {
+    local stub="$TEST_TEMP_DIR/stat-stub"
+    command printf '%s\n' '#!/bin/bash' "$1" >"$stub"
+    command chmod +x "$stub"
+    command printf '%s' "$stub"
+}
+
 # ============================================================================
 # Stale index.lock diagnostic (issue #1086)
 # ============================================================================
@@ -67,7 +81,7 @@ test_fresh_lock_is_silent() {
     local output
     output=$(run_fs_health_stderr sensitive)
 
-    assert_not_contains "$output" "index lock" \
+    assert_empty "$output" \
         "A just-created index.lock is treated as live and not reported"
 }
 
@@ -77,8 +91,8 @@ test_no_lock_is_silent() {
     local output
     output=$(run_fs_health_stderr sensitive)
 
-    assert_not_contains "$output" "index lock" \
-        "A repo without an index.lock produces no lock report"
+    assert_empty "$output" \
+        "A healthy repo without an index.lock produces no output at all"
 }
 
 test_lock_is_not_deleted() {
@@ -154,8 +168,68 @@ test_skip_case_check_silences_lock_report() {
     local output
     output=$(SKIP_CASE_CHECK=true run_fs_health_stderr sensitive)
 
-    assert_not_contains "$output" "index lock" \
+    assert_empty "$output" \
         "SKIP_CASE_CHECK=true disables the lock diagnostic with the rest"
+}
+
+test_age_cutoff_boundary() {
+    # 600s is the line between "git may still be running" and "stale". Pin both
+    # sides so the cutoff cannot drift without a test noticing.
+    seed_commit
+    local lock="$PROJECT_ROOT/.git/index.lock"
+
+    plant_lock_aged "$lock" 540
+    assert_empty "$(run_fs_health_stderr sensitive)" \
+        "A lock under the 600s cutoff is not reported"
+
+    plant_lock_aged "$lock" 660
+    assert_contains "$(run_fs_health_stderr sensitive)" "stale git index lock" \
+        "A lock just over the 600s cutoff is reported"
+}
+
+test_unreadable_mtime_is_silent_and_nonfatal() {
+    # The stat failure and non-numeric guards exist so a broken probe can never
+    # print a bogus age or fail startup. Drive both through the seam.
+    seed_commit
+    plant_stale_lock "$PROJECT_ROOT/.git/index.lock"
+
+    local output rc=0
+    output=$(FS_HEALTH_STAT="$(stat_stub 'exit 1')" run_fs_health_stderr sensitive) || rc=$?
+    assert_not_contains "$output" "1086" "A failing stat produces no lock report"
+    assert_equals "0" "$rc" "A failing stat does not fail the run"
+
+    rc=0
+    output=$(FS_HEALTH_STAT="$(stat_stub 'echo garbage')" run_fs_health_stderr sensitive) || rc=$?
+    assert_not_contains "$output" "1086" "A non-numeric mtime produces no lock report"
+    assert_equals "0" "$rc" "A non-numeric mtime does not fail the run"
+}
+
+test_submodule_lock_is_reported() {
+    # The check rides repair_repo_tree's submodule recursion (#827); a
+    # submodule's lock lives under the superproject's .git/modules/<name>/.
+    seed_commit
+    local origin="$TEST_TEMP_DIR/origin-sub"
+    command mkdir -p "$origin"
+    git -C "$origin" init -q .
+    git -C "$origin" config user.email "test@example.com"
+    git -C "$origin" config user.name "Test User"
+    echo "sub" >"$origin/sub.txt"
+    git -C "$origin" add -A >/dev/null 2>&1
+    git -C "$origin" commit -qm "seed sub" >/dev/null 2>&1
+    # git 2.38+ refuses file:// submodules without this; a failed add would
+    # leave the assertion below checking an empty fixture.
+    git -C "$PROJECT_ROOT" -c protocol.file.allow=always \
+        submodule add -q "$origin" sub >/dev/null 2>&1
+    git -C "$PROJECT_ROOT" commit -qm "add sub" >/dev/null 2>&1
+
+    local sub_git_dir
+    sub_git_dir=$(git -C "$PROJECT_ROOT/sub" rev-parse --absolute-git-dir)
+    assert_contains "$sub_git_dir" "/.git/modules/" \
+        "Fixture: the submodule's git dir is under .git/modules"
+    plant_stale_lock "$sub_git_dir/index.lock"
+
+    assert_contains "$(run_fs_health_stderr sensitive)" "$sub_git_dir/index.lock" \
+        "A stale lock in a submodule's git dir is reported (issue #1086)"
 }
 
 # ============================================================================
@@ -169,6 +243,9 @@ run_test_with_setup test_lock_is_not_deleted "Lock diagnostic deletes nothing (#
 run_test_with_setup test_stale_lock_does_not_fail_startup "Lock diagnostic never fails startup (#1086)"
 run_test_with_setup test_linked_worktree_lock_is_reported "Linked worktree lock is reported (#1086)"
 run_test_with_setup test_emitted_rm_removes_a_spaced_lock_path "Emitted rm handles a spaced path (#1086)"
+run_test_with_setup test_age_cutoff_boundary "Age cutoff boundary at 600s (#1086)"
+run_test_with_setup test_unreadable_mtime_is_silent_and_nonfatal "Unreadable mtime stays silent and non-fatal (#1086)"
+run_test_with_setup test_submodule_lock_is_reported "Submodule lock is reported (#1086)"
 run_test_with_setup test_skip_case_check_silences_lock_report "SKIP_CASE_CHECK silences the lock report (#1086)"
 
 # Generate test report

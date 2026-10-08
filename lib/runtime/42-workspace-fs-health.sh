@@ -922,6 +922,9 @@ check_stale_index_lock() {
     esac
     now=$(/usr/bin/date +%s)
     age=$((now - mtime))
+    # A future mtime (host/VM clock skew) gives a negative age and reads as
+    # fresh. That errs toward silence, which is the safe side for advice that
+    # ends in an rm.
     [ "$age" -ge "$FS_HEALTH_INDEX_LOCK_STALE_SECS" ] || return 0
 
     # %q so the pasteable commands survive a path with spaces or quotes.
