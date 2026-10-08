@@ -545,6 +545,75 @@ $root/tests/unit/lefthook-b.sh" "$out" \
     /usr/bin/rm -rf "$root"
 }
 
+# ============================================================================
+# .devcontainer/*.sh → tests/unit/.devcontainer/ (#1067)
+# ============================================================================
+# #1059 moved the devcontainer scripts from .devcontainer/bin/ to the
+# .devcontainer/ root; the old arm only routed bin/, so editing them ran no
+# suite at push time.
+
+test_devcontainer_mapping_root_scripts() {
+    local out
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+
+    out=$(map_to_test ".devcontainer/post-create.sh")
+    assert_equals "$TESTS_DIR/unit/.devcontainer/post-create.sh" "$out" \
+        ".devcontainer/post-create.sh must map to its suite only"
+
+    out=$(map_to_test ".devcontainer/post-start.sh")
+    assert_equals "$TESTS_DIR/unit/.devcontainer/post-start.sh" "$out" \
+        ".devcontainer/post-start.sh must map to its suite only"
+
+    out=$(command printf '%s\n' .devcontainer/post-create.sh .devcontainer/post-start.sh |
+        map_changed_files | command sort)
+    assert_equals "$TESTS_DIR/unit/.devcontainer/post-create.sh
+$TESTS_DIR/unit/.devcontainer/post-start.sh" "$out" \
+        "devcontainer scripts must collect each suite as its own path"
+}
+
+test_devcontainer_mapping_unmatched_is_silent() {
+    local out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    out=$(map_to_test ".devcontainer/no-such-script-1067.sh")
+    assert_empty "$out" "an uncovered devcontainer script must map to no test path"
+}
+
+# The stale arm mapped .devcontainer/bin/x.sh by basename. With only a root
+# suite present, a nested script must not fold onto it; with its own nested
+# suite present, it must map there and nowhere else.
+test_devcontainer_mapping_nested_by_path() {
+    local root out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+    root=$(/usr/bin/mktemp -d)
+    /usr/bin/mkdir -p "$root/tests/unit/.devcontainer"
+    /usr/bin/touch "$root/tests/unit/.devcontainer/x.sh"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test ".devcontainer/bin/x.sh")
+    assert_empty "$out" ".devcontainer/bin/x.sh must not map to the root x.sh suite"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test ".devcontainer/x.sh")
+    assert_equals "$root/tests/unit/.devcontainer/x.sh" "$out" \
+        ".devcontainer/x.sh must map to its root suite"
+
+    /usr/bin/mkdir -p "$root/tests/unit/.devcontainer/bin"
+    /usr/bin/touch "$root/tests/unit/.devcontainer/bin/x.sh"
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test ".devcontainer/bin/x.sh")
+    assert_equals "$root/tests/unit/.devcontainer/bin/x.sh" "$out" \
+        ".devcontainer/bin/x.sh must map to its own nested suite only"
+
+    /usr/bin/rm -rf "$root"
+}
+
 run_test test_runner_exports_flag "Pre-push runner exports SKIP_NETWORK_TESTS"
 run_test test_framework_defines_helper "framework.sh defines network_tests_disabled"
 run_test test_framework_exports_helper "framework.sh exports network_tests_disabled"
@@ -571,6 +640,9 @@ run_test test_collect_sets_run_all "runner main block sets RUN_ALL and stops at 
 run_test test_collect_go_test_sentinel "runner main block handles the GO_TEST sentinel (#1031)"
 run_test test_lefthook_mapping_emits_policy_suites "lefthook.yml maps to every lefthook policy suite (#1075)"
 run_test test_lefthook_mapping_follows_glob "lefthook.yml mapping follows the lefthook-*.sh glob (#1075)"
+run_test test_devcontainer_mapping_root_scripts "devcontainer root scripts map to their suites (#1067)"
+run_test test_devcontainer_mapping_unmatched_is_silent "uncovered devcontainer script maps to no test path (#1067)"
+run_test test_devcontainer_mapping_nested_by_path "nested devcontainer script maps by path, not basename (#1067)"
 
 # Generate test report
 generate_report
