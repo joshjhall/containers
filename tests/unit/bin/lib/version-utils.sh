@@ -120,7 +120,7 @@ test_validate_version_accepts_legit_suffixes() {
 
     local good
     for good in '1.2.3' '1.2.3-rc1' '1.2.3+build.5' '1.x' '1.2.X' '21.0.5+11' \
-        '2025-11-07' '1.0.0-beta.2' '1_8'; do
+        '2025-11-07' '1.0.0-beta.2' '1_8' '1.2.3-rc_1'; do
         if validate_version "$good"; then
             assert_true true "validate_version accepts '$good'"
         else

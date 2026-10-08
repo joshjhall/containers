@@ -58,7 +58,7 @@ validate_version() {
     fi
 
     # Check for common version patterns
-    if echo "$version" | command grep -qE '^[0-9]+(\.([0-9]+|[xX]))*([+-][0-9A-Za-z.+-]*)?$|^[0-9]{4}-[0-9]{2}-[0-9]{2}'; then
+    if echo "$version" | command grep -qE '^[0-9]+(\.([0-9]+|[xX]))*([+-][0-9A-Za-z._+-]*)?$|^[0-9]{4}-[0-9]{2}-[0-9]{2}'; then
         return 0
     fi
 
