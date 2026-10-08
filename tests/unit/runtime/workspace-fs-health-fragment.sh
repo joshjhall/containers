@@ -36,11 +36,13 @@ FS_HEALTH_FRAGMENT="$(dirname "$FS_HEALTH_SCRIPT")/lib/workspace-fs-health-repo-
 # copy pointing at the real /opt/container-runtime/lib, and on an image where
 # that exists the test would pass for the wrong reason.
 #
-# Echoes the path to the copy.
+# Args: $1 = directory to stand in for /opt/container-runtime/lib (default: one
+# that does not exist). Echoes the path to the copy.
 make_fragmentless_copy() {
     local dir="$TEST_TEMP_DIR/no-lib"
     local copy="$dir/42-workspace-fs-health.sh"
     local fallback='"/opt/container-runtime/lib/workspace-fs-health-repo-tree.sh"'
+    local installed_lib="${1:-$dir/does-not-exist}"
 
     command mkdir -p "$dir"
     command cp "$FS_HEALTH_SCRIPT" "$copy"
@@ -49,7 +51,7 @@ make_fragmentless_copy() {
         command echo "fallback line not found in $FS_HEALTH_SCRIPT" >&2
         return 1
     fi
-    command sed -i "s|${fallback}|\"$dir/does-not-exist/workspace-fs-health-repo-tree.sh\"|" "$copy"
+    command sed -i "s|${fallback}|\"$installed_lib/workspace-fs-health-repo-tree.sh\"|" "$copy"
     if command grep -qF "$fallback" "$copy"; then
         command echo "fallback rewrite did not apply in $copy" >&2
         return 1
@@ -104,6 +106,33 @@ test_missing_fragment_reports_and_exits_zero() {
         "No repair runs without the fragment"
 }
 
+test_installed_fallback_location_loads_fragment() {
+    # The INSTALLED layout: the Dockerfile copies the script alone into
+    # /etc/container/startup/, so it has no lib/ sibling and must reach the
+    # fragment through the second fixed location. Stand that location in with a
+    # scratch dir holding the real fragment, and require the repair to run.
+    local copy installed="$TEST_TEMP_DIR/installed-lib" stderr
+    command mkdir -p "$installed"
+    command cp "$FS_HEALTH_FRAGMENT" "$installed/"
+    copy=$(make_fragmentless_copy "$installed") || {
+        fail_test "Could not build a fragmentless copy of the script"
+        return
+    }
+    assert_file_not_exists "$(dirname "$copy")/lib/workspace-fs-health-repo-tree.sh" \
+        "The copy must have no lib/ sibling, or this tests the first location"
+
+    stderr=$( (
+        export PROJECT_ROOT FS_HEALTH_ENV_FILE
+        export FS_CASE_STATE=insensitive
+        { bash "$copy" >/dev/null; } 2>&1
+    )) || true
+
+    assert_not_contains "$stderr" "not found" \
+        "The fallback location must resolve the fragment"
+    assert_equals "true" "$(get_ignorecase)" \
+        "Repairs run when the fragment is found only at the installed location"
+}
+
 test_env_cannot_choose_fragment_path() {
     # A marker-writing file planted where an env override would point. The
     # script has no such override; this pins that one is never added back.
@@ -148,6 +177,7 @@ test_env_cannot_choose_fragment_path_when_fragment_missing() {
 run_test_with_setup test_fragment_exists_and_parses "Fragment exists and parses"
 run_test_with_setup test_moved_functions_not_defined_in_main_script "Repo-tree functions live only in the fragment"
 run_test_with_setup test_missing_fragment_reports_and_exits_zero "Missing fragment reports and exits 0"
+run_test_with_setup test_installed_fallback_location_loads_fragment "Installed fallback location loads the fragment"
 run_test_with_setup test_env_cannot_choose_fragment_path "Env var cannot choose the fragment path"
 run_test_with_setup test_env_cannot_choose_fragment_path_when_fragment_missing "Env var is not a fallback when the fragment is missing"
 
