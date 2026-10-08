@@ -64,7 +64,7 @@ source /tmp/build-scripts/base/path-utils.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-KOTLIN_VERSION="${KOTLIN_VERSION:-2.4.20}"
+KOTLIN_VERSION="${KOTLIN_VERSION:-2.4.21}"
 
 # Validate Kotlin version format to prevent shell injection
 validate_kotlin_version "$KOTLIN_VERSION" || {
