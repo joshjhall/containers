@@ -586,7 +586,8 @@ test_devcontainer_mapping_unmatched_is_silent() {
 }
 
 # The stale arm mapped .devcontainer/bin/x.sh by basename. With only a root
-# suite present, a nested script must not fold onto it.
+# suite present, a nested script must not fold onto it; with its own nested
+# suite present, it must map there and nowhere else.
 test_devcontainer_mapping_nested_by_path() {
     local root out
     if ! _load_map_to_test; then
@@ -603,6 +604,12 @@ test_devcontainer_mapping_nested_by_path() {
     out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test ".devcontainer/x.sh")
     assert_equals "$root/tests/unit/.devcontainer/x.sh" "$out" \
         ".devcontainer/x.sh must map to its root suite"
+
+    /usr/bin/mkdir -p "$root/tests/unit/.devcontainer/bin"
+    /usr/bin/touch "$root/tests/unit/.devcontainer/bin/x.sh"
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test ".devcontainer/bin/x.sh")
+    assert_equals "$root/tests/unit/.devcontainer/bin/x.sh" "$out" \
+        ".devcontainer/bin/x.sh must map to its own nested suite only"
 
     /usr/bin/rm -rf "$root"
 }
