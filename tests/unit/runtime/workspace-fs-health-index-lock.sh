@@ -187,6 +187,16 @@ test_age_cutoff_boundary() {
         "A lock just over the 600s cutoff is reported"
 }
 
+test_future_mtime_is_silent() {
+    # Host/VM clock skew can date the lock in the future. The negative age must
+    # read as fresh: silence is the safe side for advice that ends in an rm.
+    seed_commit
+    plant_lock_aged "$PROJECT_ROOT/.git/index.lock" -3600
+
+    assert_empty "$(run_fs_health_stderr sensitive)" \
+        "A future-dated lock (clock skew) is not reported"
+}
+
 test_unreadable_mtime_is_silent_and_nonfatal() {
     # The stat failure and non-numeric guards exist so a broken probe can never
     # print a bogus age or fail startup. Drive both through the seam.
@@ -244,6 +254,7 @@ run_test_with_setup test_stale_lock_does_not_fail_startup "Lock diagnostic never
 run_test_with_setup test_linked_worktree_lock_is_reported "Linked worktree lock is reported (#1086)"
 run_test_with_setup test_emitted_rm_removes_a_spaced_lock_path "Emitted rm handles a spaced path (#1086)"
 run_test_with_setup test_age_cutoff_boundary "Age cutoff boundary at 600s (#1086)"
+run_test_with_setup test_future_mtime_is_silent "Future-dated lock stays silent (#1086)"
 run_test_with_setup test_unreadable_mtime_is_silent_and_nonfatal "Unreadable mtime stays silent and non-fatal (#1086)"
 run_test_with_setup test_submodule_lock_is_reported "Submodule lock is reported (#1086)"
 run_test_with_setup test_skip_case_check_silences_lock_report "SKIP_CASE_CHECK silences the lock report (#1086)"

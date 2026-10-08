@@ -927,12 +927,14 @@ check_stale_index_lock() {
     # ends in an rm.
     [ "$age" -ge "$FS_HEALTH_INDEX_LOCK_STALE_SECS" ] || return 0
 
-    # %q so the pasteable commands survive a path with spaces or quotes.
+    # %q everywhere the path is printed: the pasteable commands survive spaces
+    # and quotes, and control characters in a crafted submodule path reach the
+    # terminal escaped rather than raw.
     quoted=$(command printf '%q' "$lock")
     qroot=$(command printf '%q' "$root")
 
-    command echo "$LOG_PREFIX stale git index lock (${age}s old): $lock (issue #1086)" >&2
-    command echo "$LOG_PREFIX   Git writes will fail with \"Unable to create '$lock': File exists\"." >&2
+    command echo "$LOG_PREFIX stale git index lock (${age}s old): $quoted (issue #1086)" >&2
+    command echo "$LOG_PREFIX   Git writes will fail with \"Unable to create '$quoted': File exists\"." >&2
     command echo "$LOG_PREFIX   Likely cause: the virtiofs host mount misreported a rename (Docker Desktop on macOS)." >&2
     command echo "$LOG_PREFIX   If no git command is running against this repo, remove it:" >&2
     command echo "$LOG_PREFIX     rm -f -- $quoted" >&2
