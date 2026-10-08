@@ -263,11 +263,11 @@ map_to_test() {
             return
             ;;
 
-        # .devcontainer/bin/foo.sh → tests/unit/.devcontainer/bin/foo.sh
-        .devcontainer/bin/*.sh)
-            local base
-            base=$(basename "$file")
-            local test_path="${TESTS_DIR}/unit/.devcontainer/bin/${base}"
+        # .devcontainer/foo.sh → tests/unit/.devcontainer/foo.sh (#1067).
+        # Map by path under .devcontainer/, not basename: a case `*` also
+        # matches `/`, so nested scripts must not fold onto a root suite.
+        .devcontainer/*.sh)
+            local test_path="${TESTS_DIR}/unit/${file}"
             if [ -f "$test_path" ]; then
                 echo "$test_path"
             fi
