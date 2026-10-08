@@ -32,19 +32,30 @@ RC_PIN_UNREWRITABLE="$(_rc RC_PIN_UNREWRITABLE)"
 # Test: every write in update_version() is guarded
 # ============================================================================
 # Structural guard so a newly added arm cannot reintroduce the masked failure:
-# every sed_inplace call that update_version() makes must carry `|| return`.
+# every write update_version() makes — a sed_inplace or one of the writing
+# helpers — must end in `|| return`. A bare `|| return` passes the helper's own
+# code through (bump_gitleaks_pin distinguishes refusal from write failure).
 test_every_write_is_guarded() {
-    local unguarded
+    local unguarded writes
     unguarded="$(command awk '
         /^update_version\(\)/ { inside = 1 }
         inside && /^}/ { inside = 0 }
-        inside && /^[[:space:]]+sed_inplace / && !/\|\| return "\$RC_UPDATE_FAILED"$/ {
+        inside && /^[[:space:]]+(sed_inplace|pin_action|update_luggage_catalog|sync_[a-z_]+|bump_[a-z_]+) / &&
+            !/\|\| return( "\$RC_UPDATE_FAILED")?$/ {
             print FILENAME ":" NR
         }
     ' "$UPDATERS")"
+    # Guard against the scan silently matching nothing (e.g. a renamed function).
+    writes="$(command awk '
+        /^update_version\(\)/ { inside = 1 }
+        inside && /^}/ { inside = 0 }
+        inside && /^[[:space:]]+sed_inplace / { n++ }
+        END { print n + 0 }
+    ' "$UPDATERS")"
 
+    assert_not_equals "0" "$writes" "the guard scan must find update_version()'s writes"
     assert_equals "" "$unguarded" \
-        "every sed_inplace in update_version() must end in || return \"\$RC_UPDATE_FAILED\""
+        "every write in update_version() must end in || return"
 }
 
 # ============================================================================
@@ -139,6 +150,40 @@ EOF
 }
 
 # ============================================================================
+# Test: a write failure outranks a pin-shape hold in the same run
+# ============================================================================
+# Exit 3 (tree may be half-updated) must win over exit 2 (tools held), and both
+# causes must still be summarized — a held tool must not hide a fatal one.
+test_mixed_failures_exit_three_and_report_both() {
+    local root="$TEST_SCRATCH_BASE/updaters-mixed" rc=0 output
+    _write_partial_fixture "$root"
+    command cat >"$root/lib/features/dev-tools.sh" <<'EOF'
+#!/bin/bash
+GITLEAKS_VERSION=8.30.1
+EOF
+    command cat >"$root/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "gitleaks", "current": "8.30.1", "latest": "8.31.0", "file": "dev-tools.sh", "status": "outdated"},
+    {"tool": "Python", "current": "3.12.7", "latest": "3.12.8", "file": "Dockerfile", "status": "outdated"}
+  ]
+}
+EOF
+
+    output="$(
+        cd "$root" || exit 1
+        # shellcheck disable=SC2031 # separate subshell
+        PROJECT_ROOT_OVERRIDE="$root" "$PROJECT_ROOT/bin/update-versions.sh" \
+            --no-commit --no-bump --input test.json 2>&1
+    )" || rc=$?
+    /bin/rm -rf "$root"
+
+    assert_equals "3" "$rc" "a write failure must make the run fatal even alongside a held tool"
+    assert_contains "$output" "pin line not in the shape" "the held tool must still be summarized"
+    assert_contains "$output" "rewrite error" "the failed tool must be summarized"
+}
+
+# ============================================================================
 # Test: the return codes stay distinct
 # ============================================================================
 test_return_codes_distinct() {
@@ -152,6 +197,7 @@ run_test test_every_write_is_guarded "Every write in update_version() is guarded
 run_test test_failed_non_final_write_returns_update_failed "Failed non-final write returns RC_UPDATE_FAILED"
 run_test test_failed_non_final_write_exits_three "Failed non-final write exits 3"
 run_test test_pin_refusal_reported_as_unrewritable_pin "Pin-shape refusal is held under its own label"
+run_test test_mixed_failures_exit_three_and_report_both "Write failure outranks a pin-shape hold"
 run_test test_return_codes_distinct "Return codes are distinct"
 
 # Generate test report
