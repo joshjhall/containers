@@ -476,6 +476,7 @@ mod tests {
     #[test]
     fn tool_ids_empty_catalog_is_empty() {
         let cat = Catalog::default();
-        assert!(cat.tool_ids().is_empty());
+        let ids = cat.tool_ids();
+        assert!(ids.is_empty(), "expected empty, got {ids:?}");
     }
 }

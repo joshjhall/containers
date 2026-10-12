@@ -771,7 +771,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let git = MockGit::new();
         let rows = collect_worktree_status(&git, tmp.path(), &["myapp".to_string()], 5);
-        assert!(rows.is_empty());
+        assert!(rows.is_empty(), "expected empty, got {rows:?}");
     }
 
     #[test]
@@ -797,7 +797,7 @@ mod tests {
 
         let git = MockGit::new();
         let rows = collect_worktree_status(&git, base, &["myapp".to_string()], 5);
-        assert!(rows.is_empty());
+        assert!(rows.is_empty(), "expected empty, got {rows:?}");
     }
 
     #[test]

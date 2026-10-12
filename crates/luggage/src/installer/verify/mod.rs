@@ -347,7 +347,7 @@ mod tests {
             &DeadClient,
         )
         .unwrap();
-        assert!(warnings.is_empty());
+        assert!(warnings.is_empty(), "expected empty, got {warnings:?}");
     }
 
     /// Tier 2 fetches nothing, so dispatching it must not touch the HTTP
@@ -568,7 +568,7 @@ mod tests {
             dispatch("rust", "1.95.0", &digest, "rustup-init", &v, &subs, &OkClient).unwrap();
         // Tier 3 verified against an external reference, so it has nothing to
         // warn about — only tier 4 does.
-        assert!(warnings.is_empty());
+        assert!(warnings.is_empty(), "expected empty, got {warnings:?}");
         // Suppress unused-warning for `Mutex`/`HashMap` imports above (kept
         // to mirror the tier3 test fixture style).
         let _: HashMap<&str, &str> = HashMap::new();

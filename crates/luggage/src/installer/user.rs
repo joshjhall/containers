@@ -165,13 +165,13 @@ mod tests {
         // is "non-empty result"; the value depends on whether the test
         // harness inherited a USERNAME from the parent shell.
         let r = resolve_user(Some(""));
-        assert!(!r.is_empty());
+        assert!(!r.is_empty(), "expected non-empty");
     }
 
     #[test]
     fn no_override_returns_non_empty_string() {
         let r = resolve_user(None);
-        assert!(!r.is_empty());
+        assert!(!r.is_empty(), "expected non-empty");
     }
 
     #[test]

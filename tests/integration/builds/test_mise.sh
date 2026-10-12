@@ -52,7 +52,16 @@ test_mise_build() {
 test_mise_version() {
     local image="${IMAGE_TO_TEST:-test-mise-$$}"
 
-    assert_command_in_container "$image" "mise --version" "mise"
+    # `mise --version` prints e.g. `2026.10.4 linux-x64 (2026-10-07)`; the
+    # word "mise" appears only in the "newer version available" WARN line,
+    # so a substring check on "mise" passed only while the pin lagged
+    # upstream and failed the day the pin was current (v4.21.0). Match the
+    # version line itself, not an exact version: CI runs this against the
+    # published image, which may trail the branch's pin.
+    assert_command_in_container "$image" "mise --version" || return 1
+    assert_matches "$TEST_OUTPUT" \
+        $'(^|\n)[0-9]{4}\\.[0-9]+\\.[0-9]+ linux-' \
+        "mise --version should print a CalVer version line"
 }
 
 # Test: Activation fragment installed at expected path

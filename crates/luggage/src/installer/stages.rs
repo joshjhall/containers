@@ -303,7 +303,7 @@ mod tests {
             Arc::new(methods::ProcessRunner),
         );
         let warnings = installer.stage_verify(&resolved, &digest, "art", None).unwrap();
-        assert!(warnings.is_empty());
+        assert!(warnings.is_empty(), "expected empty, got {warnings:?}");
     }
 
     #[test]

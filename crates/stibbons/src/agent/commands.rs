@@ -923,7 +923,7 @@ mod tests {
     #[test]
     fn embedded_scripts_are_present() {
         for body in [AGENT_ENTRYPOINT_SH, AGENT_INIT_SH, AGENT_START_SH] {
-            assert!(!body.is_empty());
+            assert!(!body.is_empty(), "expected non-empty");
             assert!(body.starts_with("#!"), "script should start with a shebang");
         }
         // The entrypoint is the golem-shaped version, not the retired bare shell.

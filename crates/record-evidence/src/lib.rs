@@ -291,7 +291,11 @@ mod tests {
     #[test]
     fn a_row_with_no_warnings_has_none_recorded() {
         let entry = build_test_entry(base_inputs()).unwrap();
-        assert!(entry.verification_warnings.is_empty());
+        assert!(
+            entry.verification_warnings.is_empty(),
+            "expected empty, got {:?}",
+            entry.verification_warnings
+        );
         assert!(entry.notes.is_none());
     }
 

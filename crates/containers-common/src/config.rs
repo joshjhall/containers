@@ -492,7 +492,7 @@ mod tests {
 
         let cfg = IgorConfig::load(&path).unwrap();
         assert_eq!(cfg.schema_version, 0);
-        assert!(cfg.features.is_empty());
+        assert!(cfg.features.is_empty(), "expected empty, got {:?}", cfg.features);
     }
 
     #[test]
@@ -505,13 +505,17 @@ mod tests {
         assert_eq!(defaults.network, "myproject-network");
         assert_eq!(defaults.image_tag, "latest");
         assert_eq!(defaults.shared_volumes, cache_vols);
-        assert!(defaults.repos.is_empty());
+        assert!(defaults.repos.is_empty(), "expected empty, got {:?}", defaults.repos);
     }
 
     #[test]
     fn test_agent_defaults_empty_cache_volumes() {
         let defaults = agent_defaults("proj", &[]);
-        assert!(defaults.shared_volumes.is_empty());
+        assert!(
+            defaults.shared_volumes.is_empty(),
+            "expected empty, got {:?}",
+            defaults.shared_volumes
+        );
     }
 
     #[test]
