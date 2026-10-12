@@ -99,6 +99,11 @@
           "sha256": "dc9a2bdc556b2be900c1d8cdf432de26492de5af3ffade000d4bfd97f3122bfb",
           "url": "https://eradman.com/entrproject/code/entr-5.8.tar.gz",
           "added": "2026-03-15"
+        },
+        "5.9": {
+          "sha256": "0ef2ce7db728167844a91904944cd07c7ccc6fd3041b849cad861224d106a845",
+          "url": "https://eradman.com/entrproject/code/entr-5.9.tar.gz",
+          "added": "2026-10-12"
         }
       }
     },
@@ -147,6 +152,11 @@
           "sha256": "59e9ca74c7904ef2c122b12114937673ccce68de820a663f0ed66ccf8799e0b7",
           "url": "https://github.com/JetBrains/kotlin/releases/download/v2.4.20/kotlin-compiler-2.4.20.zip",
           "added": "2026-09-07"
+        },
+        "2.4.21": {
+          "sha256": "7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd",
+          "url": "https://github.com/JetBrains/kotlin/releases/download/v2.4.21/kotlin-compiler-2.4.21.zip",
+          "added": "2026-10-12"
         }
       }
     },
@@ -254,6 +264,19 @@
             }
           },
           "added": "2026-03-16"
+        },
+        "2.38.2": {
+          "checksums": {
+            "amd64": {
+              "sha256": "148820a187930d36ca6a204504e5cdb30d8396cd1a97e64c3b3f10d793c11247",
+              "url": "https://github.com/direnv/direnv/releases/download/v2.38.2/direnv.linux-amd64"
+            },
+            "arm64": {
+              "sha256": "ec2a32dbe2f19dd085bd9315a1b4ea88b55ec288aa7eabe8723490baf466cb23",
+              "url": "https://github.com/direnv/direnv/releases/download/v2.38.2/direnv.linux-arm64"
+            }
+          },
+          "added": "2026-10-12"
         }
       }
     },
@@ -297,6 +320,19 @@
             }
           },
           "added": "2026-03-29"
+        },
+        "0.20.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "50f08c879f84c81ceb220e476491a7f492d2c9c671e79918cc44badf961a6240",
+              "url": "https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-x86_64-unknown-linux-gnu.tar.gz"
+            },
+            "arm64": {
+              "sha256": "da7f4338f593572ff426ae153e0870e2fdc72729416eff551b40cdeb67940db8",
+              "url": "https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-aarch64-unknown-linux-gnu.tar.gz"
+            }
+          },
+          "added": "2026-10-12"
         }
       }
     },
@@ -617,6 +653,19 @@
             }
           },
           "added": "2026-09-16"
+        },
+        "2.5.15": {
+          "checksums": {
+            "amd64": {
+              "sha256": "5d867a0b2ccea1755b7e508b01d836a8c64e31a1e4d11ec24b43b6b4eec8b3b6",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.15/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "a56bcd73ddbfdb0f57a82bb67b7ea698eed4027aff602b95aa18fafe919d59e0",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.15/biome-linux-arm64"
+            }
+          },
+          "added": "2026-10-12"
         }
       }
     },
@@ -763,6 +812,19 @@
             }
           },
           "added": "2026-09-16"
+        },
+        "2.2.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "1b0ff33209fb31c5da73a6b860c5077ad83b1d8a99e46f5031fc14ee96caf9fe",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.2.1/lefthook_2.2.1_Linux_x86_64.gz"
+            },
+            "arm64": {
+              "sha256": "90af157cb1f2c6194498cd88aacee9d86c71e09f194bfbf68da2f1d24aa8ae01",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.2.1/lefthook_2.2.1_Linux_aarch64.gz"
+            }
+          },
+          "added": "2026-10-12"
         }
       }
     },
@@ -862,6 +924,19 @@
             }
           },
           "added": "2026-09-07"
+        },
+        "0.63.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "f58b5d7c13ccd613cfa264f1ae82d4e5db1373f8fe20462bc1126051d111b0ce",
+              "url": "https://github.com/dprint/dprint/releases/download/0.63.0/dprint-x86_64-unknown-linux-gnu.zip"
+            },
+            "arm64": {
+              "sha256": "8dfbf17fc4be97020e51bd47e1370acdb019301295ed539840016671cab33e89",
+              "url": "https://github.com/dprint/dprint/releases/download/0.63.0/dprint-aarch64-unknown-linux-gnu.zip"
+            }
+          },
+          "added": "2026-10-12"
         }
       }
     },
@@ -957,6 +1032,19 @@
             }
           },
           "added": "2026-09-16"
+        },
+        "2.7.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_arm64"
+            }
+          },
+          "added": "2026-10-12"
         }
       }
     },
@@ -1056,6 +1144,19 @@
             }
           },
           "added": "2026-09-13"
+        },
+        "3.0.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "6c90d4a474c7c0409dfb575be03a5345878ac14fdba18de8b40fa58c60121189",
+              "url": "https://github.com/rui314/mold/releases/download/v3.0.0/mold-3.0.0-x86_64-linux.tar.gz"
+            },
+            "arm64": {
+              "sha256": "52c759d3689babaea4c42af2f31062a74ab83e17ffb5a8090232534c67b70577",
+              "url": "https://github.com/rui314/mold/releases/download/v3.0.0/mold-3.0.0-aarch64-linux.tar.gz"
+            }
+          },
+          "added": "2026-10-12"
         }
       }
     },
@@ -1138,6 +1239,19 @@
             }
           },
           "added": "2026-09-29"
+        },
+        "1.6.2": {
+          "checksums": {
+            "amd64": {
+              "sha256": "ef0af416092128fb1ccc723786000b7edf4a6971fe604acd08bf966e4f37b828",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.6.2/codegraph-linux-x64.tar.gz"
+            },
+            "arm64": {
+              "sha256": "c8c6be292be21d00dea26bad8b28d434731cf612fb8cc475dc10f5b3038b5b64",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.6.2/codegraph-linux-arm64.tar.gz"
+            }
+          },
+          "added": "2026-10-12"
         }
       }
     },
@@ -1168,12 +1282,25 @@
             }
           },
           "added": "2026-09-29"
+        },
+        "1.25.3": {
+          "checksums": {
+            "amd64": {
+              "sha256": "1f72931713e9091478538c6c78c3f11f205b4f6f394f35e61835036b23929d2a",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.25.3/cargo-binstall-x86_64-unknown-linux-musl.tgz"
+            },
+            "arm64": {
+              "sha256": "19ef7a058397f83d6b2cc83727fb8d38babd8ad657210c921b7771a9e8b3a6fb",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.25.3/cargo-binstall-aarch64-unknown-linux-musl.tgz"
+            }
+          },
+          "added": "2026-10-12"
         }
       }
     }
   },
   "metadata": {
-    "generated": "2026-09-29T14:42:31Z",
+    "generated": "2026-10-12T18:06:44Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }

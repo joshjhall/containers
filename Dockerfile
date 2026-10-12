@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.21.0
+# Version: 4.21.1
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -39,7 +39,7 @@ ARG BASE_IMAGE=debian:trixie-slim
 # scripts (see lib/features/rust.sh). Building luggage here keeps the rust
 # toolchain out of the runtime image while still bundling a reproducible
 # binary built from the in-tree workspace.
-FROM rust:1.98-slim-trixie AS luggage-builder
+FROM rust:1.99-slim-trixie AS luggage-builder
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
@@ -183,7 +183,7 @@ RUN mkdir -p /var/log/luggage && chmod 755 /var/log/luggage
 
 ARG INCLUDE_PYTHON=false
 ARG INCLUDE_PYTHON_DEV=false
-ARG PYTHON_VERSION=3.14.8
+ARG PYTHON_VERSION=3.15.0
 
 # Handle optional Python project files only if Python is being installed
 # Copy to temp location first since we're running as root and user doesn't exist yet
@@ -225,7 +225,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Rust + Rust development tools
 ARG INCLUDE_RUST=false
 ARG INCLUDE_RUST_DEV=false
-ARG RUST_VERSION=1.98.1
+ARG RUST_VERSION=1.99.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUST}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
@@ -252,7 +252,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Go + Go development tools
 ARG INCLUDE_GOLANG=false
 ARG INCLUDE_GOLANG_DEV=false
-ARG GO_VERSION=1.27.1
+ARG GO_VERSION=1.27.2
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG}" = "true" ] || [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
@@ -326,7 +326,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.10.4
+ARG MISE_VERSION=2026.10.8
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi
