@@ -83,17 +83,21 @@ consumers.
 
 ## Pinning target
 
-Consumers (luggage, stibbons) should pin **`containers-db@v0.1.0`**
-(commit `03c1fd5`, tagged 2026-04-26). v0.1.0 freezes:
+Consumers (luggage, stibbons) should pin **`containers-db@v0.2.0`**
+(commit `141267a`, tagged 2026-10-12; closed containers-db#1). It adds the
+evidence-capable `TestEntry` (paired `image_ref`/`image_digest`, duration,
+version_output, error_class, dependencies, verification_warnings), required
+`install_methods[].method_kind`, the rust catalog 1.82.0-1.99.0, and the
+18-tuple platform matrix.
 
-- `schema/tool.schema.json` and `schema/version.schema.json` (JSON Schema
-  2020-12, `schemaVersion: 1`)
-- The 7-tier activity model encoding
-- The three-field claim/evidence/fossil support model
-- The `install_methods[].verification` field shape (per-tier conditional
-  validation arrives in v0.2.0 once #402 lands)
+**`schemaVersion` is still `1`** despite #1 asking for 2: every field since
+v0.1.0 (`03c1fd5`, 2026-04-26) is optional/backward-compatible, and consumers
+reject unknown versions, so a bump would break them for no shape change.
+Reserve the bump for a genuinely breaking change.
 
-Bump the pin to v0.2.0 only after #402 merges.
+In practice the shipped image does not pin a tag: it vendors a snapshot of
+containers-db main into `crates/luggage/testdata/catalog`, held in sync by
+the drift gate ([[vendored-catalog-drift-gate]]).
 
 ## Filed issues (2026-04-25)
 
