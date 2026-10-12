@@ -17,7 +17,12 @@ Two catalogs, and the split is load-bearing:
 
 - `testdata/catalog/` — production. Must mirror upstream for any tool+version
   present in both. Only `available[]`, `default_version`, and
-  `minimum_recommended` may differ (they describe what this copy holds).
+  `minimum_recommended` may differ (they describe what this copy holds), and
+  version files are compared **without `tested[]`** (#1107, 2026-10-12):
+  evidence-run appends rows upstream on every merged evidence PR, so gating
+  it red-lit every branch until a manual re-mirror. `luggage reconcile`
+  fetches published evidence itself instead (#1108) — see
+  [[reconcile-uses-published-evidence]].
 - `testdata/fixtures-catalog/` — hermetic input for `crates/luggage/tests/cli.rs`
   only, exempt from drift. Holds the `unsupported` windows cell, the
   `rustup-init-musl` method name, and the `1.84.x` partial-version entries.
@@ -36,6 +41,11 @@ Gotchas that cost real time:
   upstream, and deliberately leaves `default_version` alone. So a field added
   upstream is NOT picked up by a version bump — mirror it across first, or every
   generated entry inherits the gap.
+- The auto-patch Rust bump used to keep add-version's generated file (today's
+  timestamps and `released`), which drifts the moment the containers-db scanner
+  has the version. Since #1106 `update_luggage_catalog`
+  (`bin/lib/update-versions/catalog.sh`) replaces it with containers-db's copy
+  (`$CONTAINERS_DB_SRC`, else raw HTTPS) when one exists.
 - The comparison is canonicalized (`jq -S`), not byte-exact, because this repo
   runs dprint over JSON and containers-db does not. Reformatting a freshly
   copied file is safe.
