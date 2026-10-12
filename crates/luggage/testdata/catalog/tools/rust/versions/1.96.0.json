@@ -5,8 +5,6 @@
   "released": "2026-05-28",
   "channel": "stable",
   "support_matrix": [
-    { "os": "debian", "os_version": "11", "arch": "amd64", "status": "supported" },
-    { "os": "debian", "os_version": "11", "arch": "arm64", "status": "supported" },
     { "os": "debian", "os_version": "12", "arch": "amd64", "status": "supported" },
     { "os": "debian", "os_version": "12", "arch": "arm64", "status": "supported" },
     { "os": "debian", "os_version": "13", "arch": "amd64", "status": "supported" },

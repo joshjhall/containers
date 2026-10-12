@@ -7,18 +7,6 @@
   "support_matrix": [
     {
       "os": "debian",
-      "os_version": "11",
-      "arch": "amd64",
-      "status": "supported"
-    },
-    {
-      "os": "debian",
-      "os_version": "11",
-      "arch": "arm64",
-      "status": "supported"
-    },
-    {
-      "os": "debian",
       "os_version": "12",
       "arch": "amd64",
       "status": "supported"
@@ -90,6 +78,35 @@
       "image_digest": "sha256:cca0bf7fe783abc570b21dd9b0054ad002bda450b16c8ab0ee4714399b4f5cbf",
       "duration_seconds": 19.868913287,
       "version_output": "rustc 1.95.0 (59807616e 2026-04-14)"
+    },
+    {
+      "os": "debian",
+      "os_version": "12",
+      "arch": "amd64",
+      "tested_at": "2026-10-07T19:01:35.335947425Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/37671017750",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-debian-12-amd64",
+      "image_digest": "sha256:88ed3ae76353fec6fd0452c445a00f7d56ba9e7f58aae8a51e12126a2b2ed96e",
+      "duration_seconds": 20.192767881,
+      "version_output": "rustc 1.95.0 (59807616e 2026-04-14)",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "20250419~deb12u1"
+        },
+        {
+          "tool": "gcc",
+          "package": "gcc",
+          "version": "4:12.2.0-3"
+        },
+        {
+          "tool": "libc_dev",
+          "package": "libc6-dev",
+          "version": "2.36-9+deb12u14"
+        }
+      ]
     }
   ],
   "install_methods": [

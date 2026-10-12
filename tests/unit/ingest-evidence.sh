@@ -3,10 +3,10 @@
 # transport script that lands rows in joshjhall/containers-db's
 # tested[] arrays. Sub-issue C of #473 (evidence-runs design tracker).
 #
-# These tests exercise the script's local-side behavior in --dry-run
-# mode against a fake containers-db checkout. The push and PR-open
-# paths are not exercised here — they require a real GH credential and
-# a real upstream; the workflow itself smoke-tests them on dispatch.
+# Most tests exercise the script's local-side behavior in --dry-run mode
+# against a fake containers-db checkout. The push + PR-open path runs
+# against a local bare repo standing in for origin, with `gh` stubbed on
+# PATH (see run_real_ingest).
 
 set -euo pipefail
 
@@ -91,14 +91,90 @@ test_appends_row_on_clean_file() {
     cleanup_db
 }
 
-test_branch_name_includes_run_id_suffix() {
+test_branch_name_is_stable_per_tuple() {
+    # GITHUB_RUN_ID is set the way CI sets it: it must NOT reach the branch
+    # name, or every run opens its own PR (45 duplicates of rust@1.95.0).
     GITHUB_RUN_ID="987654321" run_ingest "$SAMPLE_ROW"
-    if [[ "$RESULT_BRANCH" == "evidence/rust/1.95.0/debian-12-amd64/987654321" ]]; then
-        assert_true true "branch name follows convention with GITHUB_RUN_ID suffix"
-    else
-        assert_true false "expected evidence/rust/1.95.0/debian-12-amd64/987654321, got '$RESULT_BRANCH'"
-    fi
+    assert_equals "evidence/rust/1.95.0/debian-12-amd64" "$RESULT_BRANCH" \
+        "branch is evidence/<tool>/<version>/<tuple>, with no per-run suffix"
     cleanup_db
+}
+
+test_explicit_branch_suffix_is_honored() {
+    run_ingest "$SAMPLE_ROW" --branch-suffix manual-1
+    assert_equals "evidence/rust/1.95.0/debian-12-amd64/manual-1" "$RESULT_BRANCH" \
+        "--branch-suffix still opts into a separate branch"
+    cleanup_db
+}
+
+# Non-dry-run ingest against a bare repo standing in for containers-db
+# origin. `gh` is a stub that logs its argv to $GH_LOG and answers
+# `pr list` with $GH_OPEN_PR (empty = no open PR for the head).
+run_real_ingest() {
+    local db="$1" row="$2" out rc=0
+    out=$(PATH="$STUB_DIR:$PATH" GH_TOKEN=dummy BASH_ENV='' \
+        "$INGEST" --row "$row" --db-path "$db" \
+        --tool rust --version 1.95.0 --no-validate 2>/dev/null) || rc=$?
+    REAL_OUT="$out"
+    REAL_RC="$rc"
+}
+
+make_gh_stub() {
+    STUB_DIR="$(command mktemp -d)"
+    GH_LOG="$STUB_DIR/gh.log"
+    export GH_LOG
+    command cat >"$STUB_DIR/gh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$GH_LOG"
+if [ "$1 $2" = "pr list" ]; then
+    printf '%s' "${GH_OPEN_PR:-}"
+elif [ "$1 $2" = "pr create" ]; then
+    printf 'https://github.com/joshjhall/containers-db/pull/1\n'
+fi
+STUB
+    command chmod +x "$STUB_DIR/gh"
+}
+
+test_reingest_updates_open_pr_instead_of_duplicating() {
+    local origin db row2
+    origin="$(command mktemp -d)"
+    db="$(command mktemp -d)"
+    make_fake_db "$db"
+    git -C "$origin" init -q --bare
+    git -C "$db" remote add origin "$origin"
+    git -C "$db" push -q origin main 2>/dev/null
+    make_gh_stub
+
+    # First run: no PR yet, so one is created.
+    GH_OPEN_PR="" run_real_ingest "$db" "$SAMPLE_ROW"
+    assert_equals "0" "$REAL_RC" "first real ingest exits 0"
+    assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" \
+        "first ingest opens exactly one PR"
+    local tip1
+    tip1=$(git -C "$origin" rev-parse refs/heads/evidence/rust/1.95.0/debian-12-amd64)
+
+    # Second run, new digest (a rebuilt base image), PR #42 already open.
+    # The worktree is back on main, as a fresh CI checkout would be.
+    git -C "$db" checkout -q main
+    row2="$(command mktemp)"
+    jq '.image_digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"' \
+        "$SAMPLE_ROW" >"$row2"
+    GH_OPEN_PR="42" run_real_ingest "$db" "$row2"
+    assert_equals "0" "$REAL_RC" "re-ingest with an open PR exits 0"
+    assert_equals "evidence/rust/1.95.0/debian-12-amd64" "$REAL_OUT" \
+        "re-ingest reports the shared branch on stdout"
+    assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" \
+        "re-ingest opens no second PR"
+    local tip2
+    tip2=$(git -C "$origin" rev-parse refs/heads/evidence/rust/1.95.0/debian-12-amd64)
+    assert_not_equals "$tip1" "$tip2" "re-ingest force-updates the shared branch"
+    assert_equals "sha256:1111111111111111111111111111111111111111111111111111111111111111" \
+        "$(git -C "$origin" show "$tip2:tools/rust/versions/1.95.0.json" | jq -r '.tested[-1].image_digest')" \
+        "the open PR's branch now carries the new row"
+    assert_equals "1" "$(git -C "$origin" for-each-ref refs/heads/evidence/ | command wc -l | command tr -d ' ')" \
+        "only one evidence branch exists on origin"
+
+    command rm -rf "$origin" "$db" "$STUB_DIR" "$row2"
 }
 
 test_commit_lands_on_new_branch() {
@@ -320,7 +396,9 @@ test_rejects_missing_version_file() {
 # --- Run -------------------------------------------------------------------
 
 run_test test_appends_row_on_clean_file "appends row to empty tested[]"
-run_test test_branch_name_includes_run_id_suffix "branch name uses GITHUB_RUN_ID when present"
+run_test test_branch_name_is_stable_per_tuple "branch name is stable per tuple (no run-id suffix)"
+run_test test_explicit_branch_suffix_is_honored "--branch-suffix opts into a separate branch"
+run_test test_reingest_updates_open_pr_instead_of_duplicating "re-ingest updates the open PR, never duplicates it"
 run_test test_commit_lands_on_new_branch "commit lands on the new branch with conventional subject"
 run_test test_dedup_replaces_same_tuple_same_digest "dedup replaces same (tuple, digest) row"
 run_test test_dedup_appends_different_digest "different image_digest accumulates as history"

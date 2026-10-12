@@ -1,14 +1,12 @@
 {
   "activity": {
     "scan_cadence_days": 1,
-    "scanned_at": "2026-04-27T22:00:00Z",
+    "scanned_at": "2026-10-12T03:09:55Z",
     "score": "very-active",
     "signals": {
-      "active_maintainers": 152,
-      "commits_last_90d": 7904,
-      "last_commit_at": "2026-04-27T21:47:07Z",
-      "last_release_at": "2026-04-16T18:19:31Z",
-      "open_advisories": 0,
+      "last_commit_at": "2026-10-12T00:59:29Z",
+      "last_release_at": "2026-10-01T12:41:12Z",
+      "open_advisories": 6,
       "releases_last_90d": 4
     }
   },

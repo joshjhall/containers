@@ -21,6 +21,14 @@
 # version) produces a commit + PR. See docs/operations/evidence-runs.md
 # (Merge policy) for the rationale.
 #
+# One open PR per (tool, version, tuple): the branch is stable
+# (evidence/<tool>/<version>/<tuple>), each ingest force-pushes it, and an
+# already-open PR for it is updated in place rather than duplicated. The
+# no-op guard above compares against containers-db main, so until an
+# evidence PR merges every base-image rebuild (a new digest) is "new" again;
+# a per-run branch turned that into one fresh PR per push to containers
+# main (45 duplicates of rust@1.95.0 before this changed).
+#
 # Per CLAUDE.md, all bare external commands use `command` to bypass any
 # user-shell aliases.
 
@@ -47,8 +55,9 @@ Optional:
   --no-validate         Skip ajv pre-flight (testing only)
   --remote URL          containers-db origin URL when --db-path is empty
                         (default: https://github.com/joshjhall/containers-db.git)
-  --branch-suffix STR   Disambiguator appended to the branch name
-                        (default: \$GITHUB_RUN_ID or a UTC timestamp)
+  --branch-suffix STR   Disambiguator appended to the branch name. Default:
+                        none, so re-ingests of one tuple share a branch and
+                        a PR. Set it only to deliberately open a separate PR.
   -h, --help            Show this help
 
 Environment:
@@ -191,11 +200,7 @@ else
     TUPLE_SLUG="$NEW_OS-$NEW_ARCH"
 fi
 
-if [ -z "$BRANCH_SUFFIX" ]; then
-    BRANCH_SUFFIX="${GITHUB_RUN_ID:-$(command date -u +%Y%m%d-%H%M%S)}"
-fi
-
-BRANCH_NAME="evidence/$TOOL/$VERSION/$TUPLE_SLUG/$BRANCH_SUFFIX"
+BRANCH_NAME="evidence/$TOOL/$VERSION/$TUPLE_SLUG${BRANCH_SUFFIX:+/$BRANCH_SUFFIX}"
 
 # --- Dedup-merge row into the tested[] array -------------------------------
 
@@ -263,7 +268,8 @@ fi
 git -C "$DB_PATH" config --local user.name "${GIT_AUTHOR_NAME:-github-actions[bot]}"
 git -C "$DB_PATH" config --local user.email "${GIT_AUTHOR_EMAIL:-github-actions[bot]@users.noreply.github.com}"
 
-git -C "$DB_PATH" checkout -b "$BRANCH_NAME" >&2
+# -B, not -b: a checkout reused across runs may already have the branch.
+git -C "$DB_PATH" checkout -B "$BRANCH_NAME" >&2
 
 git -C "$DB_PATH" add "tools/$TOOL/versions/$VERSION.json"
 
@@ -319,7 +325,16 @@ retry() {
     return 1
 }
 
-retry git -C "$DB_PATH" push --set-upstream origin "$BRANCH_NAME"
+# The branch is rebuilt from main on every ingest, so the push replaces
+# whatever the previous run left there. Lease against the tip as fetched
+# just now so a commit someone else pushed to the branch is not silently
+# discarded; an absent remote branch leases against "must not exist".
+# stdout goes to stderr: --set-upstream prints "branch ... set up to track"
+# there, and this script's stdout is the branch name alone.
+REMOTE_TIP="$(git -C "$DB_PATH" ls-remote --heads origin "refs/heads/$BRANCH_NAME" | command cut -f1)"
+retry git -C "$DB_PATH" push --set-upstream \
+    --force-with-lease="refs/heads/$BRANCH_NAME:$REMOTE_TIP" \
+    origin "$BRANCH_NAME" >&2
 
 PR_BODY="$(
     command cat <<EOF
@@ -338,6 +353,15 @@ Ingestion contract:
 (sub-issue C of joshjhall/containers#473).
 EOF
 )"
+
+# An open PR for this head already shows the branch just force-pushed.
+EXISTING_PR="$(retry gh pr list --repo joshjhall/containers-db --state open \
+    --head "$BRANCH_NAME" --json number --jq '.[0].number // empty')"
+if [ -n "$EXISTING_PR" ]; then
+    command echo "$SCRIPT_NAME: updated open PR #$EXISTING_PR on $BRANCH_NAME" >&2
+    command echo "$BRANCH_NAME"
+    exit 0
+fi
 
 retry gh pr create \
     --repo joshjhall/containers-db \
