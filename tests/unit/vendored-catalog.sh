@@ -161,6 +161,41 @@ test_drift_fixtures_are_rejected() {
     return 0
 }
 
+# _mini_catalog <dir> <released> <tested-json>
+# A one-version catalog, so the evidence-exclusion tests below run offline and
+# do not depend on what the real containers-db happens to hold.
+_mini_catalog() {
+    command mkdir -p "$1/tools/rust/versions"
+    command printf '{"id":"rust","available":[{"version":"1.0.0"}]}\n' \
+        >"$1/tools/rust/index.json"
+    command printf '{"tool":"rust","version":"1.0.0","released":"%s","tested":%s}\n' \
+        "$2" "$3" >"$1/tools/rust/versions/1.0.0.json"
+}
+
+test_drift_ignores_tested_evidence() {
+    # Evidence-run appends tested[] rows upstream on every merged evidence PR;
+    # comparing them red-lit every branch here until a manual re-mirror.
+    local up="$TEST_TEMP_DIR/ev-up" ven="$TEST_TEMP_DIR/ev-ven"
+    _mini_catalog "$up" 2026-10-01 '[{"os":"debian","arch":"amd64","result":"pass"}]'
+    _mini_catalog "$ven" 2026-10-01 '[]'
+    local rc=0
+    command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "a tested[]-only difference is not drift"
+    command rm -rf "$up" "$ven"
+}
+
+test_drift_still_catches_install_data() {
+    # The exclusion must stay scoped to tested[]: the same pair with a real
+    # field difference still fails.
+    local up="$TEST_TEMP_DIR/id-up" ven="$TEST_TEMP_DIR/id-ven"
+    _mini_catalog "$up" 2026-10-01 '[{"os":"debian","arch":"amd64","result":"pass"}]'
+    _mini_catalog "$ven" 2026-10-12 '[]'
+    local rc=0
+    command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a non-evidence difference is still drift"
+    command rm -rf "$up" "$ven"
+}
+
 # ---------------------------------------------------------------------------
 # Structure — offline, catches a mis-staged catalog before the schema pass
 # ---------------------------------------------------------------------------
@@ -308,6 +343,8 @@ test_schema_fixtures_are_rejected() {
 
 run_test "test_vendored_matches_upstream" "vendored catalog matches containers-db"
 run_test "test_drift_fixtures_are_rejected" "drift check rejects planted drift fixtures"
+run_test "test_drift_ignores_tested_evidence" "drift check ignores tested[] evidence"
+run_test "test_drift_still_catches_install_data" "drift check still catches install-data differences"
 run_test "test_index_matches_versions_on_disk" "index available[] agrees with versions/"
 run_test "test_no_fixture_leakage_into_production" "no tests-only fixtures in shipped catalog"
 run_test "test_catalogs_validate_against_schemas" "catalogs validate against JSON schemas"

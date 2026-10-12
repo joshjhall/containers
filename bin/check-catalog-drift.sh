@@ -25,6 +25,12 @@
 #   - Index files are compared field-by-field: available[], default_version,
 #     and minimum_recommended describe what THIS catalog holds and legitimately
 #     differ. Every other field must match.
+#   - Version files are compared without tested[]. That is CI evidence, not
+#     install data: evidence-run appends to it upstream on every merged
+#     evidence PR, so comparing it red-lit every branch here until someone
+#     re-mirrored by hand. Its only reader, `luggage reconcile`, fetches the
+#     published evidence itself and warns when it has to fall back to the
+#     vendored copy.
 #   - crates/luggage/testdata/fixtures-catalog/ is exempt by design and is not
 #     passed to this script — it carries edge cases (an unsupported platform
 #     cell, a distinctly-named musl method) that exist purely so the hermetic
@@ -87,6 +93,9 @@ done
 # they are expected to differ between the two copies.
 readonly LOCAL_FIELDS='["available","default_version","minimum_recommended"]'
 
+# Version-file fields excluded from the comparison (see the header).
+readonly EVIDENCE_FIELDS='["tested"]'
+
 compared=0
 skipped=0
 failures=0
@@ -106,12 +115,14 @@ add_report() {
 # Emits a unified diff of the two canonicalized documents, or nothing when they
 # match. `jq -S` sorts keys and normalizes whitespace, so indentation or key
 # order alone never fails the check — only real content differences do.
+# EVIDENCE_FIELDS are dropped from both sides first.
 canonical_diff() {
     local up="$1" ven="$2" label="$3"
+    local strip='delpaths([$skip[] | [.]])'
     command diff -u \
         --label "upstream/$label" --label "vendored/$label" \
-        <(command jq -S . "$up" 2>/dev/null) \
-        <(command jq -S . "$ven" 2>/dev/null)
+        <(command jq -S --argjson skip "$EVIDENCE_FIELDS" "$strip" "$up" 2>/dev/null) \
+        <(command jq -S --argjson skip "$EVIDENCE_FIELDS" "$strip" "$ven" 2>/dev/null)
 }
 
 # compare_index <upstream-index> <vendored-index> <tool>
