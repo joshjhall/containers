@@ -540,6 +540,26 @@ luggage reconcile rust@1.96.0 --json --catalog ../containers-db
 just reconcile-gate rust
 ```
 
+### Where the evidence comes from
+
+`--catalog` supplies the claims; the evidence is fetched from the published
+containers-db first (`--published-base`, default containers-db `main` raw
+files), one version file at a time, and only its `tested[]` is used. The
+vendored catalog's `tested[]` is deliberately *not* kept in lockstep with
+containers-db (the drift gate ignores it — every merged evidence PR would
+otherwise red-line this repo), so judging against it would report gaps
+upstream has already closed. Each version reports its origin:
+
+| Origin | Meaning | Findings |
+|---|---|---|
+| `published` | Fetched from containers-db. | Judged normally; `--gate` blocks. |
+| `local (not yet published)` | containers-db answered 404 — no entry yet. That is an answer, not an outage. | Judged normally; `--gate` blocks. |
+| `local fallback, possibly stale` | containers-db unreachable (network error, 5xx, unparsable body), or `--offline`. The local evidence is used. | Reported as **stale-evidence warnings** naming the newest local `tested_at`; never gate failures. |
+
+The fallback is what keeps an offline or air-gapped environment usable:
+evidence there may be stale and still acceptable, so it is surfaced with its
+age for a human to judge rather than failing the run.
+
 ### The coverage contract
 
 A `tested[]` row counts as evidence for a `support_matrix` cell when it has

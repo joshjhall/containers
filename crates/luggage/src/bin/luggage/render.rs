@@ -4,15 +4,17 @@
 //! output paths live in the command handlers, which serialize directly.
 
 use luggage::{
-    CellReport, CellStatus, LuggageError, ResolutionWarning, ResolvedInstall, VersionReconciliation,
+    CellReport, CellStatus, EvidenceOrigin, LuggageError, ResolutionWarning, ResolvedInstall,
+    VersionReconciliation,
 };
 
 /// per support cell, plus a trailing summary.
 pub fn print_reconciliations(reports: &[VersionReconciliation]) {
     let mut total_cells = 0usize;
     let mut total_failures = 0usize;
+    let mut total_stale = 0usize;
     for r in reports {
-        println!("{}@{}", r.tool, r.version);
+        println!("{}@{}  evidence: {}", r.tool, r.version, describe_origin(&r.evidence));
         for cell in &r.cells {
             let osv = cell.os_version.as_deref().unwrap_or("*");
             let coord = format!("{}/{}/{}", cell.os, osv, cell.arch);
@@ -21,11 +23,48 @@ pub fn print_reconciliations(reports: &[VersionReconciliation]) {
             total_cells += 1;
         }
         total_failures += r.gate_failures();
+        total_stale += r.stale_warnings();
     }
     println!(
-        "\nsummary: {} version(s), {total_cells} cell(s), {total_failures} gate failure(s)",
+        "\nsummary: {} version(s), {total_cells} cell(s), {total_failures} gate failure(s), \
+         {total_stale} stale-evidence warning(s)",
         reports.len()
     );
+}
+
+/// Short label for where a version's evidence came from.
+fn describe_origin(origin: &EvidenceOrigin) -> String {
+    match origin {
+        EvidenceOrigin::Published => "published".to_string(),
+        EvidenceOrigin::NotPublished => "local (not yet published)".to_string(),
+        EvidenceOrigin::Fallback { newest_tested_at: Some(t), .. } => {
+            format!("local fallback, possibly stale (newest {t})")
+        }
+        EvidenceOrigin::Fallback { newest_tested_at: None, .. } => {
+            "local fallback, possibly stale (no evidence rows)".to_string()
+        }
+    }
+}
+
+/// One stderr warning per version judged against fallback evidence that has
+/// findings: they would have failed the gate, and may be stale rather than
+/// real. Printed in JSON mode too, where stdout carries the report.
+pub fn report_stale_evidence(reports: &[VersionReconciliation]) {
+    for r in reports {
+        let n = r.stale_warnings();
+        if n == 0 {
+            continue;
+        }
+        if let EvidenceOrigin::Fallback { reason, newest_tested_at } = &r.evidence {
+            let newest = newest_tested_at.as_deref().unwrap_or("none recorded");
+            eprintln!(
+                "warning: {}@{}: {n} uncovered or contradicted cell(s) judged against possibly \
+                 stale local evidence (newest tested_at: {newest}); published evidence \
+                 unavailable: {reason}. Not counted as gate failures.",
+                r.tool, r.version
+            );
+        }
+    }
 }
 
 /// Lowercase wire word for the claimed status, for the report's `claimed=` column.

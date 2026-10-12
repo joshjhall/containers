@@ -32,10 +32,15 @@
 //!
 //! Freshness (the newest matching row's `tested_at`) is *reported* but never
 //! gated — keeping the contract tight. Only `Uncovered` and `Contradiction`
-//! count as gate failures.
+//! count as gate failures, and only when the evidence is current: when it is
+//! a [fallback](crate::evidence::EvidenceOrigin::Fallback) copy that may be
+//! stale (published containers-db unreachable), those findings are reported
+//! as warnings instead. See [`crate::evidence`].
 
 use containers_common::tooldb::{SupportEntry, SupportStatus, TestEntry, TestResult, ToolVersion};
 use serde::Serialize;
+
+use crate::evidence::EvidenceOrigin;
 
 use crate::platform::{Platform, matches_support};
 
@@ -106,13 +111,31 @@ pub struct VersionReconciliation {
     pub version: String,
     /// One entry per `support_matrix` row, in declaration order.
     pub cells: Vec<CellReport>,
+    /// Where the evidence the cells were judged against came from.
+    pub evidence: EvidenceOrigin,
 }
 
 impl VersionReconciliation {
     /// Number of cells that would fail a `--gate` run (`Uncovered` +
-    /// `Contradiction`).
+    /// `Contradiction`). Zero when the evidence is a possibly-stale fallback:
+    /// those cells count as [`Self::stale_warnings`] instead.
     #[must_use]
     pub fn gate_failures(&self) -> usize {
+        if self.evidence.is_fallback() {
+            return 0;
+        }
+        self.findings()
+    }
+
+    /// Number of `Uncovered` + `Contradiction` cells that are warnings rather
+    /// than gate failures because the evidence may be stale.
+    #[must_use]
+    pub fn stale_warnings(&self) -> usize {
+        if self.evidence.is_fallback() { self.findings() } else { 0 }
+    }
+
+    /// `Uncovered` + `Contradiction` cells, regardless of evidence origin.
+    fn findings(&self) -> usize {
         self.cells.iter().filter(|c| c.status.is_gate_failure()).count()
     }
 
@@ -122,7 +145,9 @@ impl VersionReconciliation {
         self.gate_failures() == 0
     }
 
-    /// Borrowing iterator over only the gate-failing cells.
+    /// Borrowing iterator over the `Uncovered` + `Contradiction` cells —
+    /// gate failures, or stale-evidence warnings when [`Self::evidence`] is a
+    /// fallback.
     pub fn failures(&self) -> impl Iterator<Item = &CellReport> {
         self.cells.iter().filter(|c| c.status.is_gate_failure())
     }
@@ -166,11 +191,26 @@ fn classify(cell: &SupportEntry, tested: &[TestEntry]) -> CellStatus {
     }
 }
 
-/// Reconcile one tool version's claims against its evidence.
+/// Reconcile one tool version's claims against the evidence it carries,
+/// treated as current ([`EvidenceOrigin::Published`]).
 ///
-/// Pure: reads only the in-memory [`ToolVersion`], performs no I/O.
+/// Pure: reads only the in-memory [`ToolVersion`], performs no I/O. To judge
+/// against published evidence, refresh it first with
+/// [`crate::evidence::refresh_evidence`] and pass the origin to
+/// [`reconcile_version_with`].
 #[must_use]
 pub fn reconcile_version(doc: &ToolVersion) -> VersionReconciliation {
+    reconcile_version_with(doc, EvidenceOrigin::Published)
+}
+
+/// Reconcile one tool version's claims against its evidence, recording
+/// where that evidence came from. A [`EvidenceOrigin::Fallback`] origin turns
+/// the version's gate failures into stale-evidence warnings.
+#[must_use]
+pub fn reconcile_version_with(
+    doc: &ToolVersion,
+    evidence: EvidenceOrigin,
+) -> VersionReconciliation {
     let cells = doc
         .support_matrix
         .iter()
@@ -183,7 +223,7 @@ pub fn reconcile_version(doc: &ToolVersion) -> VersionReconciliation {
         })
         .collect();
 
-    VersionReconciliation { tool: doc.tool.clone(), version: doc.version.clone(), cells }
+    VersionReconciliation { tool: doc.tool.clone(), version: doc.version.clone(), cells, evidence }
 }
 
 #[cfg(test)]
@@ -268,6 +308,30 @@ mod tests {
             CellStatus::Covered { tested_at, .. } => assert_eq!(tested_at, "2026-06-01T00:00:00Z"),
             other => panic!("expected Covered, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn fallback_evidence_turns_gate_failures_into_warnings() {
+        let d =
+            doc(vec![support("alpine", Some("3.21"), "arm64", SupportStatus::Supported)], vec![]);
+        let r = reconcile_version_with(
+            &d,
+            EvidenceOrigin::Fallback { reason: "offline".into(), newest_tested_at: None },
+        );
+        assert_eq!(r.cells[0].status, CellStatus::Uncovered, "the cell is still classified");
+        assert_eq!(r.gate_failures(), 0, "stale evidence must not block");
+        assert_eq!(r.stale_warnings(), 1, "it is reported as a warning instead");
+        assert!(r.is_clean());
+        assert_eq!(r.failures().count(), 1);
+    }
+
+    #[test]
+    fn not_published_evidence_still_gates() {
+        let d =
+            doc(vec![support("alpine", Some("3.21"), "arm64", SupportStatus::Supported)], vec![]);
+        let r = reconcile_version_with(&d, EvidenceOrigin::NotPublished);
+        assert_eq!(r.gate_failures(), 1, "an authoritative 404 is judged normally");
+        assert_eq!(r.stale_warnings(), 0);
     }
 
     #[test]

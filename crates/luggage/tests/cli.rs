@@ -48,6 +48,98 @@ fn assert_exit(out: &Output, expected: i32) {
     );
 }
 
+/// A one-thread HTTP stub standing in for the published containers-db.
+/// `routes` maps a request path to `(status, body)`; any other path is a 404.
+/// Serves until the test process exits. Returns the base URL.
+fn evidence_server(routes: Vec<(&'static str, u16, String)>) -> String {
+    use std::io::{BufRead, BufReader, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind stub");
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut line = String::new();
+            if BufReader::new(&stream).read_line(&mut line).is_err() {
+                continue;
+            }
+            let path = line.split_whitespace().nth(1).unwrap_or("").to_owned();
+            let (status, body) = routes
+                .iter()
+                .find(|(p, _, _)| *p == path)
+                .map_or((404, String::new()), |(_, st, b)| (*st, b.clone()));
+            let _ = write!(
+                stream,
+                "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+    });
+    base
+}
+
+/// A base URL nothing listens on: bind an ephemeral port, then release it.
+fn unreachable_base() -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let addr = listener.local_addr().unwrap();
+    drop(listener);
+    format!("http://{addr}")
+}
+
+/// `luggage reconcile <args> --catalog <catalog> --published-base <base>`.
+fn run_reconcile(catalog: &std::path::Path, base: &str, args: &[&str]) -> Output {
+    Command::new(binary())
+        .arg("reconcile")
+        .args(args)
+        .arg("--catalog")
+        .arg(catalog)
+        .args(["--published-base", base])
+        .output()
+        .expect("spawn luggage")
+}
+
+/// A single-cell rust@2.0.0 version file (debian/13/amd64 claimed supported)
+/// carrying `tested`.
+fn rust_2_0_0(tested: &serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "schemaVersion": 1,
+        "tool": "rust",
+        "version": "2.0.0",
+        "support_matrix": [
+            { "os": "debian", "os_version": "13", "arch": "amd64", "status": "supported" }
+        ],
+        "tested": tested,
+        "install_methods": [
+            {
+                "name": "rustup-init",
+                "source_url_template": "https://example.test/{rustup_target}/rustup-init",
+                "verification": { "tier": 3 }
+            }
+        ],
+        "metadata": { "added_at": "2026-06-01T00:00:00Z", "schema_version": 1 }
+    })
+}
+
+/// A passing debian/13/amd64 evidence row at `tested_at`.
+fn pass_row(tested_at: &str) -> serde_json::Value {
+    serde_json::json!([{
+        "os": "debian", "os_version": "13", "arch": "amd64",
+        "tested_at": tested_at, "result": "pass"
+    }])
+}
+
+/// A temp copy of the fixtures catalog with rust@2.0.0 carrying `tested`.
+fn catalog_with_rust_2_0_0(tested: &serde_json::Value) -> (tempfile::TempDir, PathBuf) {
+    let workdir = tempdir().expect("tempdir");
+    let catalog = workdir.path().join("catalog");
+    copy_tree(&catalog_dir(), &catalog);
+    std::fs::write(
+        catalog.join("tools/rust/versions/2.0.0.json"),
+        serde_json::to_string_pretty(&rust_2_0_0(tested)).unwrap(),
+    )
+    .expect("write version file");
+    (workdir, catalog)
+}
+
 #[test]
 fn resolve_default_version_emits_rustup_recipe_as_json() {
     let out = run(&[
@@ -357,7 +449,7 @@ fn catalog_add_version_generates_resolvable_entry_and_is_idempotent() {
 /// uncovered coordinates so a human can act on them.
 #[test]
 fn reconcile_report_mode_exits_zero_and_lists_uncovered() {
-    let out = run(&["reconcile", "rust"]);
+    let out = run(&["reconcile", "rust", "--offline"]);
     assert_exit(&out, 0);
 
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -368,13 +460,17 @@ fn reconcile_report_mode_exits_zero_and_lists_uncovered() {
         "report should name the uncovered coordinate: {stdout}",
     );
     assert!(stdout.contains("gate failure"), "summary should count gate failures: {stdout}");
+    assert!(stdout.contains("possibly stale"), "--offline evidence is labelled stale: {stdout}");
 }
 
 /// `--gate` turns uncovered `supported` cells into a non-zero exit so a
-/// catalog PR claiming unbacked support fails review.
+/// catalog PR claiming unbacked support fails review. The stub answers 404
+/// for everything: containers-db reached, nothing published — authoritative,
+/// so the local evidence is judged normally.
 #[test]
 fn reconcile_gate_mode_exits_nonzero_when_cells_uncovered() {
-    let out = run(&["reconcile", "rust", "--gate"]);
+    let base = evidence_server(vec![]);
+    let out = run_reconcile(&catalog_dir(), &base, &["rust", "--gate"]);
     assert_exit(&out, 1);
 
     let stderr = String::from_utf8_lossy(&out.stderr);
@@ -388,7 +484,7 @@ fn reconcile_gate_mode_exits_nonzero_when_cells_uncovered() {
 /// carry the claim and the reconciliation verdict.
 #[test]
 fn reconcile_json_single_version_reports_uncovered_supported_cell() {
-    let out = run(&["reconcile", "rust@1.96.0", "--json"]);
+    let out = run(&["reconcile", "rust@1.96.0", "--json", "--offline"]);
     assert_exit(&out, 0);
 
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -405,62 +501,81 @@ fn reconcile_json_single_version_reports_uncovered_supported_cell() {
 
 /// A passing `tested[]` row covering a `supported` cell flips that cell to
 /// `covered`; once every supported cell is backed, `--gate` exits 0. Operates
-/// on a temp copy so the in-tree fixture is never mutated.
+/// on a temp copy so the in-tree fixture is never mutated. Not published
+/// (404), so the local row is the evidence.
 #[test]
 fn reconcile_gate_passes_when_every_supported_cell_has_evidence() {
-    let workdir = tempdir().expect("tempdir");
-    let catalog = workdir.path().join("catalog");
-    copy_tree(&catalog_dir(), &catalog);
-
-    // Build a single-cell version file: one supported cell + one matching
-    // passing row. Keeps the fixture self-contained and the gate green.
-    let version_path = catalog.join("tools/rust/versions/2.0.0.json");
-    let doc = serde_json::json!({
-        "schemaVersion": 1,
-        "tool": "rust",
-        "version": "2.0.0",
-        "support_matrix": [
-            { "os": "debian", "os_version": "13", "arch": "amd64", "status": "supported" }
-        ],
-        "tested": [
-            {
-                "os": "debian",
-                "os_version": "13",
-                "arch": "amd64",
-                "tested_at": "2026-06-01T00:00:00Z",
-                "result": "pass"
-            }
-        ],
-        "install_methods": [
-            {
-                "name": "rustup-init",
-                "source_url_template": "https://example.test/{rustup_target}/rustup-init",
-                "verification": { "tier": 3 }
-            }
-        ],
-        "metadata": { "added_at": "2026-06-01T00:00:00Z", "schema_version": 1 }
-    });
-    std::fs::write(&version_path, serde_json::to_string_pretty(&doc).unwrap())
-        .expect("write version file");
-
-    let out = Command::new(binary())
-        .args(["reconcile", "rust@2.0.0", "--gate"])
-        .arg("--catalog")
-        .arg(&catalog)
-        .output()
-        .expect("spawn luggage");
+    let (_w, catalog) = catalog_with_rust_2_0_0(&pass_row("2026-06-01T00:00:00Z"));
+    let base = evidence_server(vec![]);
+    let out = run_reconcile(&catalog, &base, &["rust@2.0.0", "--gate"]);
     assert_exit(&out, 0);
 
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("OK"), "the backed cell should be marked OK: {stdout}");
     assert!(stdout.contains("0 gate failure"), "summary should show zero failures: {stdout}");
+    assert!(stdout.contains("not yet published"), "origin is reported: {stdout}");
+}
+
+/// Published evidence replaces the stale local copy before judging: the
+/// local file has no rows, upstream has a passing one, so the gate passes.
+/// This is the vendored-catalog case — tested[] is no longer mirrored, and
+/// reconcile must not report a gap upstream has already closed.
+#[test]
+fn reconcile_judges_against_published_evidence() {
+    let (_w, catalog) = catalog_with_rust_2_0_0(&serde_json::json!([]));
+    let published = rust_2_0_0(&pass_row("2026-10-12T04:01:42Z")).to_string();
+    let base = evidence_server(vec![("/tools/rust/versions/2.0.0.json", 200, published)]);
+    let out = run_reconcile(&catalog, &base, &["rust@2.0.0", "--gate"]);
+    assert_exit(&out, 0);
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("evidence: published"), "origin is reported: {stdout}");
+    assert!(
+        stdout.contains("covered (tested 2026-10-12T04:01:42Z)"),
+        "the cell is covered by the PUBLISHED row: {stdout}"
+    );
+}
+
+/// Unreachable published containers-db (offline / air-gapped): the local
+/// evidence is used, the uncovered cell is a warning naming the newest local
+/// `tested_at`, and `--gate` does not block on it.
+#[test]
+fn reconcile_unreachable_published_evidence_warns_instead_of_gating() {
+    let (_w, catalog) = catalog_with_rust_2_0_0(&serde_json::json!([{
+        "os": "debian", "os_version": "12", "arch": "amd64",
+        "tested_at": "2026-09-30T12:00:00Z", "result": "pass"
+    }]));
+    let out = run_reconcile(&catalog, &unreachable_base(), &["rust@2.0.0", "--gate"]);
+    assert_exit(&out, 0);
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stdout.contains("MISS"), "the cell is still classified uncovered: {stdout}");
+    assert!(stdout.contains("0 gate failure"), "not a gate failure: {stdout}");
+    assert!(stdout.contains("1 stale-evidence warning"), "counted as a warning: {stdout}");
+    assert!(
+        stderr.contains("possibly stale") && stderr.contains("2026-09-30T12:00:00Z"),
+        "warning names the newest local evidence timestamp: {stderr}"
+    );
+}
+
+/// A 5xx is not an answer: it falls back like an unreachable host rather
+/// than being read as "not published" (which would gate).
+#[test]
+fn reconcile_server_error_is_a_fallback_not_a_gate_failure() {
+    let (_w, catalog) = catalog_with_rust_2_0_0(&serde_json::json!([]));
+    let base = evidence_server(vec![("/tools/rust/versions/2.0.0.json", 503, String::new())]);
+    let out = run_reconcile(&catalog, &base, &["rust@2.0.0", "--gate"]);
+    assert_exit(&out, 0);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("none recorded"), "no local rows to date the fallback: {stderr}");
 }
 
 /// No positional target walks the whole catalog. The vendored catalog only
 /// has rust, so the report covers every rust version and exits 0.
 #[test]
 fn reconcile_no_target_covers_all_tools_in_catalog() {
-    let out = run(&["reconcile"]);
+    let out = run(&["reconcile", "--offline"]);
     assert_exit(&out, 0);
 
     let stdout = String::from_utf8_lossy(&out.stdout);
