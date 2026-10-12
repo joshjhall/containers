@@ -412,6 +412,16 @@ is not stable across multiple producers anyway.
    Operators can re-run a flaky workflow freely without bloating the
    file or spawning redundant PRs.
 
+   A *new* digest does produce a new row, and dedup compares against
+   containers-db `main`, so until an evidence PR merges every base-image
+   rebuild is new again. That is why the branch is stable per cell —
+   `evidence/<tool>/<version>/<tuple>`, no run-id suffix: each ingest
+   force-pushes it (leased against the tip it just fetched) and, when a
+   PR for it is already open, updates that PR instead of opening another.
+   One open PR per `(tool, version, tuple)`, always carrying the latest
+   row. (A per-run branch opened 45 duplicate rust@1.95.0 PRs.)
+   `--branch-suffix` still opts into a separate branch deliberately.
+
 1. **Network flake on push or PR open.**
    The script retries `git push` and `gh pr create` up to 3 times with
    exponential backoff (2s, 4s). Final failure exits non-zero; the
