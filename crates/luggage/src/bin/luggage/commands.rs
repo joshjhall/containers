@@ -7,15 +7,16 @@
 
 use std::path::PathBuf;
 
+use luggage::evidence::{EvidenceOrigin, EvidenceSource, Fetched, HttpEvidenceSource};
 use luggage::{
     AddOutcome, Catalog, CatalogSource, Installer, InstallerOptions, LuggageError,
-    VersionReconciliation, add_version, reconcile_version,
+    VersionReconciliation, add_version, reconcile_version_with, refresh_evidence,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
 use crate::cli::{CatalogAddVersionArgs, InstallArgs, ReconcileArgs, ResolveArgs};
-use crate::render::{print_human, print_reconciliations, report_warnings};
+use crate::render::{print_human, print_reconciliations, report_stale_evidence, report_warnings};
 use crate::{
     clone_common, require_verified_downloads_from_env, resolve_for, split_tool_version,
     write_json_report,
@@ -151,9 +152,14 @@ pub fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
 /// `luggage reconcile [TOOL[@VERSION]]` — cross-check `support_matrix`
 /// claims against `tested[]` evidence.
 ///
+/// Evidence is refreshed from the published containers-db first (unless
+/// `--offline`); see [`luggage::evidence`]. Versions whose published copy
+/// could not be read are judged against the loaded evidence and reported as
+/// possibly stale, with its newest `tested_at`, as warnings.
+///
 /// Returns `Ok(true)` when nothing failed the gate (always the case in report
 /// mode), `Ok(false)` when `--gate` found at least one uncovered `supported`
-/// cell or a contradicting `unsupported` row.
+/// cell or a contradicting `unsupported` row against current evidence.
 pub fn cmd_reconcile(args: &ReconcileArgs) -> Result<bool, LuggageError> {
     if !args.catalog.is_dir() {
         return Err(LuggageError::Catalog(format!(
@@ -162,7 +168,12 @@ pub fn cmd_reconcile(args: &ReconcileArgs) -> Result<bool, LuggageError> {
         )));
     }
     let catalog = Catalog::load(CatalogSource::LocalPath(args.catalog.clone()))?;
-    let reports = collect_reconciliations(&catalog, args.target.as_deref())?;
+    let source: Box<dyn EvidenceSource> = if args.offline {
+        Box::new(OfflineSource)
+    } else {
+        Box::new(HttpEvidenceSource::new(&args.published_base))
+    };
+    let reports = collect_reconciliations(&catalog, args.target.as_deref(), source.as_ref())?;
 
     if args.json {
         let out = serde_json::to_string_pretty(&reports)
@@ -171,6 +182,7 @@ pub fn cmd_reconcile(args: &ReconcileArgs) -> Result<bool, LuggageError> {
     } else {
         print_reconciliations(&reports);
     }
+    report_stale_evidence(&reports);
 
     let total_failures: usize = reports.iter().map(VersionReconciliation::gate_failures).sum();
     if args.gate && total_failures > 0 {
@@ -191,20 +203,41 @@ pub fn cmd_reconcile(args: &ReconcileArgs) -> Result<bool, LuggageError> {
 fn collect_reconciliations(
     catalog: &Catalog,
     target: Option<&str>,
+    source: &dyn EvidenceSource,
 ) -> Result<Vec<VersionReconciliation>, LuggageError> {
     let mut out = Vec::new();
     match target {
         None => {
             for id in catalog.tool_ids() {
-                push_tool_versions(catalog, id, None, &mut out)?;
+                push_tool_versions(catalog, id, None, source, &mut out)?;
             }
         }
         Some(t) => {
             let (tool, version) = split_tool_version(t);
-            push_tool_versions(catalog, tool, version, &mut out)?;
+            push_tool_versions(catalog, tool, version, source, &mut out)?;
         }
     }
     Ok(out)
+}
+
+/// `--offline`: every version is a fallback, so the report is explicit that
+/// the evidence was not checked against the published copy.
+struct OfflineSource;
+
+impl EvidenceSource for OfflineSource {
+    fn fetch(&self, _tool: &str, _version: &str) -> Fetched {
+        Fetched::Unreachable("--offline: published evidence not fetched".into())
+    }
+}
+
+/// Refresh one version's evidence from `source`, then reconcile it.
+fn reconcile_fresh(
+    doc: &containers_common::tooldb::ToolVersion,
+    source: &dyn EvidenceSource,
+) -> VersionReconciliation {
+    let mut doc = doc.clone();
+    let origin: EvidenceOrigin = refresh_evidence(&mut doc, source);
+    reconcile_version_with(&doc, origin)
 }
 
 /// Append reconciliations for one tool. When `version` is `Some`, only that
@@ -214,20 +247,21 @@ fn push_tool_versions(
     catalog: &Catalog,
     tool: &str,
     version: Option<&str>,
+    source: &dyn EvidenceSource,
     out: &mut Vec<VersionReconciliation>,
 ) -> Result<(), LuggageError> {
     let entry = catalog.tool_entry(tool).ok_or_else(|| LuggageError::ToolNotFound(tool.into()))?;
     match version {
         None => {
             for doc in entry.versions.values() {
-                out.push(reconcile_version(doc));
+                out.push(reconcile_fresh(doc, source));
             }
         }
         Some(v) => {
             let doc = entry.versions.values().find(|d| d.version == v).ok_or_else(|| {
                 LuggageError::VersionNotFound { tool: tool.into(), spec: v.into() }
             })?;
-            out.push(reconcile_version(doc));
+            out.push(reconcile_fresh(doc, source));
         }
     }
     Ok(())

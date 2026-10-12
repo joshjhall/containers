@@ -233,9 +233,22 @@ pub struct ReconcileArgs {
 
     /// Exit non-zero when any `supported` cell lacks a passing evidence row,
     /// or an `unsupported` cell has one. Use this in CI to block a catalog PR
-    /// that claims support it cannot back.
+    /// that claims support it cannot back. Cells judged against fallback
+    /// evidence (published containers-db unreachable) are warnings, never
+    /// failures.
     #[arg(long)]
     pub gate: bool,
+
+    /// Judge against the evidence in `--catalog` without fetching the
+    /// published copy. The report says so, and gate findings become
+    /// stale-evidence warnings.
+    #[arg(long)]
+    pub offline: bool,
+
+    /// Base URL of the published containers-db the evidence is fetched from
+    /// (raw files; `tools/<tool>/versions/<v>.json` is appended).
+    #[arg(long, default_value = luggage::evidence::DEFAULT_PUBLISHED_BASE)]
+    pub published_base: String,
 
     /// Emit JSON instead of human-readable output.
     #[arg(long)]

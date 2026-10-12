@@ -28,6 +28,7 @@
 pub mod catalog;
 pub mod catalog_gen;
 pub mod error;
+pub mod evidence;
 pub mod installer;
 pub mod platform;
 pub mod policy;
@@ -37,9 +38,12 @@ pub mod resolver;
 pub use catalog::{Catalog, CatalogSource};
 pub use catalog_gen::{AddOutcome, add_version};
 pub use error::{ErrorClass, LuggageError, Result};
+pub use evidence::{EvidenceOrigin, EvidenceSource, HttpEvidenceSource, refresh_evidence};
 pub use installer::verify::VerificationWarning;
 pub use installer::{InstallPlan, InstallReport, Installer, InstallerOptions};
 pub use platform::Platform;
 pub use policy::{PolicyPreset, ResolutionPolicy};
-pub use reconcile::{CellReport, CellStatus, VersionReconciliation, reconcile_version};
+pub use reconcile::{
+    CellReport, CellStatus, VersionReconciliation, reconcile_version, reconcile_version_with,
+};
 pub use resolver::{ResolutionWarning, ResolvedInstall, VersionSpec};
