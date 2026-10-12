@@ -26,8 +26,8 @@ thiserror = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-ureq = { version = "2", default-features = false, features = ["tls"] }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 [dev-dependencies]
-serial_test = "3"
+serial_test = "4"
 tempfile = { workspace = true }

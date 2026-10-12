@@ -153,7 +153,7 @@ impl IgorConfig {
     /// Returns an error if the file cannot be read or contains invalid YAML.
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
         let data = std::fs::read_to_string(path)?;
-        let cfg: Self = serde_yaml::from_str(&data)?;
+        let cfg: Self = serde_saphyr::from_str(&data)?;
         cfg.validate()?;
         Ok(cfg)
     }
@@ -208,7 +208,7 @@ impl IgorConfig {
         // recover it (it loads the config first). Failing here points at the
         // prompt that produced the bad value, while it is still on screen.
         self.validate()?;
-        let data = serde_yaml::to_string(self)?;
+        let data = serde_saphyr::to_string(self)?;
         std::fs::write(path, data)?;
         Ok(())
     }
