@@ -245,6 +245,11 @@ fn build_platform(common: &CommonArgs) -> Result<Platform, LuggageError> {
 
 /// Read `/etc/os-release` and translate `std::env::consts::ARCH` into the
 /// catalog's vocabulary (`x86_64`→`amd64`, `aarch64`→`arm64`, …).
+///
+/// `VERSION_ID` is normalized to the granularity the catalog keys on (see
+/// [`catalog_os_version`]); `support_matrix` and `platform.os_version` match
+/// by exact string, so a raw `3.24.2` or `9.5` would never match a `3.24` or
+/// `9` row.
 fn detect_platform() -> Result<Platform, String> {
     let raw = std::fs::read_to_string("/etc/os-release")
         .map_err(|e| format!("read /etc/os-release: {e}"))?;
@@ -259,7 +264,26 @@ fn detect_platform() -> Result<Platform, String> {
     }
     let os = id.ok_or_else(|| "/etc/os-release missing ID=".to_string())?;
     let arch = translate_arch(std::env::consts::ARCH).to_owned();
-    Ok(Platform { os, os_version: version_id, arch })
+    let os_version = version_id.map(|v| catalog_os_version(&os, &v));
+    Ok(Platform { os, os_version, arch })
+}
+
+/// Trim an `/etc/os-release` `VERSION_ID` to the granularity containers-db
+/// keys its platforms on:
+///
+/// - `rhel` (UBI): major only. `9.5` → `9`, `10.2` → `10`. A point release is
+///   not a new platform.
+/// - `alpine`: major.minor. `3.24.2` → `3.24`. Each minor is its own release
+///   branch with its own support window.
+/// - everything else unchanged: debian reports `12`, ubuntu `26.04`, already
+///   catalog keys.
+fn catalog_os_version(os: &str, version_id: &str) -> String {
+    let keep = match os {
+        "rhel" => 1,
+        "alpine" => 2,
+        _ => return version_id.to_owned(),
+    };
+    version_id.split('.').take(keep).collect::<Vec<_>>().join(".")
 }
 
 fn strip_quotes(s: &str) -> &str {
@@ -370,6 +394,20 @@ mod tests {
         assert_eq!(translate_arch("x86_64"), "amd64");
         assert_eq!(translate_arch("aarch64"), "arm64");
         assert_eq!(translate_arch("riscv64"), "riscv64");
+    }
+
+    #[test]
+    fn catalog_os_version_normalizes_what_each_distro_reports() {
+        // Values probed from the real base images' /etc/os-release.
+        assert_eq!(catalog_os_version("rhel", "9.5"), "9");
+        assert_eq!(catalog_os_version("rhel", "10.2"), "10");
+        assert_eq!(catalog_os_version("rhel", "9"), "9");
+        assert_eq!(catalog_os_version("alpine", "3.24.2"), "3.24");
+        assert_eq!(catalog_os_version("alpine", "3.21.8"), "3.21");
+        assert_eq!(catalog_os_version("alpine", "3.22"), "3.22");
+        assert_eq!(catalog_os_version("debian", "13"), "13");
+        assert_eq!(catalog_os_version("ubuntu", "26.04"), "26.04");
+        assert_eq!(catalog_os_version("ubuntu", "24.04"), "24.04");
     }
 
     #[test]
