@@ -21,14 +21,14 @@
 # See base-images/README.md for spec, hardening invariants, and the
 # v4-to-v5 migration story.
 
-# Pinned to ubi9/ubi-minimal:9.5 (no ARG indirection) so hadolint can verify
-# the tag at lint time. 9.5 is the highest floating minor tag published on
+# Pinned to ubi9/ubi-minimal:9.8 (no ARG indirection) so hadolint can verify
+# the tag at lint time. 9.8 is the highest floating minor tag published on
 # registry.access.redhat.com (there is no bare `:9` tag there); a floating
-# minor still rolls forward to the latest patch within 9.5, keeping the
+# minor still rolls forward to the latest patch within 9.8, keeping the
 # Trivy CRITICAL/HIGH gate current without freezing on a stale build. Bump the
-# minor here when Red Hat publishes 9.6+. For digest-pinned reproducibility,
+# minor here when Red Hat publishes 9.9+. For digest-pinned reproducibility,
 # edit this line in a feature branch.
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8
 
 ARG USERNAME=runner
 ARG USER_UID=1000

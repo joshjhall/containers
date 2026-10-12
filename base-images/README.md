@@ -1,8 +1,9 @@
 # Base Images for v5 Evidence Runs
 
-> **Status**: design tracker — see [issue #422](https://github.com/joshjhall/containers/issues/422).
-> Pilot tuple `debian/12/amd64` ships with this spec; remaining tuples are
-> filed as sub-issues per [Decomposition](#decomposition).
+> **Status**: active — 18 tuples (9 OS versions × amd64/arm64). The supported
+> set and how it is chosen live in
+> [`docs/reference/supported-platforms.md`](../docs/reference/supported-platforms.md);
+> design history in [issue #422](https://github.com/joshjhall/containers/issues/422).
 
 This directory tree defines the minimal hardened base images that v5
 **evidence runs** install tools onto for per-tool CI testing. It exists as a
@@ -32,27 +33,18 @@ directory closes:
 ```text
 base-images/
   README.md                              # this file
-  debian/
-    hardening.sh                         # per-distro hardening library
-    12/
-      amd64/Dockerfile                   # pilot tuple
-      arm64/Dockerfile                   # filed as sub-issue
-    13/
-      amd64/Dockerfile                   # filed as sub-issue
-      arm64/Dockerfile                   # filed as sub-issue
-  alpine/
-    hardening.sh                         # filed as sub-issue
-    3.21/
-      amd64/Dockerfile
-      arm64/Dockerfile
-  rhel/
-    hardening.sh                         # filed as sub-issue (UBI base)
-    9/
-      amd64/Dockerfile
-      arm64/Dockerfile
+  VERSION                                # shared semver for every tuple
+  debian/   hardening.sh  12/ 13/                    {amd64,arm64}/Dockerfile
+  ubuntu/   hardening.sh  24.04/ 26.04/              {amd64,arm64}/Dockerfile
+  alpine/   hardening.sh  3.22/ 3.23/ 3.24/          {amd64,arm64}/Dockerfile
+  rhel/     hardening.sh  9/ 10/  (UBI minimal)      {amd64,arm64}/Dockerfile
 .github/workflows/
   build-base-images.yml                  # build + publish per-tuple
 ```
+
+`tests/unit/base-images-structure.sh` holds this tree, the
+`build-base-images.yml` matrix, and the `evidence-run.yml` dispatch choices to
+exactly the same tuple set.
 
 Every `(distro, distro_version, arch)` triple is one Dockerfile. The
 hardening library is per-distro (one `hardening.sh` shared across all
@@ -119,7 +111,7 @@ Examples:
 ```text
 ghcr.io/joshjhall/containers/base-debian-12-amd64:v1.0.0
 ghcr.io/joshjhall/containers/base-debian-12-amd64:latest
-ghcr.io/joshjhall/containers/base-alpine-3.21-arm64:v1.0.0
+ghcr.io/joshjhall/containers/base-alpine-3.24-arm64:v1.0.0
 ```
 
 ### Why one image-name per tuple
@@ -208,45 +200,18 @@ on `github.ref == 'refs/heads/main'` or a `v*` tag.
 
 ## Decomposition
 
-Sub-issues filed against this design tracker, organized by tier:
+The original tier plan (#422) is complete and superseded by the platform
+policy: [`docs/reference/supported-platforms.md`](../docs/reference/supported-platforms.md)
+is the single list of supported tuples and the rule for each distro.
 
-### Tier 1 — Active matrix (file as sub-issues now)
-
-| Tuple                  | Sub-issue                                                      |
-| ---------------------- | -------------------------------------------------------------- |
-| debian-12 amd64        | **pilot, this PR**                                             |
-| debian-12 arm64        | (sub-issue: filed)                                             |
-| debian-13 amd64        | (sub-issue: filed)                                             |
-| debian-13 arm64        | (sub-issue: filed)                                             |
-| alpine-3.21 amd64      | (sub-issue: filed)                                             |
-| alpine-3.21 arm64      | (sub-issue: filed)                                             |
-| ubi-9 amd64            | (sub-issue: filed)                                             |
-| ubi-9 arm64            | (sub-issue: filed)                                             |
-
-### Tier 2 — Likely-needed soon (defer to v2)
-
-- ~~debian-11 amd64+arm64~~ — **dropped, will not be built.** LTS security
-  support ended 2026-08-31, and `bullseye-security` package versions now 404
-  from the mirror, so the base cannot be built at all (#933)
-- ubuntu-22.04 LTS amd64+arm64 (LTS until 2027)
-- ubuntu-24.04 LTS amd64+arm64 (LTS until 2029)
-- ubi-10 amd64+arm64 (when GA)
-
-### Tier 3 — Evaluate later
+Still under evaluation, not built:
 
 - amazon-linux-2023 amd64+arm64 (AWS Lambda / Graviton evidence target)
-- nixos minimal amd64+arm64 — has its own appeal: native reproducibility,
-  and its config language may inform our own (separate exploratory issue,
-  not a base-image sub-issue)
-- alpine-3.22 amd64+arm64 (when out)
-- opensuse leap (enterprise SUSE shops)
+- nixos minimal amd64+arm64 — native reproducibility; its config language may
+  inform our own (separate exploratory issue, not a base-image sub-issue)
 
-### Out of scope
-
-- Arch Linux (rolling — hard to pin a reproducible base)
-- Fedora (community cadence; UBI is the right enterprise pick)
-- Windows containers (entirely different attack surface — separate spec)
-- ppc64le / s390x (only if a concrete consumer asks)
+Retired: debian-11 (#933, LTS EOL 2026-08-31, mirror 404s), alpine-3.21 (EOL
+2026-11-01; outside the three-newest Alpine rule).
 
 ## How evidence runs consume these images
 

@@ -47,13 +47,27 @@ on:
         required: true
         default: "debian-12-amd64"
         type: choice
+        # Every supported base-image tuple (build-base-images.yml matrix;
+        # tests/unit/base-images-structure.sh keeps the two in step).
         options:
           - debian-12-amd64
-          # arm64 is wired end-to-end but no arm64 base image is published
-          # yet (#432/#434/#436). Selecting it will fail at "Resolve base
-          # image digest" until that image lands — kept here so the arch
-          # plumbing is exercised by dispatch once it does.
           - debian-12-arm64
+          - debian-13-amd64
+          - debian-13-arm64
+          - ubuntu-24.04-amd64
+          - ubuntu-24.04-arm64
+          - ubuntu-26.04-amd64
+          - ubuntu-26.04-arm64
+          - alpine-3.22-amd64
+          - alpine-3.22-arm64
+          - alpine-3.23-amd64
+          - alpine-3.23-arm64
+          - alpine-3.24-amd64
+          - alpine-3.24-arm64
+          - rhel-9-amd64
+          - rhel-9-arm64
+          - rhel-10-amd64
+          - rhel-10-arm64
       image_tag:
         description: "Base image tag to pull"
         required: true

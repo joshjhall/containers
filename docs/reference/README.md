@@ -20,6 +20,8 @@ APIs, and system specifications.
   language versions and platforms
 - [**Rust Version Policy**](rust-version-policy.md) - MSRV vs. container
   Rust, the supported 1.82+ window, and how each moves
+- [**Supported Platforms**](supported-platforms.md) - The 18 OS/arch tuples
+  tools are built and evidence-tested on, and the rule per distro
 
 ### Security
 
