@@ -124,8 +124,6 @@ skip = [
   # phonenumber 0.3 (octarine's libphonenumber port) brings regex-cache, which
   # is still on the regex 1.5-era regex-syntax 0.6.
   { crate = "regex-syntax:<0.8", reason = "regex-cache 0.2 via octarine's phonenumber" },
-  # reqwest/hyper-util are on base64 0.22; octarine itself is on 0.23.
-  { crate = "base64:<0.23", reason = "hyper-util/reqwest lag octarine's base64 0.23" },
 ]
 skip-tree = []
 

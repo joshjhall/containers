@@ -234,13 +234,13 @@ impl UreqClient {
 impl HttpClient for UreqClient {
     fn get(&self, url: &str) -> Result<Vec<u8>> {
         buffer_with_retry(url, self.max_attempts, self.retry_delay, || {
-            ureq::get(url).call().map(ureq::Response::into_reader).map_err(|e| format!("{e}"))
+            ureq::get(url).call().map(|r| r.into_body().into_reader()).map_err(|e| format!("{e}"))
         })
     }
 
     fn get_to_writer(&self, url: &str, sink: &mut dyn RestartableSink) -> Result<u64> {
         stream_with_retry(url, sink, self.max_attempts, self.retry_delay, || {
-            ureq::get(url).call().map(ureq::Response::into_reader).map_err(|e| format!("{e}"))
+            ureq::get(url).call().map(|r| r.into_body().into_reader()).map_err(|e| format!("{e}"))
         })
     }
 }
