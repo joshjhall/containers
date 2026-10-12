@@ -184,6 +184,29 @@ test_drift_ignores_tested_evidence() {
     command rm -rf "$up" "$ven"
 }
 
+test_drift_ignores_scanner_activity() {
+    # The upstream scanner rewrites index.json `activity` (scanned_at, signals)
+    # on every scan that adds a version; that is bookkeeping, not install data.
+    local up="$TEST_TEMP_DIR/act-up" ven="$TEST_TEMP_DIR/act-ven"
+    _mini_catalog "$up" 2026-10-01 '[]'
+    _mini_catalog "$ven" 2026-10-01 '[]'
+    command printf '{"id":"rust","available":[{"version":"1.0.0"}],"activity":{"scanned_at":"2026-10-12T21:41:59Z"}}\n' \
+        >"$up/tools/rust/index.json"
+    command printf '{"id":"rust","available":[{"version":"1.0.0"}],"activity":{"scanned_at":"2026-04-27T22:00:00Z"}}\n' \
+        >"$ven/tools/rust/index.json"
+    local rc=0
+    command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "an activity-only index difference is not drift"
+
+    # ...but a real index field still is.
+    command printf '{"id":"rust","available":[{"version":"1.0.0"}],"license":"MIT"}\n' >"$up/tools/rust/index.json"
+    command printf '{"id":"rust","available":[{"version":"1.0.0"}],"license":"GPL-3.0"}\n' >"$ven/tools/rust/index.json"
+    rc=0
+    command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a non-activity index difference is still drift"
+    command rm -rf "$up" "$ven"
+}
+
 test_drift_still_catches_install_data() {
     # The exclusion must stay scoped to tested[]: the same pair with a real
     # field difference still fails.
@@ -345,6 +368,7 @@ run_test "test_vendored_matches_upstream" "vendored catalog matches containers-d
 run_test "test_drift_fixtures_are_rejected" "drift check rejects planted drift fixtures"
 run_test "test_drift_ignores_tested_evidence" "drift check ignores tested[] evidence"
 run_test "test_drift_still_catches_install_data" "drift check still catches install-data differences"
+run_test "test_drift_ignores_scanner_activity" "drift check ignores scanner activity, not other index fields"
 run_test "test_index_matches_versions_on_disk" "index available[] agrees with versions/"
 run_test "test_no_fixture_leakage_into_production" "no tests-only fixtures in shipped catalog"
 run_test "test_catalogs_validate_against_schemas" "catalogs validate against JSON schemas"

@@ -42,14 +42,50 @@
       "status": "supported"
     },
     {
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "arch": "amd64",
+      "status": "supported"
+    },
+    {
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "arch": "arm64",
+      "status": "supported"
+    },
+    {
       "os": "alpine",
-      "os_version": "3.21",
+      "os_version": "3.22",
       "arch": "amd64",
       "status": "supported"
     },
     {
       "os": "alpine",
-      "os_version": "3.21",
+      "os_version": "3.22",
+      "arch": "arm64",
+      "status": "supported"
+    },
+    {
+      "os": "alpine",
+      "os_version": "3.23",
+      "arch": "amd64",
+      "status": "supported"
+    },
+    {
+      "os": "alpine",
+      "os_version": "3.23",
+      "arch": "arm64",
+      "status": "supported"
+    },
+    {
+      "os": "alpine",
+      "os_version": "3.24",
+      "arch": "amd64",
+      "status": "supported"
+    },
+    {
+      "os": "alpine",
+      "os_version": "3.24",
       "arch": "arm64",
       "status": "supported"
     },
@@ -62,6 +98,18 @@
     {
       "os": "rhel",
       "os_version": "9",
+      "arch": "arm64",
+      "status": "supported"
+    },
+    {
+      "os": "rhel",
+      "os_version": "10",
+      "arch": "amd64",
+      "status": "supported"
+    },
+    {
+      "os": "rhel",
+      "os_version": "10",
       "arch": "arm64",
       "status": "supported"
     }
@@ -89,6 +137,35 @@
       "image_ref": "ghcr.io/joshjhall/containers/base-debian-12-amd64",
       "image_digest": "sha256:88ed3ae76353fec6fd0452c445a00f7d56ba9e7f58aae8a51e12126a2b2ed96e",
       "duration_seconds": 20.192767881,
+      "version_output": "rustc 1.95.0 (59807616e 2026-04-14)",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "20250419~deb12u1"
+        },
+        {
+          "tool": "gcc",
+          "package": "gcc",
+          "version": "4:12.2.0-3"
+        },
+        {
+          "tool": "libc_dev",
+          "package": "libc6-dev",
+          "version": "2.36-9+deb12u14"
+        }
+      ]
+    },
+    {
+      "os": "debian",
+      "os_version": "12",
+      "arch": "amd64",
+      "tested_at": "2026-10-12T04:01:42.987682647Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/38202017075",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-debian-12-amd64",
+      "image_digest": "sha256:0e9d67e7e3f1142918aa7594afff7623a93a7f254d981fa9e0fee4c2f13187ed",
+      "duration_seconds": 19.23335351,
       "version_output": "rustc 1.95.0 (59807616e 2026-04-14)",
       "dependencies": [
         {

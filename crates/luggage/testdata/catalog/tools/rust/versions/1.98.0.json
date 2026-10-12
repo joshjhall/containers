@@ -159,63 +159,111 @@
   "schemaVersion": 1,
   "support_matrix": [
     {
-      "arch": "amd64",
       "os": "debian",
       "os_version": "12",
+      "arch": "amd64",
       "status": "supported"
     },
     {
-      "arch": "arm64",
       "os": "debian",
       "os_version": "12",
+      "arch": "arm64",
       "status": "supported"
     },
     {
-      "arch": "amd64",
       "os": "debian",
       "os_version": "13",
+      "arch": "amd64",
       "status": "supported"
     },
     {
-      "arch": "arm64",
       "os": "debian",
       "os_version": "13",
+      "arch": "arm64",
       "status": "supported"
     },
     {
-      "arch": "amd64",
       "os": "ubuntu",
       "os_version": "24.04",
+      "arch": "amd64",
       "status": "supported"
     },
     {
-      "arch": "arm64",
       "os": "ubuntu",
       "os_version": "24.04",
-      "status": "supported"
-    },
-    {
-      "arch": "amd64",
-      "os": "alpine",
-      "os_version": "3.21",
-      "status": "supported"
-    },
-    {
       "arch": "arm64",
-      "os": "alpine",
-      "os_version": "3.21",
       "status": "supported"
     },
     {
+      "os": "ubuntu",
+      "os_version": "26.04",
       "arch": "amd64",
+      "status": "supported"
+    },
+    {
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "arch": "arm64",
+      "status": "supported"
+    },
+    {
+      "os": "alpine",
+      "os_version": "3.22",
+      "arch": "amd64",
+      "status": "supported"
+    },
+    {
+      "os": "alpine",
+      "os_version": "3.22",
+      "arch": "arm64",
+      "status": "supported"
+    },
+    {
+      "os": "alpine",
+      "os_version": "3.23",
+      "arch": "amd64",
+      "status": "supported"
+    },
+    {
+      "os": "alpine",
+      "os_version": "3.23",
+      "arch": "arm64",
+      "status": "supported"
+    },
+    {
+      "os": "alpine",
+      "os_version": "3.24",
+      "arch": "amd64",
+      "status": "supported"
+    },
+    {
+      "os": "alpine",
+      "os_version": "3.24",
+      "arch": "arm64",
+      "status": "supported"
+    },
+    {
       "os": "rhel",
       "os_version": "9",
+      "arch": "amd64",
       "status": "supported"
     },
     {
-      "arch": "arm64",
       "os": "rhel",
       "os_version": "9",
+      "arch": "arm64",
+      "status": "supported"
+    },
+    {
+      "os": "rhel",
+      "os_version": "10",
+      "arch": "amd64",
+      "status": "supported"
+    },
+    {
+      "os": "rhel",
+      "os_version": "10",
+      "arch": "arm64",
       "status": "supported"
     }
   ],
