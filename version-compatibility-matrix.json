@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-09-13T07:59:00Z",
+  "last_updated": "2026-10-12T18:06:44Z",
   "base_images": [
     {
       "name": "debian:12-slim",
@@ -14,7 +14,7 @@
   ],
   "language_versions": {
     "python": {
-      "current": "3.14.7",
+      "current": "3.15.0",
       "supported": [
         "3.12.0",
         "3.13.0",
@@ -44,7 +44,7 @@
       "deprecated": []
     },
     "rust": {
-      "current": "1.98.1",
+      "current": "1.99.0",
       "supported": [
         "1.80.0",
         "1.81.0",
@@ -66,7 +66,7 @@
       "deprecated": []
     },
     "go": {
-      "current": "1.27.1",
+      "current": "1.27.2",
       "supported": [
         "1.23.0",
         "1.24.0",
@@ -88,7 +88,7 @@
       "deprecated": []
     },
     "ruby": {
-      "current": "4.0.6",
+      "current": "4.0.7",
       "supported": [
         "3.3.0",
         "3.4.0",
