@@ -44,7 +44,7 @@ fn non_interactive_valid_yaml() {
     assert_success(&out);
 
     let content = fs::read_to_string(tmp.path().join(".devcontainer/docker-compose.yml")).unwrap();
-    let parsed: serde_yaml::Value = serde_yaml::from_str(&content).expect("valid YAML");
+    let parsed: serde_json::Value = serde_saphyr::from_str(&content).expect("valid YAML");
     assert!(parsed.get("services").is_some(), "docker-compose.yml must have services key");
 }
 

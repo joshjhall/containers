@@ -418,7 +418,7 @@ fn remove_to_empty_yields_valid_yaml() {
     assert!(cfg.features.is_empty(), "all features removed");
     // Reloading proves the saved `.igor.yml` is still valid YAML.
     let compose = fs::read_to_string(tmp.path().join(".devcontainer/docker-compose.yml")).unwrap();
-    let _: serde_yaml::Value = serde_yaml::from_str(&compose).expect("compose still valid YAML");
+    let _: serde_json::Value = serde_saphyr::from_str(&compose).expect("compose still valid YAML");
 }
 
 // ===========================================================================
@@ -439,8 +439,8 @@ fn add_preserves_agents_and_services() {
     // ServiceConfig has no PartialEq; compare the serialized YAML, which is what
     // round-trip preservation actually protects.
     assert_eq!(
-        serde_yaml::to_string(&after.services).unwrap(),
-        serde_yaml::to_string(&before.services).unwrap(),
+        serde_saphyr::to_string(&after.services).unwrap(),
+        serde_saphyr::to_string(&before.services).unwrap(),
         "services must survive an add",
     );
     assert_eq!(after.agents.max, before.agents.max, "agents must survive an add");
@@ -459,8 +459,8 @@ fn remove_preserves_agents_and_services() {
 
     let after = load_cfg(tmp.path());
     assert_eq!(
-        serde_yaml::to_string(&after.services).unwrap(),
-        serde_yaml::to_string(&before.services).unwrap(),
+        serde_saphyr::to_string(&after.services).unwrap(),
+        serde_saphyr::to_string(&before.services).unwrap(),
         "services must survive a remove",
     );
     assert_eq!(after.agents.max, before.agents.max, "agents must survive a remove");

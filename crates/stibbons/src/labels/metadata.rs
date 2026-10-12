@@ -205,7 +205,7 @@ pub fn load_labels(roots: &[PathBuf]) -> Result<Aggregate, Box<dyn std::error::E
             continue;
         }
         let text = std::fs::read_to_string(file)?;
-        let meta: SkillMetadata = serde_yaml::from_str(&text)
+        let meta: SkillMetadata = serde_saphyr::from_str(&text)
             .map_err(|e| format!("failed to parse {}: {e}", file.display()))?;
         if meta.labels.is_empty() {
             continue;
