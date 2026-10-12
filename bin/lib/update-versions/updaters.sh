@@ -128,10 +128,8 @@ pin_action() {
     echo -e "${BLUE}    Pinned ${repo} → ${sha} # v${version}${NC}"
 }
 
-# sync_rust_minor_pins and bump_gitleaks_pin live in their own modules to keep
-# this file under the file-size ceiling (tests/unit/file-size-ceiling.sh).
-# shellcheck source=bin/lib/update-versions/rust-pins.sh
-source "$(dirname "${BASH_SOURCE[0]}")/rust-pins.sh"
+# bump_gitleaks_pin lives in its own module to keep this file under the
+# file-size ceiling (tests/unit/file-size-ceiling.sh).
 # shellcheck source=bin/lib/update-versions/gitleaks-pins.sh
 source "$(dirname "${BASH_SOURCE[0]}")/gitleaks-pins.sh"
 # update_luggage_catalog (vendored luggage catalog) lives in catalog.sh.
@@ -205,12 +203,12 @@ update_version() {
                     # tests/unit/rust-version-sync.sh, so leaving it out made every
                     # Rust bump fail that suite until fixed by hand.
                     sed_inplace "s/RUST_VERSION: \"[0-9][^\"]*\"/RUST_VERSION: \"$latest\"/" "$PROJECT_ROOT/.devcontainer/docker-compose.yml" || return "$RC_UPDATE_FAILED"
-                    # The X.Y-only pins are asserted by the same suite, so a minor
-                    # bump that skipped them red-lit the whole auto-patch branch and
-                    # stranded every other tool's update with it (1.98 -> 1.99).
-                    # Sync them here; a moved MSRV is routed to human review by
-                    # auto-patch.yml instead of by a failing test.
-                    sync_rust_minor_pins "$latest" || return "$RC_UPDATE_FAILED"
+                    # Deliberately NOT touched: Cargo.toml rust-version,
+                    # clippy.toml msrv, CI `toolchain:` pins, and the
+                    # luggage-builder `rust:X.Y` image. Those are the toolchain
+                    # we BUILD stibbons/luggage with, frozen at the MSRV and
+                    # moved only by a deliberate PR (#1111). This case moves
+                    # only the Rust a container installs by default.
                     ;;
                 Ruby)
                     sed_inplace "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"

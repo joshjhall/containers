@@ -18,10 +18,13 @@
 #   - Allows volume mounting for persistent caches across container rebuilds
 #
 # Environment Variables:
-#   - RUST_VERSION: Toolchain version specification (default: 1.97.1)
+#   - RUST_VERSION: Toolchain version specification (default: the Dockerfile
+#     ARG, which follows the newest stable)
 #     * Specific version (e.g., "1.84.1"): Uses exact version
-#     * Major.minor only (e.g., "1.84"): Resolves to latest patch
+#     * Major.minor only (e.g., "1.84"): The newest 1.84.x patch in the
+#       luggage catalog (containers-db) — e.g. 1.84.1 over 1.84.0
 #     * Channel names (stable, beta, nightly): Passed to luggage --channel
+#     Supported range: 1.82 up to current (docs/reference/rust-version-policy.md)
 #
 # Note:
 #   - rustup-init is verified by luggage's tier-3 verifier
@@ -77,16 +80,27 @@ validate_rust_version "$RUST_VERSION" || {
     exit 1
 }
 
-# Resolve partial versions to full versions (e.g., "1.84" -> "1.84.1")
-# This enables users to use partial versions for latest patches
-# Note: Only applies to X.Y or X.Y.Z versions, not to "stable", "beta", "nightly"
+# Resolve a partial version ("1.84") to the newest patch the luggage catalog
+# holds ("1.84.1"). The catalog is the single source of truth for which
+# patches exist and are supported (#1111): asking upstream (the GitHub API,
+# as this used to) could pick a patch the catalog lacks, which then fails to
+# install, and it broke offline builds. `luggage install rust@1.84` resolves
+# the same way on its own; resolving here only makes the log and the feature
+# summary name the version actually installed. Channels skip this.
 if [[ "$RUST_VERSION" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
     ORIGINAL_VERSION="$RUST_VERSION"
-    RUST_VERSION=$(resolve_rust_version "$RUST_VERSION" 2>/dev/null || echo "$RUST_VERSION")
+    if ! RUST_VERSION=$(/usr/local/bin/luggage resolve rust \
+        --version "$ORIGINAL_VERSION" \
+        --catalog "${CONTAINERS_DB:-/opt/containers-db}" \
+        --json 2>/dev/null | command jq -r '.version // empty') ||
+        [ -z "$RUST_VERSION" ]; then
+        log_error "Rust ${ORIGINAL_VERSION} is not in the supported catalog (1.82 up to current; see docs/reference/rust-version-policy.md)"
+        exit 1
+    fi
 
     if [ "$ORIGINAL_VERSION" != "$RUST_VERSION" ]; then
         log_message "📍 Version Resolution: $ORIGINAL_VERSION → $RUST_VERSION"
-        log_message "   Using latest patch version"
+        log_message "   Newest patch in the luggage catalog"
     fi
 fi
 

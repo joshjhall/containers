@@ -159,19 +159,15 @@ jobs:
             exit "$UPDATE_STATUS"
           fi
 
-          # A minor Rust bump moves the workspace MSRV (Cargo.toml rust-version)
-          # along with every other X.Y toolchain pin — the updater syncs them all
-          # so tests/unit/rust-version-sync.sh stays green. An MSRV change is a
-          # human call, though, so hold the PR for review rather than auto-merge
-          # it. Before the sync, this case failed CI outright and stranded every
-          # other tool's update on the branch with it.
-          MSRV_CHANGED=false
-          if ! git diff --quiet -- Cargo.toml; then
-            MSRV_FROM=$(git show HEAD:Cargo.toml | grep -E '^rust-version = ' | cut -d'"' -f2)
-            MSRV_TO=$(grep -E '^rust-version = ' Cargo.toml | cut -d'"' -f2)
-            if [ "$MSRV_FROM" != "$MSRV_TO" ]; then
-              echo "::warning::Rust MSRV moved $MSRV_FROM -> $MSRV_TO — holding for review"
-              MSRV_CHANGED=true
+          # The Rust updater moves only the container default (Dockerfile ARG,
+          # rust.sh fallback, devcontainer, catalog). The MSRV and the build
+          # toolchain are a deliberate PR, never an auto-patch (#1111), so a
+          # minor Rust release no longer needs a review hold. Guard that
+          # contract: an auto-patch that touched them is a bug, not a release.
+          if ! git diff --quiet -- Cargo.toml clippy.toml; then
+            if git diff -- Cargo.toml clippy.toml | grep -qE '^[-+](rust-version|msrv) = '; then
+              echo "::error::auto-patch changed the MSRV (Cargo.toml rust-version / clippy.toml msrv); that is a deliberate PR, not an auto-patch (#1111)"
+              exit 1
             fi
           fi
 
@@ -326,17 +322,6 @@ jobs:
           locally). Those tools remain pinned at their current versions. See
           the "Create auto-patch branch and apply updates" step log for the
           tool names.
-          EOF
-          fi
-
-          if [ "$MSRV_CHANGED" = "true" ]; then
-            cat >> /tmp/commit-message.txt << EOF
-
-          ⚠️ Rust MSRV changed: ${MSRV_FROM} -> ${MSRV_TO}
-
-          A minor Rust release moved every X.Y toolchain pin (Cargo.toml
-          rust-version, clippy.toml msrv, CI toolchain:, luggage-builder image).
-          Review the MSRV implications before merging.
           EOF
           fi
 
@@ -508,13 +493,6 @@ jobs:
             echo "updates_skipped=false" >> "$GITHUB_OUTPUT"
           fi
 
-          # And a moved Rust MSRV, written by the update step on a minor bump.
-          if echo "$COMMIT_MSG" | grep -q "Rust MSRV changed"; then
-            echo "msrv_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "msrv_changed=false" >> "$GITHUB_OUTPUT"
-          fi
-
       # The compatibility-matrix update is intentionally NOT done here.
       # Pushing a second commit to the auto-patch branch invalidates the
       # CI conclusion that triggered this workflow_run (which validated
@@ -556,23 +534,22 @@ jobs:
             echo "Created PR: $PR_URL"
           fi
 
-      # Three independent conditions hold a PR back from auto-merge: changed GPG
-      # signing keys, updates that were skipped (issue #783), and a moved Rust
-      # MSRV. They share one label so there is a single documented un-hold
-      # action, but each explains itself in its own comment. Any combination
-      # can apply to the same PR.
+      # Two independent conditions hold a PR back from auto-merge: changed GPG
+      # signing keys (key files only — metadata/date churn is ignored upstream
+      # of here), and updates that were skipped (issue #783). They share one
+      # label so there is a single documented un-hold action, but each explains
+      # itself in its own comment. A moved Rust MSRV used to be a third; it is
+      # no longer something auto-patch can do (#1111).
       - name: Add hold label for changes requiring review
         if: |
           steps.branch_info.outputs.branch_exists == 'true' &&
           (steps.branch_info.outputs.gpg_keys_changed == 'true' ||
-           steps.branch_info.outputs.updates_skipped == 'true' ||
-           steps.branch_info.outputs.msrv_changed == 'true')
+           steps.branch_info.outputs.updates_skipped == 'true')
         env:
           GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
           PR_URL: ${{ steps.create_pr.outputs.pr_url }}
           GPG_KEYS_CHANGED: ${{ steps.branch_info.outputs.gpg_keys_changed }}
           UPDATES_SKIPPED: ${{ steps.branch_info.outputs.updates_skipped }}
-          MSRV_CHANGED: ${{ steps.branch_info.outputs.msrv_changed }}
         run: |
           # Create the label if it doesn't exist
           gh label create "hold/review-required" \
@@ -607,25 +584,11 @@ jobs:
             echo "Skipped updates detected — PR held for manual review"
           fi
 
-          if [ "$MSRV_CHANGED" = "true" ]; then
-            gh pr comment "$PR_URL" \
-              --body "⚠️ **Rust MSRV changed** — auto-merge disabled.
-
-          A minor Rust release moved the workspace MSRV. The updater synced every
-          X.Y toolchain pin (\`Cargo.toml\` rust-version, \`clippy.toml\` msrv, CI
-          \`toolchain:\`, the luggage-builder base image), so CI validated the new
-          toolchain. Confirm the MSRV bump is acceptable, then remove the
-          \`hold/review-required\` label to merge."
-
-            echo "Rust MSRV change detected — PR held for manual review"
-          fi
-
       - name: Enable auto-merge (nothing held for review)
         if: |
           steps.branch_info.outputs.branch_exists == 'true' &&
           steps.branch_info.outputs.gpg_keys_changed != 'true' &&
-          steps.branch_info.outputs.updates_skipped != 'true' &&
-          steps.branch_info.outputs.msrv_changed != 'true'
+          steps.branch_info.outputs.updates_skipped != 'true'
         env:
           GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
           PR_URL: ${{ steps.create_pr.outputs.pr_url }}

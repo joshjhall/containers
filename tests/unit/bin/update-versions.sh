@@ -1425,14 +1425,16 @@ EOF
 }
 
 # ============================================================================
-# Test: a minor Rust bump syncs every X.Y toolchain pin
+# Test: a minor Rust bump moves the container default, never the build chain
 # ============================================================================
-# tests/unit/rust-version-sync.sh asserts the luggage-builder image tag, the
-# Cargo.toml / clippy.toml MSRV, and every CI `toolchain:` pin equal the
-# Dockerfile RUST_VERSION's X.Y. The Rust arm used to skip them, so the 1.99.0
-# release red-lit the whole auto-patch branch and stranded ~20 unrelated bumps.
-# Assert file content: sed exits 0 even when its pattern matches nothing.
-test_rust_minor_bump_syncs_minor_pins() {
+# Since #1111 the Rust arm moves only the Rust a container installs by default
+# (Dockerfile ARG, rust.sh fallback, devcontainer). The build chain (Cargo.toml
+# rust-version, clippy.toml msrv, every CI `toolchain:`, the luggage-builder
+# image) is frozen at the MSRV and moved only by a deliberate PR. Before
+# #1111 this arm synced the build chain too, which forced an MSRV raise and a
+# review hold on every minor Rust release (#1110). Assert file content: sed
+# exits 0 even when its pattern matches nothing.
+test_rust_minor_bump_leaves_build_chain() {
     local test_dir
     test_dir=$(mktemp -d)
 
@@ -1495,24 +1497,38 @@ EOF
         echo "    update_version: expected 0, got $rc"
         ok=false
     }
-    command grep -q '^FROM rust:1.99-slim-trixie AS luggage-builder$' "$test_dir/Dockerfile" || {
-        echo "    luggage-builder base image was not rewritten to rust:1.99"
+    # Container default: moved.
+    command grep -q '^ARG RUST_VERSION=1.99.0$' "$test_dir/Dockerfile" || {
+        echo "    Dockerfile ARG RUST_VERSION was not rewritten to 1.99.0"
+        ok=false
+    }
+    command grep -q 'RUST_VERSION="${RUST_VERSION:-1.99.0}"' "$test_dir/lib/features/rust.sh" || {
+        echo "    rust.sh fallback was not rewritten to 1.99.0"
+        ok=false
+    }
+    command grep -q 'RUST_VERSION: "1.99.0"' "$test_dir/.devcontainer/docker-compose.yml" || {
+        echo "    devcontainer RUST_VERSION was not rewritten to 1.99.0"
+        ok=false
+    }
+    # Build chain: untouched, still the 1.98 MSRV.
+    command grep -q '^FROM rust:1.98-slim-trixie AS luggage-builder$' "$test_dir/Dockerfile" || {
+        echo "    luggage-builder base image moved off rust:1.98 (build chain is frozen)"
         ok=false
     }
     command grep -q '^FROM debian:13-slim AS base$' "$test_dir/Dockerfile" || {
         echo "    an unrelated FROM line was disturbed"
         ok=false
     }
-    command grep -q '^rust-version = "1.99"$' "$test_dir/Cargo.toml" || {
-        echo "    Cargo.toml rust-version was not rewritten to 1.99"
+    command grep -q '^rust-version = "1.98"$' "$test_dir/Cargo.toml" || {
+        echo "    Cargo.toml rust-version moved off 1.98 (MSRV is a deliberate PR)"
         ok=false
     }
-    command grep -q '^msrv = "1.99"$' "$test_dir/clippy.toml" || {
-        echo "    clippy.toml msrv was not rewritten to 1.99"
+    command grep -q '^msrv = "1.98"$' "$test_dir/clippy.toml" || {
+        echo "    clippy.toml msrv moved off 1.98 (MSRV is a deliberate PR)"
         ok=false
     }
-    [ "$(command grep -c 'toolchain: "1.99"' "$test_dir/.github/workflows/ci.yml")" -eq 2 ] || {
-        echo "    ci.yml: expected both toolchain pins rewritten to 1.99"
+    [ "$(command grep -c 'toolchain: "1.98"' "$test_dir/.github/workflows/ci.yml")" -eq 2 ] || {
+        echo "    ci.yml: a CI toolchain pin moved off 1.98 (build chain is frozen)"
         ok=false
     }
     command grep -q 'default: "1.95.0"' "$test_dir/.github/workflows/ci.yml" || {
@@ -1523,13 +1539,9 @@ EOF
         echo "    other.yml: a floating toolchain was disturbed"
         ok=false
     }
-    command grep -q 'RUST_VERSION: "1.99.0"' "$test_dir/.devcontainer/docker-compose.yml" || {
-        echo "    devcontainer RUST_VERSION was not rewritten to 1.99.0"
-        ok=false
-    }
 
     command rm -rf "$test_dir"
-    assert_true "$ok" "A minor Rust bump syncs every X.Y toolchain pin and nothing else"
+    assert_true "$ok" "A minor Rust bump moves only the container default, never the build chain"
 }
 
 # ============================================================================
@@ -1840,7 +1852,7 @@ run_test test_gemfile_case_rewrites_triage_pin "gitlab-triage rewrites the Gemfi
 run_test test_unknown_gemfile_tool_returns_no_updater_case "unknown Gemfile tool reports a missing updater case"
 run_test test_failed_rewrite_exits_three "Failed rewrite exits 3 (fatal), not 2 (tolerated)"
 run_test test_luggage_catalog_failure_exits_three "Failed luggage catalog update returns RC_UPDATE_FAILED and exits 3"
-run_test test_rust_minor_bump_syncs_minor_pins "A minor Rust bump syncs every X.Y toolchain pin"
+run_test test_rust_minor_bump_leaves_build_chain "A minor Rust bump moves the container default, not the build chain"
 run_test test_failure_summary_separates_causes "Failure summary separates causes and names the tools"
 
 # Generate report

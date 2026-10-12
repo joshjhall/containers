@@ -18,6 +18,8 @@ APIs, and system specifications.
   update policies
 - [**Version Compatibility**](compatibility.md) - Compatibility matrix for
   language versions and platforms
+- [**Rust Version Policy**](rust-version-policy.md) - MSRV vs. container
+  Rust, the supported 1.82+ window, and how each moves
 
 ### Security
 
