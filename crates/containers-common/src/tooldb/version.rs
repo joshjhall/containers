@@ -341,7 +341,11 @@ mod tests {
 
         // A row with no warnings must not grow the key — this is what keeps
         // every pre-#850 evidence row in containers-db byte-identical.
-        assert!(entry.verification_warnings.is_empty());
+        assert!(
+            entry.verification_warnings.is_empty(),
+            "expected empty, got {:?}",
+            entry.verification_warnings
+        );
         assert!(
             !serialized.contains("verification_warnings"),
             "warning-free rows must not gain a key: {serialized}"

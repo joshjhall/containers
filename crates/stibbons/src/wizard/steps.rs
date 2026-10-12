@@ -207,7 +207,7 @@ mod tests {
     /// Index 0 is only a safe fallback while the list is non-empty.
     #[test]
     fn base_image_options_is_non_empty() {
-        assert!(!base_image_options().is_empty());
+        assert!(!base_image_options().is_empty(), "expected non-empty");
     }
 
     #[test]

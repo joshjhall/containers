@@ -532,7 +532,8 @@ mod tests {
 
     #[test]
     fn resolve_installed_versions_empty_deps_returns_empty() {
-        assert!(resolve_installed_versions(&[], PackageManager::Apt).is_empty());
+        let versions = resolve_installed_versions(&[], PackageManager::Apt);
+        assert!(versions.is_empty(), "expected empty, got {versions:?}");
     }
 
     #[test]

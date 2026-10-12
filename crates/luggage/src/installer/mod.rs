@@ -723,7 +723,7 @@ mod tests {
         // And a report written by an older build (no `warnings` key) still
         // deserializes.
         let back: InstallReport = serde_json::from_str(&json).unwrap();
-        assert!(back.warnings.is_empty());
+        assert!(back.warnings.is_empty(), "expected empty, got {:?}", back.warnings);
     }
 
     /// The skip / dry-run / failure paths never reach verification, so their
@@ -732,11 +732,11 @@ mod tests {
     fn non_success_reports_carry_no_warnings() {
         let resolved = sample_resolved_with_deps();
         let skipped = Installer::report_skipped(&resolved, None, 0.0);
-        assert!(skipped.warnings.is_empty());
+        assert!(skipped.warnings.is_empty(), "expected empty, got {:?}", skipped.warnings);
 
         let err = LuggageError::Catalog("x".into());
         let failed = Installer::report_failure(&resolved, &err, None, 0.0);
-        assert!(failed.warnings.is_empty());
+        assert!(failed.warnings.is_empty(), "expected empty, got {:?}", failed.warnings);
 
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
@@ -744,7 +744,7 @@ mod tests {
         });
         let plan = installer.plan(&resolved).unwrap();
         let dry = Installer::report_dry_run(plan, None, 0.0);
-        assert!(dry.warnings.is_empty());
+        assert!(dry.warnings.is_empty(), "expected empty, got {:?}", dry.warnings);
     }
 
     /// Strict mode must refuse a TOFU install *before* the download, the way

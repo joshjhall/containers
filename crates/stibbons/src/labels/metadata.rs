@@ -295,7 +295,7 @@ mod tests {
         assert_eq!(agg.source_files, 1);
         let names: Vec<&str> = agg.labels.iter().map(|l| l.name.as_str()).collect();
         assert_eq!(names, vec!["effort/small", "severity/high"]);
-        assert!(agg.warnings.is_empty());
+        assert!(agg.warnings.is_empty(), "expected empty, got {:?}", agg.warnings);
     }
 
     #[test]
@@ -335,14 +335,14 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         write_skill(tmp.path(), "docker-development", "name: docker-development\nlabels: []\n");
         let agg = load_labels(&[tmp.path().to_path_buf()]).unwrap();
-        assert!(agg.labels.is_empty());
+        assert!(agg.labels.is_empty(), "expected empty, got {:?}", agg.labels);
         assert_eq!(agg.source_files, 0);
     }
 
     #[test]
     fn missing_root_is_skipped() {
         let agg = load_labels(&[PathBuf::from("/nonexistent/xyz")]).unwrap();
-        assert!(agg.labels.is_empty());
+        assert!(agg.labels.is_empty(), "expected empty, got {:?}", agg.labels);
         assert_eq!(agg.source_files, 0);
     }
 

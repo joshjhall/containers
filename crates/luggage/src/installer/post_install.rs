@@ -189,6 +189,7 @@ mod tests {
         let runner = RecordingRunner::new();
         let env = BTreeMap::new();
         run_steps(&[], "vscode", &env, &runner).unwrap();
-        assert!(runner.calls().is_empty());
+        let calls = runner.calls();
+        assert!(calls.is_empty(), "expected empty, got {calls:?}");
     }
 }

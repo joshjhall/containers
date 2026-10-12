@@ -862,7 +862,7 @@ mod tests {
             &ResolutionPolicy::default(),
         )
         .unwrap();
-        assert!(r.warnings.is_empty());
+        assert!(r.warnings.is_empty(), "expected empty, got {:?}", r.warnings);
     }
 
     #[test]
@@ -872,7 +872,7 @@ mod tests {
             ResolutionPolicy { warn_on_slow_or_stale: false, ..ResolutionPolicy::permissive() };
         let r =
             resolve_with_policy(&entry, &VersionSpec::Latest, &debian_amd64(), &policy).unwrap();
-        assert!(r.warnings.is_empty());
+        assert!(r.warnings.is_empty(), "expected empty, got {:?}", r.warnings);
     }
 
     // ---- catalog-driven fields (issue #806) -------------------------------

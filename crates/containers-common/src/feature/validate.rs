@@ -440,7 +440,7 @@ mod tests {
         let sel = explicit(&[]);
         let outcome = plan_add(&ids(&["python"]), &sel, AddOptions { dev: true }, &reg).unwrap();
         assert_eq!(outcome.explicit, explicit(&["python", "python_dev"]));
-        assert!(outcome.skipped.is_empty());
+        assert!(outcome.skipped.is_empty(), "expected empty, got {:?}", outcome.skipped);
     }
 
     #[test]
