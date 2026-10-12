@@ -139,19 +139,34 @@ it as indicative only. This compounds the field's existing volatility: per
 never alone triggers a re-ingest, so an emulated timing drift produces no
 catalog churn.
 
-### arm64 is wired but inactive
+### Push and PR matrix (catalog-derived)
 
-The arm64 plumbing is complete end to end, but the **pilot matrix runs only
-`debian-12-amd64`** today: no arm64 base image is published yet
-(`base-images/` carries only `debian/12/amd64`, and `build-base-images.yml`
-builds an amd64-only matrix). The arm64 pilot leg is present as a commented
-entry in the `setup` job, and `debian-12-arm64` is a `workflow_dispatch` tuple
-option. Activate by uncommenting the pilot leg once the arm64 base image lands
-([#432](https://github.com/joshjhall/containers/issues/432) /
-[#434](https://github.com/joshjhall/containers/issues/434) /
-[#436](https://github.com/joshjhall/containers/issues/436)) — the evidence job
-body needs no change. Until then, dispatching `debian-12-arm64` fails at
-`Resolve base image digest` (no image to pull), by design.
+The `setup` job builds the push-triggered matrix from the vendored catalog and
+the base-images tree with
+[`bin/lib/evidence-matrix.sh`](../../bin/lib/evidence-matrix.sh) (#1111):
+
+```text
+newest patch of each minor, minimum_recommended floor and up
+  x  support_matrix `supported` tuples  ∩  base-images/<os>/<osv>/<arch>/Dockerfile
+  -  cells that already have a passing tested[] row
+```
+
+- **Newest patch per minor**, because that's what `RUST_VERSION=X.Y` installs.
+  Superseded patches stay installable but aren't re-tested.
+- **Pending only.** Re-running a covered cell is a no-op at ingest, and the full
+  product (18 versions × 18 tuples = 324) exceeds GitHub's 256-job matrix cap.
+  A base-image rebuild re-evidences its tuple separately
+  ([`dispatch-evidence-for-tuple.sh`](../../bin/dispatch-evidence-for-tuple.sh)).
+- **Capped at 200 per run, oldest versions first**, so a backlog (a new platform,
+  or the 1.82+ backfill) drains over successive pushes, floor first.
+- **Nothing pending** → `has_cells=false` and the evidence job is skipped (an
+  empty matrix is a hard error in Actions).
+- **Pull requests** dry-run only the oldest pending cell. That proves the
+  pipeline still works without re-evidencing the backlog on every PR.
+
+Both arches run natively: arm64 on `ubuntu-24.04-arm`, amd64 on
+`ubuntu-latest`. The supported platform set lives in
+[`docs/reference/supported-platforms.md`](../reference/supported-platforms.md).
 
 ## Dispatching evidence on a version bump
 
@@ -177,14 +192,10 @@ from. A `support_matrix` row with no `os_version` (a wildcard claim) is realized
 through whichever concrete available tuples it covers; a claim for a tuple with
 no published base image simply drops out of the intersection.
 
-**Why only `debian-12-amd64` fires today.** The base-images tree currently
-publishes only `debian/12/amd64` (see
-[arm64 is wired but inactive](#arm64-is-wired-but-inactive)). So even a version
-whose `support_matrix` claims debian-13, alpine, or arm64, the intersection
-resolves to just `debian-12-amd64` until those base images land — the dispatcher
-fires exactly the cells that can actually run. An empty intersection (every
-claimed cell still unpublished) logs `no supported tuples available` and
-dispatches nothing, exiting cleanly rather than erroring.
+**Only runnable cells fire.** A claimed tuple with no base image drops out of
+the intersection, so the dispatcher fires exactly the cells that can actually
+run. An empty intersection logs `no supported tuples available` and dispatches
+nothing, exiting cleanly rather than erroring.
 
 **Cross-repo deferral + idempotency still apply.** If containers-db has not yet
 published `tools/<slug>/versions/<version>.json`, the dispatcher logs a clean

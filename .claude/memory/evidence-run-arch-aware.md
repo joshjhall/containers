@@ -1,6 +1,6 @@
 ---
 name: evidence-run-arch-aware
-description: evidence-run.yml is arch-parameterized (hybrid native/emulated); arm64 leg wired but inactive pending base image
+description: evidence-run.yml is arch-parameterized (hybrid native/emulated); arm64 ACTIVE since the catalog-derived matrix (#1111/#1113)
 metadata:
   node_type: memory
   type: project
@@ -21,15 +21,15 @@ arm64), no `docker --platform`. `emulated` → `ubuntu-latest` +
 container**, so it must be built for the *container* arch in both modes.
 Emulated arm64 on an amd64 host cross-compiles `aarch64-unknown-linux-musl`.
 
-**arm64 is wired but INACTIVE**: the arm64 pilot leg is commented out in the
-setup-job matrix because no arm64 base image is published yet
-([[v5-architecture]]; base-images/ has only debian/12/amd64,
-build-base-images.yml builds amd64 only). Uncomment to activate once #432/#434/
-
-# 436 land — the evidence job body needs no change
+**arm64 is ACTIVE** (2026-10-12): the hard-coded pilot leg is gone. The
+setup job derives the matrix from the catalog via `bin/lib/evidence-matrix.sh`
+(newest patch per minor x claimed tuples with a base image, pending only,
+capped at 200 for GitHub's 256-job limit), and #1113 published arm64 base
+images for all 9 OS versions. Both arches run native (arm64 on
+`ubuntu-24.04-arm`). The emulated path below still exists for dispatch.
 
 **Latent-bug lessons from the review (caught by the pre-PR adversarial harness,
-not local lint)** — all fire only when the arm64 leg activates:
+not local lint)** — these apply now that arm64 runs:
 
 - `CARGO_TARGET_<triple>_LINKER` is read whenever cargo builds that triple,
   regardless of runner. A native arm64 runner has only `musl-tools` (→ use
