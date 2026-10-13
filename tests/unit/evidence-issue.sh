@@ -164,6 +164,55 @@ test_create_path() {
 
 # --- Run -------------------------------------------------------------------
 
+# --- open_run_tracking_issue tests ----------------------------------------
+
+# _envelope <dir> <name> <version> <tuple> <result> [error_class]
+_envelope() {
+    local IFS=- parts
+    read -r -a parts <<<"$4"
+    command mkdir -p "$1"
+    command jq -n --arg v "$3" --arg os "${parts[0]}" --arg ov "${parts[1]}" --arg a "${parts[2]}" \
+        --arg r "$5" --arg ec "${6:-}" \
+        '{tool:"rust", version:$v, os:$os, os_version:$ov, arch:$a, result:$r}
+         + (if $ec == "" then {} else {error_class:$ec} end)' >"$1/$2.json"
+}
+
+test_run_issue_one_issue_for_many_fails() {
+    install_gh_stub
+    local rows="$TEST_TEMP_DIR/run-rows"
+    command rm -rf "$rows"
+    _envelope "$rows/a" r1 1.82.0 rhel-10-amd64 fail infra
+    _envelope "$rows/b" r2 1.83.0 rhel-10-arm64 fail infra
+    _envelope "$rows/c" r3 1.82.0 debian-13-amd64 pass
+    local rc=0
+    GH="$GH_STUB" GH_CALLS="$GH_CALLS" open_run_tracking_issue "$rows" "https://x/run/7" >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "files without error"
+    assert_equals "1" "$(command grep -c '^issue create' "$GH_CALLS")" "ONE issue for two failing cells"
+}
+
+test_run_issue_none_when_all_pass() {
+    install_gh_stub
+    local rows="$TEST_TEMP_DIR/run-rows-pass"
+    command rm -rf "$rows"
+    _envelope "$rows/a" r1 1.82.0 debian-13-amd64 pass
+    GH="$GH_STUB" GH_CALLS="$GH_CALLS" open_run_tracking_issue "$rows" "https://x/run/8" >/dev/null 2>&1
+    # No gh call at all is correct here, so the call log may not exist.
+    assert_equals "0" "$(command grep -sc '^issue create' "$GH_CALLS" || echo 0)" "no issue when nothing failed"
+}
+
+test_run_issue_drops_rows_failing_validation() {
+    # A smuggled search operator in a tuple must not reach the issue body.
+    install_gh_stub
+    local rows="$TEST_TEMP_DIR/run-rows-bad"
+    command rm -rf "$rows"
+    command mkdir -p "$rows"
+    command jq -n '{tool:"rust", version:"1.82.0", os:"debian", os_version:"13 in:title", arch:"amd64", result:"fail"}' \
+        >"$rows/bad.json"
+    GH="$GH_STUB" GH_CALLS="$GH_CALLS" open_run_tracking_issue "$rows" "https://x/run/9" >/dev/null 2>&1
+    assert_equals "0" "$(command grep -sc '^issue create' "$GH_CALLS" || echo 0)" \
+        "a row failing validation is dropped (so nothing is filed)"
+}
+
 run_test test_valid_inputs_pass_regexes "well-formed inputs pass all three regexes"
 run_test test_reject_tool_metachar "tool with a shell metacharacter is rejected"
 run_test test_reject_tool_uppercase "uppercase tool slug is rejected"
@@ -174,5 +223,9 @@ run_test test_reject_tuple_with_space "tuple with a space / search operator is r
 run_test test_existing_numeric_guard_rejects_corrupt "corrupt EXISTING number → rc 1, no create/edit"
 run_test test_update_path "EXISTING numeric → edit + comment, no create"
 run_test test_create_path "EXISTING empty → create with all three labels, no edit"
+
+run_test test_run_issue_one_issue_for_many_fails "one tracking issue for a run's many fail rows"
+run_test test_run_issue_none_when_all_pass "no tracking issue when every row passed"
+run_test test_run_issue_drops_rows_failing_validation "rows failing validation never reach the issue"
 
 generate_report

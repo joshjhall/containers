@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Unit tests: evidence-run.yml keeps the batched-ingest shape.
+#
+# Before batching, each evidence cell opened its own containers-db PR and its
+# own tracking issue, so one push produced up to 200 PRs (conflicting on
+# shared version files) and dozens of duplicate issues, and cells read
+# containers-db main, which raced DB changes that needed a matching luggage
+# change. These checks fail if any of that comes back.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../framework.sh"
+
+init_test_framework
+
+test_suite "evidence-run.yml batched-ingest shape"
+
+WF="$PROJECT_ROOT/.github/workflows/evidence-run.yml"
+
+# _job_block <job> — the YAML of one top-level job (from its key to the next).
+_job_block() {
+    /usr/bin/awk -v job="$1" '
+        $0 ~ "^  " job ":$" { on = 1; print; next }
+        on && /^  [a-z_-]+:$/ { exit }
+        on { print }
+    ' "$WF"
+}
+
+test_cells_open_no_prs_or_issues() {
+    local cell
+    # Comment lines excluded: prose may mention the scripts it no longer runs.
+    cell="$(_job_block evidence | /usr/bin/grep -vE '^[[:space:]]*#')"
+    if /usr/bin/grep -qE 'ingest-evidence(-batch)?\.sh|gh pr create|open_or_update_tracking_issue|open_run_tracking_issue' <<<"$cell"; then
+        assert_true false "the evidence (cell) job must not ingest or file issues; that is the collect job's"
+    else
+        assert_true true "cells only record and upload"
+    fi
+}
+
+test_collect_job_batches_into_one_pr() {
+    local collect
+    collect="$(_job_block collect)"
+    assert_contains "$collect" "ingest-evidence-batch.sh" "collect ingests the whole run in one batch"
+    assert_contains "$collect" "open_run_tracking_issue" "collect files one issue per run"
+    assert_contains "$collect" "always()" "collect runs even when some cells failed"
+}
+
+test_artifact_name_is_per_cell() {
+    # Per-tuple names collided once a tuple had many versions.
+    assert_file_contains "$WF" 'name: evidence-row-${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.tuple }}' \
+        "artifact name includes tool, version, and tuple"
+}
+
+test_cells_install_from_the_vendored_catalog() {
+    local cell
+    cell="$(_job_block evidence)"
+    assert_contains "$cell" 'crates/luggage/testdata/catalog:/catalog:ro' \
+        "cells install against the catalog luggage was built with"
+    if /usr/bin/grep -q 'clone.*containers-db' <<<"$cell"; then
+        assert_true false "cells must not clone containers-db (races DB changes against luggage)"
+    else
+        assert_true true "cells do not read containers-db main"
+    fi
+}
+
+run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
+run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
+run_test test_artifact_name_is_per_cell "artifact name is per cell"
+run_test test_cells_install_from_the_vendored_catalog "cells install from the vendored catalog"
+
+generate_report

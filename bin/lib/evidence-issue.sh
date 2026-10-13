@@ -190,3 +190,62 @@ EOF
             --label "severity/high" --label "type/bug" --label "audit/regression"
     fi
 }
+
+# open_run_tracking_issue - File ONE issue for a whole evidence run's fail rows.
+#
+# Arguments:
+#   $1 - directory of the run's evidence envelopes (*.json, any depth)
+#   $2 - run URL
+#
+# Returns 0 without filing anything when no row failed. The per-cell
+# open_or_update_tracking_issue opened one issue per failing cell, so a single
+# luggage bug that broke every cell filed dozens (47, then 83). A run's
+# failures almost always share one cause; one issue listing them all is what
+# a maintainer triages. Every envelope field reaching the body is validated
+# with validate_issue_inputs first; rows that fail validation are dropped.
+open_run_tracking_issue() {
+    local rows_dir="$1" RUN_URL="$2"
+    local table="" count=0 f tool version tuple ec
+    while IFS= read -r -d '' f; do
+        [ "$(command jq -r '.result // empty' "$f" 2>/dev/null)" = "fail" ] || continue
+        tool="$(command jq -r '.tool // empty' "$f")"
+        version="$(command jq -r '.version // empty' "$f")"
+        tuple="$(command jq -r 'if (.os_version // "") != "" then "\(.os)-\(.os_version)-\(.arch)" else "" end' "$f")"
+        ec="$(command jq -r '.error_class // "unknown"' "$f")"
+        validate_issue_inputs "$tool" "$version" "$tuple" || continue
+        [[ "$ec" =~ ^[a-z_]+$ ]] || ec="unknown"
+        table="${table}| \`${tool}@${version}\` | \`${tuple}\` | \`${ec}\` |"$'\n'
+        count=$((count + 1))
+    done < <(command find "$rows_dir" -type f -name '*.json' -print0 | command sort -z)
+
+    if [ "$count" -eq 0 ]; then
+        echo "No fail rows in this run; no tracking issue."
+        return 0
+    fi
+
+    "$GH" label create "audit/regression" --description "Automated regression finding" --color "B60205" --force
+    "$GH" label create "severity/high" --description "High severity" --color "D93F0B" 2>/dev/null || true
+    "$GH" label create "type/bug" --description "Bug" --color "D73A4A" 2>/dev/null || true
+
+    local TODAY BODY_FILE
+    TODAY="$(command date -u +%Y-%m-%d)"
+    BODY_FILE="$(command mktemp)"
+    command cat >"$BODY_FILE" <<BODY
+## Evidence run recorded ${count} \`fail\` row(s)
+
+The rows were recorded in containers-db as evidence (one batched PR); this
+issue tracks the failures. When every row shares an \`error_class\`, the cause
+is usually one luggage or catalog problem, not one per cell.
+
+**Run:** ${RUN_URL}
+**Recorded:** ${TODAY}
+
+| tool@version | tuple | error_class |
+|---|---|---|
+${table}
+<!-- managed-by: evidence-run.yml collect -->
+BODY
+    "$GH" issue create --title "Evidence run: ${count} failing cell(s) (${TODAY})" --body-file "$BODY_FILE" \
+        --label "severity/high" --label "type/bug" --label "audit/regression"
+    command rm -f "$BODY_FILE"
+}
