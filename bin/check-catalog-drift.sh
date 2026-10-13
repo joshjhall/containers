@@ -22,9 +22,15 @@
 #   - Versions with no upstream counterpart (a pin newer than upstream, e.g.
 #     the live ARG RUST_VERSION) are REPORTED and skipped, never silently
 #     ignored.
-#   - Index files are compared field-by-field: available[], default_version,
-#     and minimum_recommended describe what THIS catalog holds and legitimately
-#     differ. Every other field must match.
+#   - Index files are compared field-by-field: available[] and
+#     default_version describe what THIS catalog holds and legitimately differ.
+#     minimum_recommended is NOT exempt: luggage enforces it as the support
+#     floor (resolving below it fails), so a vendored floor that disagreed with
+#     upstream silently changed which versions install (#1115: vendored 1.82.0
+#     vs upstream 1.93.0 refused the first evidence run). `activity` is skipped: it is the scanner's bookkeeping
+#     (scanned_at, release/commit signals), rewritten upstream on every scan
+#     that adds a version, so comparing it red-lit every branch after each
+#     scan, exactly the churn tested[] caused. Every other field must match.
 #   - Version files are compared without tested[]. That is CI evidence, not
 #     install data: evidence-run appends to it upstream on every merged
 #     evidence PR, so comparing it red-lit every branch here until someone
@@ -91,10 +97,14 @@ done
 
 # Index fields describing this catalog's own contents rather than the tool, so
 # they are expected to differ between the two copies.
-readonly LOCAL_FIELDS='["available","default_version","minimum_recommended"]'
+readonly LOCAL_FIELDS='["available","default_version"]'
 
 # Version-file fields excluded from the comparison (see the header).
 readonly EVIDENCE_FIELDS='["tested"]'
+
+# Index fields excluded because the upstream scanner rewrites them on every
+# scan (see the header). Not install data.
+readonly SCANNER_FIELDS='["activity"]'
 
 compared=0
 skipped=0
@@ -131,8 +141,8 @@ compare_index() {
     local up="$1" ven="$2" tool="$3"
     local keys key up_val ven_val found=0
 
-    keys="$(command jq -r --argjson local "$LOCAL_FIELDS" \
-        '[keys[]] | map(select(. as $k | $local | index($k) | not)) | .[]' \
+    keys="$(command jq -r --argjson local "$LOCAL_FIELDS" --argjson scan "$SCANNER_FIELDS" \
+        '[keys[]] | map(select(. as $k | ($local + $scan) | index($k) | not)) | .[]' \
         "$up" "$ven" 2>/dev/null | command sort -u)"
 
     while IFS= read -r key; do

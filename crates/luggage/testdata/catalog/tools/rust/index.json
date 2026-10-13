@@ -1,10 +1,10 @@
 {
   "activity": {
     "scan_cadence_days": 1,
-    "scanned_at": "2026-10-12T03:09:55Z",
+    "scanned_at": "2026-10-12T21:41:59Z",
     "score": "very-active",
     "signals": {
-      "last_commit_at": "2026-10-12T00:59:29Z",
+      "last_commit_at": "2026-10-12T21:39:35Z",
       "last_release_at": "2026-10-01T12:41:12Z",
       "open_advisories": 6,
       "releases_last_90d": 4
@@ -12,10 +12,67 @@
   },
   "available": [
     {
+      "version": "1.82.0"
+    },
+    {
+      "version": "1.83.0"
+    },
+    {
+      "version": "1.84.0"
+    },
+    {
+      "version": "1.84.1"
+    },
+    {
+      "version": "1.85.0"
+    },
+    {
+      "version": "1.85.1"
+    },
+    {
+      "version": "1.86.0"
+    },
+    {
+      "version": "1.87.0"
+    },
+    {
+      "version": "1.88.0"
+    },
+    {
+      "version": "1.89.0"
+    },
+    {
+      "version": "1.90.0"
+    },
+    {
+      "version": "1.91.0"
+    },
+    {
+      "version": "1.91.1"
+    },
+    {
+      "version": "1.92.0"
+    },
+    {
+      "version": "1.93.0"
+    },
+    {
+      "version": "1.93.1"
+    },
+    {
+      "version": "1.94.0"
+    },
+    {
+      "version": "1.94.1"
+    },
+    {
       "version": "1.95.0"
     },
     {
       "version": "1.96.0"
+    },
+    {
+      "version": "1.96.1"
     },
     {
       "version": "1.97.0"
@@ -39,13 +96,13 @@
       "description": "Production-grade releases. New stable cuts roughly every six weeks; patch releases as needed."
     }
   },
-  "default_version": "1.97.1",
+  "default_version": "1.99.0",
   "display_name": "Rust",
   "homepage": "https://www.rust-lang.org",
   "id": "rust",
   "kind": "language",
   "license": "MIT OR Apache-2.0",
-  "minimum_recommended": "1.95.0",
+  "minimum_recommended": "1.82.0",
   "ordering": {},
   "primary_binary": "rustc",
   "schemaVersion": 1,

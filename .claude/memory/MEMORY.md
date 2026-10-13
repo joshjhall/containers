@@ -42,7 +42,7 @@
 - [Pre-push skips network tests](pre-push-skips-network-tests.md) — SKIP_NETWORK_TESTS=1 keeps the push gate offline; CI still runs full (#615)
 - [Ship review reads whole files](ship-review-whole-file-scope.md) — ship review flags pre-existing main code
 - [BASH_ENV breaks PATH stubs](bash-env-breaks-path-stubs.md) — /etc/bash_env rebuilds PATH on non-interactive bash; clear it in stub tests (#618)
-- [Evidence-run arch-aware](evidence-run-arch-aware.md) — evidence-run.yml hybrid native/emulated arch matrix; arm64 leg wired but inactive
+- [Evidence-run arch-aware](evidence-run-arch-aware.md) — native arm64+amd64; push matrix derived from the catalog (pending only, capped 200 < GitHub 256)
 - [Evidence-run validates live vs db main](evidence-run-validates-live-against-db-main.md) — new TestEntry field needs containers-db schema PR merged
 - [Pre-existing osv vuln blocks push](preexisting-osv-vuln-blocks-push.md) — whole-lockfile osv pre-push gate blocks ALL pushes on any Cargo.lock
 - [Alpine hardening: no coreutils paths](alpine-hardening-no-coreutils-paths.md) — Alpine build scripts use bare command names, not /usr/bin/<cmd>
