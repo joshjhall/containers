@@ -11,6 +11,7 @@
 //! - [`PostInstall::Unknown`] → [`crate::LuggageError::PostInstallFailed`]
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use containers_common::tooldb::PostInstall;
 use shell_words::quote;
@@ -24,6 +25,13 @@ use crate::installer::user::su_command;
 /// `env` is exported in front of every step so each `rustup` invocation
 /// sees the same `CARGO_HOME` / `RUSTUP_HOME` the install method used.
 ///
+/// `bin_dir`, when set, is prepended to `PATH` for every step. Steps invoke
+/// the tool's own binaries by bare name (`rustup component add …`) inside a
+/// fresh `su -` login shell, whose PATH comes from the distro's profile:
+/// Debian/Ubuntu happen to reach the tool, but Alpine's login PATH is just
+/// `/bin:/usr/bin`, so every install as a non-root user failed with
+/// `rustup: command not found` (#1165).
+///
 /// # Errors
 ///
 /// - [`LuggageError::NotImplemented`] for a `CargoInstall` variant.
@@ -33,10 +41,11 @@ pub fn run_steps(
     steps: &[PostInstall],
     user: &str,
     env: &BTreeMap<String, String>,
+    bin_dir: Option<&Path>,
     runner: &dyn CommandRunner,
 ) -> Result<()> {
     for step in steps {
-        run_one(step, user, env, runner)?;
+        run_one(step, user, env, bin_dir, runner)?;
     }
     Ok(())
 }
@@ -45,6 +54,7 @@ fn run_one(
     step: &PostInstall,
     user: &str,
     env: &BTreeMap<String, String>,
+    bin_dir: Option<&Path>,
     runner: &dyn CommandRunner,
 ) -> Result<()> {
     let (step_id, body) = match step {
@@ -80,6 +90,15 @@ fn run_one(
         }
     };
 
+    // Prepend the tool's bin dir. Not through `env`: su_command quotes every
+    // value, so `PATH=…:$PATH` there would set a literal `$PATH`. Here only
+    // the directory is quoted and the inner shell expands `"$PATH"`.
+    let body = match bin_dir {
+        Some(dir) => {
+            format!("export PATH={}:\"$PATH\"; {body}", quote(&dir.display().to_string()))
+        }
+        None => body,
+    };
     let argv = su_command(user, env, &body)?;
     let outcome = runner.run(&argv[0], &argv[1..])?;
     if outcome.success() {
@@ -110,6 +129,7 @@ mod tests {
             &[PostInstall::ComponentAdd { component: "rust-src".into() }],
             "vscode",
             &env,
+            None,
             &runner,
         )
         .unwrap();
@@ -122,6 +142,46 @@ mod tests {
     }
 
     #[test]
+    fn bin_dir_is_prepended_to_path_with_path_expanded() {
+        // #1165: under `su -` on Alpine the login PATH lacks the tool's bin
+        // dir, so `rustup` was not found. The dir must be prepended with
+        // `$PATH` left for the inner shell to expand (a quoted `$PATH` would
+        // set it to the literal string and break every other lookup).
+        let runner = RecordingRunner::new();
+        let env = BTreeMap::new();
+        run_steps(
+            &[PostInstall::ComponentAdd { component: "rust-src".into() }],
+            "runner",
+            &env,
+            Some(Path::new("/cache/cargo/bin")),
+            &runner,
+        )
+        .unwrap();
+        let payload = &runner.calls()[0].1[3];
+        assert!(
+            payload
+                .contains(r#"export PATH=/cache/cargo/bin:"$PATH"; rustup component add rust-src"#),
+            "PATH prefix must precede the step with $PATH expandable: {payload}"
+        );
+    }
+
+    #[test]
+    fn no_bin_dir_leaves_the_step_unchanged() {
+        let runner = RecordingRunner::new();
+        let env = BTreeMap::new();
+        run_steps(
+            &[PostInstall::ComponentAdd { component: "rust-src".into() }],
+            "runner",
+            &env,
+            None,
+            &runner,
+        )
+        .unwrap();
+        let payload = &runner.calls()[0].1[3];
+        assert!(!payload.contains("export PATH="), "no PATH prefix without a bin dir: {payload}");
+    }
+
+    #[test]
     fn command_step_quotes_and_invokes() {
         let runner = RecordingRunner::new();
         let env = BTreeMap::new();
@@ -129,6 +189,7 @@ mod tests {
             &[PostInstall::Command { command: "echo".into(), args: Some(vec!["hi there".into()]) }],
             "vscode",
             &env,
+            None,
             &runner,
         )
         .unwrap();
@@ -146,6 +207,7 @@ mod tests {
             &[PostInstall::CargoInstall { package: "ripgrep".into(), version: "14.0.0".into() }],
             "vscode",
             &env,
+            None,
             &runner,
         )
         .unwrap_err();
@@ -156,7 +218,7 @@ mod tests {
     fn unknown_variant_returns_post_install_failed() {
         let runner = RecordingRunner::new();
         let env = BTreeMap::new();
-        let err = run_steps(&[PostInstall::Unknown], "vscode", &env, &runner).unwrap_err();
+        let err = run_steps(&[PostInstall::Unknown], "vscode", &env, None, &runner).unwrap_err();
         assert!(matches!(err, LuggageError::PostInstallFailed { .. }));
     }
 
@@ -172,6 +234,7 @@ mod tests {
             &[PostInstall::ComponentAdd { component: "rust-src".into() }],
             "vscode",
             &env,
+            None,
             &runner,
         )
         .unwrap_err();
@@ -188,7 +251,7 @@ mod tests {
     fn empty_steps_is_a_noop() {
         let runner = RecordingRunner::new();
         let env = BTreeMap::new();
-        run_steps(&[], "vscode", &env, &runner).unwrap();
+        run_steps(&[], "vscode", &env, None, &runner).unwrap();
         let calls = runner.calls();
         assert!(calls.is_empty(), "expected empty, got {calls:?}");
     }
