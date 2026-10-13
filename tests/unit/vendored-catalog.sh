@@ -207,6 +207,28 @@ test_drift_ignores_scanner_activity() {
     command rm -rf "$up" "$ven"
 }
 
+test_drift_gates_the_support_floor() {
+    # minimum_recommended is enforced by luggage (below it fails), so a vendored
+    # floor that disagrees with upstream changes what installs: #1115's
+    # vendored 1.82.0 vs upstream 1.93.0 refused the first evidence run.
+    local up="$TEST_TEMP_DIR/floor-up" ven="$TEST_TEMP_DIR/floor-ven"
+    _mini_catalog "$up" 2026-10-01 '[]'
+    _mini_catalog "$ven" 2026-10-01 '[]'
+    command printf '{"id":"rust","available":[{"version":"1.0.0"}],"minimum_recommended":"1.93.0"}\n' >"$up/tools/rust/index.json"
+    command printf '{"id":"rust","available":[{"version":"1.0.0"}],"minimum_recommended":"1.82.0"}\n' >"$ven/tools/rust/index.json"
+    local rc=0
+    command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a differing minimum_recommended is drift"
+
+    # default_version stays catalog-local (only applies to version-less installs).
+    command printf '{"id":"rust","available":[{"version":"1.0.0"}],"default_version":"1.95.0"}\n' >"$up/tools/rust/index.json"
+    command printf '{"id":"rust","available":[{"version":"1.0.0"}],"default_version":"1.99.0"}\n' >"$ven/tools/rust/index.json"
+    rc=0
+    command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "a differing default_version is not drift"
+    command rm -rf "$up" "$ven"
+}
+
 test_drift_still_catches_install_data() {
     # The exclusion must stay scoped to tested[]: the same pair with a real
     # field difference still fails.
@@ -369,6 +391,7 @@ run_test "test_drift_fixtures_are_rejected" "drift check rejects planted drift f
 run_test "test_drift_ignores_tested_evidence" "drift check ignores tested[] evidence"
 run_test "test_drift_still_catches_install_data" "drift check still catches install-data differences"
 run_test "test_drift_ignores_scanner_activity" "drift check ignores scanner activity, not other index fields"
+run_test "test_drift_gates_the_support_floor" "drift check gates minimum_recommended, not default_version"
 run_test "test_index_matches_versions_on_disk" "index available[] agrees with versions/"
 run_test "test_no_fixture_leakage_into_production" "no tests-only fixtures in shipped catalog"
 run_test "test_catalogs_validate_against_schemas" "catalogs validate against JSON schemas"

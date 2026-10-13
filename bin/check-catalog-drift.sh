@@ -22,9 +22,12 @@
 #   - Versions with no upstream counterpart (a pin newer than upstream, e.g.
 #     the live ARG RUST_VERSION) are REPORTED and skipped, never silently
 #     ignored.
-#   - Index files are compared field-by-field: available[], default_version,
-#     and minimum_recommended describe what THIS catalog holds and legitimately
-#     differ. `activity` is skipped too: it is the scanner's bookkeeping
+#   - Index files are compared field-by-field: available[] and
+#     default_version describe what THIS catalog holds and legitimately differ.
+#     minimum_recommended is NOT exempt: luggage enforces it as the support
+#     floor (resolving below it fails), so a vendored floor that disagreed with
+#     upstream silently changed which versions install (#1115: vendored 1.82.0
+#     vs upstream 1.93.0 refused the first evidence run). `activity` is skipped: it is the scanner's bookkeeping
 #     (scanned_at, release/commit signals), rewritten upstream on every scan
 #     that adds a version, so comparing it red-lit every branch after each
 #     scan, exactly the churn tested[] caused. Every other field must match.
@@ -94,7 +97,7 @@ done
 
 # Index fields describing this catalog's own contents rather than the tool, so
 # they are expected to differ between the two copies.
-readonly LOCAL_FIELDS='["available","default_version","minimum_recommended"]'
+readonly LOCAL_FIELDS='["available","default_version"]'
 
 # Version-file fields excluded from the comparison (see the header).
 readonly EVIDENCE_FIELDS='["tested"]'
