@@ -56,8 +56,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Tier 1 active matrix. Add new tuples here as sub-issues land.
-        # Each entry must have a corresponding base-images/<distro>/<distro_version>/<arch>/Dockerfile.
+        # Tier 1 active matrix. Each entry must have a corresponding
+        # base-images/<distro>/<distro_version>/<arch>/Dockerfile.
+        # Supported versions (docs/reference/supported-platforms.md):
+        #   debian  — the two current stables (12, 13)
+        #   ubuntu  — the two current LTS releases (24.04, 26.04)
+        #   alpine  — the three newest releases, all inside the ~2y window
+        #   rhel    — the two current majors on UBI minimal (9, 10)
         include:
           - distro: debian
             distro_version: "12"
@@ -75,12 +80,44 @@ jobs:
             distro_version: "13"
             arch: arm64
             platform: linux/arm64
+          - distro: ubuntu
+            distro_version: "24.04"
+            arch: amd64
+            platform: linux/amd64
+          - distro: ubuntu
+            distro_version: "24.04"
+            arch: arm64
+            platform: linux/arm64
+          - distro: ubuntu
+            distro_version: "26.04"
+            arch: amd64
+            platform: linux/amd64
+          - distro: ubuntu
+            distro_version: "26.04"
+            arch: arm64
+            platform: linux/arm64
           - distro: alpine
-            distro_version: "3.21"
+            distro_version: "3.22"
             arch: amd64
             platform: linux/amd64
           - distro: alpine
-            distro_version: "3.21"
+            distro_version: "3.22"
+            arch: arm64
+            platform: linux/arm64
+          - distro: alpine
+            distro_version: "3.23"
+            arch: amd64
+            platform: linux/amd64
+          - distro: alpine
+            distro_version: "3.23"
+            arch: arm64
+            platform: linux/arm64
+          - distro: alpine
+            distro_version: "3.24"
+            arch: amd64
+            platform: linux/amd64
+          - distro: alpine
+            distro_version: "3.24"
             arch: arm64
             platform: linux/arm64
           - distro: rhel
@@ -89,6 +126,14 @@ jobs:
             platform: linux/amd64
           - distro: rhel
             distro_version: "9"
+            arch: arm64
+            platform: linux/arm64
+          - distro: rhel
+            distro_version: "10"
+            arch: amd64
+            platform: linux/amd64
+          - distro: rhel
+            distro_version: "10"
             arch: arm64
             platform: linux/arm64
     env:

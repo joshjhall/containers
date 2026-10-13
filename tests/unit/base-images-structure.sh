@@ -29,26 +29,61 @@ test_suite "Base images structure tests"
 BASE_IMAGES_DIR="$PROJECT_ROOT/base-images"
 WORKFLOW_FILE="$PROJECT_ROOT/.github/workflows/build-base-images.yml"
 
-# Tuples that must exist as Dockerfiles. Keep in sync with the matrix in
-# .github/workflows/build-base-images.yml. Adding a tuple here without
-# adding the corresponding Dockerfile will fail this test.
+# The supported platform set (docs/reference/supported-platforms.md). Each
+# must exist as a Dockerfile; test_workflow_matrix_matches_dockerfiles then
+# holds the build matrix and the on-disk Dockerfiles to exactly this set, so
+# adding or retiring a tuple in one place without the others fails.
 REQUIRED_TUPLES=(
     "debian/12/amd64"
     "debian/12/arm64"
     "debian/13/amd64"
     "debian/13/arm64"
-    "alpine/3.21/amd64"
-    "alpine/3.21/arm64"
+    "ubuntu/24.04/amd64"
+    "ubuntu/24.04/arm64"
+    "ubuntu/26.04/amd64"
+    "ubuntu/26.04/arm64"
+    "alpine/3.22/amd64"
+    "alpine/3.22/arm64"
+    "alpine/3.23/amd64"
+    "alpine/3.23/arm64"
+    "alpine/3.24/amd64"
+    "alpine/3.24/arm64"
     "rhel/9/amd64"
     "rhel/9/arm64"
+    "rhel/10/amd64"
+    "rhel/10/arm64"
 )
 
 # Per-distro hardening libraries that must exist with the standard interface.
 REQUIRED_DISTROS=(
     "debian"
+    "ubuntu"
     "alpine"
     "rhel"
 )
+
+# _matrix_tuples — print `<distro>/<version>/<arch>` for every include entry
+# in the build-base-images matrix, sorted. Plain awk rather than yq: a
+# yq-gated check silently skips wherever yq is missing (see the memory note
+# on skips rendering as passes), and the matrix is regular enough to parse.
+_matrix_tuples() {
+    /usr/bin/awk '
+        /^[[:space:]]*- distro:/      { d = $3 }
+        /^[[:space:]]*distro_version:/ { v = $2; gsub(/"/, "", v) }
+        /^[[:space:]]*arch:/          { if (d != "" && v != "") print d "/" v "/" $2; d = ""; v = "" }
+    ' "$WORKFLOW_FILE" | /usr/bin/sort -u
+}
+
+# _dockerfile_tuples — print `<distro>/<version>/<arch>` for every
+# base-images/*/*/*/Dockerfile on disk, sorted.
+_dockerfile_tuples() {
+    local f
+    for f in "$BASE_IMAGES_DIR"/*/*/*/Dockerfile; do
+        [ -f "$f" ] || continue
+        f="${f#"$BASE_IMAGES_DIR"/}"
+        /usr/bin/echo "${f%/Dockerfile}"
+    done | /usr/bin/sort -u
+}
 
 # Functions every <distro>/hardening.sh must define.
 REQUIRED_HARDENING_FUNCTIONS=(
@@ -179,6 +214,58 @@ test_hardening_libs_export_required_functions() {
     fi
 }
 
+test_workflow_matrix_matches_dockerfiles() {
+    # The build matrix, the Dockerfiles on disk, and REQUIRED_TUPLES must name
+    # exactly the same set. A Dockerfile with no matrix entry is never built
+    # (silently unsupported); a matrix entry with no Dockerfile breaks the
+    # build; a retired tuple left on disk keeps getting claimed as supported.
+    local matrix disk required
+    matrix="$(_matrix_tuples)"
+    disk="$(_dockerfile_tuples)"
+    required="$(/usr/bin/printf '%s\n' "${REQUIRED_TUPLES[@]}" | /usr/bin/sort -u)"
+    local n
+    n="$(/usr/bin/printf '%s\n' "$matrix" | /usr/bin/grep -c . || true)"
+    if [ "$n" -lt "${#REQUIRED_TUPLES[@]}" ]; then
+        assert_true false "matrix parse found only $n tuple(s); the awk parser is broken, not the matrix"
+        return
+    fi
+    assert_equals "$required" "$matrix" "build-base-images.yml matrix must equal REQUIRED_TUPLES"
+    assert_equals "$required" "$disk" "base-images/*/*/*/Dockerfile set must equal REQUIRED_TUPLES"
+}
+
+test_evidence_dispatch_offers_every_tuple() {
+    # evidence-run.yml's workflow_dispatch `tuple` choices are how a human
+    # records evidence for one cell; a supported tuple missing from them can
+    # only get evidence by an image rebuild.
+    local evidence="$PROJECT_ROOT/.github/workflows/evidence-run.yml" want got
+    want="$(/usr/bin/printf '%s\n' "${REQUIRED_TUPLES[@]}" | /usr/bin/tr '/' '-' | /usr/bin/sort -u)"
+    got="$(/usr/bin/awk '/^      tuple:/{f=1} f&&/^      [a-z_]+:/&&!/tuple:/{f=0} f&&/^          - /{print $2}' "$evidence" | /usr/bin/sort -u)"
+    assert_equals "$want" "$got" "evidence-run.yml dispatch tuple options must equal the supported set"
+}
+
+test_ubuntu_images_drop_stock_extras() {
+    # ubuntu:24.04+ put a stock `ubuntu` user at UID 1000 (runner's slot), and
+    # ubuntu:26.04 ships a loose /usr/bin/pebble whose Go toolchain fails the
+    # Trivy HIGH gate. Each Ubuntu Dockerfile must remove what its release ships.
+    local f missing=0
+    for f in "$BASE_IMAGES_DIR"/ubuntu/*/*/Dockerfile; do
+        [ -f "$f" ] || continue
+        /usr/bin/grep -q 'userdel --remove ubuntu' "$f" || {
+            /usr/bin/echo "  no stock-user removal: ${f#"$PROJECT_ROOT"/}"
+            missing=$((missing + 1))
+        }
+        case "$f" in
+            */ubuntu/26.04/*)
+                /usr/bin/grep -qE '^RUN rm -f /usr/bin/pebble' "$f" || {
+                    /usr/bin/echo "  no pebble removal: ${f#"$PROJECT_ROOT"/}"
+                    missing=$((missing + 1))
+                }
+                ;;
+        esac
+    done
+    assert_equals "0" "$missing" "Ubuntu Dockerfiles remove the stock user (and 26.04's pebble)"
+}
+
 test_workflow_file_exists() {
     assert_true [ -f "$WORKFLOW_FILE" ] \
         "build-base-images.yml workflow must exist"
@@ -208,6 +295,9 @@ run_test test_every_dockerfile_invokes_hardening "every Dockerfile invokes harde
 run_test test_every_distro_has_hardening_lib "every required distro has hardening.sh"
 run_test test_hardening_libs_export_required_functions "hardening libraries export required interface"
 run_test test_workflow_file_exists "build-base-images.yml workflow exists"
+run_test test_workflow_matrix_matches_dockerfiles "workflow matrix, Dockerfiles, and REQUIRED_TUPLES agree"
+run_test test_evidence_dispatch_offers_every_tuple "evidence dispatch offers every supported tuple"
+run_test test_ubuntu_images_drop_stock_extras "Ubuntu images drop the stock user and 26.04's pebble"
 run_test test_workflow_references_pilot_tuple "workflow matrix references pilot tuple"
 
 generate_report

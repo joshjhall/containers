@@ -47,13 +47,27 @@ on:
         required: true
         default: "debian-12-amd64"
         type: choice
+        # Every supported base-image tuple (build-base-images.yml matrix;
+        # tests/unit/base-images-structure.sh keeps the two in step).
         options:
           - debian-12-amd64
-          # arm64 is wired end-to-end but no arm64 base image is published
-          # yet (#432/#434/#436). Selecting it will fail at "Resolve base
-          # image digest" until that image lands — kept here so the arch
-          # plumbing is exercised by dispatch once it does.
           - debian-12-arm64
+          - debian-13-amd64
+          - debian-13-arm64
+          - ubuntu-24.04-amd64
+          - ubuntu-24.04-arm64
+          - ubuntu-26.04-amd64
+          - ubuntu-26.04-arm64
+          - alpine-3.22-amd64
+          - alpine-3.22-arm64
+          - alpine-3.23-amd64
+          - alpine-3.23-arm64
+          - alpine-3.24-amd64
+          - alpine-3.24-arm64
+          - rhel-9-amd64
+          - rhel-9-arm64
+          - rhel-10-amd64
+          - rhel-10-arm64
       image_tag:
         description: "Base image tag to pull"
         required: true
@@ -122,6 +136,17 @@ jobs:
             base-images
             crates/luggage/testdata/catalog
 
+      # A PR's base-images tree can add tuples whose images are not published
+      # until it merges (PR builds never push), so a PR's "available" set is
+      # the BASE branch's tree, i.e. what can actually be pulled.
+      - name: Checkout base branch base-image tree (PRs)
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: _base
+          sparse-checkout: base-images
+
       - name: Generate matrix and dry-run flag
         id: gen
         env:
@@ -177,7 +202,11 @@ jobs:
             # shellcheck source=bin/lib/evidence-matrix.sh
             source bin/lib/evidence-matrix.sh
             rc=0
-            MATRIX=$(evidence_matrix crates/luggage/testdata/catalog rust "$PWD" latest 200) || rc=$?
+            AVAILABLE_ROOT="$PWD"
+            if [ "$EVENT" = "pull_request" ] && [ -d _base/base-images ]; then
+              AVAILABLE_ROOT="$PWD/_base"
+            fi
+            MATRIX=$(evidence_matrix crates/luggage/testdata/catalog rust "$AVAILABLE_ROOT" latest 200) || rc=$?
             case "$rc" in
               0) ;;
               3)

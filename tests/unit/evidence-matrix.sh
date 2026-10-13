@@ -112,6 +112,21 @@ test_cells_carry_arch_plumbing() {
         "each cell carries the same fields the dispatch path builds"
 }
 
+test_unpublished_tuples_are_not_available() {
+    # evidence-run.yml computes a PR's matrix against the BASE branch's
+    # base-images tree: a tuple the PR adds has no published image to pull
+    # yet. Pointing the root at a tree without that tuple must drop it.
+    local r base out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
+    base="$(command mktemp -d "$TEST_TEMP_DIR/base.XXXXXX")"
+    command mkdir -p "$base/base-images/debian/13/amd64"
+    command touch "$base/base-images/debian/13/amd64/Dockerfile"
+    out="$(evidence_matrix "$r/catalog" rust "$base")"
+    assert_equals "1.90.0 debian-13-amd64" "$(_cells "$out")" \
+        "a tuple absent from the root's base-images tree is not offered"
+}
+
 test_missing_index_is_an_error() {
     local rc=0
     evidence_matrix "$TEST_TEMP_DIR/nope" rust "$TEST_TEMP_DIR" >/dev/null 2>&1 || rc=$?
@@ -142,6 +157,7 @@ run_test test_covered_cells_are_not_pending "covered cells are not re-run"
 run_test test_nothing_pending_exits_3_with_no_output "nothing pending exits 3 with no output"
 run_test test_cap_takes_oldest_first "cap keeps the oldest pending cells"
 run_test test_cells_carry_arch_plumbing "cells carry arch plumbing"
+run_test test_unpublished_tuples_are_not_available "tuples absent from the root tree are not offered"
 run_test test_missing_index_is_an_error "missing index is an error"
 run_test test_real_catalog_respects_github_cap "shipped catalog stays within GitHub's 256 cap"
 
