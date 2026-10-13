@@ -52,6 +52,14 @@ RUN apt-get update \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
+# ubuntu:26.04 ships /usr/bin/pebble (Canonical's service manager) as a loose
+# binary: no package owns it and nothing in the image calls it. It is built
+# with an older Go toolchain whose net/http and crypto/tls CVEs (HIGH) fail the
+# Trivy publish gate. Evidence images never use a service manager, so drop it
+# rather than suppress the findings. Guarded so a future image without it
+# still builds.
+RUN rm -f /usr/bin/pebble
+
 # Ubuntu images (24.04+) ship a stock `ubuntu` user at UID/GID 1000 — the
 # exact slot `runner` takes on every other distro. hardening.sh reuses an
 # occupied UID rather than failing, so without this the image would end up

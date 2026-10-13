@@ -243,6 +243,29 @@ test_evidence_dispatch_offers_every_tuple() {
     assert_equals "$want" "$got" "evidence-run.yml dispatch tuple options must equal the supported set"
 }
 
+test_ubuntu_images_drop_stock_extras() {
+    # ubuntu:24.04+ put a stock `ubuntu` user at UID 1000 (runner's slot), and
+    # ubuntu:26.04 ships a loose /usr/bin/pebble whose Go toolchain fails the
+    # Trivy HIGH gate. Each Ubuntu Dockerfile must remove what its release ships.
+    local f missing=0
+    for f in "$BASE_IMAGES_DIR"/ubuntu/*/*/Dockerfile; do
+        [ -f "$f" ] || continue
+        /usr/bin/grep -q 'userdel --remove ubuntu' "$f" || {
+            /usr/bin/echo "  no stock-user removal: ${f#"$PROJECT_ROOT"/}"
+            missing=$((missing + 1))
+        }
+        case "$f" in
+            */ubuntu/26.04/*)
+                /usr/bin/grep -qE '^RUN rm -f /usr/bin/pebble' "$f" || {
+                    /usr/bin/echo "  no pebble removal: ${f#"$PROJECT_ROOT"/}"
+                    missing=$((missing + 1))
+                }
+                ;;
+        esac
+    done
+    assert_equals "0" "$missing" "Ubuntu Dockerfiles remove the stock user (and 26.04's pebble)"
+}
+
 test_workflow_file_exists() {
     assert_true [ -f "$WORKFLOW_FILE" ] \
         "build-base-images.yml workflow must exist"
@@ -274,6 +297,7 @@ run_test test_hardening_libs_export_required_functions "hardening libraries expo
 run_test test_workflow_file_exists "build-base-images.yml workflow exists"
 run_test test_workflow_matrix_matches_dockerfiles "workflow matrix, Dockerfiles, and REQUIRED_TUPLES agree"
 run_test test_evidence_dispatch_offers_every_tuple "evidence dispatch offers every supported tuple"
+run_test test_ubuntu_images_drop_stock_extras "Ubuntu images drop the stock user and 26.04's pebble"
 run_test test_workflow_references_pilot_tuple "workflow matrix references pilot tuple"
 
 generate_report
