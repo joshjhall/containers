@@ -70,7 +70,7 @@
 - [Stale base re-adds bin/igor, breaks typos](stale-base-typos-bin-igor.md) — worktree cut before #690 carries deleted bin/igor in push range
 - [dist profile scoping](dist-profile-scoping.md) — stibbons size tuning lives in [profile.dist] not workspace-wide [profile.release]
 - [aarch64 release native not cross](aarch64-release-native-not-cross.md) — release-binaries aarch64 leg builds native on ubuntu-24.04-arm
-- [Rust toolchain pin sync](rust-toolchain-pin-sync.md) — toolchain pinned in ~8 places (X.Y.Z vs X.Y); auto-patch syncs all, MSRV move holds the PR
+- [Rust toolchain pin sync](rust-toolchain-pin-sync.md) — split since #1111: build chain/MSRV frozen (deliberate PR), container default follows latest with no hold
 - [cargo missing from non-login/shebang shells](cargo-path-missing-luggage-rust.md) — luggage rust: /cache/cargo/bin empty, /usr/local/bin/cargo
 - [Review harness destructive rm (#746)](review-harness-destructive-rm-746.md) — ship-issue pre-PR review subagent ran `rm -rf` with unresolved `..`
 - [Host activity line shows pipeline phase](host-activity-line-shows-pipeline-phase.md) — golem host activity line sources from next-issue phase
@@ -130,3 +130,7 @@
 - [Mutation checks on scratch copies](mutation-checks-on-scratch-copies.md) — prove a guard by mutating a mktemp copy, never sed -i/cp over a tracked file + restore
 - [Empty review dimension is not a pass](empty-review-dimension-is-not-a-pass.md) — reviewers submit {findings:[]} unread (21% Sonnet, 17 security); audit tool calls ≠ StructuredOutput; decline golem prompts with Esc, not a digit
 - [grep -q pipefail SIGPIPE needs load](grep-q-pipefail-sigpipe-needs-load.md) — `x | grep -q` flake only shows under scheduler pressure; capture + herestring instead
+- [containers-db scanner silent failure](containers-db-scanner-silent-failure.md) — scanner went green while PR-create failed for weeks; check logs + stale scan/* branches when db lags upstream
+- [reconcile uses published evidence](reconcile-uses-published-evidence.md) — fetch tested[] from published db; unreachable → warning with newest tested_at, never a gate failure
+- [Stale git index.lock](stale-git-index-lock.md) — orphaned ~145KB lock recurs; check ps/lsof, rm, retry — never loop-wait; back up work before stash/rebase
+- [YAML crate is serde-saphyr](yaml-crate-serde-saphyr.md) — serde_yaml forks (ng/norway/bw) still embed c2rust libyaml; also ureq 3 API notes

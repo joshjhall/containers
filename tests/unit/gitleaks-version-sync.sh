@@ -200,7 +200,7 @@ test_updater_normalizes_bare_pin() {
 
 # sed_inplace must return sed's own status. Its cleanup loop used to run last,
 # so a failed sed reported 0 and every `sed_inplace ... || return` guard in
-# rust-pins.sh and gitleaks-pins.sh was dead code.
+# gitleaks-pins.sh (and the former rust-pins.sh) was dead code.
 test_sed_inplace_propagates_sed_failure() {
     local rc=0
     (

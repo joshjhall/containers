@@ -13,7 +13,8 @@ These are defined as build arguments in the Dockerfile:
 
 - `PYTHON_VERSION` (currently 3.14.7)
 - `NODE_VERSION` (currently 22)
-- `RUST_VERSION` (currently 1.98.1)
+- `RUST_VERSION` (currently 1.99.0): container default only; the MSRV is
+  separate, see [Rust version policy](rust-version-policy.md)
 - `RUBY_VERSION` (currently 4.0.7)
 - `R_VERSION` (currently 4.6.1)
 - `GO_VERSION` (currently 1.27.1)

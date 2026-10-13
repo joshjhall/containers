@@ -29,12 +29,26 @@ The push to `auto-patch/*` triggers the full CI pipeline:
 
 ### 3. Auto-Merge or Notify
 
-**If CI passes:**
+**If CI passes** and nothing below calls for review:
 
 - Auto-merges the branch to `main`
 - Creates and pushes a version tag (e.g., `v1.2.3`)
 - Sends Pushover success notification
 - Deletes the auto-patch branch
+
+**Held for review** (`hold/review-required` label, auto-merge disabled, a
+comment explaining why). Remove the label after checking to let it merge:
+
+- **GPG key files changed**: an actual `.asc`/`.kbx`/`.gpg` file under
+  `lib/gpg-keys/` changed. Metadata and date-stamp churn in those directories
+  is ignored and does not hold.
+- **Updates were skipped**: a detected update was not applied (no updater
+  case, a refused pin shape, a failed rewrite). The PR body is built before
+  updates run, so it would otherwise list a bump that never happened.
+
+A minor Rust release is **not** a hold: auto-patch moves only the container's
+default Rust, never the MSRV or the build toolchain. See the
+[Rust version policy](../reference/rust-version-policy.md) (#1111).
 
 **If CI fails:**
 

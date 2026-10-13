@@ -188,7 +188,7 @@ validate_python_version() {
 # Validate Rust version format (X.Y or X.Y.Z)
 #
 # Note: Rust supports partial versions (1.84) which will be resolved
-# to full versions (1.84.1) by resolve_rust_version() before installation.
+# to the newest catalog patch (1.84.1) by `luggage resolve` in rust.sh.
 # Can also be: stable, beta, nightly (these bypass numeric validation)
 #
 # Args:
