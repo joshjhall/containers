@@ -805,5 +805,104 @@ run_test test_overlay_does_not_pass_xattr_ro "Overlay avoids the ineffective --x
 run_test test_overlay_keeps_permission_flags "Overlay keeps its permission flags (#977)"
 run_test test_scoped_sudo_enables_bindfs "Scoped sudo enables bindfs overlay (#996)"
 
+# ============================================================================
+# Concurrent overlay passes (issue #1252)
+# ============================================================================
+# Under Zed, recover-entrypoint can replay the full entrypoint while the PID-1
+# entrypoint is still in setup_bindfs_overlays. Two unserialized passes both saw
+# the bare virtiofs mount and stacked two bindfs layers on it. These run real
+# passes against a fake mount table: findmnt and bindfs are stubs sharing one
+# table file, and flock is the real binary.
+
+# Build a sandbox: stub bin dir + mount table seeded with one virtiofs mount.
+# Echoes the sandbox dir. Lives under mktemp, not the FUSE-mounted repo.
+make_overlay_sandbox() {
+    local sb
+    sb=$(mktemp -d)
+    command mkdir -p "$sb/bin"
+    command printf '%s\n' '/workspace/proj virtiofs' >"$sb/mounts"
+    : >"$sb/fuse"
+    : >"$sb/lock"
+    # findmnt: print the table (only the -n -r -o TARGET,FSTYPE form is used).
+    command printf '%s\n' '#!/bin/bash' "command cat \"$sb/mounts\"" >"$sb/bin/findmnt"
+    # bindfs: sleep inside the mount so an unserialized second pass would read
+    # the table before this one writes it, then append a fuse layer.
+    command printf '%s\n' '#!/bin/bash' 'for a; do t="$a"; done' 'sleep 0.5' \
+        "command printf '%s fuse\\n' \"\$t\" >>\"$sb/mounts\"" >"$sb/bin/bindfs"
+    command chmod +x "$sb/bin/findmnt" "$sb/bin/bindfs"
+    echo "$sb"
+}
+
+# One overlay pass inside the sandbox. Runs as "root" so no sudo probe happens.
+run_overlay_pass() {
+    local sb="$1" lock="${2:-$1/lock}"
+    (
+        PATH="$sb/bin:$PATH"
+        source "$SOURCE_FILE"
+        _FUSE_CLEANUP_GC=/nonexistent
+        _BINDFS_FUSE_DEV="$sb/fuse"
+        _BINDFS_SETUP_LOCK="$lock"
+        run_privileged() { "$@"; }
+        RUNNING_AS_ROOT=true USERNAME="$(id -un)" BINDFS_ENABLED=auto \
+            setup_bindfs_overlays >/dev/null 2>&1
+    )
+}
+
+fuse_layers() {
+    command grep -c ' fuse$' "$1/mounts" || true
+}
+
+test_concurrent_passes_mount_one_layer() {
+    if ! command -v flock >/dev/null 2>&1; then
+        skip_test "flock not available"
+        return
+    fi
+    local sb
+    sb=$(make_overlay_sandbox)
+    run_overlay_pass "$sb" &
+    run_overlay_pass "$sb" &
+    wait
+    assert_equals "1" "$(fuse_layers "$sb")" \
+        "two concurrent passes must stack exactly one bindfs layer (#1252)"
+    command rm -rf "$sb"
+}
+
+# Discriminates the test above: with the lock unopenable, the same race must
+# stack two layers. If this ever reads 1, the stub no longer reproduces the
+# race and the concurrency test above proves nothing.
+test_unlocked_concurrent_passes_reproduce_race() {
+    local sb
+    sb=$(make_overlay_sandbox)
+    run_overlay_pass "$sb" /nonexistent-dir/lock &
+    run_overlay_pass "$sb" /nonexistent-dir/lock &
+    wait
+    assert_equals "2" "$(fuse_layers "$sb")" \
+        "without the lock the stubbed race must reproduce the double mount"
+    command rm -rf "$sb"
+}
+
+# A second pass AFTER the first finished must not mount again: findmnt still
+# lists the virtiofs line under the existing fuse layer.
+test_sequential_rerun_does_not_restack() {
+    local sb
+    sb=$(make_overlay_sandbox)
+    run_overlay_pass "$sb"
+    run_overlay_pass "$sb"
+    assert_equals "1" "$(fuse_layers "$sb")" \
+        "a re-run over an existing overlay must not add a second layer (#1252)"
+    command rm -rf "$sb"
+}
+
+test_feature_creates_setup_lock() {
+    assert_file_contains "$PROJECT_ROOT/lib/features/bindfs.sh" \
+        "/etc/container/lock/bindfs-setup.lock" \
+        "bindfs feature pre-creates the setup lock (#1252)"
+}
+
+run_test test_concurrent_passes_mount_one_layer "Concurrent passes mount one layer (#1252)"
+run_test test_unlocked_concurrent_passes_reproduce_race "Unlocked concurrent passes reproduce the race"
+run_test test_sequential_rerun_does_not_restack "Sequential re-run does not restack (#1252)"
+run_test test_feature_creates_setup_lock "Feature pre-creates the setup lock"
+
 # Generate test report
 generate_report
