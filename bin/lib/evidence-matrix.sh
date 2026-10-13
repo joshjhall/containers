@@ -37,14 +37,28 @@ _em_arch_plumbing() {
     esac
 }
 
-# _em_available_tuples <project_root> — every base-image tuple slug, one per line.
+# _em_available_tuples <project_root> — every base-image tuple slug whose
+# Dockerfile exists AND, when EVIDENCE_PUBLISHED_CHECK names a command, whose
+# image that command reports published (it gets the slug, exit 0 = published).
+#
+# A Dockerfile is not an image: on the merge that adds a tuple, this matrix
+# and the base-image publish start together, so without the check the first
+# run queued cells for images that did not exist yet and failed pulling them
+# (#1113: 12 new tuples, ~130 doomed cells). Unpublished tuples stay pending
+# and run on a later push, or via dispatch-evidence-for-tuple.sh once
+# published. Unset in unit tests (hermetic); evidence-run.yml sets it.
 _em_available_tuples() {
-    local f rel
+    local f rel slug
     for f in "$1"/base-images/*/*/*/Dockerfile; do
         [ -e "$f" ] || continue
         rel="${f#"$1"/base-images/}"
         rel="${rel%/Dockerfile}"
-        command echo "${rel//\//-}"
+        slug="${rel//\//-}"
+        if [ -n "${EVIDENCE_PUBLISHED_CHECK:-}" ] && ! "$EVIDENCE_PUBLISHED_CHECK" "$slug"; then
+            command echo "evidence_matrix: base-$slug not published yet; its cells stay pending" >&2
+            continue
+        fi
+        command echo "$slug"
     done
 }
 

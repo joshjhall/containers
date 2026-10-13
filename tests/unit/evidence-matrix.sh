@@ -127,6 +127,23 @@ test_unpublished_tuples_are_not_available() {
         "a tuple absent from the root's base-images tree is not offered"
 }
 
+test_unpublished_images_are_skipped() {
+    # EVIDENCE_PUBLISHED_CHECK gates each tuple on its image being published:
+    # on the merge that adds a tuple, the matrix runs before the image exists.
+    local r out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
+    _published_debian_only() { [ "$1" = debian-13-amd64 ]; }
+    out="$(EVIDENCE_PUBLISHED_CHECK=_published_debian_only evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)"
+    assert_equals "1.90.0 debian-13-amd64" "$(_cells "$out")" \
+        "a tuple whose image is not published is skipped"
+
+    # Unset (unit tests, local runs): Dockerfiles alone decide, as before.
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'1.90.0 alpine-3.24-amd64\n1.90.0 debian-13-amd64' "$(_cells "$out")" \
+        "with no check configured, every tuple with a Dockerfile is offered"
+}
+
 test_missing_index_is_an_error() {
     local rc=0
     evidence_matrix "$TEST_TEMP_DIR/nope" rust "$TEST_TEMP_DIR" >/dev/null 2>&1 || rc=$?
@@ -158,6 +175,7 @@ run_test test_nothing_pending_exits_3_with_no_output "nothing pending exits 3 wi
 run_test test_cap_takes_oldest_first "cap keeps the oldest pending cells"
 run_test test_cells_carry_arch_plumbing "cells carry arch plumbing"
 run_test test_unpublished_tuples_are_not_available "tuples absent from the root tree are not offered"
+run_test test_unpublished_images_are_skipped "unpublished images are skipped when a check is set"
 run_test test_missing_index_is_an_error "missing index is an error"
 run_test test_real_catalog_respects_github_cap "shipped catalog stays within GitHub's 256 cap"
 

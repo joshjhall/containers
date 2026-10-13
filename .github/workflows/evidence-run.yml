@@ -206,6 +206,13 @@ jobs:
             if [ "$EVENT" = "pull_request" ] && [ -d _base/base-images ]; then
               AVAILABLE_ROOT="$PWD/_base"
             fi
+            # Only tuples whose image is actually published (a Dockerfile can
+            # land before its image: the publish runs alongside this on merge).
+            image_published() {
+              docker manifest inspect "${REGISTRY}/${GITHUB_REPOSITORY}/base-$1:latest" >/dev/null 2>&1
+            }
+            export -f image_published
+            export EVIDENCE_PUBLISHED_CHECK=image_published
             MATRIX=$(evidence_matrix crates/luggage/testdata/catalog rust "$AVAILABLE_ROOT" latest 200) || rc=$?
             case "$rc" in
               0) ;;
