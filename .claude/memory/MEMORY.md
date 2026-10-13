@@ -132,5 +132,8 @@
 - [grep -q pipefail SIGPIPE needs load](grep-q-pipefail-sigpipe-needs-load.md) — `x | grep -q` flake only shows under scheduler pressure; capture + herestring instead
 - [containers-db scanner silent failure](containers-db-scanner-silent-failure.md) — scanner went green while PR-create failed for weeks; check logs + stale scan/* branches when db lags upstream
 - [reconcile uses published evidence](reconcile-uses-published-evidence.md) — fetch tested[] from published db; unreachable → warning with newest tested_at, never a gate failure
-- [Stale git index.lock](stale-git-index-lock.md) — orphaned ~145KB lock recurs; check ps/lsof, rm, retry — never loop-wait; back up work before stash/rebase
+- [Stale git index.lock](stale-git-index-lock.md) — virtiofs rename ghost (#1114 closed not-planned), NOT lefthook/bindfs; retry after 2s, check holder + rm; user declined a retry wrapper
 - [YAML crate is serde-saphyr](yaml-crate-serde-saphyr.md) — serde_yaml forks (ng/norway/bw) still embed c2rust libyaml; also ureq 3 API notes
+- [Evidence batched ingest](evidence-batched-ingest.md) — one auto-merged db PR + one issue per run (#1249); vendored catalog, published-image filter, --user runner
+- [Distro deps live in catalog](distro-deps-live-in-catalog.md) — system_package.platforms + `distro:release` selectors (#1164); no distro tables in luggage
+- [Peel FUSE layers with unshare](peel-fuse-layers-with-unshare.md) — `sudo unshare -m` + `umount -l` to test raw virtiofs safely; /tmp clone is the control
