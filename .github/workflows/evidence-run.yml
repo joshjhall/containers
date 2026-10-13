@@ -136,6 +136,17 @@ jobs:
             base-images
             crates/luggage/testdata/catalog
 
+      # A PR's base-images tree can add tuples whose images are not published
+      # until it merges (PR builds never push), so a PR's "available" set is
+      # the BASE branch's tree, i.e. what can actually be pulled.
+      - name: Checkout base branch base-image tree (PRs)
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: _base
+          sparse-checkout: base-images
+
       - name: Generate matrix and dry-run flag
         id: gen
         env:
@@ -191,7 +202,11 @@ jobs:
             # shellcheck source=bin/lib/evidence-matrix.sh
             source bin/lib/evidence-matrix.sh
             rc=0
-            MATRIX=$(evidence_matrix crates/luggage/testdata/catalog rust "$PWD" latest 200) || rc=$?
+            AVAILABLE_ROOT="$PWD"
+            if [ "$EVENT" = "pull_request" ] && [ -d _base/base-images ]; then
+              AVAILABLE_ROOT="$PWD/_base"
+            fi
+            MATRIX=$(evidence_matrix crates/luggage/testdata/catalog rust "$AVAILABLE_ROOT" latest 200) || rc=$?
             case "$rc" in
               0) ;;
               3)
