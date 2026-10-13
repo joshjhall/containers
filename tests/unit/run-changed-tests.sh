@@ -540,13 +540,15 @@ test_lefthook_mapping_emits_policy_suites() {
     # The exact set, by name: a dropped or substituted suite changes it.
     out=$(map_to_test "lefthook.yml" | command sort)
     assert_equals "$TESTS_DIR/unit/lefthook-cargo-hint.sh
-$TESTS_DIR/unit/lefthook-optional-tools.sh" "$out" \
+$TESTS_DIR/unit/lefthook-optional-tools.sh
+$TESTS_DIR/unit/lefthook-sequential-fixers.sh" "$out" \
         "lefthook.yml must map to every lefthook policy suite"
 
     # Through the collection loop too, so each suite stays its own line.
     out=$(command printf '%s\n' lefthook.yml | map_changed_files | command sort)
     assert_equals "$TESTS_DIR/unit/lefthook-cargo-hint.sh
-$TESTS_DIR/unit/lefthook-optional-tools.sh" "$out" \
+$TESTS_DIR/unit/lefthook-optional-tools.sh
+$TESTS_DIR/unit/lefthook-sequential-fixers.sh" "$out" \
         "lefthook.yml must collect each lefthook policy suite as its own path"
 }
 
