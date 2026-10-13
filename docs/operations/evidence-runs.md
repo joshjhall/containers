@@ -159,6 +159,12 @@ newest patch of each minor, minimum_recommended floor and up
   ([`dispatch-evidence-for-tuple.sh`](../../bin/dispatch-evidence-for-tuple.sh)).
 - **Capped at 200 per run, oldest versions first**, so a backlog (a new platform,
   or the 1.82+ backfill) drains over successive pushes, floor first.
+- **Published images only.** A tuple is available only if
+  `ghcr.io/.../base-<tuple>:latest` exists. On the merge that adds a tuple, the
+  matrix runs alongside the base-image publish; without this, the first run
+  queued cells for images that didn't exist yet (#1113: 74 cells failed at
+  `Resolve base image digest`). Those tuples stay pending and run once
+  published.
 - **Nothing pending** → `has_cells=false` and the evidence job is skipped (an
   empty matrix is a hard error in Actions).
 - **Pull requests** dry-run only the oldest pending cell. That proves the
