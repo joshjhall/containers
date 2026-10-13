@@ -30,7 +30,9 @@ pub enum PackageManager {
     Apt,
     /// `apk` (alpine).
     Apk,
-    /// `dnf` (rhel/fedora).
+    /// `dnf` (rhel/fedora), or `microdnf` where only that exists: RHEL's
+    /// UBI *minimal* images ship `microdnf` and no `dnf`. See
+    /// [`resolve_program`].
     Dnf,
 }
 
@@ -159,12 +161,15 @@ pub fn translate_dependencies(deps: &[Dependency], mgr: PackageManager) -> Trans
 /// - [`LuggageError::PackageManagerFailed`] when the package manager exits
 ///   non-zero or fails to launch.
 pub fn install_dependencies(deps: &[Dependency], mgr: PackageManager, strict: bool) -> Result<()> {
-    let TranslatedDeps { packages, unknown } = translate_dependencies(deps, mgr);
+    let TranslatedDeps { mut packages, unknown } = translate_dependencies(deps, mgr);
     if strict && !unknown.is_empty() {
         return Err(LuggageError::UnknownDependency {
             manager: format!("{mgr:?}"),
             ids: unknown.join(", "),
         });
+    }
+    if let Some(extra) = runtime_requirement(mgr, on_path) {
+        packages.push(extra);
     }
     let Some((program, args)) = install_argv(mgr, &packages) else {
         return Ok(());
@@ -185,6 +190,7 @@ pub fn install_dependencies(deps: &[Dependency], mgr: PackageManager, strict: bo
             });
         }
     }
+    let program = resolve_program(program, on_path);
     let out = Command::new(program).args(&args).output().map_err(|e| {
         LuggageError::PackageManagerFailed { message: format!("{program} failed to launch: {e}") }
     })?;
@@ -199,6 +205,62 @@ pub fn install_dependencies(deps: &[Dependency], mgr: PackageManager, strict: bo
             ),
         })
     }
+}
+
+/// Pick the binary to run for `program` given what is on `PATH`.
+///
+/// `install_argv` names the canonical program; this resolves the one case
+/// where that binary may be absent with a drop-in present: `dnf` on RHEL UBI
+/// minimal, which ships only `microdnf` (same `install -y <pkgs>` argv). Every
+/// RHEL evidence run failed with `dnf failed to launch: No such file or
+/// directory` until this existed. `dnf` is preferred when both exist; any
+/// other program is returned unchanged. `on_path` is injected for tests.
+#[must_use]
+pub fn resolve_program(program: &'static str, on_path: impl Fn(&str) -> bool) -> &'static str {
+    if program == "dnf" && !on_path("dnf") && on_path("microdnf") {
+        return "microdnf";
+    }
+    program
+}
+
+/// A package luggage itself needs at install time, beyond the tool's catalog
+/// dependencies, when the host lacks it.
+///
+/// luggage runs install methods as the target user via `su` (see
+/// [`super::user::su_command`]). UBI minimal ships no `su`: on UBI 9 it
+/// arrives only as a side effect (gcc's dependency chain pulls in
+/// `util-linux`); on UBI 10 nothing does, so every rust install failed at
+/// `failed to launch su`. Request `util-linux` explicitly on dnf when `su` is
+/// absent, rather than depending on that accident. apt/apk images ship `su`.
+#[must_use]
+pub fn runtime_requirement(
+    mgr: PackageManager,
+    on_path: impl Fn(&str) -> bool,
+) -> Option<&'static str> {
+    match mgr {
+        PackageManager::Dnf if !on_path("su") => Some("util-linux"),
+        _ => None,
+    }
+}
+
+/// `true` when `name` is an executable file in some `PATH` directory.
+fn on_path(name: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|paths| {
+        std::env::split_paths(&paths).any(|dir| is_executable(&dir.join(name)))
+    })
+}
+
+#[cfg(unix)]
+fn is_executable(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+}
+
+// luggage installs only on Linux, but the workspace also builds on Windows
+// (stibbons CI), where there is no exec bit to check.
+#[cfg(not(unix))]
+fn is_executable(path: &std::path::Path) -> bool {
+    path.is_file()
 }
 
 /// Build the argv that prints the installed version of `package` via `mgr`.
@@ -403,6 +465,43 @@ mod tests {
         let (prog, args) = install_argv(PackageManager::Dnf, &["gcc"]).unwrap();
         assert_eq!(prog, "dnf");
         assert_eq!(args, vec!["install", "-y", "gcc"]);
+    }
+
+    #[test]
+    fn resolve_program_falls_back_to_microdnf_on_ubi_minimal() {
+        // UBI minimal: microdnf present, dnf absent (probed on base-rhel-9/10).
+        assert_eq!(resolve_program("dnf", |n| n == "microdnf"), "microdnf");
+    }
+
+    #[test]
+    fn resolve_program_prefers_dnf_when_present() {
+        assert_eq!(resolve_program("dnf", |_| true), "dnf");
+        assert_eq!(resolve_program("dnf", |n| n == "dnf"), "dnf");
+    }
+
+    #[test]
+    fn resolve_program_keeps_dnf_when_neither_exists() {
+        // Fails later with a clear "dnf failed to launch", not a wrong name.
+        assert_eq!(resolve_program("dnf", |_| false), "dnf");
+    }
+
+    #[test]
+    fn resolve_program_leaves_other_managers_alone() {
+        assert_eq!(resolve_program("apt-get", |_| false), "apt-get");
+        assert_eq!(resolve_program("apk", |n| n == "microdnf"), "apk");
+    }
+
+    #[test]
+    fn runtime_requirement_adds_util_linux_on_dnf_without_su() {
+        // UBI 10 minimal: no su before or after gcc/glibc-devel (probed).
+        assert_eq!(runtime_requirement(PackageManager::Dnf, |_| false), Some("util-linux"));
+    }
+
+    #[test]
+    fn runtime_requirement_is_none_when_su_exists_or_not_dnf() {
+        assert_eq!(runtime_requirement(PackageManager::Dnf, |n| n == "su"), None);
+        assert_eq!(runtime_requirement(PackageManager::Apt, |_| false), None);
+        assert_eq!(runtime_requirement(PackageManager::Apk, |_| false), None);
     }
 
     #[test]
