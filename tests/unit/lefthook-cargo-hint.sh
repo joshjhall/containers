@@ -39,7 +39,8 @@ fi
 lh_field() {
     local hook="$1" field="$2"
     LH_HOOK="$hook" LH_FIELD="$field" yq -r \
-        '[.. | select(has("commands")) | .commands | to_entries] | flatten
+        '[(.. | select(tag == "!!map" and has("commands")) | .commands | to_entries),
+            (.. | select(tag == "!!map" and has("name") and has("run")) | {"key": .name, "value": .})] | flatten
          | map(select(.key == env(LH_HOOK))) | .[0].value[env(LH_FIELD)]' "$LEFTHOOK"
 }
 

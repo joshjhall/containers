@@ -55,11 +55,14 @@ OPTIONAL_TOOLS=(
     "cargo-deny|(^|[^-[:alnum:]_])cargo[[:space:]]+deny([^-[:alnum:]_]|$)"
 )
 
-# Emit "<hook-name>|<base64 of run: body>" for every command in every stage.
+# Emit "<hook-name>|<base64 of run: body>" for every hook in every stage —
+# both `commands:` maps and named `jobs:` entries (pre-commit uses grouped
+# jobs since #1114, so a commands-only walk would miss every pre-commit hook).
 # The body is base64'd because run: bodies are multi-line shell containing
 # pipes, quotes and newlines — anything less would mangle them.
 lh_commands() {
-    yq -r '[.. | select(has("commands")) | .commands | to_entries] | flatten
+    yq -r '[(.. | select(tag == "!!map" and has("commands")) | .commands | to_entries),
+            (.. | select(tag == "!!map" and has("name") and has("run")) | {"key": .name, "value": .})] | flatten
            | .[] | .key + "|" + ((.value.run // "") | @base64)' "$LEFTHOOK"
 }
 
@@ -72,7 +75,8 @@ lh_commands() {
 lh_skip_json() {
     local hook="$1"
     LH_HOOK="$hook" yq -r \
-        '[.. | select(has("commands")) | .commands | to_entries] | flatten
+        '[(.. | select(tag == "!!map" and has("commands")) | .commands | to_entries),
+            (.. | select(tag == "!!map" and has("name") and has("run")) | {"key": .name, "value": .})] | flatten
          | map(select(.key == env(LH_HOOK))) | .[0].value.skip | tojson' "$LEFTHOOK"
 }
 

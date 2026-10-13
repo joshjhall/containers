@@ -10,242 +10,255 @@
 # Pre-commit stage: runs on `git commit`
 # ============================================================================
 pre-commit:
-  parallel: true
-  commands:
+  jobs:
+    # Fixers run ONE AT A TIME (#1114). Each stage_fixed hook re-stages its
+    # output with `git add`, which takes .git/index.lock; run concurrently they
+    # collided with each other and with the commit itself ("Unable to create
+    # .git/index.lock: File exists"). Ordering matters too: whitespace/EOF
+    # fixers run before the formatters, so a formatter sees the final bytes.
+    - name: fixers
+      group:
+        parallel: false
+        jobs:
+          # --- General file checks (native shell, no Python runtime) ---
+          # YAML/JSON/private-key checks are covered elsewhere: dprint-yaml, dprint-json,
+          # rumdl (markdown), and gitleaks (all defined below).
+          - name: trailing-whitespace
+            glob: "*"
+            exclude:
+              - "tests/results/**"
+              - "lib/gpg-keys/**"
+            run: bin/fix-trailing-whitespace.sh {staged_files}
+            stage_fixed: true
 
-    # --- General file checks (native shell, no Python runtime) ---
-    # YAML/JSON/private-key checks are covered elsewhere: dprint-yaml, dprint-json,
-    # rumdl (markdown), and gitleaks (all defined below).
-    trailing-whitespace:
-      glob: "*"
-      exclude:
-        - "tests/results/**"
-        - "lib/gpg-keys/**"
-      run: bin/fix-trailing-whitespace.sh {staged_files}
-      stage_fixed: true
+          - name: end-of-file-fixer
+            glob: "*"
+            exclude:
+              - "tests/results/**"
+              - "lib/gpg-keys/**"
+            run: bin/fix-end-of-file.sh {staged_files}
+            stage_fixed: true
 
-    end-of-file-fixer:
-      glob: "*"
-      exclude:
-        - "tests/results/**"
-        - "lib/gpg-keys/**"
-      run: bin/fix-end-of-file.sh {staged_files}
-      stage_fixed: true
+          - name: fix-shell-permissions
+            glob: "*.sh"
+            run: bin/fix-shell-permissions.sh {staged_files}
+            stage_fixed: true
 
-    check-added-large-files:
-      run: |
-        max=512000  # 500 KB (matches prior --maxkb=500)
-        fail=0
-        for f in {staged_files}; do
-          [ -f "$f" ] || continue
-          size=$(/usr/bin/wc -c < "$f")
-          if [ "$size" -gt "$max" ]; then
-            echo "ERROR: $f is $size bytes (max: $max)"
-            fail=1
-          fi
-        done
-        exit "$fail"
+          - name: shfmt
+            glob: "*.sh"
+            exclude:
+              - "tests/results/**"
+            run: shfmt -w -i 4 -ci {staged_files}
+            stage_fixed: true
 
-    check-merge-conflict:
-      exclude:
-        # Skill template documents literal conflict-marker examples in a code fence
-        - "lib/features/templates/claude/skills/rebase-imports/SKILL.md"
-      run: |
-        if /usr/bin/grep -lE '^(<{7} |>{7} |={7}$)' {staged_files} 2>/dev/null; then
-          echo "ERROR: merge conflict markers found in the above file(s)"
-          exit 1
-        fi
+          - name: enforce-command-prefix
+            glob: "{lib,bin,tests}/**/*.sh"
+            exclude:
+              - "lib/features/lib/bashrc/**"
+            run: bin/enforce-command-prefix.sh {staged_files}
+            stage_fixed: true
 
-    # --- Shell linting (direct binary from dev-tools) ---
+          # --- YAML formatting (dprint + g-plane/pretty_yaml) ---
 
-    shellcheck:
-      glob: "*.sh"
-      exclude:
-        - "tests/results/**"
-      run: shellcheck --severity=warning {staged_files}
+          - name: dprint-yaml
+            glob: "*.{yml,yaml}"
+            exclude:
+              - "tests/results/**"
+              # .vscode/** is excluded in dprint.json, so passing it to `dprint fmt`
+              # exits 14 ("no files found") and fails the hook — mirror that exclude
+              # here. .devcontainer/** is NOT excluded in dprint.json, so it stays
+              # lintable (2-space YAML indent enforced by the pretty_yaml plugin).
+              - ".vscode/**"
+            run: dprint fmt {staged_files}
+            stage_fixed: true
 
-    shfmt:
-      glob: "*.sh"
-      exclude:
-        - "tests/results/**"
-      run: shfmt -w -i 4 -ci {staged_files}
-      stage_fixed: true
+          # --- JSON formatting (dprint) ---
 
-    # --- YAML formatting (dprint + g-plane/pretty_yaml) ---
+          - name: dprint-json
+            glob: "*.json"
+            exclude:
+              - "tests/results/**"
+              # Same rule as dprint-yaml: mirror dprint.json's excludes only.
+              # .vscode/** is excluded there, so passing it to `dprint fmt` exits 14
+              # ("no files found") and fails the hook. .devcontainer/** is NOT
+              # excluded there, so it stays lintable — leaving it out here let a
+              # misformatted devcontainer.json through commit and then blocked the
+              # push on `dprint check {all_files}`.
+            run: dprint fmt {staged_files}
+            stage_fixed: true
 
-    dprint-yaml:
-      glob: "*.{yml,yaml}"
-      exclude:
-        - "tests/results/**"
-        # .vscode/** is excluded in dprint.json, so passing it to `dprint fmt`
-        # exits 14 ("no files found") and fails the hook — mirror that exclude
-        # here. .devcontainer/** is NOT excluded in dprint.json, so it stays
-        # lintable (2-space YAML indent enforced by the pretty_yaml plugin).
-        - ".vscode/**"
-      run: dprint fmt {staged_files}
-      stage_fixed: true
+          # --- TOML formatting (taplo) ---
 
-    # --- Markdown linting + formatting (rumdl) ---
-    #
-    # Lint-only in the hook (matches mado's former behaviour). `rumdl fmt`
-    # has aggressive rewrites that misfire on nested code fences, so users
-    # opt into formatting via `just fmt` and review the diff themselves.
+          - name: taplo
+            glob: "*.toml"
+            exclude:
+              - "tests/results/**"
+              - "target/**"
+            run: taplo fmt {staged_files}
+            stage_fixed: true
 
-    rumdl:
-      glob: "*.md"
-      exclude:
-        - "CHANGELOG.md"
-        - "tests/results/**"
-      run: rumdl check {staged_files}
+    # Read-only checks: nothing is re-staged, so these stay parallel. They run
+    # after the fixers so they lint what will actually be committed.
+    - name: checks
+      group:
+        parallel: true
+        jobs:
+          - name: check-added-large-files
+            run: |
+              max=512000  # 500 KB (matches prior --maxkb=500)
+              fail=0
+              for f in {staged_files}; do
+                [ -f "$f" ] || continue
+                size=$(/usr/bin/wc -c < "$f")
+                if [ "$size" -gt "$max" ]; then
+                  echo "ERROR: $f is $size bytes (max: $max)"
+                  fail=1
+                fi
+              done
+              exit "$fail"
 
-    # Prose linting — warn-only. Skips until `vale sync` has fetched styles.
-    vale:
-      glob: "*.md"
-      exclude:
-        - "CHANGELOG.md"
-        - "tests/results/**"
-      skip:
-        - run: "! command -v vale >/dev/null 2>&1"
-        - run: "[ ! -d .vale/styles/write-good ]"
-      run: vale --no-wrap {staged_files} || true
+          - name: check-merge-conflict
+            exclude:
+              # Skill template documents literal conflict-marker examples in a code fence
+              - "lib/features/templates/claude/skills/rebase-imports/SKILL.md"
+            run: |
+              if /usr/bin/grep -lE '^(<{7} |>{7} |={7}$)' {staged_files} 2>/dev/null; then
+                echo "ERROR: merge conflict markers found in the above file(s)"
+                exit 1
+              fi
 
-    # --- JSON formatting (dprint) ---
+          # --- Shell linting (direct binary from dev-tools) ---
 
-    dprint-json:
-      glob: "*.json"
-      exclude:
-        - "tests/results/**"
-        # Same rule as dprint-yaml: mirror dprint.json's excludes only.
-        # .vscode/** is excluded there, so passing it to `dprint fmt` exits 14
-        # ("no files found") and fails the hook. .devcontainer/** is NOT
-        # excluded there, so it stays lintable — leaving it out here let a
-        # misformatted devcontainer.json through commit and then blocked the
-        # push on `dprint check {all_files}`.
-      run: dprint fmt {staged_files}
-      stage_fixed: true
+          - name: shellcheck
+            glob: "*.sh"
+            exclude:
+              - "tests/results/**"
+            run: shellcheck --severity=warning {staged_files}
 
-    # --- TOML formatting (taplo) ---
+          # --- Markdown linting + formatting (rumdl) ---
+          #
+          # Lint-only in the hook (matches mado's former behaviour). `rumdl fmt`
+          # has aggressive rewrites that misfire on nested code fences, so users
+          # opt into formatting via `just fmt` and review the diff themselves.
 
-    taplo:
-      glob: "*.toml"
-      exclude:
-        - "tests/results/**"
-        - "target/**"
-      run: taplo fmt {staged_files}
-      stage_fixed: true
+          - name: rumdl
+            glob: "*.md"
+            exclude:
+              - "CHANGELOG.md"
+              - "tests/results/**"
+            run: rumdl check {staged_files}
 
-    # --- Dockerfile linting (hadolint) ---
+          # Prose linting — warn-only. Skips until `vale sync` has fetched styles.
+          - name: vale
+            glob: "*.md"
+            exclude:
+              - "CHANGELOG.md"
+              - "tests/results/**"
+            skip:
+              - run: "! command -v vale >/dev/null 2>&1"
+              - run: "[ ! -d .vale/styles/write-good ]"
+            run: vale --no-wrap {staged_files} || true
 
-    hadolint:
-      # hadolint is shipped by the dev-tools feature; skip gracefully if
-      # running outside a dev-tools container (e.g., CI linting host).
-      glob: "Dockerfile*"
-      skip:
-        - run: "! command -v hadolint >/dev/null 2>&1"
-      run: hadolint {staged_files}
+          # --- Dockerfile linting (hadolint) ---
 
-    # --- GitHub Actions workflow linting (actionlint) ---
+          - name: hadolint
+            # hadolint is shipped by the dev-tools feature; skip gracefully if
+            # running outside a dev-tools container (e.g., CI linting host).
+            glob: "Dockerfile*"
+            skip:
+              - run: "! command -v hadolint >/dev/null 2>&1"
+            run: hadolint {staged_files}
 
-    actionlint:
-      # actionlint is shipped by the dev-tools feature; skip gracefully if
-      # running outside a dev-tools container (e.g., CI linting host).
-      # actionlint embeds shellcheck to lint `run:` blocks — the top-level
-      # shellcheck hook only globs *.sh, so no double-lint overlap here.
-      # Pass --severity=warning to match the project's .sh shellcheck policy
-      # (see the shellcheck hook above and justfile v4 scope).
-      glob: ".github/workflows/*.{yml,yaml}"
-      skip:
-        - run: "! command -v actionlint >/dev/null 2>&1"
-      run: actionlint -shellcheck "shellcheck --severity=warning" {staged_files}
+          # --- GitHub Actions workflow linting (actionlint) ---
 
-    # --- Security ---
+          - name: actionlint
+            # actionlint is shipped by the dev-tools feature; skip gracefully if
+            # running outside a dev-tools container (e.g., CI linting host).
+            # actionlint embeds shellcheck to lint `run:` blocks — the top-level
+            # shellcheck hook only globs *.sh, so no double-lint overlap here.
+            # Pass --severity=warning to match the project's .sh shellcheck policy
+            # (see the shellcheck hook above and justfile v4 scope).
+            glob: ".github/workflows/*.{yml,yaml}"
+            skip:
+              - run: "! command -v actionlint >/dev/null 2>&1"
+            run: actionlint -shellcheck "shellcheck --severity=warning" {staged_files}
 
-    gitleaks:
-      # gitleaks is shipped by the dev-tools feature; skip gracefully if
-      # running outside a dev-tools container (e.g., CI linting host).
-      skip:
-        - run: "! command -v gitleaks >/dev/null 2>&1"
-      run: gitleaks protect --staged --verbose --redact
+          # --- Security ---
 
-    # --- Rust linting (stibbons) ---
-    #
-    # Single hook delegating to `just lint <scope>` (fmt --check + clippy).
-    # Derives scope from staged file paths: each distinct `crates/<name>/…`
-    # becomes one `just lint <name>` call. Falls back to `just lint v5`
-    # (workspace) if no crate path is detectable — e.g., root `Cargo.toml`
-    # or `.rustfmt.toml` changes.
-    #
-    # #286 AC "pre-commit hook builds stibbons for host platform": this hook
-    # fulfills it. `clippy` compiles the stibbons crate for the host target as
-    # a side effect of linting, so a commit touching stibbons cannot land
-    # without a successful host build. The pre-push `cargo-test` hook (below)
-    # is the stronger backstop — it compiles *and* runs the whole workspace.
-    # No dedicated `cargo build -p stibbons` step is added: it would only
-    # duplicate the compile these two hooks already perform. If `cargo-lint`
-    # is ever scoped to a subset of crates, restore explicit stibbons build
-    # coverage here so this AC does not silently regress.
-    #
-    # Unlike the optional tools below (#831), cargo-lint and cargo-test have
-    # NO `skip:` guard: Rust is required in this repo, so a missing cargo
-    # must fail rather than let unlinted/untested Rust through. A missing
-    # cargo almost always means the image is stale relative to
-    # .devcontainer/docker-compose.yml, so the run: body fails with a rebuild
-    # hint instead of a bare "command not found" (#1060).
+          - name: gitleaks
+            # gitleaks is shipped by the dev-tools feature; skip gracefully if
+            # running outside a dev-tools container (e.g., CI linting host).
+            skip:
+              - run: "! command -v gitleaks >/dev/null 2>&1"
+            run: gitleaks protect --staged --verbose --redact
 
-    cargo-lint:
-      glob: "{crates/**/*.rs,.rustfmt.toml,Cargo.toml}"
-      run: |
-        # cargo missing means a stale image, not a skippable optional tool:
-        # print the rebuild hint and FAIL (#1060). See the note above cargo-lint.
-        if ! command -v cargo >/dev/null 2>&1; then
-          /usr/bin/printf '%s\n' \
-            "cargo not found: this image was built without the Rust feature (stale image?)." \
-            "Rebuild the devcontainer (docker-compose.yml sets INCLUDE_RUST_DEV=true) rather than installing rustup by hand." \
-            "See docs/troubleshooting/feature-specific-issues.md" >&2
-          exit 1
-        fi
-        crates=$(/usr/bin/printf '%s\n' {staged_files} \
-          | /usr/bin/grep '^crates/' \
-          | /usr/bin/cut -d/ -f2 \
-          | /usr/bin/sort -u)
-        if [ -z "$crates" ]; then
-          just lint v5
-        else
-          for c in $crates; do just lint "$c"; done
-        fi
+          # --- Rust linting (stibbons) ---
+          #
+          # Single hook delegating to `just lint <scope>` (fmt --check + clippy).
+          # Derives scope from staged file paths: each distinct `crates/<name>/…`
+          # becomes one `just lint <name>` call. Falls back to `just lint v5`
+          # (workspace) if no crate path is detectable — e.g., root `Cargo.toml`
+          # or `.rustfmt.toml` changes.
+          #
+          # #286 AC "pre-commit hook builds stibbons for host platform": this hook
+          # fulfills it. `clippy` compiles the stibbons crate for the host target as
+          # a side effect of linting, so a commit touching stibbons cannot land
+          # without a successful host build. The pre-push `cargo-test` hook (below)
+          # is the stronger backstop — it compiles *and* runs the whole workspace.
+          # No dedicated `cargo build -p stibbons` step is added: it would only
+          # duplicate the compile these two hooks already perform. If `cargo-lint`
+          # is ever scoped to a subset of crates, restore explicit stibbons build
+          # coverage here so this AC does not silently regress.
+          #
+          # Unlike the optional tools below (#831), cargo-lint and cargo-test have
+          # NO `skip:` guard: Rust is required in this repo, so a missing cargo
+          # must fail rather than let unlinted/untested Rust through. A missing
+          # cargo almost always means the image is stale relative to
+          # .devcontainer/docker-compose.yml, so the run: body fails with a rebuild
+          # hint instead of a bare "command not found" (#1060).
 
-    # --- Custom hooks ---
+          - name: cargo-lint
+            glob: "{crates/**/*.rs,.rustfmt.toml,Cargo.toml}"
+            run: |
+              # cargo missing means a stale image, not a skippable optional tool:
+              # print the rebuild hint and FAIL (#1060). See the note above cargo-lint.
+              if ! command -v cargo >/dev/null 2>&1; then
+                /usr/bin/printf '%s\n' \
+                  "cargo not found: this image was built without the Rust feature (stale image?)." \
+                  "Rebuild the devcontainer (docker-compose.yml sets INCLUDE_RUST_DEV=true) rather than installing rustup by hand." \
+                  "See docs/troubleshooting/feature-specific-issues.md" >&2
+                exit 1
+              fi
+              crates=$(/usr/bin/printf '%s\n' {staged_files} \
+                | /usr/bin/grep '^crates/' \
+                | /usr/bin/cut -d/ -f2 \
+                | /usr/bin/sort -u)
+              if [ -z "$crates" ]; then
+                just lint v5
+              else
+                for c in $crates; do just lint "$c"; done
+              fi
 
-    check-env-drift:
-      glob: "{.env,.env.secrets}.example"
-      run: bin/check-env-drift.sh
+          # --- Custom hooks ---
 
-    no-env-file:
-      run: |
-        if git diff --cached --name-only | grep -q "^\.env$"; then
-          echo "ERROR: .env file staged — refusing to commit"
-          exit 1
-        fi
+          - name: check-env-drift
+            glob: "{.env,.env.secrets}.example"
+            run: bin/check-env-drift.sh
 
-    no-bashrc-heredocs:
-      glob: "lib/features/*.sh"
-      run: |
-        if grep -rn "write_bashrc_content.*<<" {staged_files} 2>/dev/null; then
-          echo "ERROR: Use file redirect instead of heredoc for write_bashrc_content"
-          exit 1
-        fi
+          - name: no-env-file
+            run: |
+              if git diff --cached --name-only | grep -q "^\.env$"; then
+                echo "ERROR: .env file staged — refusing to commit"
+                exit 1
+              fi
 
-    fix-shell-permissions:
-      glob: "*.sh"
-      run: bin/fix-shell-permissions.sh {staged_files}
-      stage_fixed: true
-
-    enforce-command-prefix:
-      glob: "{lib,bin,tests}/**/*.sh"
-      exclude:
-        - "lib/features/lib/bashrc/**"
-      run: bin/enforce-command-prefix.sh {staged_files}
-      stage_fixed: true
+          - name: no-bashrc-heredocs
+            glob: "lib/features/*.sh"
+            run: |
+              if grep -rn "write_bashrc_content.*<<" {staged_files} 2>/dev/null; then
+                echo "ERROR: Use file redirect instead of heredoc for write_bashrc_content"
+                exit 1
+              fi
 
 # ============================================================================
 # commit-msg stage: validates the message before the commit lands
