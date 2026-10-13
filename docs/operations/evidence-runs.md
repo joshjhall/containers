@@ -174,6 +174,30 @@ Both arches run natively: arm64 on `ubuntu-24.04-arm`, amd64 on
 `ubuntu-latest`. The supported platform set lives in
 [`docs/reference/supported-platforms.md`](../reference/supported-platforms.md).
 
+### Ingest: one PR per run
+
+Cells only install, record, and upload their row (an envelope adding
+`tool`/`version` to the TestEntry, as artifact
+`evidence-row-<tool>-<version>-<tuple>`). The **`collect`** job then:
+
+1. downloads every row from the run,
+1. merges each into its version file in one containers-db checkout with the
+   shared dedup policy ([`bin/lib/evidence-merge.sh`](../../bin/lib/evidence-merge.sh)),
+1. validates once, and opens **one** PR on `evidence/batch/<run_id>` with
+   **auto-merge** enabled ([`bin/ingest-evidence-batch.sh`](../../bin/ingest-evidence-batch.sh)),
+1. files **one** tracking issue listing the run's `fail` rows, if any.
+
+It runs even when cells failed, since a fail row is evidence too. Rows already
+recorded make it a no-op: no PR. Before this, every cell opened its own PR and
+its own issue, so one push could open 200 PRs that conflicted on shared version
+files, and one luggage bug filed dozens of duplicate issues.
+
+**Cells install against the vendored catalog** (`crates/luggage/testdata/catalog`,
+the one luggage was built and shipped with), not containers-db `main`.
+Reading `main` raced every DB change that needed a matching luggage change: in
+the window between the two merges, every cell recorded a false failure
+(#1164's `util_linux`). containers-db is only the ingest target.
+
 ## Dispatching evidence on a version bump
 
 When the auto-patch pipeline bumps a luggage-managed tool's `ARG <TOOL>_VERSION`
@@ -429,15 +453,12 @@ is not stable across multiple producers anyway.
    Operators can re-run a flaky workflow freely without bloating the
    file or spawning redundant PRs.
 
-   A *new* digest does produce a new row, and dedup compares against
-   containers-db `main`, so until an evidence PR merges every base-image
-   rebuild is new again. That is why the branch is stable per cell —
-   `evidence/<tool>/<version>/<tuple>`, no run-id suffix: each ingest
-   force-pushes it (leased against the tip it just fetched) and, when a
-   PR for it is already open, updates that PR instead of opening another.
-   One open PR per `(tool, version, tuple)`, always carrying the latest
-   row. (A per-run branch opened 45 duplicate rust@1.95.0 PRs.)
-   `--branch-suffix` still opts into a separate branch deliberately.
+   Workflow runs ingest every row as **one batched PR per run** (see
+   [Ingest: one PR per run](#ingest-one-pr-per-run)), auto-merged, so
+   the queue never builds up. The manual single-row path
+   (`bin/ingest-evidence.sh`) keeps a stable branch per cell,
+   `evidence/<tool>/<version>/<tuple>`: it force-pushes that branch and
+   updates an already-open PR instead of opening another.
 
 1. **Network flake on push or PR open.**
    The script retries `git push` and `gh pr create` up to 3 times with

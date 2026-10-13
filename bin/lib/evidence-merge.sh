@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Merge one evidence row into a containers-db version file's tested[] array.
+#
+# Shared by bin/ingest-evidence.sh (one row, manual) and
+# bin/ingest-evidence-batch.sh (every row of a run, one PR), so the dedup
+# policy has exactly one implementation.
+#
+# Policy (docs/operations/evidence-runs.md, Merge policy): rows with the same
+# (os, os_version, arch, image_digest) are replaced by the new row; everything
+# else is preserved. If an existing row matches that dedup key AND is
+# identical on every non-volatile field, the new row carries no fresh signal
+# (same content-addressed image, same result), only a newer timestamp, so the
+# file is left untouched. Volatile fields: tested_at, ci_run, duration_seconds.
+#
+# Requires jq.
+
+# merge_evidence_row <version-file> <row-json>
+#
+# Rewrites <version-file> in place (trailing newline kept). Byte-stable for
+# identical inputs, so callers detect a no-op with `git diff --quiet`.
+# Returns 2 when the row is not valid JSON or lacks os/arch/result.
+merge_evidence_row() {
+    local file="$1" row="$2" tmp
+    command jq -e . >/dev/null 2>&1 <<<"$row" || {
+        command echo "merge_evidence_row: row is not valid JSON" >&2
+        return 2
+    }
+    local os ov arch digest result
+    os="$(command jq -r '.os // ""' <<<"$row")"
+    ov="$(command jq -r '.os_version // ""' <<<"$row")"
+    arch="$(command jq -r '.arch // ""' <<<"$row")"
+    digest="$(command jq -r '.image_digest // ""' <<<"$row")"
+    result="$(command jq -r '.result // ""' <<<"$row")"
+    if [ -z "$os" ] || [ -z "$arch" ] || [ -z "$result" ]; then
+        command echo "merge_evidence_row: row missing required .os/.arch/.result" >&2
+        return 2
+    fi
+
+    tmp="$(command mktemp)" || return 1
+    if ! command jq \
+        --argjson new "$row" \
+        --arg os "$os" \
+        --arg ov "$ov" \
+        --arg arch "$arch" \
+        --arg digest "$digest" \
+        '
+        def dedup_match:
+            (.os // "") == $os
+            and (.os_version // "") == $ov
+            and (.arch // "") == $arch
+            and (.image_digest // "") == $digest;
+        def strip_volatile: del(.tested_at, .ci_run, .duration_seconds);
+        ($new | strip_volatile) as $new_core
+        | (.tested // []) as $rows
+        | if ($rows | map(select(dedup_match)) | any(strip_volatile == $new_core))
+          then .
+          else .tested = (($rows | map(select(dedup_match | not))) + [$new])
+          end
+        ' "$file" >"$tmp"; then
+        command rm -f "$tmp"
+        return 1
+    fi
+    command cp "$tmp" "$file"
+    command echo "" >>"$file"
+    command rm -f "$tmp"
+}
+
+# evidence_tuple_slug <row-json> — `os-os_version-arch` (or `os-arch`).
+evidence_tuple_slug() {
+    command jq -r 'if (.os_version // "") != "" then "\(.os)-\(.os_version)-\(.arch)" else "\(.os)-\(.arch)" end' <<<"$1"
+}

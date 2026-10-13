@@ -204,42 +204,11 @@ BRANCH_NAME="evidence/$TOOL/$VERSION/$TUPLE_SLUG${BRANCH_SUFFIX:+/$BRANCH_SUFFIX
 
 # --- Dedup-merge row into the tested[] array -------------------------------
 
-# Policy: rows with the same (os, os_version, arch, image_digest) are
-# replaced by the new row; everything else is preserved. But if an existing
-# row matches that dedup key AND is identical on every non-volatile field,
-# the new row carries no fresh signal (same content-addressed image, same
-# result) — only a newer timestamp — so we leave the file untouched and let
-# the no-op guard below short-circuit. Volatile fields are tested_at, ci_run,
-# and duration_seconds. Rationale lives in docs/operations/evidence-runs.md
-# (Merge policy).
-TMP_FILE="$(command mktemp)"
-trap 'rm -f "$TMP_FILE"' EXIT
-
-jq \
-    --argjson new "$ROW_JSON" \
-    --arg os "$NEW_OS" \
-    --arg ov "$NEW_OS_VERSION" \
-    --arg arch "$NEW_ARCH" \
-    --arg digest "$NEW_DIGEST" \
-    '
-    def dedup_match:
-        (.os // "") == $os
-        and (.os_version // "") == $ov
-        and (.arch // "") == $arch
-        and (.image_digest // "") == $digest;
-    def strip_volatile: del(.tested_at, .ci_run, .duration_seconds);
-    ($new | strip_volatile) as $new_core
-    | (.tested // []) as $rows
-    | if ($rows | map(select(dedup_match)) | any(strip_volatile == $new_core))
-      then .
-      else .tested = (($rows | map(select(dedup_match | not))) + [$new])
-      end
-    ' \
-    "$VERSIONS_FILE" >"$TMP_FILE"
-
-# Trailing newline keeps `git diff` and POSIX text-tool output clean.
-command cp "$TMP_FILE" "$VERSIONS_FILE"
-command echo "" >>"$VERSIONS_FILE"
+# Policy and implementation live in bin/lib/evidence-merge.sh, shared with the
+# batched ingest (bin/ingest-evidence-batch.sh) so the two cannot diverge.
+# shellcheck source=bin/lib/evidence-merge.sh
+source "$SCRIPT_DIR/lib/evidence-merge.sh"
+merge_evidence_row "$VERSIONS_FILE" "$ROW_JSON" || die "failed to merge row into $VERSIONS_FILE"
 
 # --- No-op short-circuit ---------------------------------------------------
 

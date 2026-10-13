@@ -390,19 +390,16 @@ jobs:
             echo "arch=${parts[2]}"
           } >> "$GITHUB_OUTPUT"
 
-      # Single containers-db clone serves two consumers:
-      #   1. luggage (below) reads `tools/<tool>/versions/<v>.json` to know
-      #      *how* to install the tool — catalog mounted read-only into the
-      #      docker container at /catalog.
-      #   2. bin/ingest-evidence.sh (later) writes the new row to the same
-      #      checkout and pushes a branch when dry_run=false.
-      # Cloning once keeps these two consumers seeing the same catalog SHA
-      # for the lifetime of the run.
-      - name: Clone containers-db catalog
+      # Install against the catalog luggage was built and shipped with (the
+      # vendored snapshot in this checkout), not containers-db main. Reading
+      # main raced every DB change that needed a matching luggage change: the
+      # window between the two merges recorded false failures for every cell
+      # (#1164: util_linux unknown to the old luggage). containers-db is only
+      # the ingest target, written by the collect job below.
+      - name: Check the version is in the vendored catalog
         run: |
-          git clone --depth=1 https://github.com/joshjhall/containers-db.git _db
-          test -f "_db/tools/${INPUT_TOOL}/versions/${INPUT_TOOL_VERSION}.json" || {
-            echo "containers-db missing tools/${INPUT_TOOL}/versions/${INPUT_TOOL_VERSION}.json" >&2
+          test -f "crates/luggage/testdata/catalog/tools/${INPUT_TOOL}/versions/${INPUT_TOOL_VERSION}.json" || {
+            echo "vendored catalog missing tools/${INPUT_TOOL}/versions/${INPUT_TOOL_VERSION}.json" >&2
             exit 1
           }
 
@@ -445,7 +442,7 @@ jobs:
             "${PLATFORM_FLAGS[@]}" \
             --user 0 \
             -v "$PWD/target/$RUST_TARGET/release/luggage:/usr/local/bin/luggage:ro" \
-            -v "$PWD/_db:/catalog:ro" \
+            -v "$PWD/crates/luggage/testdata/catalog:/catalog:ro" \
             -v "$PWD/out:/out" \
             -e CONTAINERS_DB=/catalog \
             "$IMAGE" \
@@ -495,83 +492,89 @@ jobs:
           source "$GITHUB_WORKSPACE/bin/lib/evidence-issue.sh"
           read_evidence_verdict out/evidence-row.json >> "$GITHUB_OUTPUT"
 
+      # The row is a bare TestEntry; the collect job also needs to know which
+      # tool/version file it belongs to, so wrap it in an envelope. Named per
+      # CELL (tool, version, tuple): with many versions per tuple, a per-tuple
+      # name made parallel legs collide (upload-artifact@v4 rejects a reused
+      # name). The collect job downloads every evidence-row-* artifact.
+      - name: Wrap row for batch ingest
+        run: |
+          jq --arg tool "$INPUT_TOOL" --arg version "$INPUT_TOOL_VERSION" \
+            '{tool: $tool, version: $version} + .' out/evidence-row.json > out/evidence-envelope.json
+
       - name: Upload evidence row
         uses: actions/upload-artifact@v4
         with:
-          # Per-tuple name so parallel matrix legs don't collide —
-          # upload-artifact@v4 rejects two uploads under one name. A downstream
-          # consumer downloads all evidence-row-* artifacts.
-          name: evidence-row-${{ matrix.tuple }}
-          path: out/evidence-row.json
+          name: evidence-row-${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.tuple }}
+          path: out/evidence-envelope.json
           if-no-files-found: error
+
+  # One PR per run. Cells only record and upload; this job merges every row
+  # into containers-db with the shared dedup policy, opens ONE PR, and
+  # auto-merges it. Per-cell PRs (up to 200 per push, conflicting on shared
+  # version files) and per-cell tracking issues are gone. Runs even when some
+  # cells failed: a fail row is evidence too.
+  collect:
+    name: Ingest evidence (one PR)
+    needs: [setup, evidence]
+    if: ${{ always() && needs.setup.outputs.has_cells == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout containers
+        uses: actions/checkout@v4
+
+      - name: Download evidence rows
+        uses: actions/download-artifact@v4
+        with:
+          pattern: evidence-row-*
+          path: rows
+          merge-multiple: false
 
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3.1.0
 
-      - name: Ingest evidence (dry-run)
+      - name: Install ajv (db-validate)
+        run: npm install --no-save ajv-cli@5.0.0 ajv-formats@3.0.1
+
+      - name: Ingest (dry-run)
         if: ${{ needs.setup.outputs.dry_run == 'true' }}
         env:
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          mkdir -p _db
-          ./bin/ingest-evidence.sh \
-            --row out/evidence-row.json \
-            --db-path "$PWD/_db" \
-            --tool "$INPUT_TOOL" \
-            --version "$INPUT_TOOL_VERSION" \
-            --dry-run
+          ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
+            --run-id "$RUN_ID" --run-url "$RUN_URL" --dry-run
 
-      - name: Ingest evidence (PR open)
+      - name: Ingest (one PR, auto-merged)
         if: ${{ needs.setup.outputs.dry_run != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.CONTAINERS_DB_PAT }}
           GIT_AUTHOR_NAME: github-actions[bot]
           GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "CONTAINERS_DB_PAT secret is not configured." >&2
-            echo "See docs/operations/evidence-runs.md (Auth model) for setup." >&2
+            echo "CONTAINERS_DB_PAT secret is not configured (docs/operations/evidence-runs.md, Auth model)." >&2
             exit 1
           fi
-          mkdir -p _db
-          # gh+git need the token on the HTTPS push as well.
           git config --global "url.https://x-access-token:${GH_TOKEN}@github.com/.insteadOf" "https://github.com/"
-          ./bin/ingest-evidence.sh \
-            --row out/evidence-row.json \
-            --db-path "$PWD/_db" \
-            --tool "$INPUT_TOOL" \
-            --version "$INPUT_TOOL_VERSION"
+          ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
+            --run-id "$RUN_ID" --run-url "$RUN_URL"
 
-      # A `result: fail` row is recorded as evidence but does not fail the job
-      # (see "Run luggage install ..." above). Without this step the regression
-      # would sit quiet in containers-db. Mirror the cadence tiers' (#464/#465)
-      # search-or-create auto-issue convention so a broken tool@tuple gets
-      # triaged. Pattern: security-scan.yml's tracking-issue step.
-      #
-      # Gated on dry_run != 'true' rather than github.event_name: the dry-run
-      # flag is setup's single resolved source of truth, and PR legs are forced
-      # to dry_run=true there — so this never fires on a fork-safe PR leg.
-      - name: Open or update tracking issue on fail row
-        if: ${{ steps.verdict.outputs.result == 'fail' && needs.setup.outputs.dry_run != 'true' }}
-        # Best-effort: this runs AFTER the evidence row is uploaded and ingested,
-        # so a transient gh hiccup (rate limit, list timeout) must not turn an
-        # otherwise-successful evidence run red. Same posture as the base-image
-        # rebuild dispatch. The fail row is still durably recorded either way.
+      # ONE tracking issue per run listing every fail row, instead of one issue
+      # per failing cell (a broken luggage build opened 47, then 83). Best-effort.
+      - name: Open tracking issue for fail rows
+        if: ${{ needs.setup.outputs.dry_run != 'true' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          ERROR_CLASS: ${{ steps.verdict.outputs.error_class }}
         run: |
           set -euo pipefail
-          # Validation + search-or-create lives in a sourced helper so it is
-          # unit-tested offline (tests/unit/evidence-issue.sh). The helper
-          # validates INPUT_TOOL/INPUT_TOOL_VERSION/INPUT_TUPLE against tight
-          # slugs (the primary injection defense for the gh --search title and
-          # issue body), guards the captured EXISTING number, and runs the
-          # edit-vs-create branch. INPUT_TOOL/INPUT_TOOL_VERSION/INPUT_TUPLE come
-          # from the job env; ERROR_CLASS/RUN_URL/GH_TOKEN from this step's env.
           source "$GITHUB_WORKSPACE/bin/lib/evidence-issue.sh"
-          open_or_update_tracking_issue \
-            "$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE" "$ERROR_CLASS" "$RUN_URL"
+          open_run_tracking_issue rows "$RUN_URL"
