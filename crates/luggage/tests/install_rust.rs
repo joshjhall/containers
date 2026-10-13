@@ -85,6 +85,41 @@ fn options_in(roots: &TempDir) -> InstallerOptions {
 
 /// Resolve `rust@1.95.0` for debian/amd64 against the in-tree testdata
 /// catalog. Centralised so every test exercises the same plan.
+/// Resolve rust@1.95.0 from a temp copy of the catalog whose install methods
+/// also depend on `extra`. Goes through `Catalog::resolve`, the production
+/// path that maps dependencies to host packages, so an id the catalog has no
+/// `system_package` for lands in `system_deps.unmapped` exactly as it would
+/// for a real catalog row.
+fn resolve_rust_with_extra_dep(extra: &str) -> (TempDir, luggage::ResolvedInstall) {
+    let tmp = TempDir::new().unwrap();
+    copy_dir(&testdata_catalog(), tmp.path());
+    let path = tmp.path().join("tools/rust/versions/1.95.0.json");
+    let mut doc: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    for method in doc["install_methods"].as_array_mut().unwrap() {
+        method["dependencies"].as_array_mut().unwrap().push(serde_json::json!({ "tool": extra }));
+    }
+    std::fs::write(&path, serde_json::to_vec(&doc).unwrap()).unwrap();
+    let catalog = Catalog::load(CatalogSource::LocalPath(tmp.path().to_owned())).unwrap();
+    let resolved = catalog
+        .resolve("rust", &VersionSpec::Exact("1.95.0".into()), &debian_amd64())
+        .expect("resolve rust@1.95.0");
+    (tmp, resolved)
+}
+
+fn copy_dir(src: &Path, dst: &Path) {
+    std::fs::create_dir_all(dst).unwrap();
+    for entry in std::fs::read_dir(src).unwrap() {
+        let entry = entry.unwrap();
+        let to = dst.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir(&entry.path(), &to);
+        } else {
+            std::fs::copy(entry.path(), to).unwrap();
+        }
+    }
+}
+
 fn resolve_rust() -> luggage::ResolvedInstall {
     let catalog = Catalog::load(CatalogSource::LocalPath(testdata_catalog())).unwrap();
     catalog
@@ -489,19 +524,6 @@ fn validate_check_survives_etxtbsy_under_parallel_write_then_exec() {
     }
 }
 
-/// Build a `Dependency` for a catalog tool id with no metadata. Used to
-/// inject an id luggage has no system-package mapping for.
-fn dep(tool: &str) -> containers_common::tooldb::Dependency {
-    containers_common::tooldb::Dependency {
-        tool: tool.into(),
-        version: None,
-        version_constraint: None,
-        purpose: None,
-        required: None,
-        platforms: None,
-    }
-}
-
 /// Non-strict `plan()` surfaces an unrecognized dependency id in
 /// `skipped_dependencies` instead of erroring — and does so without touching
 /// a real package manager (plan is pure). Proves the `--allow-unknown-deps`
@@ -509,11 +531,8 @@ fn dep(tool: &str) -> containers_common::tooldb::Dependency {
 #[test]
 fn plan_surfaces_skipped_deps_when_not_strict() {
     let roots = TempDir::new().unwrap();
-    let mut resolved = resolve_rust();
-    // Append an id with no mapping; the four real rust deps stay known.
-    let mut deps = resolved.dependencies.take().unwrap_or_default();
-    deps.push(dep("frobnicator"));
-    resolved.dependencies = Some(deps);
+    // An id the catalog has no system_package for; the real rust deps resolve.
+    let (_cat, resolved) = resolve_rust_with_extra_dep("frobnicator");
 
     let mut opts = options_in(&roots);
     opts.fail_on_unknown_deps = false;
@@ -529,7 +548,7 @@ fn plan_surfaces_skipped_deps_when_not_strict() {
         "expected frobnicator in skipped_dependencies, got {:?}",
         plan.skipped_dependencies,
     );
-    // The known deps still translate to packages, untouched.
+    // The known deps still resolve to their catalog packages.
     assert!(plan.system_packages.contains(&"gcc".to_owned()));
 }
 
@@ -540,10 +559,7 @@ fn plan_surfaces_skipped_deps_when_not_strict() {
 #[test]
 fn strict_install_errors_on_unknown_dependency() {
     let roots = TempDir::new().unwrap();
-    let mut resolved = resolve_rust();
-    let mut deps = resolved.dependencies.take().unwrap_or_default();
-    deps.push(dep("frobnicator"));
-    resolved.dependencies = Some(deps);
+    let (_cat, resolved) = resolve_rust_with_extra_dep("frobnicator");
 
     // Strict default, and turn the system-package stage on so the gate runs.
     let mut opts = options_in(&roots);

@@ -2,26 +2,23 @@
 //!
 //! Catalog `Dependency.tool` entries (e.g. `ca_certificates`, `gcc`,
 //! `libc_dev`) describe abstract system packages that need to be installed
-//! before the tool can run. This module:
+//! before the tool can run. Their per-distro package names come from the
+//! catalog's `system_package` entries, resolved onto the plan by
+//! [`crate::sysdeps`] (containers-db is the single source of truth; luggage
+//! keeps no name table of its own). This module:
 //!
 //! 1. Detects the host's package manager from a [`crate::Platform`].
-//! 2. Maps each abstract `Dependency.tool` id to the per-distro package name.
-//! 3. Shells out to the host's package manager to install them.
-//!
-//! # Pilot scope
-//!
-//! The IDs rust@1.95.0 declares — `ca_certificates`, `gcc`, `libc_dev`,
-//! `musl_dev` — are wired up, plus `pkg_config` and `bash`. Unknown IDs
-//! log a warning and continue rather than fail; future issues will widen
-//! the table or move it into the catalog as a per-tool override.
+//! 2. Shells out to it to install the resolved packages, and queries their
+//!    installed versions for the evidence row.
 
 use std::process::Command;
 
-use containers_common::tooldb::{Dependency, InstalledDependency};
+use containers_common::tooldb::InstalledDependency;
 use tracing::warn;
 
 use crate::Platform;
 use crate::error::{LuggageError, Result};
+use crate::sysdeps::ResolvedSystemDeps;
 
 /// Detected host package manager.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,7 +27,9 @@ pub enum PackageManager {
     Apt,
     /// `apk` (alpine).
     Apk,
-    /// `dnf` (rhel/fedora).
+    /// `dnf` (rhel/fedora), or `microdnf` where only that exists: RHEL's
+    /// UBI *minimal* images ship `microdnf` and no `dnf`. See
+    /// [`resolve_program`].
     Dnf,
 }
 
@@ -48,23 +47,6 @@ impl PackageManager {
             "rhel" | "fedora" => Self::Dnf,
             _ => return Err(LuggageError::NotImplemented("package manager for this platform")),
         })
-    }
-}
-
-/// Map an abstract `Dependency.tool` id to the per-distro package name.
-///
-/// Returns `None` when the id is unknown to this build of luggage.
-#[must_use]
-pub fn package_name(tool: &str, mgr: PackageManager) -> Option<&'static str> {
-    match (tool, mgr) {
-        ("bash", _) => Some("bash"),
-        ("ca_certificates", _) => Some("ca-certificates"),
-        ("gcc", _) => Some("gcc"),
-        ("libc_dev", PackageManager::Apt) => Some("libc6-dev"),
-        ("libc_dev", PackageManager::Dnf) => Some("glibc-devel"),
-        ("musl_dev", PackageManager::Apk) => Some("musl-dev"),
-        ("pkg_config", _) => Some("pkg-config"),
-        _ => None,
     }
 }
 
@@ -98,47 +80,6 @@ pub fn install_argv(mgr: PackageManager, packages: &[&str]) -> Option<(&'static 
     })
 }
 
-/// Result of translating catalog dependency ids into per-distro packages.
-///
-/// `packages` holds the recognized ids' per-distro names; `unknown` holds the
-/// raw `Dependency.tool` ids that had no mapping in this build of luggage.
-/// Callers decide what to do with `unknown`: the default (strict) install
-/// path turns a non-empty `unknown` into [`LuggageError::UnknownDependency`],
-/// while the planner and `--allow-unknown-deps` path surface it as a
-/// skipped-dependency list instead.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct TranslatedDeps {
-    /// Recognized dependency ids, mapped to per-distro package names.
-    pub packages: Vec<&'static str>,
-    /// Dependency ids with no system-package mapping in this build.
-    pub unknown: Vec<String>,
-}
-
-/// Translate `dependencies` into per-distro package names.
-///
-/// Unknown `Dependency.tool` ids emit a `tracing::warn!` and are collected
-/// into [`TranslatedDeps::unknown`] rather than silently dropped. The rust
-/// pilot's catalog has been hand-audited, but catalogs scanned in by future
-/// automation may carry ids we haven't wired yet; the caller decides whether
-/// an unrecognized id is fatal (strict mode) or skippable.
-#[must_use]
-pub fn translate_dependencies(deps: &[Dependency], mgr: PackageManager) -> TranslatedDeps {
-    let mut out = TranslatedDeps::default();
-    for dep in deps {
-        if let Some(name) = package_name(&dep.tool, mgr) {
-            out.packages.push(name);
-        } else {
-            warn!(
-                tool = %dep.tool,
-                manager = ?mgr,
-                "no system-package mapping; skipping (catalog may need an update)",
-            );
-            out.unknown.push(dep.tool.clone());
-        }
-    }
-    out
-}
-
 /// Install `dependencies` on the host via `mgr`.
 ///
 /// Skips the call when no dependencies translate to packages. When `strict`
@@ -158,14 +99,21 @@ pub fn translate_dependencies(deps: &[Dependency], mgr: PackageManager) -> Trans
 ///   dependency id has no system-package mapping.
 /// - [`LuggageError::PackageManagerFailed`] when the package manager exits
 ///   non-zero or fails to launch.
-pub fn install_dependencies(deps: &[Dependency], mgr: PackageManager, strict: bool) -> Result<()> {
-    let TranslatedDeps { packages, unknown } = translate_dependencies(deps, mgr);
-    if strict && !unknown.is_empty() {
+pub fn install_dependencies(
+    deps: &ResolvedSystemDeps,
+    mgr: PackageManager,
+    strict: bool,
+) -> Result<()> {
+    if strict && !deps.unmapped.is_empty() {
         return Err(LuggageError::UnknownDependency {
             manager: format!("{mgr:?}"),
-            ids: unknown.join(", "),
+            ids: deps.unmapped.join(", "),
         });
     }
+    for tool in &deps.unmapped {
+        warn!(tool = %tool, manager = ?mgr, "no catalog system_package mapping for this distro; skipping");
+    }
+    let packages: Vec<&str> = deps.packages.iter().map(|p| p.package.as_str()).collect();
     let Some((program, args)) = install_argv(mgr, &packages) else {
         return Ok(());
     };
@@ -185,6 +133,7 @@ pub fn install_dependencies(deps: &[Dependency], mgr: PackageManager, strict: bo
             });
         }
     }
+    let program = resolve_program(program, on_path);
     let out = Command::new(program).args(&args).output().map_err(|e| {
         LuggageError::PackageManagerFailed { message: format!("{program} failed to launch: {e}") }
     })?;
@@ -199,6 +148,42 @@ pub fn install_dependencies(deps: &[Dependency], mgr: PackageManager, strict: bo
             ),
         })
     }
+}
+
+/// Pick the binary to run for `program` given what is on `PATH`.
+///
+/// `install_argv` names the canonical program; this resolves the one case
+/// where that binary may be absent with a drop-in present: `dnf` on RHEL UBI
+/// minimal, which ships only `microdnf` (same `install -y <pkgs>` argv). Every
+/// RHEL evidence run failed with `dnf failed to launch: No such file or
+/// directory` until this existed. `dnf` is preferred when both exist; any
+/// other program is returned unchanged. `on_path` is injected for tests.
+#[must_use]
+pub fn resolve_program(program: &'static str, on_path: impl Fn(&str) -> bool) -> &'static str {
+    if program == "dnf" && !on_path("dnf") && on_path("microdnf") {
+        return "microdnf";
+    }
+    program
+}
+
+/// `true` when `name` is an executable file in some `PATH` directory.
+fn on_path(name: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|paths| {
+        std::env::split_paths(&paths).any(|dir| is_executable(&dir.join(name)))
+    })
+}
+
+#[cfg(unix)]
+fn is_executable(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+}
+
+// luggage installs only on Linux, but the workspace also builds on Windows
+// (stibbons CI), where there is no exec bit to check.
+#[cfg(not(unix))]
+fn is_executable(path: &std::path::Path) -> bool {
+    path.is_file()
 }
 
 /// Build the argv that prints the installed version of `package` via `mgr`.
@@ -263,9 +248,8 @@ fn parse_apt_dnf_version(stdout: &str) -> Option<String> {
 
 /// Resolve the installed versions of `deps` via `mgr`, best-effort.
 ///
-/// Returns one [`InstalledDependency`] per dep that maps to a known package
-/// name (unknown ids are skipped with a warning, exactly as
-/// [`translate_dependencies`] does). `version` is `None` when the package
+/// Returns one [`InstalledDependency`] per resolved package (tools with no
+/// catalog mapping for the distro were left out by [`crate::sysdeps`]). `version` is `None` when the package
 /// manager query fails to launch, exits non-zero, or prints nothing — a
 /// missing version must never abort an otherwise-successful install, so this
 /// function returns no error. Used to populate evidence rows ([containers#642]).
@@ -273,27 +257,17 @@ fn parse_apt_dnf_version(stdout: &str) -> Option<String> {
 /// [containers#642]: https://github.com/joshjhall/containers/issues/642
 #[must_use]
 pub fn resolve_installed_versions(
-    deps: &[Dependency],
+    deps: &ResolvedSystemDeps,
     mgr: PackageManager,
 ) -> Vec<InstalledDependency> {
-    let mut out = Vec::new();
-    for dep in deps {
-        let Some(package) = package_name(&dep.tool, mgr) else {
-            warn!(
-                tool = %dep.tool,
-                manager = ?mgr,
-                "no system-package mapping; skipping version capture",
-            );
-            continue;
-        };
-        let version = query_installed_version(mgr, package);
-        out.push(InstalledDependency {
-            tool: dep.tool.clone(),
-            package: package.to_owned(),
-            version,
-        });
-    }
-    out
+    deps.packages
+        .iter()
+        .map(|p| InstalledDependency {
+            tool: p.tool.clone(),
+            package: p.package.clone(),
+            version: query_installed_version(mgr, &p.package),
+        })
+        .collect()
 }
 
 /// Run the package-manager query for `package` and return the parsed version,
@@ -365,26 +339,6 @@ mod tests {
     }
 
     #[test]
-    fn package_name_known_mappings() {
-        assert_eq!(package_name("bash", PackageManager::Apt), Some("bash"));
-        assert_eq!(package_name("bash", PackageManager::Apk), Some("bash"));
-        assert_eq!(package_name("gcc", PackageManager::Apt), Some("gcc"));
-        assert_eq!(package_name("libc_dev", PackageManager::Apt), Some("libc6-dev"));
-        assert_eq!(package_name("musl_dev", PackageManager::Apk), Some("musl-dev"));
-        assert_eq!(package_name("ca_certificates", PackageManager::Apk), Some("ca-certificates"));
-        assert_eq!(package_name("pkg_config", PackageManager::Dnf), Some("pkg-config"));
-    }
-
-    #[test]
-    fn package_name_unknown_returns_none() {
-        assert_eq!(package_name("frobnicator", PackageManager::Apt), None);
-        // Wrong-distro mapping (e.g. musl_dev on apt) also returns None;
-        // catalog entries should never produce this combination, but if they
-        // do, we'd rather skip than install something wrong.
-        assert_eq!(package_name("musl_dev", PackageManager::Apt), None);
-    }
-
-    #[test]
     fn install_argv_apt_includes_no_install_recommends() {
         let (prog, args) = install_argv(PackageManager::Apt, &["gcc", "libc6-dev"]).unwrap();
         assert_eq!(prog, "apt-get");
@@ -406,74 +360,74 @@ mod tests {
     }
 
     #[test]
+    fn resolve_program_falls_back_to_microdnf_on_ubi_minimal() {
+        // UBI minimal: microdnf present, dnf absent (probed on base-rhel-9/10).
+        assert_eq!(resolve_program("dnf", |n| n == "microdnf"), "microdnf");
+    }
+
+    #[test]
+    fn resolve_program_prefers_dnf_when_present() {
+        assert_eq!(resolve_program("dnf", |_| true), "dnf");
+        assert_eq!(resolve_program("dnf", |n| n == "dnf"), "dnf");
+    }
+
+    #[test]
+    fn resolve_program_keeps_dnf_when_neither_exists() {
+        // Fails later with a clear "dnf failed to launch", not a wrong name.
+        assert_eq!(resolve_program("dnf", |_| false), "dnf");
+    }
+
+    #[test]
+    fn resolve_program_leaves_other_managers_alone() {
+        assert_eq!(resolve_program("apt-get", |_| false), "apt-get");
+        assert_eq!(resolve_program("apk", |n| n == "microdnf"), "apk");
+    }
+
+    #[test]
     fn install_argv_returns_none_when_no_packages() {
         assert!(install_argv(PackageManager::Apt, &[]).is_none());
     }
 
-    #[test]
-    fn translate_dependencies_skips_unknown() {
-        let deps = vec![
-            Dependency {
-                tool: "ca_certificates".into(),
-                version: None,
-                version_constraint: None,
-                purpose: None,
-                required: None,
-                platforms: None,
-            },
-            Dependency {
-                tool: "frobnicator".into(),
-                version: None,
-                version_constraint: None,
-                purpose: None,
-                required: None,
-                platforms: None,
-            },
-            Dependency {
-                tool: "gcc".into(),
-                version: None,
-                version_constraint: None,
-                purpose: None,
-                required: None,
-                platforms: None,
-            },
-        ];
-        let translated = translate_dependencies(&deps, PackageManager::Apt);
-        assert_eq!(translated.packages, vec!["ca-certificates", "gcc"]);
-        assert_eq!(translated.unknown, vec!["frobnicator".to_owned()]);
-    }
-
-    fn dep(tool: &str) -> Dependency {
-        Dependency {
-            tool: tool.into(),
-            version: None,
-            version_constraint: None,
-            purpose: None,
-            required: None,
-            platforms: None,
+    fn resolved(packages: &[(&str, &str)], unmapped: &[&str]) -> ResolvedSystemDeps {
+        ResolvedSystemDeps {
+            packages: packages
+                .iter()
+                .map(|(t, p)| crate::sysdeps::SystemPackageDep {
+                    tool: (*t).into(),
+                    package: (*p).into(),
+                })
+                .collect(),
+            unmapped: unmapped.iter().map(|u| (*u).to_string()).collect(),
         }
     }
 
     #[test]
-    fn install_dependencies_strict_errors_on_unknown() {
-        // Pure: the strict check returns before any package-manager shell-out,
-        // so no real apt/apk/dnf is needed.
-        let deps = vec![dep("gcc"), dep("frobnicator")];
-        let err = install_dependencies(&deps, PackageManager::Apt, true).unwrap_err();
-        match err {
-            LuggageError::UnknownDependency { manager, ids } => {
-                assert_eq!(manager, "Apt");
-                assert_eq!(ids, "frobnicator");
-            }
+    fn install_dependencies_strict_errors_on_unmapped() {
+        // A dep with no catalog mapping for this distro is refused in strict
+        // mode before any package manager runs.
+        let deps = resolved(&[("ca_certificates", "ca-certificates")], &["frobnicator"]);
+        match install_dependencies(&deps, PackageManager::Apt, true) {
+            Err(LuggageError::UnknownDependency { ids, .. }) => assert_eq!(ids, "frobnicator"),
             other => panic!("expected UnknownDependency, got {other:?}"),
         }
     }
 
     #[test]
-    fn install_dependencies_strict_ok_when_all_known_and_empty() {
-        // No unknown ids and no packages to install → strict mode still
-        // returns Ok without shelling out (install_argv is None for []).
-        assert!(install_dependencies(&[], PackageManager::Apt, true).is_ok());
+    fn install_dependencies_ok_when_nothing_to_install() {
+        // Nothing mapped and nothing unmapped: strict mode returns Ok without
+        // shelling out (install_argv is None for []).
+        assert!(install_dependencies(&resolved(&[], &[]), PackageManager::Apt, true).is_ok());
+    }
+
+    #[test]
+    fn resolve_installed_versions_follows_the_resolved_packages() {
+        // One entry per resolved package, named by the catalog's package (not
+        // the tool id); unmapped tools are not queried.
+        let deps = resolved(&[("libc_dev", "glibc-devel")], &["frobnicator"]);
+        let out = resolve_installed_versions(&deps, PackageManager::Dnf);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].tool, "libc_dev");
+        assert_eq!(out[0].package, "glibc-devel");
     }
 
     #[test]
@@ -515,25 +469,6 @@ mod tests {
         assert_eq!(parse_apk_version("gcc", "something-else-1.0"), None);
         // Prefix present but no version after it.
         assert_eq!(parse_apk_version("gcc", "gcc-"), None);
-    }
-
-    #[test]
-    fn resolve_installed_versions_skips_unknown_ids() {
-        // `frobnicator` has no package mapping, so it is dropped entirely —
-        // the known deps still produce an entry (version is best-effort and
-        // may be None on a host without the package, which is fine here).
-        let deps = vec![dep("ca_certificates"), dep("frobnicator"), dep("gcc")];
-        let resolved = resolve_installed_versions(&deps, PackageManager::Apt);
-        let tools: Vec<&str> = resolved.iter().map(|d| d.tool.as_str()).collect();
-        assert_eq!(tools, vec!["ca_certificates", "gcc"]);
-        let packages: Vec<&str> = resolved.iter().map(|d| d.package.as_str()).collect();
-        assert_eq!(packages, vec!["ca-certificates", "gcc"]);
-    }
-
-    #[test]
-    fn resolve_installed_versions_empty_deps_returns_empty() {
-        let versions = resolve_installed_versions(&[], PackageManager::Apt);
-        assert!(versions.is_empty(), "expected empty, got {versions:?}");
     }
 
     #[test]

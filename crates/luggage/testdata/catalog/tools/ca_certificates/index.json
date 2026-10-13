@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "ca_certificates",
+  "display_name": "Mozilla CA certificate bundle",
+  "kind": "system_package",
+  "homepage": "https://wiki.mozilla.org/CA",
+  "license": "MPL-2.0",
+  "activity": {
+    "score": "very-active",
+    "scan_cadence_days": 30,
+    "scanned_at": "2026-04-29T00:00:00Z"
+  },
+  "validation_tiers": {
+    "tier1": {
+      "available": true,
+      "notes": "Distro archive keyrings sign the bundle. Required by every TLS-fetching install method on a fresh container."
+    }
+  },
+  "system_package": {
+    "platforms": {
+      "debian": { "name": "ca-certificates" },
+      "ubuntu": { "name": "ca-certificates" },
+      "alpine": { "name": "ca-certificates" },
+      "rhel": { "name": "ca-certificates" }
+    }
+  }
+}

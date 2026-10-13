@@ -260,6 +260,13 @@
         },
         {
           "tool": "libc_dev"
+        },
+        {
+          "tool": "util_linux",
+          "platforms": [
+            "rhel"
+          ],
+          "purpose": "build"
         }
       ]
     },

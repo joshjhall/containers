@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "util_linux",
+  "display_name": "util-linux",
+  "kind": "system_package",
+  "homepage": "https://github.com/util-linux/util-linux",
+  "source_repo": "https://github.com/util-linux/util-linux.git",
+  "license": "GPL-2.0-or-later",
+  "activity": {
+    "score": "very-active",
+    "scan_cadence_days": 30,
+    "scanned_at": "2026-10-13T00:00:00Z"
+  },
+  "validation_tiers": {
+    "tier1": {
+      "available": true,
+      "notes": "Provides `su`/`runuser`, which luggage uses to run install methods as the target user. Debian and Ubuntu ship it and Alpine provides `su` from busybox (so alpine is deliberately unmapped), but RHEL UBI minimal ships neither. Distro archives are GPG-signed by their archive keyrings (debian-archive-keyring, ubuntu-archive-keyring, redhat-release); trust is rooted in the host package manager."
+    }
+  },
+  "system_package": {
+    "platforms": {
+      "debian": {
+        "name": "util-linux"
+      },
+      "ubuntu": {
+        "name": "util-linux"
+      },
+      "rhel": {
+        "name": "util-linux"
+      }
+    }
+  }
+}
