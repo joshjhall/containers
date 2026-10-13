@@ -190,7 +190,12 @@ impl Installer {
         if let Some(l) = logger {
             l.step(&format!("post-install ({} steps)", steps.len()));
         }
-        post_install::run_steps(steps, user, env_map, self.runner.as_ref())
+        // The tool's own bin dir (e.g. rust's cache-root `cargo/bin`) goes on
+        // PATH so steps that call it by name work under any distro's login
+        // PATH (#1165).
+        let bin_dir =
+            resolved.bin_source_dir.as_deref().map(|rel| self.options.cache_root.join(rel));
+        post_install::run_steps(steps, user, env_map, bin_dir.as_deref(), self.runner.as_ref())
     }
 
     pub(super) fn stage_validate(

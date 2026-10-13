@@ -438,6 +438,13 @@ jobs:
           # here is the "this is an install test, not a service" exception.
           # The mounted luggage binary runs INSIDE the container, so it is
           # built for the container arch ($RUST_TARGET) in both runtime modes.
+          #
+          # luggage's own --user runner, though, makes the install method and
+          # post-install steps run as the base image's non-root user via `su`,
+          # exactly as lib/features/rust.sh does in a real container. Without
+          # it evidence installed as root and never exercised that path, which
+          # hid an Alpine bug (#1165: post-install could not find `rustup`
+          # under su's login PATH) while every Alpine cell passed.
           docker run --rm \
             "${PLATFORM_FLAGS[@]}" \
             --user 0 \
@@ -446,7 +453,7 @@ jobs:
             -v "$PWD/out:/out" \
             -e CONTAINERS_DB=/catalog \
             "$IMAGE" \
-            luggage install "${INPUT_TOOL}@${INPUT_TOOL_VERSION}" --json-report /out/luggage-report.json
+            luggage install "${INPUT_TOOL}@${INPUT_TOOL_VERSION}" --user runner --json-report /out/luggage-report.json
           INSTALL_RC=$?
           set -e
           echo "luggage exited with $INSTALL_RC"

@@ -27,6 +27,19 @@ _job_block() {
     ' "$WF"
 }
 
+test_cells_install_as_the_container_user() {
+    # Evidence must take the run-as-user path real containers take
+    # (lib/features/rust.sh passes --user): installing as root hid an Alpine
+    # post-install PATH bug while every Alpine cell passed (#1165).
+    local cell
+    cell="$(_job_block evidence | /usr/bin/grep -vE '^[[:space:]]*#')"
+    if /usr/bin/grep -qE 'luggage install .*--user runner' <<<"$cell"; then
+        assert_true true "luggage install runs with --user runner"
+    else
+        assert_true false "evidence luggage install must pass --user runner"
+    fi
+}
+
 test_cells_open_no_prs_or_issues() {
     local cell
     # Comment lines excluded: prose may mention the scripts it no longer runs.
@@ -64,6 +77,7 @@ test_cells_install_from_the_vendored_catalog() {
     fi
 }
 
+run_test test_cells_install_as_the_container_user "cells install as the container user (--user runner)"
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
 run_test test_artifact_name_is_per_cell "artifact name is per cell"
