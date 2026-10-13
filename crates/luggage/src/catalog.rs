@@ -118,7 +118,7 @@ impl Catalog {
         platform: &Platform,
     ) -> Result<ResolvedInstall> {
         let entry = self.tools.get(tool).ok_or_else(|| LuggageError::ToolNotFound(tool.into()))?;
-        resolver::resolve(entry, spec, platform)
+        Ok(self.with_system_deps(resolver::resolve(entry, spec, platform)?))
     }
 
     /// Resolve `(tool, spec, platform)` into a concrete install plan, gated
@@ -135,7 +135,18 @@ impl Catalog {
         policy: &ResolutionPolicy,
     ) -> Result<ResolvedInstall> {
         let entry = self.tools.get(tool).ok_or_else(|| LuggageError::ToolNotFound(tool.into()))?;
-        resolver::resolve_with_policy(entry, spec, platform, policy)
+        Ok(self.with_system_deps(resolver::resolve_with_policy(entry, spec, platform, policy)?))
+    }
+
+    /// Resolve the plan's dependencies to host packages from this catalog's
+    /// `system_package` entries (the resolver only sees the tool itself).
+    fn with_system_deps(&self, mut resolved: ResolvedInstall) -> ResolvedInstall {
+        resolved.system_deps = crate::sysdeps::resolve_system_deps(
+            resolved.dependencies.as_deref().unwrap_or_default(),
+            &resolved.platform,
+            self,
+        );
+        resolved
     }
 
     /// Tools of the given [`Kind`] whose activity tier is at least

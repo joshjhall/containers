@@ -38,8 +38,8 @@ impl Installer {
             return Ok(());
         }
         let Ok(mgr) = PackageManager::for_platform(&resolved.platform) else { return Ok(()) };
-        let Some(deps) = resolved.dependencies.as_deref() else { return Ok(()) };
-        if deps.is_empty() {
+        let deps = &resolved.system_deps;
+        if deps.packages.is_empty() && deps.unmapped.is_empty() {
             return Ok(());
         }
         if let Some(l) = logger {
@@ -62,15 +62,10 @@ impl Installer {
             return None;
         }
         let mgr = PackageManager::for_platform(&resolved.platform).ok()?;
-        let deps = resolved.dependencies.as_deref()?;
-        if deps.is_empty() {
-            return None;
-        }
-        // `resolve_installed_versions` skips deps with no package mapping, so a
-        // list of only-unknown ids yields an empty vec. Collapse that to `None`
-        // so the report omits the field entirely rather than serializing an
-        // ambiguous `"dependencies": []`.
-        let versions = resolve_installed_versions(deps, mgr);
+        // Only resolved packages are queried, so a plan whose deps all lacked a
+        // mapping yields an empty vec. Collapse that to `None` so the report
+        // omits the field rather than serializing an ambiguous `[]`.
+        let versions = resolve_installed_versions(&resolved.system_deps, mgr);
         if versions.is_empty() {
             return None;
         }
@@ -355,7 +350,9 @@ mod tests {
             ..InstallerOptions::default()
         });
         let mut resolved = sample_resolved_with_deps();
+        // What Catalog::resolve produces for a tool with no dependencies.
         resolved.dependencies = Some(vec![]);
+        resolved.system_deps = crate::sysdeps::ResolvedSystemDeps::default();
         assert!(installer.captured_dependency_versions(&resolved).is_none());
     }
 }

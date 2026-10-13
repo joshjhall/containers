@@ -97,6 +97,11 @@ pub struct ResolvedInstall {
     /// Method-level dependencies, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<Vec<Dependency>>,
+    /// [`Self::dependencies`] resolved to host packages for [`Self::platform`]
+    /// from the catalog's `system_package` maps (see [`crate::sysdeps`]).
+    /// Filled by [`crate::Catalog::resolve`]; empty from the bare resolver,
+    /// which sees only one tool's entry and cannot look its deps up.
+    pub system_deps: crate::sysdeps::ResolvedSystemDeps,
     /// Binary the idempotency check and post-install validation invoke, from
     /// the tool index's `primary_binary`, falling back to the tool id.
     ///
@@ -399,6 +404,7 @@ fn build_resolved(
         invoke: method.invoke.clone(),
         post_install: method.post_install.clone(),
         dependencies: method.dependencies.clone(),
+        system_deps: crate::sysdeps::ResolvedSystemDeps::default(),
         // The tool id is the fallback: correct wherever the binary shares the
         // catalog id, and the only sane default for an entry that says nothing.
         primary_binary: primary_binary.unwrap_or(tool).to_owned(),

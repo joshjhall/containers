@@ -34,6 +34,7 @@ pub mod platform;
 pub mod policy;
 pub mod reconcile;
 pub mod resolver;
+pub mod sysdeps;
 
 pub use catalog::{Catalog, CatalogSource};
 pub use catalog_gen::{AddOutcome, add_version};

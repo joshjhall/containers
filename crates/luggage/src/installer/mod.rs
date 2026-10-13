@@ -40,7 +40,7 @@ use crate::resolver::ResolvedInstall;
 use download::{HttpClient, UreqClient};
 use methods::{CommandRunner, ProcessRunner};
 use rustup_target::rustup_target_for;
-use syspackages::{PackageManager, translate_dependencies};
+use syspackages::PackageManager;
 use template::{Substitutions, substitute_url};
 
 /// Installer configuration.
@@ -286,17 +286,16 @@ impl Installer {
         };
         let invoke_args = resolved.invoke.as_ref().and_then(|i| i.args.clone());
 
-        let pkg_mgr = PackageManager::for_platform(&resolved.platform).ok();
+        // Package names come from the catalog (resolved onto the plan by
+        // `Catalog::resolve`); a host with no package manager installs none.
         let (system_packages, skipped_dependencies) =
-            match (pkg_mgr, resolved.dependencies.as_deref()) {
-                (Some(mgr), Some(deps)) => {
-                    let translated = translate_dependencies(deps, mgr);
-                    (
-                        translated.packages.into_iter().map(str::to_owned).collect(),
-                        translated.unknown,
-                    )
-                }
-                _ => (Vec::new(), Vec::new()),
+            if PackageManager::for_platform(&resolved.platform).is_ok() {
+                (
+                    resolved.system_deps.packages.iter().map(|p| p.package.clone()).collect(),
+                    resolved.system_deps.unmapped.clone(),
+                )
+            } else {
+                (Vec::new(), Vec::new())
             };
 
         let post_install_steps = resolved.post_install.as_ref().map_or(0, Vec::len);
@@ -613,6 +612,13 @@ mod tests {
                 required: None,
                 platforms: None,
             }]),
+            system_deps: crate::sysdeps::ResolvedSystemDeps {
+                packages: vec![crate::sysdeps::SystemPackageDep {
+                    tool: "gcc".into(),
+                    package: "gcc".into(),
+                }],
+                unmapped: Vec::new(),
+            },
             primary_binary: "rustc".into(),
             binaries: None,
             bin_source_dir: None,
