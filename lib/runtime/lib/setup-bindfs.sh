@@ -35,6 +35,17 @@
 # setup_bindfs_overlays directly, so nothing between the two can reassign it.
 _FUSE_CLEANUP_GC=/usr/local/bin/fuse-cleanup
 
+# Serializes concurrent setup_bindfs_overlays runs (#1252). Under Zed,
+# recover-entrypoint can replay the FULL entrypoint ~150ms after the PID-1
+# entrypoint starts — before the first-run marker exists — so two overlay
+# passes run at once. Both read findmnt before either has mounted, both see the
+# bare virtiofs, and the mount ends up with two stacked bindfs layers.
+# Pre-created by lib/features/bindfs.sh. Same source-time pinning as
+# _FUSE_CLEANUP_GC; tests reassign it after sourcing.
+_BINDFS_SETUP_LOCK=/etc/container/lock/bindfs-setup.lock
+# The FUSE device probed before any overlay work; a seam for the same reason.
+_BINDFS_FUSE_DEV=/dev/fuse
+
 # Parse BINDFS_SKIP_PATHS env var into associative array for O(1) lookup
 # Sets global: BINDFS_SKIP_MAP
 parse_bindfs_skip_paths() {
@@ -49,6 +60,20 @@ parse_bindfs_skip_paths() {
             [ -n "$_skip_path" ] && BINDFS_SKIP_MAP["$_skip_path"]=1
         done
     fi
+}
+
+# True when a FUSE layer is already mounted on the exact target (#1252).
+#
+# findmnt lists EVERY layer stacked on a path, so after one overlay the loop in
+# setup_bindfs_overlays sees two lines for the target: the original virtiofs
+# line and the bindfs fuse line. The fuse line is skipped by fstype, but the
+# virtiofs line still probes as "needs fix" and would mount a second layer.
+# Checking the target as a whole, rather than the line, closes that.
+# Arguments:
+#   $1 - mount target path
+target_has_fuse_layer() {
+    findmnt -n -r -o TARGET,FSTYPE 2>/dev/null |
+        command awk -v t="$1" '$1 == t && $2 ~ /fuse/ { found = 1 } END { exit !found }'
 }
 
 # Check if a mount point needs a bindfs overlay
@@ -177,7 +202,7 @@ setup_bindfs_overlays() {
         BINDFS_ENABLED="${BINDFS_ENABLED:-auto}"
 
         if [ "$BINDFS_ENABLED" != "false" ]; then
-            if [ -e /dev/fuse ]; then
+            if [ -e "$_BINDFS_FUSE_DEV" ]; then
                 echo "🔧 Checking bind mounts for permission fixes (bindfs=$BINDFS_ENABLED)..."
 
                 parse_bindfs_skip_paths
@@ -196,13 +221,33 @@ setup_bindfs_overlays() {
                 BINDFS_UID=$(id -u "$USERNAME")
                 BINDFS_GID=$(id -g "$USERNAME")
 
+                # Hold the setup lock across discovery AND mounting, so a
+                # concurrent pass waits and then sees this pass's overlays
+                # (#1252). Blocking with a bound, unlike fuse-cleanup's -n: the
+                # second pass must not proceed until the first has mounted.
+                # Without flock (busybox-less Alpine, ubi-minimal) or an
+                # openable lock file, fall back to the unlocked behavior; the
+                # per-target re-check below still stops sequential re-runs.
+                # fd 202: fuse-cleanup uses 201 in its own process.
+                if command -v flock >/dev/null 2>&1 && [ ! -L "$_BINDFS_SETUP_LOCK" ] &&
+                    { exec 202>"$_BINDFS_SETUP_LOCK"; } 2>/dev/null; then
+                    flock -w 60 202 || echo "   ⚠️  Timed out waiting for another bindfs setup; continuing"
+                fi
+
                 BINDFS_APPLIED=0
                 while IFS=' ' read -r mnt_target mnt_fstype; do
                     [ -z "$mnt_target" ] && continue
+                    if target_has_fuse_layer "$mnt_target"; then
+                        continue
+                    fi
                     if probe_mount_needs_fix "$mnt_target" "$mnt_fstype" "$BINDFS_ENABLED"; then
                         apply_bindfs_overlay "$mnt_target" && BINDFS_APPLIED=$((BINDFS_APPLIED + 1))
                     fi
                 done < <(findmnt -n -r -o TARGET,FSTYPE 2>/dev/null | command grep -E '^/workspace(/| )' || true)
+
+                # Release: the entrypoint keeps running (exec's the user
+                # command), so closing the fd is what drops the lock.
+                exec 202>&-
 
                 if [ "$BINDFS_APPLIED" -gt 0 ]; then
                     echo "✓ Bindfs overlays applied ($BINDFS_APPLIED mount(s))"

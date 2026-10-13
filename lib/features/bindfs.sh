@@ -122,6 +122,14 @@ install -d -m 755 -o root -g root /etc/container/lock
 install -m 666 -o root -g root /dev/null \
     /etc/container/lock/fuse-cleanup.lock
 
+# Serializes concurrent overlay passes in lib/runtime/lib/setup-bindfs.sh
+# (#1252): Zed's recover-entrypoint can replay the full entrypoint alongside
+# the PID-1 one, and two unserialized passes stacked two bindfs layers on each
+# /workspace mount. Same placement and modes as the sweep lock above.
+log_message "Creating bindfs setup lock..."
+install -m 666 -o root -g root /dev/null \
+    /etc/container/lock/bindfs-setup.lock
+
 # Create the wrapper script that cron will execute
 command cat >/usr/local/bin/fuse-cleanup-cron <<'FUSE_CLEANUP_EOF'
 #!/bin/bash
@@ -251,7 +259,7 @@ log_message "  Created /var/log/fuse-cleanup.log"
 log_feature_summary \
     --feature "Bindfs" \
     --tools "bindfs,fusermount3" \
-    --paths "/etc/fuse.conf,/usr/local/bin/fuse-cleanup-cron,/etc/cron.d/fuse-cleanup,/etc/container/lock/fuse-cleanup.lock,/var/log/fuse-cleanup.log" \
+    --paths "/etc/fuse.conf,/usr/local/bin/fuse-cleanup-cron,/etc/cron.d/fuse-cleanup,/etc/container/lock/fuse-cleanup.lock,/etc/container/lock/bindfs-setup.lock,/var/log/fuse-cleanup.log" \
     --env "BINDFS_ENABLED,BINDFS_SKIP_PATHS,FUSE_CLEANUP_DISABLE,FUSE_CLEANUP_LOCK" \
     --next-steps "Run container with --cap-add SYS_ADMIN --device /dev/fuse. Overlays applied automatically by entrypoint."
 
