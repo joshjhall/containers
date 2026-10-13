@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "libc_dev",
+  "display_name": "libc development headers (glibc)",
+  "kind": "system_package",
+  "homepage": "https://www.gnu.org/software/libc/",
+  "source_repo": "https://sourceware.org/git/glibc.git",
+  "license": "LGPL-2.1-or-later",
+  "activity": {
+    "score": "very-active",
+    "scan_cadence_days": 30,
+    "scanned_at": "2026-04-29T00:00:00Z"
+  },
+  "validation_tiers": {
+    "tier1": {
+      "available": true,
+      "notes": "Distro archive keyrings sign these packages. Alpine ships musl rather than glibc — see `tools/musl_dev/` for the alpine equivalent."
+    }
+  },
+  "alternatives": [
+    {
+      "tool": "musl_dev",
+      "relationship": "similar",
+      "scope": "alpine-only",
+      "notes": "musl-libc is Alpine's libc; glibc is not available there. Cannot be auto-substituted because ABI compatibility is not guaranteed."
+    }
+  ],
+  "system_package": {
+    "platforms": {
+      "debian": { "name": "libc6-dev" },
+      "ubuntu": { "name": "libc6-dev" },
+      "rhel": { "name": "glibc-devel" }
+    }
+  }
+}

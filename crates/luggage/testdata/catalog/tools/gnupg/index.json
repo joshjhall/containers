@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "gnupg",
+  "display_name": "GnuPG",
+  "kind": "system_package",
+  "homepage": "https://gnupg.org",
+  "source_repo": "https://dev.gnupg.org/source/gnupg.git",
+  "license": "GPL-3.0-or-later",
+  "activity": {
+    "score": "active",
+    "scan_cadence_days": 30,
+    "scanned_at": "2026-04-29T00:00:00Z"
+  },
+  "validation_tiers": {
+    "tier1": {
+      "available": true,
+      "notes": "Distro archive keyrings sign the package. Required by Tier 1 (GPG) install methods."
+    }
+  },
+  "system_package": {
+    "platforms": {
+      "debian": { "name": "gnupg" },
+      "ubuntu": { "name": "gnupg" },
+      "alpine": { "name": "gnupg" },
+      "rhel": { "name": "gnupg2" }
+    }
+  }
+}
