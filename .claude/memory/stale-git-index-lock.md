@@ -1,8 +1,11 @@
 ---
 name: stale-git-index-lock
-description: stale .git/index.lock is a virtiofs rename defect (#1086/#1114, closed not-planned), NOT lefthook or bindfs; retry after 2s, verify no holder, rm; no wrapper
+description: "stale .git/index.lock is a virtiofs rename defect (#1086/#1114, closed not-planned), NOT lefthook or bindfs; retry after 2s, verify no holder, rm; if a stage_fixed commit fails every time, commit from a /tmp clone; no wrapper"
 metadata:
+  node_type: memory
   type: feedback
+  originSessionId: 093c56c6-fee4-42ce-beed-2a6b86434986
+  modified: 2026-10-14T16:28:47.031Z
 ---
 
 In this workspace `.git/index.lock` is repeatedly left behind (~145-153KB, no
@@ -30,7 +33,11 @@ is wrong too; blaming the hook config sends the fix to the wrong layer.
 **How to apply:** on "Unable to create .git/index.lock", sleep ~2s and retry
 first (most are the transient ghost). If it persists: check mtime and that no
 process holds it (`find /proc/[0-9]*/fd -lname '*/.git/index.lock'`), then
-`rm -f` and retry once. Never `while [ -e lock ]` without a timeout. To test
+`rm -f` and retry once. If a commit whose lefthook fixers re-stage files
+fails every attempt (seen 3/3 on 2026-10-14 after a rebuild, from lefthook's own
+`git add` of fixed files), the retry ladder won't converge: `git diff --cached`
+to a patch, `git clone --no-local` into `/tmp`, apply, and commit + push from
+there. Every hook still runs; never `--no-verify`. Never `while [ -e lock ]` without a timeout. To test
 hook/git behavior, use a clone in `/tmp` as the control. Back up uncommitted work
 to /tmp before multi-step git sequences. Related:
 [[case-insensitive-mount-shared-inode]], [[results-dir-fuse-incoherent]],
