@@ -48,7 +48,10 @@ download_and_verify_nodejs_gpg() {
 
     # Node.js SHASUMS256.txt URL
     local shasums_url="https://nodejs.org/dist/v${version}/SHASUMS256.txt"
-    local shasums_file="${file%/*}/SHASUMS256.txt"
+    # dirname, not ${file%/*}: callers pass a bare filename (cwd-relative),
+    # which ${file%/*} leaves intact and turns into "<tarball>/SHASUMS256.txt"
+    local shasums_file
+    shasums_file="$(dirname "$file")/SHASUMS256.txt"
 
     log_message "Downloading Node.js checksums file..."
     if ! command curl -fsSL -o "$shasums_file" "$shasums_url" 2>/dev/null; then
