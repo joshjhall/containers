@@ -49,7 +49,7 @@ run_test_with_setup() {
 _run_checksum_subshell() {
     # Runs the provided commands in a subshell, suppressing all log output
     # Usage: result=$(_run_checksum_subshell "commands...")
-    bash -c "
+    /usr/bin/env -u BASH_ENV /bin/bash -c "
         # Provide fallback functions for dependencies not available in test
         log_message() { :; }
         log_error() { :; }
@@ -67,6 +67,45 @@ _run_checksum_subshell() {
         source '$SOURCE_FILE' >/dev/null 2>&1
         $1
     " 2>/dev/null
+}
+
+# Helper: write a PATH-stub curl that serves $1 as the body of every request.
+# A function mock can't intercept the source's `command curl`; a PATH stub can.
+# With no fixture (or a missing one) the stub fails like an unreachable host.
+_make_curl_stub() {
+    local fixture="${1:-}"
+    mkdir -p "$TEST_TEMP_DIR/bin"
+    command cat >"$TEST_TEMP_DIR/bin/curl" <<STUB
+#!/bin/bash
+fixture='$fixture'
+[ -n "\$fixture" ] && [ -f "\$fixture" ] || exit 22
+out=""
+while [ \$# -gt 0 ]; do
+    case "\$1" in
+        -o) out="\$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+if [ -n "\$out" ]; then
+    command cat "\$fixture" >"\$out" 2>/dev/null || exit 23
+else
+    command cat "\$fixture"
+fi
+STUB
+    chmod +x "$TEST_TEMP_DIR/bin/curl"
+}
+
+# Helper: a SHASUMS256.txt shaped like nodejs.org's, with distinct x64 and
+# arm64 entries plus a .tar.gz decoy for each.
+#   $1 - x64 .tar.xz hash, $2 - arm64 .tar.xz hash
+_write_node_shasums() {
+    local zeros="0000000000000000000000000000000000000000000000000000000000000000"
+    command cat >"$TEST_TEMP_DIR/SHASUMS256.txt" <<SUMS
+${zeros}  node-v22.23.3-linux-arm64.tar.gz
+$2  node-v22.23.3-linux-arm64.tar.xz
+${zeros}  node-v22.23.3-linux-x64.tar.gz
+$1  node-v22.23.3-linux-x64.tar.xz
+SUMS
 }
 
 # ============================================================================
@@ -791,6 +830,81 @@ test_verification_sources_pinned() {
 }
 
 # ============================================================================
+# Language Tier 3 (nodejs) — arch selection and mismatch handling (#1255)
+# ============================================================================
+
+test_nodejs_tier3_arm64_selects_arm64_entry() {
+    echo "node arm64 tarball" >"$TEST_TEMP_DIR/node.tar.xz"
+    local actual wrong="1111111111111111111111111111111111111111111111111111111111111111"
+    actual=$(sha256sum "$TEST_TEMP_DIR/node.tar.xz" | command awk '{print $1}')
+    _write_node_shasums "$wrong" "$actual"
+    _make_curl_stub "$TEST_TEMP_DIR/SHASUMS256.txt"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export PATH='$TEST_TEMP_DIR/bin':\"\$PATH\"
+        verify_download 'language' 'nodejs' '22.23.3' '$TEST_TEMP_DIR/node.tar.xz' 'arm64'
+    " || exit_code=$?
+
+    assert_equals "0" "$exit_code" "arm64 build verifies against the linux-arm64 SHASUMS entry"
+}
+
+test_nodejs_tier3_amd64_selects_x64_entry() {
+    echo "node x64 tarball" >"$TEST_TEMP_DIR/node.tar.xz"
+    local actual wrong="1111111111111111111111111111111111111111111111111111111111111111"
+    actual=$(sha256sum "$TEST_TEMP_DIR/node.tar.xz" | command awk '{print $1}')
+    _write_node_shasums "$actual" "$wrong"
+    _make_curl_stub "$TEST_TEMP_DIR/SHASUMS256.txt"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export PATH='$TEST_TEMP_DIR/bin':\"\$PATH\"
+        verify_download 'language' 'nodejs' '22.23.3' '$TEST_TEMP_DIR/node.tar.xz' 'amd64'
+    " || exit_code=$?
+
+    assert_equals "0" "$exit_code" "amd64 build verifies against the linux-x64 SHASUMS entry"
+}
+
+test_language_tier3_mismatch_hard_fails() {
+    # A fetched-but-wrong checksum must fail the build, not fall to TOFU —
+    # even with TOFU explicitly allowed.
+    echo "tampered node tarball" >"$TEST_TEMP_DIR/node.tar.xz"
+    local wrong="1111111111111111111111111111111111111111111111111111111111111111"
+    _write_node_shasums "$wrong" "$wrong"
+    _make_curl_stub "$TEST_TEMP_DIR/SHASUMS256.txt"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export PATH='$TEST_TEMP_DIR/bin':\"\$PATH\"
+        export REQUIRE_VERIFIED_DOWNLOADS=false
+        export BUILD_LOG_DIR='$TEST_TEMP_DIR'
+        verify_download 'language' 'nodejs' '22.23.3' '$TEST_TEMP_DIR/node.tar.xz' 'arm64'
+    " || exit_code=$?
+
+    assert_equals "1" "$exit_code" "language Tier 3 mismatch returns 1 (hard fail)"
+    assert_file_not_exists "$TEST_TEMP_DIR/tofu-downloads.log" \
+        "mismatch never reaches Tier 4 TOFU"
+}
+
+test_language_tier3_unavailable_falls_to_tofu() {
+    echo "node tarball, publisher unreachable" >"$TEST_TEMP_DIR/node.tar.xz"
+    _make_curl_stub ""
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export PATH='$TEST_TEMP_DIR/bin':\"\$PATH\"
+        export REQUIRE_VERIFIED_DOWNLOADS=false
+        verify_download 'language' 'nodejs' '22.23.3' '$TEST_TEMP_DIR/node.tar.xz' 'arm64'
+    " || exit_code=$?
+
+    assert_equals "2" "$exit_code" "unavailable published checksum still falls through to TOFU (2)"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 
@@ -864,6 +978,12 @@ run_test_with_setup test_source_contains_tofu_log_tracking "Source contains TOFU
 run_test_with_setup test_pinned_file_exists "checksum-pinned.sh exists"
 run_test_with_setup test_fetch_file_has_tool_registry "checksum-fetch.sh has tool registry"
 run_test_with_setup test_verification_sources_pinned "checksum-verification.sh sources checksum-pinned.sh"
+
+# Language Tier 3 nodejs arch + mismatch (#1255)
+run_test_with_setup test_nodejs_tier3_arm64_selects_arm64_entry "nodejs Tier 3 on arm64 selects the arm64 entry"
+run_test_with_setup test_nodejs_tier3_amd64_selects_x64_entry "nodejs Tier 3 on amd64 selects the x64 entry"
+run_test_with_setup test_language_tier3_mismatch_hard_fails "Language Tier 3 mismatch hard-fails, never TOFU"
+run_test_with_setup test_language_tier3_unavailable_falls_to_tofu "Language Tier 3 unavailable falls through to TOFU"
 
 # Generate test report
 generate_report

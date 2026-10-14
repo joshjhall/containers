@@ -127,11 +127,12 @@ verify_signature_tier() {
 #   $1 - Name (e.g., "python", "ruby", "go")
 #   $2 - Version
 #   $3 - Downloaded file path
-#   $4 - Architecture (optional, for go/rust)
+#   $4 - Architecture (optional, for go/nodejs)
 #
 # Returns:
 #   0 if verification succeeds
-#   1 if checksum not available or verification fails
+#   1 if checksum not available (fall through to next tier)
+#   2 if checksum was fetched but doesn't match (hard fail — possible tampering)
 verify_published_checksum() {
     local name="$1"
     local version="$2"
@@ -159,9 +160,15 @@ verify_published_checksum() {
             ;;
         nodejs | node)
             log_message "   Checking nodejs.org SHASUMS256.txt..."
-            local filename="node-v${version}-linux-x64.tar.xz"
+            local node_arch
+            case "$arch" in
+                amd64 | x86_64 | x64) node_arch="x64" ;;
+                arm64 | aarch64) node_arch="arm64" ;;
+                *) node_arch="$arch" ;;
+            esac
+            local filename="node-v${version}-linux-${node_arch}.tar.xz"
             local shasums_url="https://nodejs.org/dist/v${version}/SHASUMS256.txt"
-            expected=$(command curl -fsSL "$shasums_url" 2>/dev/null | command grep "$filename" | command awk '{print $1}' || echo "")
+            expected=$(command curl -fsSL "$shasums_url" 2>/dev/null | command awk -v f="$filename" '$2 == f {print $1}' || echo "")
             ;;
         *)
             log_message "   ⚠️  No published checksum method for $name"
@@ -187,7 +194,7 @@ verify_published_checksum() {
         log_error "Checksum mismatch!"
         log_error "Expected: $expected"
         log_error "Got:      $actual"
-        return 1
+        return 2
     fi
 }
 
@@ -244,9 +251,14 @@ verify_download() {
 
     # TIER 3: Published Checksums
     if [ "$category" = "language" ]; then
-        if verify_published_checksum "$name" "$version" "$file" "$arch"; then
-            return 0
+        local _lang_t3_rc=0
+        verify_published_checksum "$name" "$version" "$file" "$arch" || _lang_t3_rc=$?
+        if [ "$_lang_t3_rc" -eq 0 ]; then
+            return 0 # Tier 3 passed
+        elif [ "$_lang_t3_rc" -eq 2 ]; then
+            return 1 # Checksum mismatch — hard fail
         fi
+        # _lang_t3_rc=1 means checksum unavailable — fall through to Tier 4
     elif [ "$category" = "tool" ]; then
         local _tool_t3_rc=0
         verify_tool_published_checksum "$name" "$version" "$file" "$arch" || _tool_t3_rc=$?
