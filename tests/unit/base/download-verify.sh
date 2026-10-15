@@ -243,13 +243,13 @@ test_sha1_rejected() {
 
     assert_not_equals "0" "$exit_code" "verify_checksum rejects SHA-1 checksums"
 
-    if echo "$output" | command grep -q "SHA-1 checksums are not supported"; then
+    if command grep -q "SHA-1 checksums are not supported" <<<"$output"; then
         assert_true true "Error message mentions SHA-1 is not supported"
     else
         assert_true false "Expected error message about SHA-1 not being supported"
     fi
 
-    if echo "$output" | command grep -q "SHA-256.*SHA-512\|SHA256.*SHA512"; then
+    if command grep -q "SHA-256.*SHA-512\|SHA256.*SHA512" <<<"$output"; then
         assert_true true "Error message directs to SHA-256/SHA-512"
     else
         assert_true false "Expected error message to suggest SHA-256/SHA-512 alternatives"
@@ -259,7 +259,9 @@ test_sha1_rejected() {
 # Test: Script documentation mentions both SHA256 and SHA512
 test_script_documentation() {
     # Check header comments mention both hash types
-    if head -30 "$PROJECT_ROOT/lib/base/download-verify.sh" | command grep -qi "SHA256\|SHA512"; then
+    local header
+    header=$(command head -30 "$PROJECT_ROOT/lib/base/download-verify.sh" || true)
+    if command grep -qi "SHA256\|SHA512" <<<"$header"; then
         assert_true true "Script documentation mentions hash types"
     else
         assert_true false "Script documentation should mention hash types"

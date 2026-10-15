@@ -78,7 +78,7 @@ is_rate_limited() {
     # GitHub returns 403 for rate limit exceeded
     # Most APIs return 429 for rate limiting
     if [ "$http_code" = "403" ] || [ "$http_code" = "429" ]; then
-        if echo "$response" | command grep -qi "rate limit\|too many requests\|API rate limit"; then
+        if command grep -qi "rate limit\|too many requests\|API rate limit" <<<"$response"; then
             return 0
         fi
     fi
@@ -153,7 +153,7 @@ test_python_major_minor_resolution() {
     local result
     result=$(resolve_python_version "3.12" 2>&1) || {
         # Check if it's a rate limit issue
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -178,7 +178,7 @@ test_python_major_only_resolution() {
     # Test resolving major only to latest stable
     local result
     result=$(resolve_python_version "3" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -212,7 +212,7 @@ test_node_major_minor_resolution() {
 
     local result
     result=$(resolve_node_version "20.18" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -236,7 +236,7 @@ test_node_major_only_resolution() {
 
     local result
     result=$(resolve_node_version "20" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -270,7 +270,7 @@ test_rust_major_minor_resolution() {
 
     local result
     result=$(resolve_rust_version "1.82" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "GitHub API rate limit (not a code error)"
             if [ -z "${GITHUB_TOKEN:-}" ]; then
                 echo "  💡 TIP: Set GITHUB_TOKEN to increase rate limits"
@@ -307,7 +307,7 @@ test_java_major_only_resolution() {
 
     local result
     result=$(resolve_java_version "21" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "Adoptium API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -341,7 +341,7 @@ test_ruby_major_minor_resolution() {
 
     local result
     result=$(resolve_ruby_version "3.4" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "Ruby website rate limit or fetch failure (not a code error)"
             return
         fi
@@ -365,7 +365,7 @@ test_ruby_major_only_resolution() {
 
     local result
     result=$(resolve_ruby_version "3" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "Ruby website rate limit or fetch failure (not a code error)"
             return
         fi
@@ -399,7 +399,7 @@ test_go_major_minor_resolution() {
 
     local result
     result=$(resolve_go_version "1.23" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "Go website rate limit or fetch failure (not a code error)"
             return
         fi
@@ -423,7 +423,7 @@ test_go_major_only_resolution() {
 
     local result
     result=$(resolve_go_version "1" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "Go website rate limit or fetch failure (not a code error)"
             return
         fi
@@ -457,7 +457,7 @@ test_kotlin_major_minor_resolution() {
 
     local result
     result=$(resolve_kotlin_version "2.1" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "GitHub API rate limit or fetch failure (not a code error)"
             if [ -z "${GITHUB_TOKEN:-}" ]; then
                 echo "  💡 TIP: Set GITHUB_TOKEN to increase rate limits"
@@ -484,7 +484,7 @@ test_kotlin_major_only_resolution() {
 
     local result
     result=$(resolve_kotlin_version "2" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "GitHub API rate limit or fetch failure (not a code error)"
             if [ -z "${GITHUB_TOKEN:-}" ]; then
                 echo "  💡 TIP: Set GITHUB_TOKEN to increase rate limits"
@@ -572,7 +572,7 @@ test_resolve_version_wrapper_python() {
 
     local result
     result=$(resolve_version "python" "3.12" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -595,7 +595,7 @@ test_resolve_version_wrapper_node() {
 
     local result
     result=$(resolve_version "node" "20" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -619,7 +619,7 @@ test_resolve_version_wrapper_nodejs_alias() {
     # Test that "nodejs" alias works
     local result
     result=$(resolve_version "nodejs" "20" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -643,7 +643,7 @@ test_resolve_version_wrapper_golang_alias() {
     # Test that "golang" alias works
     local result
     result=$(resolve_version "golang" "1.23" 2>&1) || {
-        if echo "$result" | command grep -qi "rate limit\|failed to fetch"; then
+        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi

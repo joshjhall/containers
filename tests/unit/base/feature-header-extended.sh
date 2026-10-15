@@ -180,7 +180,7 @@ test_create_secure_temp_dir_returns_valid_dir() {
     # the stderr output contains the registration message.
     local output
     output=$(create_secure_temp_dir 2>&1 >/dev/null)
-    if echo "$output" | command grep -q "Registered for cleanup"; then
+    if command grep -q "Registered for cleanup" <<<"$output"; then
         assert_true true "Temp dir registered for cleanup"
     else
         assert_true false "Temp dir not registered for cleanup"

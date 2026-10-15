@@ -110,7 +110,9 @@ EOF
     assert_file_exists "$bash_env"
 
     # Check shebang
-    if head -n1 "$bash_env" | command grep -q "#!/bin/bash"; then
+    local shebang
+    shebang=$(command head -n1 "$bash_env" || true)
+    if command grep -q "#!/bin/bash" <<<"$shebang"; then
         assert_true true "bash_env has shebang"
     else
         assert_true false "bash_env missing shebang"

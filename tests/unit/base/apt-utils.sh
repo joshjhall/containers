@@ -180,7 +180,7 @@ test_apt_update_delegates_to_apt_retry() {
     # apt_update should NOT have its own while loop
     local update_body
     update_body=$(command sed -n '/^apt_update()/,/^}/p' "$PROJECT_ROOT/lib/base/apt-utils.sh")
-    if echo "$update_body" | command grep -q "while.*attempt"; then
+    if command grep -q "while.*attempt" <<<"$update_body"; then
         assert_true false "apt_update still has its own retry loop (should use apt_retry)"
     else
         assert_true true "apt_update does not have a duplicate retry loop"
@@ -192,14 +192,14 @@ test_apt_install_delegates_to_apt_retry() {
     # apt_install should call apt_retry
     local install_body
     install_body=$(command sed -n '/^apt_install()/,/^}/p' "$PROJECT_ROOT/lib/base/apt-utils.sh")
-    if echo "$install_body" | command grep -q "apt_retry"; then
+    if command grep -q "apt_retry" <<<"$install_body"; then
         assert_true true "apt_install delegates to apt_retry"
     else
         assert_true false "apt_install does not delegate to apt_retry"
     fi
 
     # apt_install should NOT have its own while loop
-    if echo "$install_body" | command grep -q "while.*attempt"; then
+    if command grep -q "while.*attempt" <<<"$install_body"; then
         assert_true false "apt_install still has its own retry loop (should use apt_retry)"
     else
         assert_true true "apt_install does not have a duplicate retry loop"
