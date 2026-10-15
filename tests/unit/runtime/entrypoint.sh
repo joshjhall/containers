@@ -740,8 +740,12 @@ test_no_unquoted_dollar_star_in_exec() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # Search for lines that use $* (unquoted word-split expansion) in exec
-    # This pattern is dangerous because it allows command injection
-    if command grep -E 'exec .* \$\*' "$script" | command grep -v '^[[:space:]]*#' | command grep -q .; then
+    # This pattern is dangerous because it allows command injection.
+    # Captured, not piped into grep -q: an early match would SIGPIPE the
+    # filter under pipefail and hide a real hit (#1092/#1097).
+    local hits
+    hits=$(command grep -E 'exec .* \$\*' "$script" | command grep -v '^[[:space:]]*#' || true)
+    if [ -n "$hits" ]; then
         assert_true false "Found unquoted \$* in exec context — command injection risk"
     else
         assert_true true "No unquoted \$* found in exec contexts"

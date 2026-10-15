@@ -252,6 +252,16 @@ pre-commit:
                 exit 1
               fi
 
+          # Pipe into `grep -q` races under pipefail (SIGPIPE, #1092). The
+          # suite owns the scanner and the per-directory phase allowlist
+          # (#1097); this hook just runs it at commit time so a new site never
+          # reaches a push. bash + awk + find only, so no skip: guard applies.
+          - name: no-pipe-grep-q
+            # Both arms: lefthook's `**` needs at least one directory, so
+            # `tests/unit/**/*.sh` alone misses top-level suites.
+            glob: "{tests/unit/*.sh,tests/unit/**/*.sh}"
+            run: tests/unit/grep-q-pipefail-guard.sh >/dev/null || tests/unit/grep-q-pipefail-guard.sh
+
           - name: no-bashrc-heredocs
             glob: "lib/features/*.sh"
             run: |

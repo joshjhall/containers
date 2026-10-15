@@ -469,7 +469,8 @@ emulator-ci-start() {
     echo "Waiting for emulator to boot (timeout: ${timeout}s)..."
     local count=0
     while [ $count -lt $timeout ]; do
-        if adb shell getprop sys.boot_completed 2>/dev/null | command grep -q "1"; then
+        boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null || true)
+        if command grep -q "1" <<<"$boot_completed"; then
             echo "Emulator booted successfully"
             return 0
         fi

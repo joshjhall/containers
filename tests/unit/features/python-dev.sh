@@ -389,7 +389,11 @@ test_arg_order_check_catches_cross_stage_arg() {
         }
     ' "$PROJECT_ROOT/Dockerfile" >"$mutated"
 
-    if ! command grep -B1 '^FROM .* AS base$' "$mutated" | command grep -q '^ARG INCLUDE_PYTHON_DEV='; then
+    # Captured, not piped into grep -q: an early match would SIGPIPE the
+    # producer under pipefail (#1092/#1097).
+    local before_from
+    before_from=$(command grep -B1 '^FROM .* AS base$' "$mutated" || true)
+    if ! command grep -q '^ARG INCLUDE_PYTHON_DEV=' <<<"$before_from"; then
         assert_true false "Mutation did not move ARG INCLUDE_PYTHON_DEV above the stage FROM"
     fi
     errors=$(node_condition_arg_order_errors "$mutated")

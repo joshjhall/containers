@@ -56,12 +56,24 @@ updater_cases() {
         command sort -u
 }
 
-# True when $1 appears as a whole line in the newline-separated list on stdin.
-# Substring matching is wrong here: short tool names like `sd` occur inside
-# longer ones (`shfmt`, `sccache`), so a substring check would report a missing
-# case as present.
+# list_has_line PRODUCER NEEDLE — true when NEEDLE is a whole line of
+# PRODUCER's output. Substring matching is wrong here: short tool names like
+# `sd` occur inside longer ones (`shfmt`, `sccache`), so a substring check
+# would report a missing case as present.
+#
+# The output is captured, then matched via a herestring — never piped into
+# `grep -q`. grep -q exits on its first match; a producer with output still
+# unwritten then takes SIGPIPE, pipefail fails the pipeline, and a present case
+# is reported missing. updater_cases is well past one pipe buffer, so this is
+# the #1092 shape (#1097).
+list_has_line() {
+    local body
+    body=$("$1")
+    command grep -qxF "$2" <<<"$body"
+}
+
 has_case() {
-    updater_cases | command grep -qxF "$1"
+    list_has_line updater_cases "$1"
 }
 
 # Registered tools that have no updater case, minus any intentional exclusions.
@@ -157,10 +169,31 @@ test_issue_781_tools_have_cases() {
     done
 }
 
+# ---------------------------------------------------------------------------
+# Test: an early match in a long list is not misreported
+#
+# The needle is line 1 of a ~5 MiB single-process producer, so grep -q matches
+# and exits while the producer still has far more than a pipe buffer left to
+# write. The old `producer | grep -qxF` shape then died of SIGPIPE (141) on
+# every run, not only under load — the #1092 flake made deterministic.
+# ---------------------------------------------------------------------------
+early_match_long_list() {
+    command awk 'BEGIN {
+        print "needle"
+        for (i = 0; i < 100000; i++) print "filler line long enough to overflow the pipe buffer"
+    }'
+}
+
+test_list_has_line_immune_to_early_exit_sigpipe() {
+    assert_true "list_has_line early_match_long_list needle" \
+        "an early match in a long list is found (grep -q SIGPIPE, #1092/#1097)"
+}
+
 run_test "test_extraction_is_not_vacuous" "Tool-name extraction finds a plausible number of tools"
 run_test "test_every_registered_tool_has_updater_case" "Every tool in check-versions.sh has an updater case"
 run_test "test_hyperfine_cases_are_isolated" "hyperfine and hyperfine-cargo cases stay independent"
 run_test "test_issue_781_tools_have_cases" "hyperfine, jsonc-parser, and sd have updater cases"
+run_test "test_list_has_line_immune_to_early_exit_sigpipe" "An early match in a long list is not misreported (SIGPIPE)"
 
 # Generate report
 generate_report
