@@ -16,7 +16,7 @@ test_suite "Update Versions Tests"
 test_help_output() {
     output=$("$PROJECT_ROOT/bin/update-versions.sh" --help 2>&1 || true)
 
-    if echo "$output" | command grep -q "Usage:"; then
+    if command grep -q "Usage:" <<<"$output"; then
         return 0
     else
         return 1
@@ -55,7 +55,7 @@ EOF
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --dry-run --input test.json 2>&1)
 
     # Check that file wasn't modified
-    if command grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile && echo "$output" | command grep -q "DRY RUN"; then
+    if command grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile && command grep -q "DRY RUN" <<<"$output"; then
         command rm -rf "$test_dir"
         return 0
     else
@@ -146,7 +146,7 @@ EOF
     cd "$test_dir"
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-bump --input test.json 2>&1)
 
-    if echo "$output" | command grep -q "All versions are up to date"; then
+    if command grep -q "All versions are up to date" <<<"$output"; then
         command rm -rf "$test_dir"
         return 0
     else
@@ -159,7 +159,7 @@ EOF
 test_invalid_input() {
     output=$("$PROJECT_ROOT/bin/update-versions.sh" --input /nonexistent/file.json 2>&1 || true)
 
-    if echo "$output" | command grep -q "Error: Input file not found"; then
+    if command grep -q "Error: Input file not found" <<<"$output"; then
         return 0
     else
         return 1
@@ -453,7 +453,7 @@ EOF
         all_updated=false
     fi
     # Regression: must not warn about these tools being unknown.
-    if echo "$output" | command grep -qE "Unknown shell script tool: (just|rumdl|conform)"; then
+    if command grep -qE "Unknown shell script tool: (just|rumdl|conform)" <<<"$output"; then
         all_updated=false
     fi
 
@@ -536,7 +536,7 @@ EOF
     local success=true
 
     # Check output contains error messages
-    if ! echo "$output" | command grep -q "Invalid version format"; then
+    if ! command grep -q "Invalid version format" <<<"$output"; then
         success=false
     fi
 
@@ -885,7 +885,7 @@ EOF
     command grep -q 'VALE_VERSION="${VALE_VERSION:-3.15.1}"' lib/features/dev-tools.sh || all_updated=false
     command grep -q 'TYPOS_VERSION="${TYPOS_VERSION:-1.47.2}"' lib/features/dev-tools.sh || all_updated=false
     # Regression: must not warn about these being unknown.
-    if echo "$output" | command grep -qiE "Unknown (Dockerfile|shell script) tool: (Mise|vale|typos)"; then
+    if command grep -qiE "Unknown (Dockerfile|shell script) tool: (Mise|vale|typos)" <<<"$output"; then
         all_updated=false
     fi
 
@@ -935,9 +935,9 @@ EOF
 
     # Must surface an ERROR and NOT report the bogus tool as an applied update.
     local ok=true
-    echo "$output" | command grep -qiE "ERROR: Unknown shell script tool" || ok=false
-    echo "$output" | command grep -qiE "No updates applied|Updates applied: 0" || ok=false
-    if echo "$output" | command grep -qiE "Updates applied: [1-9]"; then
+    command grep -qiE "ERROR: Unknown shell script tool" <<<"$output" || ok=false
+    command grep -qiE "No updates applied|Updates applied: 0" <<<"$output" || ok=false
+    if command grep -qiE "Updates applied: [1-9]" <<<"$output"; then
         ok=false
     fi
     assert_true "$ok" "Unmapped tool produces an error and applies nothing"
@@ -1222,11 +1222,11 @@ EOF
         echo "    expected exit 2 from a dry run over a missing case, got $rc"
         ok=false
     }
-    echo "$output" | command grep -q "no updater case" || {
+    command grep -q "no updater case" <<<"$output" || {
         echo "    dry run did not report the missing updater case"
         ok=false
     }
-    echo "$output" | command grep -q "totally-unmapped-tool" || {
+    command grep -q "totally-unmapped-tool" <<<"$output" || {
         echo "    dry run did not name the unmapped tool"
         ok=false
     }
@@ -1739,7 +1739,7 @@ EOF
         echo "    unknown Gemfile tool exited 0 — a missing case must be reported"
         ok=false
     fi
-    if ! /usr/bin/printf '%s' "$output" | command grep -qi 'unknown gemfile tool'; then
+    if ! command grep -qi 'unknown gemfile tool' <<<"$output"; then
         echo "    expected an 'Unknown Gemfile tool' error, got: $output"
         ok=false
     fi
@@ -1827,9 +1827,9 @@ EOF
 
     local ok=true
     # Both causes reported, each naming its tool — and NOT collapsed into one.
-    echo "$output" | command grep -q "no updater case" || ok=false
-    echo "$output" | command grep -q "totally-unmapped-tool" || ok=false
-    echo "$output" | command grep -q "invalid version strings" || ok=false
+    command grep -q "no updater case" <<<"$output" || ok=false
+    command grep -q "totally-unmapped-tool" <<<"$output" || ok=false
+    command grep -q "invalid version strings" <<<"$output" || ok=false
 
     assert_true "$ok" "Missing-case and invalid-version failures are reported separately, naming the tools"
 }

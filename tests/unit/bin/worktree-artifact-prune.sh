@@ -81,7 +81,9 @@ run_tty() {
 # run_tty needs util-linux `script` (-q -e -c); BSD/busybox `script` takes other
 # flags, so presence alone is not enough to run rather than skip.
 have_util_linux_script() {
-    command script --version 2>&1 | command grep -q util-linux
+    local ver
+    ver=$(command script --version 2>&1 || true)
+    command grep -q util-linux <<<"$ver"
 }
 
 # PATH with every entry holding an `artifact-dir` dropped, so the script must

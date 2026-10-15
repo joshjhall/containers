@@ -132,7 +132,7 @@ test_output_includes_path_info() {
     local output
     output=$(QUIET=false "$DETECT_SCRIPT" "$TEST_DIR" 2>&1 || true)
 
-    if echo "$output" | command grep -q "$TEST_DIR"; then
+    if command grep -q "$TEST_DIR" <<<"$output"; then
         return 0
     else
         fail_test "Output should include the tested path"
@@ -186,7 +186,7 @@ test_default_path_is_workspace() {
         local output
         output=$(QUIET=false "$DETECT_SCRIPT" 2>&1 || true)
 
-        if echo "$output" | command grep -q "/workspace"; then
+        if command grep -q "/workspace" <<<"$output"; then
             return 0
         else
             fail_test "Default should be /workspace"
