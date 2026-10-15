@@ -11,6 +11,14 @@
 # Security note: every interpolation of github.event.* or matrix.* into a
 # shell context is plumbed through `env:` rather than direct `${{ ... }}`
 # expansion — prevents workflow-injection via PR metadata.
+#
+# `labeled` is in the trigger so that adding `ci/full-build` to an OPEN PR
+# starts the tier (#1099) — a re-run would replay the original payload, whose
+# label list predates the label. GitHub cannot filter `labeled` by label name,
+# so every label add creates a run. A run for any OTHER label ("irrelevant")
+# skips detect-changes/build-feature, and pr-tier MIRRORS the PR's last real
+# `PR Tier` verdict on this SHA instead of reporting a skipped-as-green over a
+# failed build (see the pr-tier job).
 # =====================================
 
 name: PR Tier — per-feature builds
@@ -18,10 +26,20 @@ name: PR Tier — per-feature builds
 on:
   pull_request:
     branches: [main, v5]
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
   pull-requests: read
+
+# One group per PR. Relevant events (push, reopen, a `ci/full-build` add)
+# cancel each other, so a push and a label add close together build the
+# feature matrix once. Irrelevant-label runs never cancel: they queue BEHIND
+# the in-flight run, which is what lets their mirror read a finished verdict
+# (a burst of label adds collapses to one pending run).
+concurrency:
+  group: test-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: ${{ github.event.action != 'labeled' || github.event.label.name == 'ci/full-build' }}
 
 env:
   REGISTRY: ghcr.io
@@ -35,6 +53,9 @@ jobs:
   # =====================================
   detect-changes:
     name: Detect changed features
+    # Skip on an irrelevant-label event (#1099); build-feature follows via
+    # `needs`, and pr-tier mirrors the prior verdict.
+    if: github.event.action != 'labeled' || github.event.label.name == 'ci/full-build'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -363,17 +384,65 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: read
     steps:
       - name: Summarize
         env:
           MODE: ${{ needs.detect-changes.outputs.mode }}
           BUILD_RESULT: ${{ needs.build-feature.result }}
           DETECT_RESULT: ${{ needs.detect-changes.result }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_LABEL: ${{ github.event.label.name }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ID: ${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           echo "Detect result: ${DETECT_RESULT}"
           echo "Detect mode: ${MODE}"
           echo "Build result: ${BUILD_RESULT}"
+
+          # Irrelevant-label run (#1099): a label other than `ci/full-build`
+          # was added, so detect-changes/build-feature were skipped and this
+          # run certified nothing. Reporting `skipped`/green here would make
+          # it the newest `PR Tier` on the SHA and mask an earlier FAILED
+          # build. Mirror the newest other non-cancelled `PR Tier` check run
+          # instead — concurrency queues this run behind any in-flight one,
+          # so that run has normally finished. Fail closed on anything but a
+          # completed passing verdict, including an API error.
+          if [ "${EVENT_ACTION}" = "labeled" ] && [ "${EVENT_LABEL}" != "ci/full-build" ]; then
+            echo "Label '${EVENT_LABEL}' does not affect this tier — mirroring the last PR Tier verdict on ${HEAD_SHA}."
+            if ! RUNS=$(gh api --paginate \
+                "repos/${REPO}/commits/${HEAD_SHA}/check-runs?check_name=PR%20Tier&filter=all&per_page=100" \
+                --jq '.check_runs[]'); then
+              echo "::error::could not list PR Tier check runs — cannot mirror a verdict."
+              exit 1
+            fi
+            if ! LATEST=$(printf '%s\n' "${RUNS}" | jq -cs --arg run "/actions/runs/${RUN_ID}/" '
+                map(select((.details_url // "" | contains($run) | not)
+                           and .conclusion != "cancelled"))
+                | sort_by(.id) | last // empty'); then
+              echo "::error::could not parse PR Tier check runs — cannot mirror a verdict."
+              exit 1
+            fi
+            if [ -z "${LATEST}" ]; then
+              echo "::error::no prior PR Tier verdict on this commit to mirror."
+              exit 1
+            fi
+            STATUS=$(printf '%s' "${LATEST}" | jq -r '.status')
+            CONCLUSION=$(printf '%s' "${LATEST}" | jq -r '.conclusion // ""')
+            echo "Mirroring: status=${STATUS} conclusion=${CONCLUSION}"
+            if [ "${STATUS}" = "completed" ]; then
+              case "${CONCLUSION}" in
+                success|skipped|neutral) exit 0 ;;
+              esac
+            fi
+            echo "::error::last PR Tier verdict is not a pass (status=${STATUS} conclusion=${CONCLUSION})."
+            exit 1
+          fi
 
           # Gate on the UPSTREAM job's result first (#909). When detect-changes
           # fails, its compute step never writes outputs, so MODE is empty
