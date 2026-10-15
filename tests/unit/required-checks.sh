@@ -612,13 +612,25 @@ test_pr_tier_mirror_verdict() {
     local bad='{"id":20,"status":"completed","conclusion":"failure","details_url":"https://github.com/owner/repo/actions/runs/150/job/2"}'
     local cancelled='{"id":25,"status":"completed","conclusion":"cancelled","details_url":"https://github.com/owner/repo/actions/runs/160/job/4"}'
     local running='{"id":25,"status":"in_progress","conclusion":null,"details_url":"https://github.com/owner/repo/actions/runs/160/job/4"}'
+    local ok_new='{"id":40,"status":"completed","conclusion":"success","details_url":"https://github.com/owner/repo/actions/runs/170/job/5"}'
+    local skipped='{"id":40,"status":"completed","conclusion":"skipped","details_url":"https://github.com/owner/repo/actions/runs/170/job/5"}'
+    local neutral='{"id":40,"status":"completed","conclusion":"neutral","details_url":"https://github.com/owner/repo/actions/runs/170/job/5"}'
+    local timed_out='{"id":40,"status":"completed","conclusion":"timed_out","details_url":"https://github.com/owner/repo/actions/runs/170/job/5"}'
 
     # Each row: fixture lines | gh exit | expected exit | description.
-    # The newest-wins rows (ok then bad, and bad then ok) are both present so
-    # a mirror that picked "any success" or "first line" cannot pass.
+    # "Newest" is the highest id, NOT the last line: the API's order is not
+    # guaranteed, so the newest-wins rows appear in both line orders. A mirror
+    # that took "any success", the first line, or the last line (no sort)
+    # fails at least one of them.
     local -a cases=(
         "$ok"$'\n'"$own|0|0|newest other run succeeded → mirror passes"
         "$ok"$'\n'"$bad"$'\n'"$own|0|1|newest other run failed → mirror fails (no masking)"
+        "$bad"$'\n'"$ok"$'\n'"$own|0|1|newest failure listed first still wins over an older success"
+        "$ok_new"$'\n'"$bad"$'\n'"$own|0|0|newest success listed first still wins over an older failure"
+        "$bad"$'\n'"$skipped"$'\n'"$own|0|0|a newest skipped verdict (docs-only push) passes"
+        "$bad"$'\n'"$neutral"$'\n'"$own|0|0|a newest neutral verdict passes"
+        "$ok"$'\n'"$timed_out"$'\n'"$own|0|1|a newest timed_out verdict fails"
+        "not json|0|1|an unparseable gh response → fail closed"
         "$bad"$'\n'"$cancelled"$'\n'"$own|0|1|a cancelled newer run does not hide a failure"
         "$ok"$'\n'"$cancelled"$'\n'"$own|0|0|a cancelled newest run falls back to the older success"
         "$ok"$'\n'"$running"$'\n'"$own|0|1|newest other run still in progress → fail closed"
@@ -642,6 +654,22 @@ test_pr_tier_mirror_verdict() {
             /usr/bin/echo "  row ${i}: gh was never called — the mirror path was not taken"
             violations=$((violations + 1))
         fi
+    done
+
+    # The query itself: without filter=all the API returns only the latest
+    # run per name (which may be this run's own), and the wrong SHA or check
+    # name mirrors an unrelated verdict. The stub ignores its arguments, so
+    # pin them here.
+    local calls needle
+    calls=$(/usr/bin/cat "$TEST_TEMP_DIR/gh-stub-1/gh.calls" 2>/dev/null) || calls=""
+    for needle in "repos/owner/repo/commits/deadbeef/check-runs" "check_name=PR%20Tier" "filter=all" "--paginate"; do
+        case "$calls" in
+            *"$needle"*) ;;
+            *)
+                /usr/bin/echo "  gh query is missing '${needle}': ${calls:-<no call>}"
+                violations=$((violations + 1))
+                ;;
+        esac
     done
 
     # Discriminating row: a `ci/full-build` add is a RELEVANT event and must
