@@ -118,8 +118,8 @@ test_runtime_lib_installed() {
     # consumer does: a literal path is tested as written (so a typo in the
     # directory counts, not just the basename), and a $VAR/<name>.sh reference
     # (entrypoint's $_RUNTIME_LIB) is expanded through that file's own
-    # assignment -- or, where it is computed (healthcheck's RUNTIME_LIB), the
-    # file's one lib-dir literal -- so a typo'd assignment or use-site variable
+    # assignment -- or, where it is computed (healthcheck's RUNTIME_LIB), every
+    # lib-dir literal in the file -- so a typo'd assignment or use-site variable
     # fails too. The known consumers must be among those scanned, so a regex
     # that matches nothing cannot print the sentinel; a grep error fails rather
     # than silently shrinking the scan.
@@ -144,10 +144,12 @@ for f in $consumers; do
         name=${ref%%/*}; name=${name#\$}; name=${name#\{}; name=${name%\}}
         dir=$(command sed -nE "s/^[[:space:]]*${name}=\"?(\\/[^\"\$]*)\"?[[:space:]]*\$/\\1/p" "$f")
         if [ -z "$dir" ] && command grep -qE "^[[:space:]]*${name}=" "$f"; then
-            dir=$(command grep -ohE "${libdir}\"" "$f" | command sort -u)
+            dir=$(command grep -ohE "${libdir}\\}?\"" "$f" | command sed -E 's/\}?"$//' | command sort -u)
         fi
-        dir=${dir%\"}
-        [[ -n "$dir" && "$dir" != *$'\n'* ]] && [ -f "$dir/${ref#*/}" ] || missing="$missing $f:$ref"
+        [ -n "$dir" ] || missing="$missing $f:$ref"
+        for d in $dir; do
+            [ -f "$d/${ref#*/}" ] || missing="$missing $f:$ref@$d"
+        done
     done
 done
 unseen=""
