@@ -488,14 +488,13 @@ extract_pr_tier_script() {
 # Run the extracted rollup under one (DETECT_RESULT, MODE, BUILD_RESULT) triple
 # and echo its exit code. Never lets a non-zero exit abort the suite.
 #
-# The event env defaults to a plain push (`synchronize`): on a real runner
-# these are always set, and the run block reads them under `set -u`. The
-# mirror tests below override them (#1099).
+# The event env is a plain push (`synchronize`): on a real runner these are
+# always set, and the run block reads them under `set -u`. Label events are
+# covered by run_pr_tier_mirror below (#1099).
 run_pr_tier() {
     local script="$1" detect="$2" mode="$3" build="$4" rc=0
     DETECT_RESULT="$detect" MODE="$mode" BUILD_RESULT="$build" \
-        EVENT_ACTION="${PR_TIER_EVENT_ACTION:-synchronize}" \
-        EVENT_LABEL="${PR_TIER_EVENT_LABEL:-}" \
+        EVENT_ACTION="synchronize" EVENT_LABEL="" \
         REPO="owner/repo" HEAD_SHA="deadbeef" RUN_ID="200" \
         bash "$script" >/dev/null 2>&1 || rc=$?
     /usr/bin/printf '%s\n' "$rc"
@@ -581,8 +580,8 @@ EOF
     /usr/bin/chmod +x "$dir/gh"
 }
 
-# Run the extracted rollup as an irrelevant-label run (or with $4 as the
-# label) against a gh stub dir $2. Echoes the exit code.
+# Run the extracted rollup $1 as a `labeled` run for label $3 (default: an
+# irrelevant one) against the gh stub dir $2. Echoes the exit code.
 run_pr_tier_mirror() {
     local script="$1" stub="$2" label="${3:-status/pr-pending}" rc=0
     BASH_ENV="" PATH="$stub:$PATH" \
