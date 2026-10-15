@@ -109,7 +109,9 @@ test_trap_registered_for_exit() {
         unset _EXIT_HANDLERS_LOADED 2>/dev/null || true
         source "$SOURCE_FILE"
         # Check that EXIT trap includes cleanup_on_exit
-        trap -p EXIT | command grep -q "cleanup_on_exit" || exit 1
+        local traps
+        traps=$(trap -p EXIT)
+        command grep -q "cleanup_on_exit" <<<"$traps" || exit 1
     )
     assert_equals "0" "$?" "EXIT trap is registered with cleanup_on_exit"
 }

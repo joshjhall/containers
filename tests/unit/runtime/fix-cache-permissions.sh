@@ -137,7 +137,9 @@ predicate_needs_fix() {
     # $1 = test cache root, $2 = target uid, $3 = target gid
     # Returns 0 when a fix would be triggered, 1 when the predicate would
     # short-circuit (i.e., everything already aligned).
-    if command find "$1" \( ! -uid "$2" -o ! -gid "$3" \) -print -quit 2>/dev/null | command grep -q .; then
+    local hit
+    hit=$(command find "$1" \( ! -uid "$2" -o ! -gid "$3" \) -print -quit 2>/dev/null || true)
+    if [ -n "$hit" ]; then
         return 0
     fi
     return 1
