@@ -134,17 +134,16 @@ for d in /usr/local/bin /usr/local/sbin /etc/container/startup /opt/container-ru
 done
 errfile=$(command mktemp)
 consumers=$(command grep -rlIE "$lit|$var" $dirs </dev/null 2>"$errfile")
-errs=$(<"$errfile")
 missing=""
 for f in $consumers; do
-    for ref in $(command grep -ohE "$lit" "$f" | command sort -u); do
+    for ref in $(command grep -ohE "$lit" "$f" 2>>"$errfile" | command sort -u); do
         [ -f "$ref" ] || missing="$missing $f:$ref"
     done
-    for ref in $(command grep -ohE "$var" "$f" | command sort -u); do
+    for ref in $(command grep -ohE "$var" "$f" 2>>"$errfile" | command sort -u); do
         name=${ref%%/*}; name=${name#\$}; name=${name#\{}; name=${name%\}}
-        dir=$(command sed -nE "s/^[[:space:]]*${name}=\"?(\\/[^\"\$]*)\"?[[:space:]]*\$/\\1/p" "$f")
-        if [ -z "$dir" ] && command grep -qE "^[[:space:]]*${name}=" "$f"; then
-            dir=$(command grep -ohE "${libdir}\\}?\"" "$f" | command sed -E 's/\}?"$//' | command sort -u)
+        dir=$(command sed -nE "s/^[[:space:]]*${name}=\"?(\\/[^\"\$]*)\"?[[:space:]]*\$/\\1/p" "$f" 2>>"$errfile")
+        if [ -z "$dir" ] && command grep -qE "^[[:space:]]*${name}=" "$f" 2>>"$errfile"; then
+            dir=$(command grep -ohE "${libdir}\\}?\"" "$f" 2>>"$errfile" | command sed -E 's/\}?"$//' | command sort -u)
         fi
         [ -n "$dir" ] || missing="$missing $f:$ref"
         for d in $dir; do
@@ -152,6 +151,7 @@ for f in $consumers; do
         done
     done
 done
+errs=$(<"$errfile")
 unseen=""
 for want in /usr/local/bin/entrypoint /usr/local/bin/workspace-fs-health-cron /usr/local/bin/healthcheck /etc/container/startup/42-workspace-fs-health.sh; do
     command grep -qxF "$want" <<<"$consumers" || unseen="$unseen $want"
