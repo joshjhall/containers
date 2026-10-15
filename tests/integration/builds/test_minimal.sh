@@ -114,24 +114,47 @@ test_runtime_lib_installed() {
 
     # Every other installed consumer loads its fragment behind a bare [ -f ],
     # so a path typo skips it at boot without failing (#1095). Scan the
-    # installed scripts for fragment references -- both the literal path and
-    # entrypoint's $_RUNTIME_LIB/<name>.sh indirection -- and require each to
-    # exist. The known consumers must be among those scanned, so a regex that
-    # matches nothing cannot print the sentinel.
+    # installed scripts for fragment references and resolve each the way its
+    # consumer does: a literal path is tested as written (so a typo in the
+    # directory counts, not just the basename), and a $VAR/<name>.sh reference
+    # (entrypoint's $_RUNTIME_LIB) is expanded through that file's own
+    # assignment -- or, where it is computed (healthcheck's RUNTIME_LIB), the
+    # file's one lib-dir literal -- so a typo'd assignment or use-site variable
+    # fails too. The known consumers must be among those scanned, so a regex
+    # that matches nothing cannot print the sentinel; a grep error fails rather
+    # than silently shrinking the scan.
     local scan
     read -r -d '' scan <<'EOF' || true
-re='(/opt/container-runtime/lib|\$\{?_RUNTIME_LIB\}?)/[A-Za-z0-9_.-]+\.sh'
-consumers=$(command grep -rlIE "$re" /usr/local/bin /usr/local/sbin /etc/container/startup /opt/container-runtime 2>/dev/null)
+libdir='/opt/container-[A-Za-z0-9_.-]+/lib[A-Za-z0-9_.-]*'
+lit="$libdir/[A-Za-z0-9_./-]+\\.sh"
+var='\$\{?_?[A-Z_]*RUNTIME[A-Z_]*\}?/[A-Za-z0-9_./-]+\.sh'
+dirs=""
+for d in /usr/local/bin /usr/local/sbin /etc/container/startup /opt/container-runtime; do
+    [ -d "$d" ] && dirs="$dirs $d"
+done
+errfile=$(command mktemp)
+consumers=$(command grep -rlIE "$lit|$var" $dirs </dev/null 2>"$errfile")
+errs=$(<"$errfile")
 missing=""
-for ref in $(command grep -ohE "$re" $consumers </dev/null | command sort -u); do
-    path="/opt/container-runtime/lib/${ref##*/}"
-    [ -f "$path" ] || missing="$missing $path"
+for f in $consumers; do
+    for ref in $(command grep -ohE "$lit" "$f" | command sort -u); do
+        [ -f "$ref" ] || missing="$missing $f:$ref"
+    done
+    for ref in $(command grep -ohE "$var" "$f" | command sort -u); do
+        name=${ref%%/*}; name=${name#\$}; name=${name#\{}; name=${name%\}}
+        dir=$(command sed -nE "s/^[[:space:]]*${name}=\"?(\\/[^\"\$]*)\"?[[:space:]]*\$/\\1/p" "$f")
+        if [ -z "$dir" ] && command grep -qE "^[[:space:]]*${name}=" "$f"; then
+            dir=$(command grep -ohE "${libdir}\"" "$f" | command sort -u)
+        fi
+        dir=${dir%\"}
+        [[ -n "$dir" && "$dir" != *$'\n'* ]] && [ -f "$dir/${ref#*/}" ] || missing="$missing $f:$ref"
+    done
 done
 unseen=""
 for want in /usr/local/bin/entrypoint /usr/local/bin/workspace-fs-health-cron /etc/container/startup/42-workspace-fs-health.sh; do
     command grep -qxF "$want" <<<"$consumers" || unseen="$unseen $want"
 done
-if [ -z "$missing$unseen" ]; then command echo consumers-ok; else command echo "missing:$missing unseen:$unseen"; fi
+if [ -z "$missing$unseen$errs" ]; then command echo consumers-ok; else command echo "missing:$missing unseen:$unseen errors: $errs"; fi
 EOF
     assert_command_in_container "$image" "$scan" \
         "consumers-ok" \
