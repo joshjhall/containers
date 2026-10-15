@@ -120,7 +120,7 @@ Residuals — all fail closed (a false red, never a false green):
    would otherwise read as a healthy nothing-to-build and report green over an
    empty build. Reporting green on no evidence is the #854 failure class, one
    hop upstream. Both directions are covered offline by
-   [`tests/unit/required-checks.sh`](../../tests/unit/required-checks.sh), which
+   [`tests/unit/required-checks-pr-tier.sh`](../../tests/unit/required-checks-pr-tier.sh), which
    extracts this job's run block and executes it across the upstream states.
 
 ### Cache strategy
