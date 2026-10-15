@@ -234,10 +234,12 @@ test_json_output_format() {
     fi
 
     # Test that the script supports --json flag
-    local output
+    local output help_text
 
-    # First check if --help mentions JSON
-    if "$PROJECT_ROOT/bin/check-versions.sh" --help 2>&1 | command grep -q "json"; then
+    # First check if --help mentions JSON. Captured, not piped into grep -q:
+    # an early match would SIGPIPE the producer under pipefail (#1092/#1097).
+    help_text=$("$PROJECT_ROOT/bin/check-versions.sh" --help 2>&1 || true)
+    if command grep -q "json" <<<"$help_text"; then
         # JSON is supported, test it with a short timeout
         output=$(timeout 5 "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache 2>/dev/null || true)
 

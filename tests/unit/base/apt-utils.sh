@@ -166,8 +166,12 @@ test_apt_retry_hook_support() {
 
 # Test: apt_update delegates to apt_retry
 test_apt_update_delegates_to_apt_retry() {
-    # apt_update should call apt_retry instead of having its own retry loop
-    if command grep -A5 "^apt_update()" "$PROJECT_ROOT/lib/base/apt-utils.sh" | command grep -q "apt_retry"; then
+    # apt_update should call apt_retry instead of having its own retry loop.
+    # Captured, not piped into grep -q: an early match would SIGPIPE the
+    # producer under pipefail (#1092/#1097).
+    local body
+    body=$(command grep -A5 "^apt_update()" "$PROJECT_ROOT/lib/base/apt-utils.sh" || true)
+    if command grep -q "apt_retry" <<<"$body"; then
         assert_true true "apt_update delegates to apt_retry"
     else
         assert_true false "apt_update does not delegate to apt_retry"

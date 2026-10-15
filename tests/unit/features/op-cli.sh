@@ -515,8 +515,13 @@ run_test test_op_ref_loop_excludes_file_ref_in_source "_REF loop excludes _FILE_
 # Test: op-env-safe must not use eval to run jq-generated export commands
 test_op_env_safe_no_eval_of_field_values() {
     local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
-    # The old vulnerable pattern: jq produces 'export LABEL="VALUE"' and eval runs it
-    if command grep -A 20 'op-env-safe()' "$source_file" | command grep -q 'eval "\$export_commands"'; then
+    # The old vulnerable pattern: jq produces 'export LABEL="VALUE"' and eval runs it.
+    # Bodies in this file are captured, then matched via a herestring — never
+    # piped into grep -q, whose early exit SIGPIPEs the producer under
+    # pipefail (#1092/#1097).
+    local body
+    body=$(command grep -A 20 'op-env-safe()' "$source_file" || true)
+    if command grep -q 'eval "\$export_commands"' <<<"$body"; then
         fail_test "op-env-safe still uses eval on jq-generated export commands (injection risk)"
     else
         pass_test "op-env-safe does not eval jq-generated export commands"
@@ -527,7 +532,9 @@ test_op_env_safe_no_eval_of_field_values() {
 test_op_env_safe_uses_safe_export() {
     local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
     # Search the full function body (up to 30 lines after the function definition)
-    if command grep -A 30 '^op-env-safe()' "$source_file" | command grep -qE '@tsv|export "\$'; then
+    local body
+    body=$(command grep -A 30 '^op-env-safe()' "$source_file" || true)
+    if command grep -qE '@tsv|export "\$' <<<"$body"; then
         pass_test "op-env-safe uses safe @tsv / direct export pattern"
     else
         fail_test "op-env-safe should use @tsv or direct export pattern"
@@ -538,7 +545,9 @@ test_op_env_safe_uses_safe_export() {
 test_op_env_uses_safe_escaping() {
     local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
     # Search the full function body (up to 10 lines after the function definition)
-    if command grep -A 10 '^op-env()' "$source_file" | command grep -q '@sh'; then
+    local body
+    body=$(command grep -A 10 '^op-env()' "$source_file" || true)
+    if command grep -q '@sh' <<<"$body"; then
         pass_test "op-env uses jq @sh for safe value escaping"
     else
         fail_test "op-env should use jq @sh for safe value escaping"
@@ -683,7 +692,9 @@ test_cache_startup_writes_cache() {
 test_cache_permissions_bashrc() {
     local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
     # The _op_write_cache function must set 0600 on the cache file
-    if command grep -A 30 '_op_write_cache()' "$source_file" | command grep -q 'chmod 600'; then
+    local body
+    body=$(command grep -A 30 '_op_write_cache()' "$source_file" || true)
+    if command grep -q 'chmod 600' <<<"$body"; then
         pass_test "bashrc _op_write_cache sets chmod 600 on cache"
     else
         fail_test "bashrc _op_write_cache should set chmod 600 on cache"
@@ -718,7 +729,9 @@ test_cache_atomic_write_bashrc() {
     else
         fail_test "bashrc should use .tmp.\$\$ for atomic cache write"
     fi
-    if command grep -A 30 '_op_write_cache()' "$source_file" | command grep -q 'mv .*_cache_tmp.*_OP_SECRETS_CACHE'; then
+    local body
+    body=$(command grep -A 30 '_op_write_cache()' "$source_file" || true)
+    if command grep -q 'mv .*_cache_tmp.*_OP_SECRETS_CACHE' <<<"$body"; then
         pass_test "bashrc _op_write_cache uses mv for atomic rename"
     else
         fail_test "bashrc _op_write_cache should use mv for atomic rename"
@@ -801,7 +814,9 @@ test_cache_functional_sourcing() {
 # Static: bashrc _op_resolve_git_identity has early return when both vars set
 test_cache_git_identity_early_return() {
     local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
-    if command grep -A 10 '_op_resolve_git_identity()' "$source_file" | command grep -q 'GIT_USER_NAME.*GIT_USER_EMAIL'; then
+    local body
+    body=$(command grep -A 10 '_op_resolve_git_identity()' "$source_file" || true)
+    if command grep -q 'GIT_USER_NAME.*GIT_USER_EMAIL' <<<"$body"; then
         pass_test "bashrc _op_resolve_git_identity has early return for cached vars"
     else
         fail_test "bashrc _op_resolve_git_identity should check both GIT_USER_NAME and GIT_USER_EMAIL"

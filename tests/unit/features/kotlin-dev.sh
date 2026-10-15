@@ -301,7 +301,8 @@ test_claude_lsp_integration() {
 
 if command -v claude &>/dev/null && [ "${ENABLE_LSP_TOOL:-0}" = "1" ]; then
     if command -v kotlin-language-server &>/dev/null; then
-        if ! claude plugin list 2>/dev/null | command grep -q "kotlin"; then
+        plugins=$(claude plugin list 2>/dev/null || true)
+        if ! command grep -q "kotlin" <<<"$plugins"; then
             echo "Installing Kotlin LSP plugin for Claude Code..."
             claude plugin add kotlin-language-server@claude-code-lsps 2>/dev/null || true
         fi

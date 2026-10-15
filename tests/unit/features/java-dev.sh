@@ -330,8 +330,12 @@ test_maven_daemon_architecture_check() {
         return
     fi
 
-    # Check that Maven Daemon only installs on amd64 (not arm64)
-    if command grep -A2 "Maven Daemon" "$java_dev_script" | command grep -q 'if \[ "$ARCH" = "amd64" \]'; then
+    # Check that Maven Daemon only installs on amd64 (not arm64). Captured, not
+    # piped into grep -q: an early match would SIGPIPE the producer under
+    # pipefail (#1092/#1097).
+    local mvnd_block
+    mvnd_block=$(command grep -A2 "Maven Daemon" "$java_dev_script" || true)
+    if command grep -q 'if \[ "$ARCH" = "amd64" \]' <<<"$mvnd_block"; then
         assert_true true "java-dev.sh only installs Maven Daemon on amd64"
     else
         assert_true false "java-dev.sh has incorrect Maven Daemon architecture check"

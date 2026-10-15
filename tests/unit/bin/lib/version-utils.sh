@@ -262,8 +262,12 @@ test_script_sources_cleanly() {
     # Need to source common.sh first (dependency)
     source "$PROJECT_ROOT/bin/lib/common.sh"
 
-    # Source the script in a subshell to catch any errors
-    if (source "$PROJECT_ROOT/bin/lib/version-utils.sh" 2>&1 | command grep -qi "error"); then
+    # Source the script in a subshell to catch any errors. Captured, not piped
+    # into grep -q: an early match would SIGPIPE the producer, and pipefail
+    # would turn a real error into a false "sources cleanly" (#1092/#1097).
+    local out
+    out=$(source "$PROJECT_ROOT/bin/lib/version-utils.sh" 2>&1 || true)
+    if command grep -qi "error" <<<"$out"; then
         assert_true false "version-utils.sh has sourcing errors"
     else
         assert_true true "version-utils.sh sources without errors"
