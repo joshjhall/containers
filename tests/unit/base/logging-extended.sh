@@ -153,7 +153,7 @@ test_log_message_before_feature_start() {
     output=$(log_message "Before feature start" 2>&1)
 
     assert_true [ $? -eq 0 ] "log_message does not crash before feature start"
-    if echo "$output" | command grep -q "Before feature start"; then
+    if command grep -q "Before feature start" <<<"$output"; then
         assert_true true "log_message outputs to stdout when uninitialized"
     else
         assert_true false "log_message output missing when uninitialized"
@@ -172,7 +172,7 @@ test_log_error_before_feature_start() {
     output=$(log_error "Error before feature start" 2>&1)
 
     assert_true [ $? -eq 0 ] "log_error does not crash before feature start"
-    if echo "$output" | command grep -q "Error before feature start"; then
+    if command grep -q "Error before feature start" <<<"$output"; then
         assert_true true "log_error outputs to stderr when uninitialized"
     else
         assert_true false "log_error output missing when uninitialized"
