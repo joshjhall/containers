@@ -111,6 +111,31 @@ test_runtime_lib_installed() {
         "out=\$($script 2>&1); rc=\$?; if [ \"\$rc\" -ne 0 ] || command grep -q 'not found' <<<\"\$out\"; then command echo \"fragment-missing (rc=\$rc): \$out\"; else command echo fragment-ok; fi" \
         "fragment-ok" \
         "Installed $script should load its repo-tree fragment"
+
+    # Every other installed consumer loads its fragment behind a bare [ -f ],
+    # so a path typo skips it at boot without failing (#1095). Scan the
+    # installed scripts for fragment references -- both the literal path and
+    # entrypoint's $_RUNTIME_LIB/<name>.sh indirection -- and require each to
+    # exist. The known consumers must be among those scanned, so a regex that
+    # matches nothing cannot print the sentinel.
+    local scan
+    read -r -d '' scan <<'EOF' || true
+re='(/opt/container-runtime/lib|\$\{?_RUNTIME_LIB\}?)/[A-Za-z0-9_.-]+\.sh'
+consumers=$(command grep -rlIE "$re" /usr/local/bin /usr/local/sbin /etc/container/startup /opt/container-runtime 2>/dev/null)
+missing=""
+for ref in $(command grep -ohE "$re" $consumers </dev/null | command sort -u); do
+    path="/opt/container-runtime/lib/${ref##*/}"
+    [ -f "$path" ] || missing="$missing $path"
+done
+unseen=""
+for want in /usr/local/bin/entrypoint /usr/local/bin/workspace-fs-health-cron /etc/container/startup/42-workspace-fs-health.sh; do
+    command grep -qxF "$want" <<<"$consumers" || unseen="$unseen $want"
+done
+if [ -z "$missing$unseen" ]; then command echo consumers-ok; else command echo "missing:$missing unseen:$unseen"; fi
+EOF
+    assert_command_in_container "$image" "$scan" \
+        "consumers-ok" \
+        "Every installed /opt/container-runtime/lib reference should resolve"
 }
 
 # Test: User permissions and environment
