@@ -127,17 +127,44 @@ permissions work correctly and skips the overlay.
 
 ### `Unable to create '.git/index.lock': File exists` on macOS
 
-**Symptom**: Every git write fails with `fatal: Unable to create
-'/workspace/<repo>/.git/index.lock': File exists`, even though no git command
-is running. Less often, `git status` shows every tracked file as a staged
-deletion (the index was emptied).
+**Symptom**: git writes intermittently fail with `fatal: Unable to create
+'/workspace/<repo>/.git/index.lock': File exists`. Commits whose pre-commit
+hooks re-stage fixed files fail with `couldn't stage fixed files: … exit
+status 128` nearly every time. Less often, `git status` shows every tracked
+file as a staged deletion (the index was emptied).
 
-**Cause**: Docker Desktop's virtiofs mount occasionally misreports
-`rename(2)`. Git commits an index write by renaming `index.lock` over `index`.
-When the rename is misreported, `index` already has the new content but
-`index.lock` reappears and stays, so the next git write can't take the lock.
-The defect is in virtiofs, not in the bindfs overlay (issue #1086). Measured
-with a loop that mirrors git's index write, anomalies per 10,000 cycles:
+**Cause**: mostly two git clients fighting over one index (issue #1114,
+upstream [zed-industries/zed#52265](https://github.com/zed-industries/zed/issues/52265)).
+With the repo open in Zed, git runs against the same `.git` from both the
+macOS host and Zed's remote server in the container. Git caches each file's
+`dev`/`ino`/`uid`/`gid` in the index, and the two sides see different values
+for the same file across the virtiofs mount. So every pass reads the other
+side's entries as changed and rewrites the whole index under `index.lock`.
+After a container-side `git add`, `git ls-files --debug` showed the entry
+rewritten with host values (`dev: 16777244 uid: 501`) within about ten
+seconds.
+
+`--no-optional-locks` doesn't help. Zed already passes it, but porcelain
+`git diff` (which Zed runs once per changed file, as `git diff --numstat`)
+never checks it: `refresh_index_quietly()` in git's `builtin/diff.c` takes
+the lock whenever it sees a stat-only mismatch. Only `git status` honors the
+flag.
+
+Measured on this repo, 300 back-to-back `touch f && git add f` from inside
+the container:
+
+| Config                    | `index.lock` failures |
+| ------------------------- | --------------------: |
+| default                   |                 6/300 |
+| `core.checkStat=minimal`  |                 0/300 |
+
+A clone on the same mount that Zed wasn't watching had 0/400 failures. So the
+mount alone isn't the cause.
+
+A smaller, separate effect does come from the mount: Docker Desktop's
+virtiofs occasionally misreports the `rename(2)` git uses to commit an index
+write, leaving a stale `index.lock` behind (issue #1086). Measured with a
+loop that mirrors git's index write, anomalies per 10,000 cycles:
 
 | Mount                                                       | Anomalies |
 | ----------------------------------------------------------- | --------: |
@@ -145,12 +172,22 @@ with a loop that mirrors git's index write, anomalies per 10,000 cycles:
 | bindfs overlay (default)                                    |        18 |
 | bindfs + `entry_timeout=0,attr_timeout=0,negative_timeout=0` |        22 |
 
-So disabling FUSE caches does not help, and neither does excluding the repo
-with `BINDFS_SKIP_PATHS`: the mount underneath has the same problem.
+Disabling FUSE caches doesn't help with that, and neither does excluding the
+repo with `BINDFS_SKIP_PATHS`.
 
 **Solution**:
 
-1. Make sure no git command is running against the repo (including from
+1. Stop the host and container from fighting over the index. Run this once
+   per affected repo; `.git/config` is on the mount, so both sides pick it up:
+
+   ```bash
+   git config core.checkStat minimal
+   ```
+
+   This makes git compare only whole-second mtime and size, the stat fields
+   that agree across the boundary. It's safe to keep after Zed is fixed.
+
+1. If a lock is already stuck, make sure no git command is running against the repo (including from
    another container or the host), then remove the lock:
 
    ```bash

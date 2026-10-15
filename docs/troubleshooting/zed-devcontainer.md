@@ -84,6 +84,13 @@ has well-known gaps versus VS Code. The ones that affect this build system:
   [Fix: recover-entrypoint](#fix-recover-entrypoint) for the replay
   mechanism that papers over this locally. Upstream bug:
   [zed-industries/zed#56357](https://github.com/zed-industries/zed/issues/56357).
+- **Host and container git fight over `.git/index`** — on macOS, git on the
+  host and Zed's remote server in the container keep rewriting each other's
+  index stat data, so git commands and lefthook re-stages hit
+  `Unable to create '.git/index.lock': File exists`. Run
+  `git config core.checkStat minimal` in the repo. Upstream bug:
+  [zed-industries/zed#52265](https://github.com/zed-industries/zed/issues/52265).
+  See [runtime issues](runtime-issues.md#unable-to-create-gitindexlock-file-exists-on-macos).
 - **The remote user is remapped to the host UID** — unless told otherwise,
   Zed rebuilds the image with the user moved to your host UID/GID (501:20 on
   macOS). Generated configs opt out with `"updateRemoteUserUID": false`. See

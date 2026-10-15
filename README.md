@@ -98,6 +98,22 @@ See [`docs/troubleshooting/zed-devcontainer.md`](docs/troubleshooting/zed-devcon
 for the full parity matrix, requirements, open-in-Zed flow, lifecycle hook
 behavior, and known limitations.
 
+> **Known issue (Zed + macOS):** git commands intermittently fail with
+> `Unable to create '.git/index.lock': File exists`, and pre-commit hooks
+> that re-stage fixed files fail nearly every time. Git on the macOS host and
+> Zed's remote server in the container keep rewriting each other's index.
+> Each side reads the other's `dev`/`uid`/`gid` as changed, and `git diff`
+> takes `index.lock` to refresh the index even with `--no-optional-locks`.
+> Until [zed-industries/zed#52265](https://github.com/zed-industries/zed/issues/52265)
+> is fixed, run this once in each affected repo (`.git/config` is shared by
+> the host and the container):
+>
+> ```bash
+> git config core.checkStat minimal
+> ```
+>
+> See [runtime issues](docs/troubleshooting/runtime-issues.md#unable-to-create-gitindexlock-file-exists-on-macos).
+
 ---
 
 ## Available Features
