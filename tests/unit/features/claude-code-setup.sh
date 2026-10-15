@@ -151,7 +151,7 @@ export CLAUDE_SETUP_RETRY_DELAY=0
 _match_plugin_in_list() {
     local plugin_name="$1"
     local list_output="$2"
-    echo "$list_output" | command grep -qE "^[[:space:]]*❯ ${plugin_name}@" 2>/dev/null
+    command grep -qE "^[[:space:]]*❯ ${plugin_name}@" <<<"$list_output" 2>/dev/null
 }
 
 # ============================================================================
@@ -246,7 +246,7 @@ _mock_call_count() {
 _match_mcp_server_in_list() {
     local server_name="$1"
     local list_output="$2"
-    echo "$list_output" | command grep -qE "^${server_name}:" 2>/dev/null
+    command grep -qE "^${server_name}:" <<<"$list_output" 2>/dev/null
 }
 
 _parse_git_remote_host() {
@@ -2322,7 +2322,7 @@ test_file_warns_when_env_also_set() {
     local result stderr_output
     stderr_output=$(_resolve_override_list_or_file "TEST_WARN_VAR" "a,b" 2>&1 1>/dev/null) || true
     # The warning should mention that env var is ignored
-    if echo "$stderr_output" | command grep -q "TEST_WARN_VAR ignored"; then
+    if command grep -q "TEST_WARN_VAR ignored" <<<"$stderr_output"; then
         pass_test "Warning emitted when env var also set"
     else
         pass_test "Warning behavior (file still takes precedence)"

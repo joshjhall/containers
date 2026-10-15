@@ -989,11 +989,11 @@ test_agnix_post_audit_install_failure_is_not_fatal() {
     # success log / else / failure handling / fi).
     arm=$(command sed -n "${global_line:-1},$((${global_line:-1} + 4))p" "$code_only")
 
-    command printf '%s' "$arm" | command grep -q 'log_warning "agnix installation failed'
+    command grep -q 'log_warning "agnix installation failed' <<<"$arm"
     assert_equals "0" "$?" \
         "a failure of the verified-path install logs a warning"
 
-    command printf '%s' "$arm" | command grep -q 'return 1'
+    command grep -q 'return 1' <<<"$arm"
     assert_equals "1" "$?" \
         "a post-audit install failure must NOT abort the build — the bytes were verified"
 }
@@ -1271,7 +1271,7 @@ test_zed_lsp_config_has_comments() {
     # The heredoc body (between the JSON markers) must carry // comments.
     local body
     body=$(command awk '/<<.?JSON.?/{f=1;next} /^JSON$/{f=0} f' "$script")
-    if printf '%s' "$body" | command grep -q '//'; then
+    if command grep -q '//' <<<"$body"; then
         assert_true true "zed-lsp settings body is commented JSONC (self-documenting)"
     else
         assert_true false "zed-lsp settings body must ship inline // comments (JSONC)"

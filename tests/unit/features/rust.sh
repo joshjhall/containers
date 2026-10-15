@@ -370,8 +370,8 @@ test_rust_script_installed() {
         command grep -E '^install_feature_test_script ' | command tr -s ' ')
     # Anchored on the name argument's end (EOL or the next argument) so a
     # name that merely starts with test-rust cannot satisfy it.
-    if command printf '%s\n' "$call" | command grep -qE \
-        "^install_feature_test_script /tmp/build-scripts/features/lib/rust/test-rust\.sh test-rust( |$)"; then
+    if command grep -qE \
+        "^install_feature_test_script /tmp/build-scripts/features/lib/rust/test-rust\.sh test-rust( |$)" <<<"$call"; then
         pass_test
     else
         fail_test "rust.sh does not install lib/rust/test-rust.sh as test-rust at top level (got: $call)"
