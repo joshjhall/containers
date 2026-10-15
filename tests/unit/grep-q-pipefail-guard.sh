@@ -55,9 +55,11 @@ pipe_grep_q_sites() {
             function is_comment(s) { return s ~ /^[[:space:]]*#/ }
             # GREP_Q: a grep invocation whose flags include q, anchored where a
             # pipe consumer starts. No `|` precedes it in this regex; callers
-            # supply that context.
+            # supply that context. Any tokens may sit between grep and the q
+            # flag (value-taking flags like -m1, -A 2, -e P), stopping at a
+            # shell separator so a later command on the line is not blamed.
             BEGIN {
-                grep_q = "(command[[:space:]]+|/usr/bin/|/bin/)?grep([[:space:]]+-[A-Za-z]+)*[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|$)"
+                grep_q = "(command[[:space:]]+|/usr/bin/|/bin/)?grep([[:space:]]+[^|;&[:space:]]+)*[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|$)"
             }
             FNR == 1 { pending = 0 }
             {
@@ -120,11 +122,15 @@ test_scanner_detects_known_shapes() {
         command printf 'command %s -q foo <<<"$x"\n' "$g"                               # 9
         command printf 'producer %s command %s -c foo\n' "$p" "$g"                      # 10
         command printf 'producer %s command %s -v foo\n' "$p" "$g"                      # 11
+        command printf 'producer %s command %s -m1 -q foo\n' "$p" "$g"                  # 12 flag
+        command printf 'producer %s command %s -A 2 -q foo\n' "$p" "$g"                 # 13 flag
+        command printf 'producer %s command %s -e foo -q\n' "$p" "$g"                   # 14 flag
+        command printf 'producer %s command %s -v "x -q"; y -q\n' "$p" "$g"             # 15
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 " "$got" \
-        "scanner flags same-line, prefixed, --quiet and line-continued pipes into grep -q; ignores ||, comments, herestrings, and non-q greps"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 " "$got" \
+        "scanner flags same-line, prefixed, --quiet, value-flag and line-continued pipes into grep -q; ignores ||, comments, herestrings, quoted -q, a later command's -q, and non-q greps"
 }
 
 # ---------------------------------------------------------------------------

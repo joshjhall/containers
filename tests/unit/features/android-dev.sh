@@ -467,7 +467,7 @@ emulator-ci-start() {
     emulator @"$avd_name" -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect &
 
     echo "Waiting for emulator to boot (timeout: ${timeout}s)..."
-    local count=0
+    local count=0 boot_completed
     while [ $count -lt $timeout ]; do
         boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null || true)
         if command grep -q "1" <<<"$boot_completed"; then
