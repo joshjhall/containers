@@ -151,7 +151,7 @@ for f in $consumers; do
     done
 done
 unseen=""
-for want in /usr/local/bin/entrypoint /usr/local/bin/workspace-fs-health-cron /etc/container/startup/42-workspace-fs-health.sh; do
+for want in /usr/local/bin/entrypoint /usr/local/bin/workspace-fs-health-cron /usr/local/bin/healthcheck /etc/container/startup/42-workspace-fs-health.sh; do
     command grep -qxF "$want" <<<"$consumers" || unseen="$unseen $want"
 done
 if [ -z "$missing$unseen$errs" ]; then command echo consumers-ok; else command echo "missing:$missing unseen:$unseen errors: $errs"; fi
