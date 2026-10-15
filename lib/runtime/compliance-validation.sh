@@ -198,12 +198,15 @@ cv_check_security_context() {
 cv_check_health_monitoring() {
     local framework="$1"
     local requirement="$2"
+    # Where the Dockerfile installs bin/healthcheck.sh; CV_HEALTHCHECK_BIN is a
+    # test seam (the build host may carry its own copy at the default path).
+    local healthcheck_bin="${CV_HEALTHCHECK_BIN:-/usr/local/bin/healthcheck}"
 
     # Check if healthcheck is configured
     if [ -n "${HEALTHCHECK_ENABLED:-}" ] && [ "${HEALTHCHECK_ENABLED}" = "true" ]; then
         cv_compliance_check "Health Check" "pass" "$framework" "$requirement" \
             "Health check is configured"
-    elif [ -f "/opt/container-runtime/healthcheck.sh" ]; then
+    elif [ -x "$healthcheck_bin" ]; then
         cv_compliance_check "Health Check" "pass" "$framework" "$requirement" \
             "Health check script is present"
     else
