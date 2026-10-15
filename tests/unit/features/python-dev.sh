@@ -421,8 +421,8 @@ test_python_dev_script_installed() {
         command grep -E '^install_feature_test_script ' | command tr -s ' ')
     # Anchored on the name argument's end (EOL or the next argument) so a
     # name that merely starts with test-python-dev cannot satisfy it.
-    if command printf '%s\n' "$call" | command grep -qE \
-        "^install_feature_test_script /tmp/build-scripts/features/lib/python/test-python-dev\.sh test-python-dev( |$)"; then
+    if command grep -qE \
+        "^install_feature_test_script /tmp/build-scripts/features/lib/python/test-python-dev\.sh test-python-dev( |$)" <<<"$call"; then
         pass_test
     else
         fail_test "python-dev.sh does not install lib/python/test-python-dev.sh as test-python-dev at top level (got: $call)"

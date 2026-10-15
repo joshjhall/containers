@@ -585,7 +585,7 @@ test_exits_zero_on_completion() {
     # Script must end with exit 0
     local last_code_line
     last_code_line=$(command grep -n '^exit' "$SOURCE_FILE" | command tail -1)
-    echo "$last_code_line" | command grep -q 'exit 0' &&
+    command grep -q 'exit 0' <<<"$last_code_line" &&
         assert_true 0 "Script ends with exit 0" ||
         assert_true 1 "Script should end with exit 0"
 }

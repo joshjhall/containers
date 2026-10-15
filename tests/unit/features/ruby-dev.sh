@@ -274,8 +274,8 @@ test_ruby_dev_script_installed() {
         command grep -E '^install_feature_test_script ' | command tr -s ' ')
     # Anchored on the name argument's end (EOL or the next argument) so a
     # name that merely starts with test-ruby-dev cannot satisfy it.
-    if command printf '%s\n' "$call" | command grep -qE \
-        "^install_feature_test_script /tmp/build-scripts/features/lib/ruby/test-ruby-dev\.sh test-ruby-dev( |$)"; then
+    if command grep -qE \
+        "^install_feature_test_script /tmp/build-scripts/features/lib/ruby/test-ruby-dev\.sh test-ruby-dev( |$)" <<<"$call"; then
         pass_test
     else
         fail_test "ruby-dev.sh does not install lib/ruby/test-ruby-dev.sh as test-ruby-dev at top level (got: $call)"

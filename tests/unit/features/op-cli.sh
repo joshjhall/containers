@@ -129,28 +129,28 @@ test_op_ref_pattern_matching() {
     local matches
     matches=$(compgen -v | command grep '^OP_.\+_REF$' || true)
 
-    echo "$matches" | command grep -q "OP_GITHUB_TOKEN_REF" &&
+    command grep -q "OP_GITHUB_TOKEN_REF" <<<"$matches" &&
         assert_true 0 "OP_GITHUB_TOKEN_REF matches pattern" ||
         assert_true 1 "OP_GITHUB_TOKEN_REF should match pattern"
 
-    echo "$matches" | command grep -q "OP_KAGI_API_KEY_REF" &&
+    command grep -q "OP_KAGI_API_KEY_REF" <<<"$matches" &&
         assert_true 0 "OP_KAGI_API_KEY_REF matches pattern" ||
         assert_true 1 "OP_KAGI_API_KEY_REF should match pattern"
 
-    echo "$matches" | command grep -q "OP_MY_PROJECT_SECRET_REF" &&
+    command grep -q "OP_MY_PROJECT_SECRET_REF" <<<"$matches" &&
         assert_true 0 "OP_MY_PROJECT_SECRET_REF matches pattern" ||
         assert_true 1 "OP_MY_PROJECT_SECRET_REF should match pattern"
 
     # Should NOT match
-    echo "$matches" | command grep -q "OP_SERVICE_ACCOUNT_TOKEN" &&
+    command grep -q "OP_SERVICE_ACCOUNT_TOKEN" <<<"$matches" &&
         assert_true 1 "OP_SERVICE_ACCOUNT_TOKEN should not match" ||
         assert_true 0 "OP_SERVICE_ACCOUNT_TOKEN excluded from pattern"
 
-    echo "$matches" | command grep -q '^OP_REF$' &&
+    command grep -q '^OP_REF$' <<<"$matches" &&
         assert_true 1 "OP_REF should not match (no middle)" ||
         assert_true 0 "OP_REF excluded from pattern"
 
-    echo "$matches" | command grep -q '^GITHUB_TOKEN_REF$' &&
+    command grep -q '^GITHUB_TOKEN_REF$' <<<"$matches" &&
         assert_true 1 "GITHUB_TOKEN_REF should not match (no OP_ prefix)" ||
         assert_true 0 "GITHUB_TOKEN_REF excluded from pattern"
 
@@ -371,20 +371,20 @@ test_op_file_ref_pattern_matching() {
     local matches
     matches=$(compgen -v | command grep '^OP_.\+_FILE_REF$' || true)
 
-    echo "$matches" | command grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" &&
+    command grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" <<<"$matches" &&
         assert_true 0 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF matches _FILE_REF pattern" ||
         assert_true 1 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF should match _FILE_REF pattern"
 
-    echo "$matches" | command grep -q "OP_MY_CERT_FILE_REF" &&
+    command grep -q "OP_MY_CERT_FILE_REF" <<<"$matches" &&
         assert_true 0 "OP_MY_CERT_FILE_REF matches _FILE_REF pattern" ||
         assert_true 1 "OP_MY_CERT_FILE_REF should match _FILE_REF pattern"
 
     # Should NOT match
-    echo "$matches" | command grep -q "OP_GITHUB_TOKEN_REF" &&
+    command grep -q "OP_GITHUB_TOKEN_REF" <<<"$matches" &&
         assert_true 1 "OP_GITHUB_TOKEN_REF should not match _FILE_REF pattern" ||
         assert_true 0 "OP_GITHUB_TOKEN_REF excluded from _FILE_REF pattern"
 
-    echo "$matches" | command grep -q "OP_SERVICE_ACCOUNT_TOKEN" &&
+    command grep -q "OP_SERVICE_ACCOUNT_TOKEN" <<<"$matches" &&
         assert_true 1 "OP_SERVICE_ACCOUNT_TOKEN should not match _FILE_REF pattern" ||
         assert_true 0 "OP_SERVICE_ACCOUNT_TOKEN excluded from _FILE_REF pattern"
 
@@ -465,11 +465,11 @@ test_op_file_ref_excludes_from_ref_loop() {
     local ref_matches
     ref_matches=$(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$' || true)
 
-    echo "$ref_matches" | command grep -q "OP_GITHUB_TOKEN_REF" &&
+    command grep -q "OP_GITHUB_TOKEN_REF" <<<"$ref_matches" &&
         assert_true 0 "OP_GITHUB_TOKEN_REF still matches _REF pattern" ||
         assert_true 1 "OP_GITHUB_TOKEN_REF should match _REF pattern"
 
-    echo "$ref_matches" | command grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" &&
+    command grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" <<<"$ref_matches" &&
         assert_true 1 "_FILE_REF var should be excluded from _REF loop" ||
         assert_true 0 "_FILE_REF var correctly excluded from _REF loop"
 

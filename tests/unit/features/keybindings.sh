@@ -58,7 +58,9 @@ test_keybindings_script_format() {
 
     if [ -f "$script" ]; then
         # Check for proper shebang
-        if head -1 "$script" | command grep -q "#!/bin/bash"; then
+        local shebang
+        shebang=$(command head -1 "$script")
+        if command grep -q "#!/bin/bash" <<<"$shebang"; then
             assert_true true "Script has proper shebang"
         else
             assert_true false "Script missing or has incorrect shebang"
