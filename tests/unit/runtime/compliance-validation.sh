@@ -51,7 +51,7 @@ setup() {
     unset ENABLE_AUDIT_LOGGING AUDIT_LOG_FILE LOG_RETENTION_DAYS 2>/dev/null || true
     unset MEMORY_LIMIT CPU_LIMIT 2>/dev/null || true
     unset CONTAINER_PRIVILEGED READ_ONLY_ROOT_FS 2>/dev/null || true
-    unset HEALTHCHECK_ENABLED 2>/dev/null || true
+    unset HEALTHCHECK_ENABLED CV_HEALTHCHECK_BIN 2>/dev/null || true
     unset NETWORK_POLICY_ENFORCED 2>/dev/null || true
     unset BACKUP_ENABLED BACKUP_SCHEDULE 2>/dev/null || true
     unset COMPLIANCE_MODE COMPLIANCE_REPORT_PATH 2>/dev/null || true
@@ -298,10 +298,63 @@ test_health_monitoring_enabled() {
 }
 
 test_health_monitoring_not_configured() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    export CV_HEALTHCHECK_BIN="$tmpdir/absent"
+
     cv_check_health_monitoring "TEST" "11.4" >/dev/null 2>&1
 
     assert_contains "$CV_COMPLIANCE_REPORT" "WARN|TEST|11.4|Health Check" \
         "Health check should warn when not configured"
+
+    command rm -rf "$tmpdir"
+}
+
+test_health_monitoring_script_present() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    export CV_HEALTHCHECK_BIN="$tmpdir/healthcheck"
+    printf '#!/bin/sh\nexit 0\n' >"$CV_HEALTHCHECK_BIN"
+    command chmod 755 "$CV_HEALTHCHECK_BIN"
+
+    cv_check_health_monitoring "TEST" "11.4" >/dev/null 2>&1
+
+    assert_contains "$CV_COMPLIANCE_REPORT" \
+        "PASS|TEST|11.4|Health Check|Health check script is present" \
+        "Health check should pass when the installed script is executable"
+
+    command rm -rf "$tmpdir"
+}
+
+test_health_monitoring_script_not_executable() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    export CV_HEALTHCHECK_BIN="$tmpdir/healthcheck"
+    printf '#!/bin/sh\nexit 0\n' >"$CV_HEALTHCHECK_BIN"
+    command chmod 644 "$CV_HEALTHCHECK_BIN"
+
+    cv_check_health_monitoring "TEST" "11.4" >/dev/null 2>&1
+
+    assert_contains "$CV_COMPLIANCE_REPORT" "WARN|TEST|11.4|Health Check" \
+        "Health check should warn when the script is not executable"
+    assert_not_contains "$CV_COMPLIANCE_REPORT" "PASS|TEST|11.4|Health Check" \
+        "A non-executable script must not count as present"
+
+    command rm -rf "$tmpdir"
+}
+
+test_health_monitoring_default_matches_dockerfile() {
+    local root dockerfile_dest probe_default
+    root="$(dirname "${BASH_SOURCE[0]}")/../../.."
+    dockerfile_dest=$(command awk '$1 == "COPY" && $2 == "bin/healthcheck.sh" { print $3 }' \
+        "$root/Dockerfile")
+    probe_default=$(command sed -n \
+        's/.*healthcheck_bin="\${CV_HEALTHCHECK_BIN:-\([^}]*\)}".*/\1/p' \
+        "$root/lib/runtime/compliance-validation.sh")
+
+    assert_not_empty "$dockerfile_dest" "Dockerfile should COPY bin/healthcheck.sh"
+    assert_equals "$dockerfile_dest" "$probe_default" \
+        "Compliance probe default must be the Dockerfile's healthcheck install path"
 }
 
 # ============================================================================
@@ -528,6 +581,9 @@ run_test test_security_context_readonly_fs "Security context: read-only filesyst
 # cv_check_health_monitoring
 run_test test_health_monitoring_enabled "Health monitoring: enabled"
 run_test test_health_monitoring_not_configured "Health monitoring: not configured"
+run_test test_health_monitoring_script_present "Health monitoring: installed script present"
+run_test test_health_monitoring_script_not_executable "Health monitoring: non-executable script warns"
+run_test test_health_monitoring_default_matches_dockerfile "Health monitoring: default path matches Dockerfile"
 
 # cv_check_network_security
 run_test test_network_security_enforced "Network security: enforced"
