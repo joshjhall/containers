@@ -630,7 +630,7 @@ test_pr_tier_mirror_verdict() {
         "$bad"$'\n'"$skipped"$'\n'"$own|0|0|a newest skipped verdict (docs-only push) passes"
         "$bad"$'\n'"$neutral"$'\n'"$own|0|0|a newest neutral verdict passes"
         "$ok"$'\n'"$timed_out"$'\n'"$own|0|1|a newest timed_out verdict fails"
-        "not json|0|1|an unparseable gh response → fail closed"
+        "not json|0|1|an unparsable gh response → fail closed"
         "$bad"$'\n'"$cancelled"$'\n'"$own|0|1|a cancelled newer run does not hide a failure"
         "$ok"$'\n'"$cancelled"$'\n'"$own|0|0|a cancelled newest run falls back to the older success"
         "$ok"$'\n'"$running"$'\n'"$own|0|1|newest other run still in progress → fail closed"
@@ -821,7 +821,7 @@ jobs:
     rc=0
     run_yq '((.on // .["on"]).pull_request // {}) | has("paths")' "$bad_dir/broken.yml" >/dev/null 2>&1 || rc=$?
     if [ "$rc" -eq 0 ]; then
-        /usr/bin/echo "  run_yq returned success on an unparseable file — the path-filter check would pass having verified nothing"
+        /usr/bin/echo "  run_yq returned success on an unparsable file — the path-filter check would pass having verified nothing"
         violations=$((violations + 1))
     fi
     out=$(run_yq '((.on // .["on"]).pull_request // {}) | has("paths")' "$good_dir/a.yml" 2>/dev/null) || out="FAILED"
