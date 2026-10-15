@@ -487,9 +487,16 @@ extract_pr_tier_script() {
 
 # Run the extracted rollup under one (DETECT_RESULT, MODE, BUILD_RESULT) triple
 # and echo its exit code. Never lets a non-zero exit abort the suite.
+#
+# The event env defaults to a plain push (`synchronize`): on a real runner
+# these are always set, and the run block reads them under `set -u`. The
+# mirror tests below override them (#1099).
 run_pr_tier() {
     local script="$1" detect="$2" mode="$3" build="$4" rc=0
     DETECT_RESULT="$detect" MODE="$mode" BUILD_RESULT="$build" \
+        EVENT_ACTION="${PR_TIER_EVENT_ACTION:-synchronize}" \
+        EVENT_LABEL="${PR_TIER_EVENT_LABEL:-}" \
+        REPO="owner/repo" HEAD_SHA="deadbeef" RUN_ID="200" \
         bash "$script" >/dev/null 2>&1 || rc=$?
     /usr/bin/printf '%s\n' "$rc"
 }
@@ -544,6 +551,144 @@ test_pr_tier_verdict_matrix() {
     else
         assert_true false "$violations pr-tier state(s) produced the wrong verdict (see above)"
     fi
+}
+
+# --- irrelevant-label mirror (#1099) ----------------------------------------
+#
+# `labeled` is in the trigger, so every label add creates a run. A run for a
+# label other than `ci/full-build` skips detect-changes and build-feature,
+# and pr-tier then MIRRORS the newest other non-cancelled `PR Tier` check
+# run on the SHA. Reporting skipped/green instead would make that run the
+# newest `PR Tier` and mask an earlier failed build (the #854/#909 class).
+#
+# `gh` is stubbed on PATH. The stub answers in the shape `gh api --jq
+# '.check_runs[]'` really produces: one compact JSON object per line, not
+# the raw response envelope. BASH_ENV is cleared so /etc/bash_env cannot
+# rebuild PATH around the stub (#618).
+
+# Write a `gh` stub into $1 that prints $2 (fixture lines) and exits $3,
+# recording every call in $1/gh.calls.
+write_gh_stub() {
+    local dir="$1" fixture="$2" rc="$3"
+    /usr/bin/mkdir -p "$dir"
+    /usr/bin/printf '%s\n' "$fixture" >"$dir/fixture"
+    /usr/bin/cat >"$dir/gh" <<EOF
+#!/usr/bin/env bash
+/usr/bin/printf '%s\n' "\$*" >>"$dir/gh.calls"
+[ "$rc" = 0 ] || exit $rc
+/usr/bin/cat "$dir/fixture"
+EOF
+    /usr/bin/chmod +x "$dir/gh"
+}
+
+# Run the extracted rollup as an irrelevant-label run (or with $4 as the
+# label) against a gh stub dir $2. Echoes the exit code.
+run_pr_tier_mirror() {
+    local script="$1" stub="$2" label="${3:-status/pr-pending}" rc=0
+    BASH_ENV="" PATH="$stub:$PATH" \
+        DETECT_RESULT="skipped" MODE="" BUILD_RESULT="skipped" \
+        EVENT_ACTION="labeled" EVENT_LABEL="$label" \
+        REPO="owner/repo" HEAD_SHA="deadbeef" RUN_ID="200" \
+        bash "$script" >/dev/null 2>&1 || rc=$?
+    /usr/bin/printf '%s\n' "$rc"
+}
+
+test_pr_tier_mirror_verdict() {
+    require_yq || return 0
+    command -v jq >/dev/null 2>&1 || {
+        skip_test "jq not available — skipping pr-tier mirror tests"
+        return 0
+    }
+
+    local script="$TEST_TEMP_DIR/pr-tier.sh"
+    if ! extract_pr_tier_script "$script"; then
+        assert_true false "could not extract pr-tier's 'Summarize' step from test-pr.yml — the job was renamed or restructured"
+        return 0
+    fi
+
+    # Check-run fixtures. RUN_ID is 200, so a details_url under
+    # /actions/runs/200/ is this run's own check run and must be ignored.
+    local own='{"id":30,"status":"in_progress","conclusion":null,"details_url":"https://github.com/owner/repo/actions/runs/200/job/3"}'
+    local ok='{"id":10,"status":"completed","conclusion":"success","details_url":"https://github.com/owner/repo/actions/runs/100/job/1"}'
+    local bad='{"id":20,"status":"completed","conclusion":"failure","details_url":"https://github.com/owner/repo/actions/runs/150/job/2"}'
+    local cancelled='{"id":25,"status":"completed","conclusion":"cancelled","details_url":"https://github.com/owner/repo/actions/runs/160/job/4"}'
+    local running='{"id":25,"status":"in_progress","conclusion":null,"details_url":"https://github.com/owner/repo/actions/runs/160/job/4"}'
+
+    # Each row: fixture lines | gh exit | expected exit | description.
+    # The newest-wins rows (ok then bad, and bad then ok) are both present so
+    # a mirror that picked "any success" or "first line" cannot pass.
+    local -a cases=(
+        "$ok"$'\n'"$own|0|0|newest other run succeeded → mirror passes"
+        "$ok"$'\n'"$bad"$'\n'"$own|0|1|newest other run failed → mirror fails (no masking)"
+        "$bad"$'\n'"$cancelled"$'\n'"$own|0|1|a cancelled newer run does not hide a failure"
+        "$ok"$'\n'"$cancelled"$'\n'"$own|0|0|a cancelled newest run falls back to the older success"
+        "$ok"$'\n'"$running"$'\n'"$own|0|1|newest other run still in progress → fail closed"
+        "$own|0|1|only this run's own check run → nothing to mirror, fail closed"
+        "|1|1|gh api failure → fail closed"
+    )
+
+    local row fixture ghrc expected desc rc stub violations=0 i=0
+    for row in "${cases[@]}"; do
+        IFS='|' read -r -d '' fixture ghrc expected desc <<<"$row" || true
+        desc="${desc%$'\n'}"
+        i=$((i + 1))
+        stub="$TEST_TEMP_DIR/gh-stub-$i"
+        write_gh_stub "$stub" "$fixture" "$ghrc"
+        rc=$(run_pr_tier_mirror "$script" "$stub")
+        if [ "$rc" != "$expected" ]; then
+            /usr/bin/echo "  row ${i}: expected exit ${expected}, got ${rc} — ${desc}"
+            violations=$((violations + 1))
+        fi
+        if [ ! -s "$stub/gh.calls" ]; then
+            /usr/bin/echo "  row ${i}: gh was never called — the mirror path was not taken"
+            violations=$((violations + 1))
+        fi
+    done
+
+    # Discriminating row: a `ci/full-build` add is a RELEVANT event and must
+    # not mirror. With DETECT_RESULT=skipped it reaches the #909 gate and
+    # fails — and gh is never called. (The mirror would have passed on $ok.)
+    stub="$TEST_TEMP_DIR/gh-stub-relevant"
+    write_gh_stub "$stub" "$ok" 0
+    rc=$(run_pr_tier_mirror "$script" "$stub" "ci/full-build")
+    if [ "$rc" != "1" ] || [ -e "$stub/gh.calls" ]; then
+        /usr/bin/echo "  ci/full-build label: expected exit 1 with no gh call, got ${rc} (gh called: $([ -e "$stub/gh.calls" ] && echo yes || echo no))"
+        violations=$((violations + 1))
+    fi
+
+    if [ "$violations" -eq 0 ]; then
+        assert_true true "pr-tier mirrors the last verdict correctly across all $((${#cases[@]} + 1)) label states"
+    else
+        assert_true false "$violations pr-tier mirror case(s) wrong (see above)"
+    fi
+}
+
+# The trigger/concurrency/gate shape the mirror depends on. Each is a
+# separate silent failure: without `labeled` the label does nothing (#1099);
+# without the detect-changes gate an unrelated label rebuilds the matrix;
+# without a PR-scoped group a push + label add build twice; and if an
+# irrelevant run could cancel, it would kill the real run it then mirrors.
+test_pr_tier_label_trigger_shape() {
+    require_yq || return 0
+    local wf="$PR_TIER_WORKFLOW" out
+
+    out=$(run_yq '(.on // .["on"]).pull_request.types | contains(["labeled"])' "$wf") || out="FAILED"
+    assert_equals "true" "$out" "test-pr.yml triggers on pull_request 'labeled'"
+
+    out=$(run_yq '.concurrency.group' "$wf") || out="FAILED"
+    assert_equals 'test-pr-${{ github.event.pull_request.number }}' "$out" \
+        "test-pr.yml concurrency group is PR-scoped"
+
+    out=$(run_yq '.concurrency["cancel-in-progress"]' "$wf") || out="FAILED"
+    assert_equals "\${{ github.event.action != 'labeled' || github.event.label.name == 'ci/full-build' }}" "$out" \
+        "only relevant events cancel an in-progress run"
+
+    out=$(run_yq '.jobs["detect-changes"].if' "$wf") || out="FAILED"
+    assert_equals "github.event.action != 'labeled' || github.event.label.name == 'ci/full-build'" "$out" \
+        "detect-changes skips irrelevant-label events"
+
+    out=$(run_yq '.jobs["pr-tier"].if' "$wf") || out="FAILED"
+    assert_equals "always()" "$out" "pr-tier still always reports (#904)"
 }
 
 # --- the resolver's own failure modes (#919) --------------------------------
@@ -756,6 +901,8 @@ run_test test_context_workflows_have_no_pull_request_path_filters "no context si
 run_test test_context_names_are_not_templated "context names are not templated"
 run_test test_check_name_literals_match_a_real_job "each check-name literal maps to exactly one job"
 run_test test_pr_tier_verdict_matrix "pr-tier's verdict is correct across upstream states"
+run_test test_pr_tier_mirror_verdict "pr-tier mirrors the last verdict on an irrelevant label (#1099)"
+run_test test_pr_tier_label_trigger_shape "test-pr.yml label trigger, concurrency, and gates (#1099)"
 run_test test_yq_failure_is_distinguishable_from_empty "a yq failure is distinguishable from an empty result"
 run_test test_job_name_index_semantics "the job-name index preserves per-file, exact-match semantics"
 

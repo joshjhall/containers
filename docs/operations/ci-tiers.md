@@ -49,6 +49,45 @@ the full multi-variant merge-tier cost.
 > in a feature script); routine PRs run only the code-level checks and merge
 > against the merge tier's coverage. Remove this gate once the per-feature
 > scripts are retired.
+>
+> **The label takes effect as soon as it is added (#1099)** — the workflow
+> triggers on `labeled`, so adding `ci/full-build` to an already-open PR starts
+> the tier immediately; no empty commit or close/reopen is needed. (Re-running
+> an old run does *not* work: a re-run replays its original event payload,
+> whose label list predates the label.) Removing the label does not cancel a
+> run already in flight.
+
+### Label events and concurrency
+
+GitHub cannot filter `labeled` by label name, so **every** label add creates a
+`test-pr.yml` run. The workflow tells the two kinds apart:
+
+- **Relevant** — `opened` / `synchronize` / `reopened`, or `labeled` with
+  `ci/full-build`. These share a per-PR concurrency group
+  (`test-pr-<PR number>`) with `cancel-in-progress`, so a push and a label add
+  close together build the feature matrix once, not twice.
+- **Irrelevant** — `labeled` with any other label (e.g. `status/pr-pending`,
+  which `/workflow:ship-issue` adds at PR open). `detect-changes` and
+  `build-feature` are skipped, and `PR Tier` **mirrors** the newest other
+  non-cancelled `PR Tier` check run on the same head SHA. Because `PR Tier` is
+  required, a plain skipped (= success) run here would become the newest check
+  on the commit and turn a failed full build green on an unrelated label — the
+  #854/#909 "green on no evidence" class. The mirror fails closed: anything but
+  a completed `success`/`skipped`/`neutral` verdict (a failure, a still-running
+  run, no prior run, or a `gh api` error) reports failure. Irrelevant runs
+  never cancel; they queue behind the in-flight run in the same group, so the
+  verdict they mirror has normally finished.
+
+Residuals — all fail closed (a false red, never a false green):
+
+- GitHub keeps at most one *pending* run per group and cancels the older one.
+  A queued irrelevant run displaced by a newer event is harmless (the newer run
+  reports, and the mirror ignores `cancelled` check runs). The reverse — a
+  label add landing in the few seconds a just-pushed run is still pending —
+  displaces that run, and the mirror then finds no verdict on the new SHA and
+  fails. Recover by pushing again or re-running the cancelled run's workflow.
+- If the mirror reads a still-running verdict (a race the queueing mostly
+  prevents), it fails; re-run that `PR Tier` once the real run finishes.
 
 ### Flow
 
