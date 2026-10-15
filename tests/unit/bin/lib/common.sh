@@ -34,7 +34,7 @@ test_log_info() {
     local output
     output=$(log_info "Test message" 2>&1)
 
-    if echo "$output" | command grep -q "Test message"; then
+    if command grep -q "Test message" <<<"$output"; then
         assert_true true "log_info outputs message"
     else
         assert_true false "log_info failed to output message"
@@ -47,7 +47,7 @@ test_log_success() {
     local output
     output=$(log_success "Success message" 2>&1)
 
-    if echo "$output" | command grep -q "Success message"; then
+    if command grep -q "Success message" <<<"$output"; then
         assert_true true "log_success outputs message"
     else
         assert_true false "log_success failed to output message"
@@ -60,7 +60,7 @@ test_log_warning() {
     local output
     output=$(log_warning "Warning message" 2>&1)
 
-    if echo "$output" | command grep -q "Warning message"; then
+    if command grep -q "Warning message" <<<"$output"; then
         assert_true true "log_warning outputs message"
     else
         assert_true false "log_warning failed to output message"
@@ -73,7 +73,7 @@ test_log_error() {
     local output
     output=$(log_error "Error message" 2>&1)
 
-    if echo "$output" | command grep -q "Error message"; then
+    if command grep -q "Error message" <<<"$output"; then
         assert_true true "log_error outputs message to stderr"
     else
         assert_true false "log_error failed to output message"

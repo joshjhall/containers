@@ -177,7 +177,7 @@ test_missing_env_file() {
     output=$("$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | command sed 's/\x1b\[[0-9;]*m//g' | command head -10 || true)
 
     # Check for warning about missing token
-    if echo "$output" | command grep -q "Warning: No GITHUB_TOKEN set"; then
+    if command grep -q "Warning: No GITHUB_TOKEN set" <<<"$output"; then
         assert_true true "Script handles missing .env file gracefully"
     else
         # The script might be using the token from environment
@@ -252,7 +252,7 @@ test_json_output_format() {
     else
         # Fallback to text format check
         output=$(timeout 5 "$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | command head -5 || true)
-        if echo "$output" | command grep -q "Version Check Results\|Checking\|Scanning"; then
+        if command grep -q "Version Check Results\|Checking\|Scanning" <<<"$output"; then
             assert_true true "Script produces formatted output"
         else
             assert_true false "Script output format is incorrect"
@@ -454,7 +454,7 @@ test_extract_krew_version() {
     assert_not_empty "$krew_ver" "krew version extracted from Dockerfile"
 
     # Verify it's a reasonable version format
-    if echo "$krew_ver" | command grep -qE '^[0-9]+\.[0-9]+'; then
+    if command grep -qE '^[0-9]+\.[0-9]+' <<<"$krew_ver"; then
         assert_true true "krew version has valid format"
     else
         assert_true false "krew version has invalid format: $krew_ver"

@@ -230,19 +230,19 @@ test_cancellation_message() {
     output=$(echo "n" | "$PROJECT_ROOT/bin/release.sh" patch 2>&1 || true)
 
     # Check for the helpful messages
-    if echo "$output" | command grep -q "Release cancelled"; then
+    if command grep -q "Release cancelled" <<<"$output"; then
         assert_true true "Shows cancellation message"
     else
         assert_true false "Missing cancellation message"
     fi
 
-    if echo "$output" | command grep -q "echo 'y' |"; then
+    if command grep -q "echo 'y' |" <<<"$output"; then
         assert_true true "Shows echo 'y' automation example"
     else
         assert_true false "Missing echo 'y' automation example"
     fi
 
-    if echo "$output" | command grep -q "yes |"; then
+    if command grep -q "yes |" <<<"$output"; then
         assert_true true "Shows yes command automation example"
     else
         assert_true false "Missing yes command automation example"
