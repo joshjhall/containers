@@ -109,6 +109,24 @@ test_scanner_detects_known_shapes() {
 }
 
 # ---------------------------------------------------------------------------
+# Test: the scanner descends into subdirectories
+#
+# Most of tests/unit lives in subdirectories (base/, bin/, features/, ...). The
+# shapes test above uses a flat fixture, so it cannot catch a traversal change
+# (a -maxdepth, a narrowed -name) that would leave those trees unscanned.
+# ---------------------------------------------------------------------------
+test_scanner_descends_into_subdirs() {
+    local dir got
+    dir=$(command mktemp -d)
+    command mkdir -p "$dir/sub/deeper"
+    command printf 'producer %s command %s -q foo\n' '|' 'grep' >"$dir/sub/deeper/nested.sh"
+    got=$(pipe_grep_q_sites "$dir")
+    command rm -rf "$dir"
+    assert_equals "sub/deeper/nested.sh:1" "$got" \
+        "scanner reports a site two directories below the scan root"
+}
+
+# ---------------------------------------------------------------------------
 # Test: no pipe into grep -q anywhere under tests/unit
 # ---------------------------------------------------------------------------
 test_no_sites_in_tests_unit() {
@@ -142,6 +160,7 @@ test_no_sites_in_tests_unit() {
 }
 
 run_test "test_scanner_detects_known_shapes" "Scanner flags each pipe-into-grep-q shape and nothing else"
+run_test "test_scanner_descends_into_subdirs" "Scanner reports sites in nested subdirectories"
 run_test "test_no_sites_in_tests_unit" "No pipe into grep -q anywhere under tests/unit"
 
 # Generate report
