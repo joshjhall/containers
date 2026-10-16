@@ -237,7 +237,10 @@ test_version_token_predicate() {
             return 0
         fi
     done
-    for v in ../index 1.0/../x a/b .. 1.. 1... 1.0- 1.0+ 1.0-rc..1 null "" "1.0 " ../../../escaped; do
+    # The newline pair pins that ^/$ anchor the whole value, not a line —
+    # true of bash's =~, not of a line-oriented grep -E/sed port.
+    for v in ../index 1.0/../x a/b .. 1.. 1... 1.0- 1.0+ 1.0-rc..1 null "" "1.0 " ../../../escaped \
+        $'1.0\n../x' $'../x\n1.0'; do
         if _is_version_token "$v"; then
             fail_test "path-shaped or non-version '$v' was accepted"
             return 0
@@ -291,6 +294,14 @@ test_path_shaped_vendored_only_fixture_is_refused() {
     rc=0
     target="$(_vendored_only_target "$scratch/drift-vendored-only-control.json" "0.0.1-scratch")" || rc=$?
     assert_equals "1" "$rc" "a version equal to the live pin is refused on the pin branch"
+
+    # A version the vendored catalog already holds, with a non-matching pin:
+    # refused on the existence branch, where cp would overwrite a real entry.
+    command printf '{"tool":"rust","version":"1.96.0"}\n' \
+        >"$scratch/drift-vendored-only-existing.json"
+    rc=0
+    target="$(_vendored_only_target "$scratch/drift-vendored-only-existing.json" "9.9.9")" || rc=$?
+    assert_equals "1" "$rc" "a version the catalog already holds is refused on the existence branch"
     command rm -rf "$scratch"
     return 0
 }
