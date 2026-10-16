@@ -176,8 +176,10 @@ db-validate-vendored: db-compile
                 version="$(command jq -r .version "$fixture")"
                 # .version becomes a path component: a value carrying `/` or
                 # `..` would point the existence guards below at one path and
-                # cp at another (or outside the staging dir). Plain tokens only.
-                if ! [[ "$version" =~ ^[0-9]+(\.[0-9]+)*([-.+][A-Za-z0-9.]+)?$ ]]; then
+                # cp at another (or outside the staging dir). Plain tokens only;
+                # this also refuses empty and jq's `null`. Kept byte-equal to
+                # _is_version_token in tests/unit/vendored-catalog.sh.
+                if ! [[ "$version" =~ ^[0-9]+(\.[0-9]+)*(-[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?(\+[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?$ ]]; then
                     command echo "ERROR: $fixture .version must be a plain version token (got '$version')" >&2
                     exit 1
                 fi
@@ -189,8 +191,7 @@ db-validate-vendored: db-compile
                 # rather than as a generic "did NOT trip". Parsed like live_pin.
                 pin="$(command sed -n -E 's/^ARG RUST_VERSION="?([^"[:space:]]+)"?[[:space:]]*$/\1/p' \
                     "{{ justfile_directory() }}/Dockerfile" | command sed -n '1p')"
-                if [ -z "$version" ] || [ "$version" = "null" ] ||
-                    [ -e "$VENDORED/$target" ] || [ -e "{{ CONTAINERS_DB }}/$target" ] ||
+                if [ -e "$VENDORED/$target" ] || [ -e "{{ CONTAINERS_DB }}/$target" ] ||
                     [ "$version" = "$pin" ]; then
                     command echo "ERROR: $fixture must name a version in neither catalog and not the live pin $pin (got '$version')" >&2
                     exit 1

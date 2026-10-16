@@ -52,11 +52,13 @@ _dockerfile_rust_pin() {
         "$PROJECT_ROOT/Dockerfile" | command sed -n '1p'
 }
 
-# _is_version_token <value> — true for a plain version (1.96.0, 1.2.3-rc.1).
-# Same regex as just/db.just db-validate-vendored: .version becomes a path
-# component, so `/` and `..` must never reach it.
+# _is_version_token <value> — true for a plain version (1.96.0, 1.2.3-rc.1,
+# 1.0.0-rc.1+build.5). .version becomes a path component, so `/` and `..` must
+# never reach it. Byte-equal to just/db.just db-validate-vendored's copy —
+# test_version_token_regex_matches_recipe pins that.
+_VERSION_TOKEN_RE='^[0-9]+(\.[0-9]+)*(-[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?(\+[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?$'
 _is_version_token() {
-    [[ "$1" =~ ^[0-9]+(\.[0-9]+)*([-.+][A-Za-z0-9.]+)?$ ]]
+    [[ "$1" =~ $_VERSION_TOKEN_RE ]]
 }
 
 # _vendored_only_target <fixture> <pin> — print the path a drift-vendored-only
@@ -221,18 +223,31 @@ test_drift_fixtures_are_rejected() {
 
 test_version_token_predicate() {
     local v
-    for v in 1.0.1 1.96.0 1.2.3-rc.1 1.0+build 2; do
+    for v in 1.0.1 1.96.0 1.2.3-rc.1 1.0+build 1.0.0-rc.1+build.5 2; do
         if ! _is_version_token "$v"; then
             fail_test "plain version '$v' was refused"
             return 0
         fi
     done
-    for v in ../index 1.0/../x a/b .. null "" "1.0 " ../../../escaped; do
+    for v in ../index 1.0/../x a/b .. 1.. 1... 1.0- 1.0+ 1.0-rc..1 null "" "1.0 " ../../../escaped; do
         if _is_version_token "$v"; then
             fail_test "path-shaped or non-version '$v' was accepted"
             return 0
         fi
     done
+    return 0
+}
+
+# The recipe stages fixtures with cp, so ITS regex is the gate; the helper
+# above only mirrors it. Extract the recipe's literal and require equality, so
+# the predicate tests here cover the regex the recipe actually runs.
+test_version_token_regex_matches_recipe() {
+    local recipe_re line
+    line="$(command grep -F '[[ "$version" =~ ' "$PROJECT_ROOT/just/db.just")"
+    recipe_re="${line#*=~ }"
+    recipe_re="${recipe_re% ]]; then}"
+    assert_equals "$_VERSION_TOKEN_RE" "$recipe_re" \
+        "just/db.just's version-token regex equals _is_version_token's"
     return 0
 }
 
@@ -612,6 +627,7 @@ test_schema_fixtures_are_rejected() {
 run_test "test_vendored_matches_upstream" "vendored catalog matches containers-db"
 run_test "test_drift_fixtures_are_rejected" "drift check rejects planted drift fixtures"
 run_test "test_version_token_predicate" "version-token predicate refuses path-shaped values"
+run_test "test_version_token_regex_matches_recipe" "version-token regex is byte-equal to just/db.just's"
 run_test "test_path_shaped_vendored_only_fixture_is_refused" "a path-shaped drift-vendored-only fixture is refused, not staged"
 run_test "test_drift_ignores_tested_evidence" "drift check ignores tested[] evidence"
 run_test "test_drift_still_catches_install_data" "drift check still catches install-data differences"
