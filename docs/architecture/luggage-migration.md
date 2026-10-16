@@ -106,6 +106,17 @@ checks in CI's existing "Run Tests" job and in the pre-push hook. The drift
 half needs only `jq` ([`bin/check-catalog-drift.sh`][drift]) so it keeps
 working offline; only the `ajv` schema half needs the network.
 
+A vendored version with no upstream entry is allowed in exactly one case: it is
+the tool's live pin (`ARG RUST_VERSION=` in the `Dockerfile`, passed with
+`--dockerfile`), which may briefly run ahead of the upstream scanner. That skip
+passes with a `::warning::`. Any other vendored-only version fails with
+`vendored-only and not the live pin; publish it upstream (containers-db) or
+remove it`. The skip used to be unbounded: `1.97.0`–`1.98.1` sat vendored-only
+for four months behind a stalled scanner (containers-db#90) while the check
+reported `4 skipped, 0 drifted` and stayed green (#1102). To clear the failure,
+get the version published upstream and re-mirror it, or delete the vendored
+entry.
+
 This check exists because hand-mirroring had already lost real data. None of it
 was caught until issue #815 added the comparison:
 

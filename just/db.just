@@ -140,7 +140,8 @@ db-validate-vendored: db-compile
     # 2. Drift. Only the production copy — fixtures-catalog is exempt by design
     # (it carries edge cases upstream has no reason to hold).
     command echo "=== drift: vendored vs {{ CONTAINERS_DB }} ==="
-    command bash "$DRIFT" --vendored "$VENDORED" --upstream "{{ CONTAINERS_DB }}"
+    command bash "$DRIFT" --vendored "$VENDORED" --upstream "{{ CONTAINERS_DB }}" \
+        --dockerfile "{{ justfile_directory() }}/Dockerfile"
 
     # 3. Negative fixtures. schema-* must fail ajv; drift-* are schema-VALID and
     # must fail only the drift comparison — staged into a temp copy of the

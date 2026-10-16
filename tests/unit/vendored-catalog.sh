@@ -104,11 +104,14 @@ test_vendored_matches_upstream() {
     fi
 
     local output rc=0
-    output="$(command bash "$DRIFT_SCRIPT" \
-        --vendored "$VENDORED" --upstream "$UPSTREAM_DB" 2>&1)" || rc=$?
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$VENDORED" \
+        --upstream "$UPSTREAM_DB" --dockerfile "$PROJECT_ROOT/Dockerfile" 2>&1)" || rc=$?
 
     if [ "$rc" -ne 0 ]; then
         fail_test "drift against $UPSTREAM_DB:"$'\n'"$output"
+    else
+        # An allowed live-pin skip passes, but must not pass unseen (#1102).
+        command printf '%s\n' "$output" | command grep '^::warning::' >&2 || true
     fi
     return 0
 }
@@ -238,6 +241,60 @@ test_drift_still_catches_install_data() {
     local rc=0
     command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet >/dev/null 2>&1 || rc=$?
     assert_equals "1" "$rc" "a non-evidence difference is still drift"
+    command rm -rf "$up" "$ven"
+}
+
+# _vendored_only_pair <up> <ven> <pin>
+# Identical mini catalogs, plus a vendored-only 1.1.0 and a Dockerfile pinning
+# RUST_VERSION=<pin> at <ven>/Dockerfile.
+_vendored_only_pair() {
+    _mini_catalog "$1" 2026-10-01 '[]'
+    _mini_catalog "$2" 2026-10-01 '[]'
+    command printf '{"tool":"rust","version":"1.1.0","released":"2026-10-01","tested":[]}\n' \
+        >"$2/tools/rust/versions/1.1.0.json"
+    command printf 'FROM debian\nARG RUST_VERSION=%s\n' "$3" >"$2/Dockerfile"
+}
+
+test_drift_allows_live_pin_vendored_only() {
+    # The live pin may run briefly ahead of the upstream scanner — visibly.
+    local up="$TEST_TEMP_DIR/pin-up" ven="$TEST_TEMP_DIR/pin-ven"
+    _vendored_only_pair "$up" "$ven" 1.1.0
+    local output rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" \
+        --dockerfile "$ven/Dockerfile" --quiet 2>&1)" || rc=$?
+    assert_equals "0" "$rc" "a vendored-only version equal to the live pin is allowed"
+    assert_contains "$output" "::warning::rust/versions/1.1.0.json is vendored-only" \
+        "the allowed skip is warned about even under --quiet"
+    command rm -rf "$up" "$ven"
+}
+
+test_drift_rejects_non_pin_vendored_only() {
+    # #1102: 1.97.0-1.98.1 sat vendored-only for four months behind a stalled
+    # scanner while this check printed "4 skipped, 0 drifted".
+    local up="$TEST_TEMP_DIR/nopin-up" ven="$TEST_TEMP_DIR/nopin-ven"
+    _vendored_only_pair "$up" "$ven" 9.9.9
+    local output rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" \
+        --dockerfile "$ven/Dockerfile" --quiet 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "a vendored-only version that is not the live pin is drift"
+    assert_contains "$output" \
+        "rust/versions/1.1.0.json: vendored-only and not the live pin (9.9.9); publish it upstream" \
+        "the failure names the version, the pin, and the fix"
+    command rm -rf "$up" "$ven"
+}
+
+test_drift_rejects_vendored_only_without_pin_source() {
+    # No --dockerfile means no pin: forgetting the flag must not re-open the skip.
+    local up="$TEST_TEMP_DIR/nosrc-up" ven="$TEST_TEMP_DIR/nosrc-ven"
+    _vendored_only_pair "$up" "$ven" 1.1.0
+    local rc=0
+    command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "without --dockerfile every vendored-only version is drift"
+
+    rc=0
+    command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" \
+        --dockerfile "$ven/missing-Dockerfile" --quiet >/dev/null 2>&1 || rc=$?
+    assert_equals "2" "$rc" "an unreadable --dockerfile is a usage error, not a pass"
     command rm -rf "$up" "$ven"
 }
 
@@ -392,6 +449,9 @@ run_test "test_drift_ignores_tested_evidence" "drift check ignores tested[] evid
 run_test "test_drift_still_catches_install_data" "drift check still catches install-data differences"
 run_test "test_drift_ignores_scanner_activity" "drift check ignores scanner activity, not other index fields"
 run_test "test_drift_gates_the_support_floor" "drift check gates minimum_recommended, not default_version"
+run_test "test_drift_allows_live_pin_vendored_only" "drift check allows the live pin ahead of upstream, with a warning"
+run_test "test_drift_rejects_non_pin_vendored_only" "drift check rejects a vendored-only version that is not the live pin"
+run_test "test_drift_rejects_vendored_only_without_pin_source" "drift check rejects vendored-only versions when no pin source is given"
 run_test "test_index_matches_versions_on_disk" "index available[] agrees with versions/"
 run_test "test_no_fixture_leakage_into_production" "no tests-only fixtures in shipped catalog"
 run_test "test_catalogs_validate_against_schemas" "catalogs validate against JSON schemas"

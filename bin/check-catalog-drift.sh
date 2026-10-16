@@ -19,9 +19,15 @@
 # hook runs with SKIP_NETWORK_TESTS=1.
 #
 # Scope rules:
-#   - Versions with no upstream counterpart (a pin newer than upstream, e.g.
-#     the live ARG RUST_VERSION) are REPORTED and skipped, never silently
-#     ignored.
+#   - A version with no upstream counterpart is allowed ONLY when it is the
+#     tool's live pin — `ARG <TOOL>_VERSION=` in the --dockerfile — which may
+#     briefly run ahead of the upstream scanner. It is skipped with a
+#     `::warning::` (printed even under --quiet). Any other vendored-only
+#     version is drift: an unbounded skip let 1.97.0-1.98.1 diverge for four
+#     months behind a stalled scanner (containers-db#90, #1102) while this
+#     check stayed green. Without --dockerfile there is no pin, so every
+#     vendored-only version fails. A vendored-only TOOL is still reported and
+#     skipped.
 #   - Index files are compared field-by-field: available[] and
 #     default_version describe what THIS catalog holds and legitimately differ.
 #     minimum_recommended is NOT exempt: luggage enforces it as the support
@@ -42,13 +48,15 @@
 #     cell, a distinctly-named musl method) that exist purely so the hermetic
 #     crates/luggage/tests/cli.rs suite can assert on them.
 #
-# Usage: check-catalog-drift.sh --vendored <dir> --upstream <dir> [--quiet]
+# Usage: check-catalog-drift.sh --vendored <dir> --upstream <dir>
+#                               [--dockerfile <path>] [--quiet]
 # Exit:  0 clean, 1 drift found, 2 usage/IO error.
 
 set -uo pipefail
 
 VENDORED=""
 UPSTREAM=""
+DOCKERFILE=""
 QUIET=false
 
 while [ $# -gt 0 ]; do
@@ -61,12 +69,16 @@ while [ $# -gt 0 ]; do
             UPSTREAM="${2:-}"
             shift 2
             ;;
+        --dockerfile)
+            DOCKERFILE="${2:-}"
+            shift 2
+            ;;
         --quiet)
             QUIET=true
             shift
             ;;
         -h | --help)
-            command sed -n '2,34p' "$0"
+            command sed -n '2,53p' "$0"
             exit 0
             ;;
         *)
@@ -77,7 +89,12 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$VENDORED" ] || [ -z "$UPSTREAM" ]; then
-    command echo "usage: $0 --vendored <dir> --upstream <dir> [--quiet]" >&2
+    command echo "usage: $0 --vendored <dir> --upstream <dir> [--dockerfile <path>] [--quiet]" >&2
+    exit 2
+fi
+
+if [ -n "$DOCKERFILE" ] && [ ! -r "$DOCKERFILE" ]; then
+    command echo "ERROR: --dockerfile is not readable: $DOCKERFILE" >&2
     exit 2
 fi
 
@@ -114,6 +131,16 @@ report=""
 # say <message> — progress output, suppressed under --quiet.
 say() {
     [ "$QUIET" = true ] || command echo "$1"
+}
+
+# live_pin <tool> — print the tool's `ARG <TOOL>_VERSION=` default from
+# --dockerfile, or nothing when there is no Dockerfile or no such ARG.
+live_pin() {
+    [ -n "$DOCKERFILE" ] || return 0
+    local var
+    var="$(command printf '%s' "$1" | command tr '[:lower:]-' '[:upper:]_')_VERSION"
+    command sed -n -E "s/^ARG ${var}=\"?([^\" ]+)\"?[[:space:]]*\$/\\1/p" "$DOCKERFILE" |
+        command sed -n '1p'
 }
 
 # add_report <message> — accumulate a failure detail for the final block.
@@ -204,6 +231,8 @@ for tool_dir in "$VENDORED"/tools/*/; do
         [ "$found" -eq 0 ] && say "OK   $tool/index.json"
     fi
 
+    pin="$(live_pin "$tool")"
+
     for version_file in "$tool_dir"versions/*.json; do
         [ -f "$version_file" ] || continue
         version_name="$(command basename "$version_file")"
@@ -211,8 +240,15 @@ for tool_dir in "$VENDORED"/tools/*/; do
         label="$tool/versions/$version_name"
 
         if [ ! -f "$upstream_version" ]; then
-            skipped=$((skipped + 1))
-            say "SKIP $label — vendored-only version (no upstream entry)"
+            if [ -n "$pin" ] && [ "${version_name%.json}" = "$pin" ]; then
+                skipped=$((skipped + 1))
+                # Not routed through say(): an allowed skip must stay visible
+                # under --quiet, or it is indistinguishable from a pass.
+                command echo "::warning::$label is vendored-only (live pin, not yet upstream); publish it to containers-db"
+            else
+                failures=$((failures + 1))
+                add_report "  $label: vendored-only and not the live pin${pin:+ ($pin)}; publish it upstream (containers-db) or remove it"
+            fi
             continue
         fi
 
@@ -242,7 +278,7 @@ if [ -n "$report" ]; then
 fi
 
 command echo ""
-command echo "$compared entries compared, $skipped skipped, $failures drifted"
+command echo "$compared entries compared, $skipped skipped (vendored-only tool or live pin), $failures drifted"
 
 [ "$failures" -eq 0 ] || exit 1
 exit 0
