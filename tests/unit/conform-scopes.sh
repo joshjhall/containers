@@ -279,8 +279,10 @@ drive_check() {
     ) 2>&1 | command sed 's/\x1b\[[0-9;]*m//g'
 }
 
-# Writes the malformed and empty-scopes fixtures into a new scratch dir and
-# prints its path; returns 1, removing any partial dir, if a step fails.
+# Writes the malformed, empty-scopes and content fixtures into a new scratch
+# dir and prints its path; returns 1, removing any partial dir, if a step
+# fails. content.yaml parses cleanly but has no release scope and one
+# unanchored entry; `^releases$` is an anchored near-miss of `release`.
 make_check_fixtures() {
     local scratch
     if ! scratch=$(command mktemp -d "${TMPDIR:-/tmp}/conform-scopes-checks.XXXXXX") ||
@@ -288,7 +290,8 @@ make_check_fixtures() {
         return 1
     fi
     if ! command printf 'policies: [\n  - {broken\n' >"$scratch/bad.yaml" ||
-        ! command printf 'policies:\n  - type: commit\n    spec:\n      conventional:\n        scopes: []\n' >"$scratch/empty.yaml"; then
+        ! command printf 'policies:\n  - type: commit\n    spec:\n      conventional:\n        scopes: []\n' >"$scratch/empty.yaml" ||
+        ! command printf "policies:\n  - type: commit\n    spec:\n      conventional:\n        scopes: ['^op\$', '^releases\$', 'unanchored']\n" >"$scratch/content.yaml"; then
         command rm -rf "$scratch"
         return 1
     fi
@@ -351,6 +354,45 @@ test_empty_scopes_fail_closed() {
     fi
 }
 
+test_content_failures_reported() {
+    # The release-missing and unanchored-entry branches never run against the
+    # real .conform.yaml, which passes both (#1282). Each must fail once and
+    # name what it found, so a regex that accepts `releases` or a grep that
+    # flags every entry is caught.
+    local scratch out fails listed problems=()
+    if ! scratch=$(make_check_fixtures); then
+        assert_true false "fixture setup failed under ${TMPDIR:-/tmp}"
+        return 0
+    fi
+    out=$(drive_check "$scratch/content.yaml" test_release_scope_present)
+    fails=$(command grep -cx 'FAIL' <<<"$out" || true)
+    if ! command grep -qx '__status=failed' <<<"$out" || [ "$fails" -ne 1 ]; then
+        problems+=("test_release_scope_present didn't fail exactly once (FAILs=$fails)")
+    elif [[ "$out" != *"release scope missing"* ]] ||
+        [[ "$out" != *'read 3 lines, last: ^op$ ^releases$ unanchored'* ]]; then
+        problems+=("release diagnostic lacks the line count or last entries")
+    fi
+    out=$(drive_check "$scratch/content.yaml" test_scopes_are_anchored)
+    fails=$(command grep -cx 'FAIL' <<<"$out" || true)
+    # The indented block under the listing header; the framework's own
+    # failure detail is indented too, so stop at the first other line.
+    listed=$(command awk '/unanchored entries/ { f = 1; next } f && /^    / { print; next } { f = 0 }' <<<"$out")
+    if ! command grep -qx '__status=failed' <<<"$out" || [ "$fails" -ne 1 ]; then
+        problems+=("test_scopes_are_anchored didn't fail exactly once (FAILs=$fails)")
+    elif [[ "$out" != *'1 scope entr(y/ies) missing ^...$ anchors'* ]]; then
+        problems+=("anchored diagnostic doesn't count 1 unanchored entry")
+    elif [ "$listed" != "    unanchored" ]; then
+        problems+=("anchored check listed '${listed//$'\n'/|}', expected only 'unanchored'")
+    fi
+    command rm -rf "$scratch"
+
+    if [ "${#problems[@]}" -eq 0 ]; then
+        assert_true true "release-missing and unanchored-entry failures are reported"
+    else
+        assert_true false "$(command printf '%s; ' "${problems[@]}")"
+    fi
+}
+
 run_test test_yaml_parseable ".conform.yaml is valid YAML"
 run_test test_scopes_non_empty "scopes list is non-empty"
 run_test test_release_scope_present "release scope present (regression for #409)"
@@ -360,5 +402,6 @@ run_test test_run_yq_reports_failure "yq failures report rc and stderr (#1100)"
 run_test test_run_yq_reports_setup_failure "scratch-file failures are not blamed on yq (#1100)"
 run_test test_checks_report_yq_failure "each check reports a yq failure exactly once (#1279)"
 run_test test_empty_scopes_fail_closed "empty scopes list fails closed (#1279)"
+run_test test_content_failures_reported "content failures are reported (#1282)"
 
 generate_report
