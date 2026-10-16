@@ -280,14 +280,19 @@ drive_check() {
 }
 
 # Writes the malformed and empty-scopes fixtures into a new scratch dir and
-# prints its path; returns 1 if any step fails.
+# prints its path; returns 1, removing any partial dir, if a step fails.
 make_check_fixtures() {
     local scratch
-    scratch=$(command mktemp -d "${TMPDIR:-/tmp}/conform-scopes-checks.XXXXXX") &&
-        [ -d "$scratch" ] &&
-        command printf 'policies: [\n  - {broken\n' >"$scratch/bad.yaml" &&
-        command printf 'policies:\n  - type: commit\n    spec:\n      conventional:\n        scopes: []\n' >"$scratch/empty.yaml" &&
-        echo "$scratch"
+    if ! scratch=$(command mktemp -d "${TMPDIR:-/tmp}/conform-scopes-checks.XXXXXX") ||
+        [ ! -d "$scratch" ]; then
+        return 1
+    fi
+    if ! command printf 'policies: [\n  - {broken\n' >"$scratch/bad.yaml" ||
+        ! command printf 'policies:\n  - type: commit\n    spec:\n      conventional:\n        scopes: []\n' >"$scratch/empty.yaml"; then
+        command rm -rf "$scratch"
+        return 1
+    fi
+    echo "$scratch"
 }
 
 test_checks_report_yq_failure() {
