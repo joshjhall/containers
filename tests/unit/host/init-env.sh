@@ -205,14 +205,14 @@ EOF
         --project-root "$TEST_TEMP_DIR/project" --dry-run 2>/dev/null)"
 
     # Check that OP_GITHUB_TOKEN_REF -> GITHUB_TOKEN
-    if printf '%s' "$output" | command grep -q "^GITHUB_TOKEN=mock-secret-value"; then
+    if command grep -q "^GITHUB_TOKEN=mock-secret-value" <<<"$output"; then
         pass_test "OP_GITHUB_TOKEN_REF correctly derived to GITHUB_TOKEN"
     else
         fail_test "Expected GITHUB_TOKEN=mock-secret-value in output, got: $output"
     fi
 
     # Check that OP_DATABASE_URL_REF -> DATABASE_URL
-    if printf '%s' "$output" | command grep -q "^DATABASE_URL=mock-secret-value"; then
+    if command grep -q "^DATABASE_URL=mock-secret-value" <<<"$output"; then
         pass_test "OP_DATABASE_URL_REF correctly derived to DATABASE_URL"
     else
         fail_test "Expected DATABASE_URL=mock-secret-value in output, got: $output"
@@ -229,7 +229,7 @@ EOF
     stderr_output="$(bash "$TEST_TEMP_DIR/project/containers/host/init-env.sh" \
         --project-root "$TEST_TEMP_DIR/project" 2>&1 1>/dev/null)" || true
 
-    if printf '%s' "$stderr_output" | command grep -qi "skip\|not supported"; then
+    if command grep -qi "skip\|not supported" <<<"$stderr_output"; then
         pass_test "FILE_REF lines are warned and skipped"
     else
         fail_test "Expected warning about FILE_REF, got: $stderr_output"
@@ -354,7 +354,7 @@ EOF
     output="$(bash "$TEST_TEMP_DIR/project/containers/host/init-env.sh" \
         --project-root "$TEST_TEMP_DIR/project" --dry-run 2>/dev/null)"
 
-    if printf '%s' "$output" | command grep -q "KEY=value"; then
+    if command grep -q "KEY=value" <<<"$output"; then
         pass_test "Dry-run prints output to stdout"
     else
         fail_test "Dry-run should print KEY=value to stdout, got: $output"
@@ -371,7 +371,7 @@ test_help_flag() {
     local output
     output="$(bash "$SOURCE_FILE" --help 2>&1)" || true
 
-    if printf '%s' "$output" | command grep -q "Usage"; then
+    if command grep -q "Usage" <<<"$output"; then
         pass_test "--help shows usage"
     else
         fail_test "Expected usage info from --help, got: $output"
@@ -407,19 +407,19 @@ EOF
         bash "$TEST_TEMP_DIR/project/containers/host/init-env.sh" \
         --project-root "$TEST_TEMP_DIR/project" --dry-run 2>/dev/null)"
 
-    if printf '%s' "$output" | command grep -q '^DOUBLE=got=\[op://Vault/Item/double\]$'; then
+    if command grep -q '^DOUBLE=got=\[op://Vault/Item/double\]$' <<<"$output"; then
         pass_test "Double-quoted ref value is unquoted before op read"
     else
         fail_test "Expected DOUBLE=got=[op://Vault/Item/double], got: $output"
     fi
 
-    if printf '%s' "$output" | command grep -q '^SINGLE=got=\[op://Vault/Item/single\]$'; then
+    if command grep -q '^SINGLE=got=\[op://Vault/Item/single\]$' <<<"$output"; then
         pass_test "Single-quoted ref value is unquoted before op read"
     else
         fail_test "Expected SINGLE=got=[op://Vault/Item/single], got: $output"
     fi
 
-    if printf '%s' "$output" | command grep -q '^BARE=got=\[op://Vault/Item/bare\]$'; then
+    if command grep -q '^BARE=got=\[op://Vault/Item/bare\]$' <<<"$output"; then
         pass_test "Unquoted ref value passes through unchanged"
     else
         fail_test "Expected BARE=got=[op://Vault/Item/bare], got: $output"
@@ -456,14 +456,14 @@ EOF
         --project-root "$TEST_TEMP_DIR/project" --dry-run 2>/dev/null)"
 
     # Good var should be resolved
-    if printf '%s' "$output" | command grep -q "^GOOD_VAR=good-value"; then
+    if command grep -q "^GOOD_VAR=good-value" <<<"$output"; then
         pass_test "Successful refs are resolved despite other failures"
     else
         fail_test "Expected GOOD_VAR=good-value in output, got: $output"
     fi
 
     # Bad var should NOT appear
-    if printf '%s' "$output" | command grep -q "^BAD_VAR="; then
+    if command grep -q "^BAD_VAR=" <<<"$output"; then
         fail_test "Failed ref should not appear in output"
     else
         pass_test "Failed ref correctly excluded from output"

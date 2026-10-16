@@ -59,8 +59,9 @@ test_release_scope_present() {
     # `chore(release): ...` is what bin/release.sh emits and what
     # docs/development/releasing.md tells contributors to use. If this
     # check fails, releases break.
-    if yq eval '.policies[0].spec.conventional.scopes[]' "$CONFORM" |
-        command grep -qE '^\^?release\$?$'; then
+    local scopes
+    scopes=$(yq eval '.policies[0].spec.conventional.scopes[]' "$CONFORM" || true)
+    if command grep -qE '^\^?release\$?$' <<<"$scopes"; then
         assert_true true "release scope present (regression guard for #409)"
     else
         assert_true false "release scope missing — chore(release): commits will fail the commit-msg hook"
@@ -92,6 +93,9 @@ test_historical_scopes_covered() {
     local missing=()
     local allowed_anchored
     allowed_anchored=$(yq eval '.policies[0].spec.conventional.scopes[]' "$CONFORM")
+    # Bare names (^ and $ stripped), matched below via herestring (#1097).
+    local allowed_bare
+    allowed_bare=$(command sed 's/^\^//; s/\$$//' <<<"$allowed_anchored")
 
     # Skip gracefully on shallow clones (CI sometimes does --depth=1).
     if ! command -v git >/dev/null 2>&1; then
@@ -111,9 +115,7 @@ test_historical_scopes_covered() {
         total=$((total + 1))
         # Match against anchored entries: scope must equal one of the bare
         # names (after stripping ^ and $).
-        if echo "$allowed_anchored" |
-            command sed 's/^\^//; s/\$$//' |
-            command grep -Fxq "$scope"; then
+        if command grep -Fxq "$scope" <<<"$allowed_bare"; then
             covered=$((covered + 1))
         else
             missing+=("$scope")

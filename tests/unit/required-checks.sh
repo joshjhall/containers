@@ -244,7 +244,7 @@ test_context_workflows_trigger_on_pull_request_to_protected_branch() {
             assert_true false "yq failed reading the trigger for '$ctx' (see above)"
             return 0
         }
-        if ! /usr/bin/printf '%s\n' "$has_pr" | /usr/bin/grep -qx 'true'; then
+        if ! /usr/bin/grep -qx 'true' <<<"$has_pr"; then
             /usr/bin/echo "  '$ctx' ($(/usr/bin/basename "$file")): workflow has no pull_request trigger"
             violations=$((violations + 1))
             continue
@@ -256,8 +256,8 @@ test_context_workflows_trigger_on_pull_request_to_protected_branch() {
             assert_true false "yq failed reading trigger branches for '$ctx' (see above)"
             return 0
         }
-        if ! /usr/bin/printf '%s\n' "$branches" | /usr/bin/grep -qxF -- '*ALL*'; then
-            if ! /usr/bin/printf '%s\n' "$branches" | /usr/bin/grep -qxF -- "$PROTECTED_BRANCH"; then
+        if ! /usr/bin/grep -qxF -- '*ALL*' <<<"$branches"; then
+            if ! /usr/bin/grep -qxF -- "$PROTECTED_BRANCH" <<<"$branches"; then
                 /usr/bin/echo "  '$ctx' ($(/usr/bin/basename "$file")): pull_request trigger excludes '$PROTECTED_BRANCH'"
                 violations=$((violations + 1))
             fi
@@ -296,7 +296,7 @@ test_context_workflows_have_no_pull_request_path_filters() {
                 assert_true false "yq failed reading '$filter' for '$ctx' (see above)"
                 return 0
             }
-            if /usr/bin/printf '%s\n' "$has_filter" | /usr/bin/grep -qx 'true'; then
+            if /usr/bin/grep -qx 'true' <<<"$has_filter"; then
                 /usr/bin/echo "  '$ctx' ($(/usr/bin/basename "$file")): pull_request has a '$filter' filter — the workflow can be skipped entirely, so this context would never report and would block $PROTECTED_BRANCH"
                 violations=$((violations + 1))
             fi
@@ -317,7 +317,7 @@ test_context_names_are_not_templated() {
     local violations=0 ctx
     while IFS= read -r ctx; do
         [ -n "$ctx" ] || continue
-        if /usr/bin/printf '%s\n' "$ctx" | /usr/bin/grep -qF '${{'; then
+        if /usr/bin/grep -qF '${{' <<<"$ctx"; then
             /usr/bin/echo "  '$ctx' contains a \${{ }} expression — not a stable context name"
             violations=$((violations + 1))
         fi
@@ -369,7 +369,7 @@ test_check_name_literals_match_a_real_job() {
 
             # A templated literal renders per-run and can't be matched against a
             # static job name — flag it rather than silently passing it through.
-            if /usr/bin/printf '%s\n' "$literal" | /usr/bin/grep -qF '${{'; then
+            if /usr/bin/grep -qF '${{' <<<"$literal"; then
                 /usr/bin/echo "  '$literal' ($(/usr/bin/basename "$file")): check-name contains a \${{ }} expression — cannot be verified against a job name"
                 violations=$((violations + 1))
                 continue
@@ -456,7 +456,7 @@ jobs:
     if [ "$rc" -eq 0 ]; then
         /usr/bin/echo "  a malformed workflow did NOT fail the resolver — a yq error is rendering as 'no such job'"
         violations=$((violations + 1))
-    elif ! /usr/bin/printf '%s\n' "$out" | /usr/bin/grep -qF 'broken.yml'; then
+    elif ! /usr/bin/grep -qF 'broken.yml' <<<"$out"; then
         /usr/bin/echo "  resolver failed but did not name the offending file: $out"
         violations=$((violations + 1))
     fi
@@ -478,7 +478,7 @@ jobs:
 
     # 4. A present one resolves to its file.
     out=$(workflows_defining_job_name 'Sentinel Job') || out=""
-    if ! /usr/bin/printf '%s\n' "$out" | /usr/bin/grep -qF 'a.yml'; then
+    if ! /usr/bin/grep -qF 'a.yml' <<<"$out"; then
         /usr/bin/echo "  a present job name did not resolve to its file, got '$out'"
         violations=$((violations + 1))
     fi
@@ -491,7 +491,7 @@ jobs:
     if [ "$rc" -eq 0 ]; then
         /usr/bin/echo "  a nonexistent workflow dir returned success — an empty build would read as 'no such job'"
         violations=$((violations + 1))
-    elif ! /usr/bin/printf '%s\n' "$out" | /usr/bin/grep -qF 'wf-does-not-exist'; then
+    elif ! /usr/bin/grep -qF 'wf-does-not-exist' <<<"$out"; then
         /usr/bin/echo "  missing-dir failure did not name the directory: $out"
         violations=$((violations + 1))
     fi
@@ -567,7 +567,7 @@ test_job_name_index_semantics() {
 
     # Names with spaces and ${{ }} survive as exact keys.
     out=$(workflows_defining_job_name 'Spaced ${{ matrix.os }} Name') || out=""
-    if ! /usr/bin/printf '%s\n' "$out" | /usr/bin/grep -qF 'twin.yml'; then
+    if ! /usr/bin/grep -qF 'twin.yml' <<<"$out"; then
         /usr/bin/echo "  a job name containing spaces and \${{ }} did not round-trip as a key"
         violations=$((violations + 1))
     fi

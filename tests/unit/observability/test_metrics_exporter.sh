@@ -71,15 +71,15 @@ test_prometheus_format() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should contain HELP comments
-    echo "$metrics" | command grep -q "^# HELP"
+    command grep -q "^# HELP" <<<"$metrics"
     assert_success "Should contain HELP comments"
 
     # Should contain TYPE comments
-    echo "$metrics" | command grep -q "^# TYPE"
+    command grep -q "^# TYPE" <<<"$metrics"
     assert_success "Should contain TYPE comments"
 
     # Should contain actual metrics (not just comments)
-    echo "$metrics" | command grep -qE "^[a-z_]+ "
+    command grep -qE "^[a-z_]+ " <<<"$metrics"
     assert_success "Should contain metric lines"
 
     pass_test
@@ -94,26 +94,26 @@ test_build_metrics() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should contain build duration metrics
-    echo "$metrics" | command grep -q "container_build_duration_seconds"
+    command grep -q "container_build_duration_seconds" <<<"$metrics"
     assert_success "Should contain build duration metrics"
 
     # Should contain error metrics
-    echo "$metrics" | command grep -q "container_build_errors_total"
+    command grep -q "container_build_errors_total" <<<"$metrics"
     assert_success "Should contain error metrics"
 
     # Should contain warning metrics
-    echo "$metrics" | command grep -q "container_build_warnings_total"
+    command grep -q "container_build_warnings_total" <<<"$metrics"
     assert_success "Should contain warning metrics"
 
     # Check Python metrics (0 errors, 145s)
-    echo "$metrics" | command grep -q 'container_build_duration_seconds{feature="python"'
+    command grep -q 'container_build_duration_seconds{feature="python"' <<<"$metrics"
     assert_success "Should have Python metrics"
 
-    echo "$metrics" | command grep -q 'container_build_errors_total{feature="python"} 0'
+    command grep -q 'container_build_errors_total{feature="python"} 0' <<<"$metrics"
     assert_success "Should record 0 errors for Python"
 
     # Check Rust metrics (1 error, 234s)
-    echo "$metrics" | command grep -q 'container_build_errors_total{feature="rust"} 1'
+    command grep -q 'container_build_errors_total{feature="rust"} 1' <<<"$metrics"
     assert_success "Should record 1 error for Rust"
 
     pass_test
@@ -129,7 +129,7 @@ test_runtime_metrics() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should contain uptime metric
-    echo "$metrics" | command grep -q "container_uptime_seconds"
+    command grep -q "container_uptime_seconds" <<<"$metrics"
     assert_success "Should contain uptime metric"
 
     # Uptime should be a number
@@ -168,7 +168,7 @@ test_feature_count() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should count 3 features from mock logs
-    echo "$metrics" | command grep -q "container_features_installed 3"
+    command grep -q "container_features_installed 3" <<<"$metrics"
     assert_success "Should count 3 installed features"
 
     pass_test
@@ -183,11 +183,11 @@ test_aggregate_errors() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Total errors: Python(0) + Node(0) + Rust(1) = 1
-    echo "$metrics" | command grep -q "container_build_errors_total_all 1"
+    command grep -q "container_build_errors_total_all 1" <<<"$metrics"
     assert_success "Should aggregate to 1 total error"
 
     # Total warnings: Python(2) + Node(0) + Rust(3) = 5
-    echo "$metrics" | command grep -q "container_build_warnings_total_all 5"
+    command grep -q "container_build_warnings_total_all 5" <<<"$metrics"
     assert_success "Should aggregate to 5 total warnings"
 
     pass_test
@@ -202,11 +202,11 @@ test_status_labels() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Python and Node should have status="success" (0 errors)
-    echo "$metrics" | command grep -q 'status="success"'
+    command grep -q 'status="success"' <<<"$metrics"
     assert_success "Should have success status for error-free builds"
 
     # Rust should have status="failed" (1 error)
-    echo "$metrics" | command grep -q 'status="failed"'
+    command grep -q 'status="failed"' <<<"$metrics"
     assert_success "Should have failed status for builds with errors"
 
     pass_test
@@ -239,7 +239,7 @@ test_metrics_timestamp() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should have scrape timestamp
-    echo "$metrics" | command grep -q "container_metrics_scrape_timestamp_seconds"
+    command grep -q "container_metrics_scrape_timestamp_seconds" <<<"$metrics"
     assert_success "Should include scrape timestamp"
 
     # Timestamp should be recent (within last minute)

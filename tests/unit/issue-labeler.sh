@@ -156,14 +156,14 @@ RUNNER_EOF
 # Assert a "<method> <arg>" line is / is not among the recorded calls.
 assert_called() {
     local calls="$1" needle="$2" message="$3"
-    if ! command printf '%s\n' "$calls" | command grep -qxF "$needle"; then
+    if ! command grep -qxF "$needle" <<<"$calls"; then
         fail_test "$message (recorded calls: ${calls//$'\n'/ | })"
     fi
 }
 
 assert_not_called() {
     local calls="$1" needle="$2" message="$3"
-    if command printf '%s\n' "$calls" | command grep -qxF "$needle"; then
+    if command grep -qxF "$needle" <<<"$calls"; then
         fail_test "$message (recorded calls: ${calls//$'\n'/ | })"
     fi
 }

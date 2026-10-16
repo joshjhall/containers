@@ -87,7 +87,7 @@ test_crlf_stripped_from_result() {
     assert_equals "0" "$rc" "fail\\r\\n still validates as fail after strip"
     # The result line must be exactly "result=fail" — no trailing CR, no
     # injected second line. Grep for an exact-line match.
-    if command printf '%s\n' "$out" | command grep -qxF "result=fail"; then
+    if command grep -qxF "result=fail" <<<"$out"; then
         assert_true true "result line is exactly 'result=fail' (CR/LF stripped)"
     else
         assert_true false "expected an exact 'result=fail' line, got: $(command printf '%q' "$out")"
@@ -105,7 +105,7 @@ test_crlf_and_case_normalize_error_class() {
     assert_equals "0" "$rc" "row still validates"
     assert_contains "$out" "error_class=unknown" \
         "an uppercase/punct/CRLF error_class normalizes to unknown"
-    if command printf '%s\n' "$out" | command grep -qxF "error_class=unknown"; then
+    if command grep -qxF "error_class=unknown" <<<"$out"; then
         assert_true true "error_class line is exactly 'error_class=unknown'"
     else
         assert_true false "expected exact 'error_class=unknown' line, got: $(command printf '%q' "$out")"

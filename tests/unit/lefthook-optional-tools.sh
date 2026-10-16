@@ -121,7 +121,7 @@ test_every_optional_tool_hook_has_a_skip_guard() {
             # tool only in prose (osv-scanner's comment cites
             # docker-compose-validate), which is not an invocation.
             body=$(/usr/bin/printf '%s\n' "$body" | /usr/bin/grep -v '^[[:space:]]*#' || true)
-            /usr/bin/printf '%s' "$body" | /usr/bin/grep -qE "$pattern" || continue
+            /usr/bin/grep -qE "$pattern" <<<"$body" || continue
 
             skip=$(lh_skip_json "$name")
             case "$skip" in
