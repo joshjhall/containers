@@ -26,7 +26,12 @@
 # Callers word their own error, so each can name its own context.
 vendored_only_target() {
     local fixture="$1" vendored="$2" upstream="$3" pin="$4" version target
-    version="$(command jq -r .version "$fixture")" || return 3
+    # $(...) strips ALL trailing newlines, which would let "1.0\n" pass the
+    # anchored check below as "1.0". Append a sentinel so they survive, then
+    # remove it and only the one newline jq -r adds. `&&` keeps jq's status.
+    version="$(command jq -r .version "$fixture" && command printf x)" || return 3
+    version="${version%x}"
+    version="${version%$'\n'}"
     [[ "$version" =~ ^[0-9]+(\.[0-9]+)*(-[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?(\+[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?$ ]] ||
         return 2
     target="tools/rust/versions/$version.json"

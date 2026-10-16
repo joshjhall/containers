@@ -246,10 +246,12 @@ test_version_token_predicate() {
             return 0
         fi
     done
-    # The newline pair pins that ^/$ anchor the whole value, not a line —
-    # true of bash's =~, not of a line-oriented grep -E/sed port.
+    # The embedded-newline pair pins that ^/$ anchor the whole value, not a
+    # line — true of bash's =~, not of a line-oriented grep -E/sed port. The
+    # trailing-newline pair pins that reading .version keeps them: $(...)
+    # alone would strip them and accept the value as a plain token.
     for v in ../index 1.0/../x a/b .. 1.. 1... 1.0- 1.0+ 1.0-rc..1 null "" "1.0 " ../../../escaped \
-        $'1.0\n../x' $'../x\n1.0'; do
+        $'1.0\n../x' $'../x\n1.0' $'1.0\n' $'1.0\n\n'; do
         rc="$(_vonly_rc "$scratch" "$v" "$empty" "$empty" "9.9.9")"
         if [ "$rc" != "2" ]; then
             fail_test "path-shaped or non-version '$v' was not refused as a non-token (rc=$rc)"
