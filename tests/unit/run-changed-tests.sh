@@ -63,16 +63,40 @@ test_helper_keys_on_env() {
 # the specific function bodies (rather than a count threshold) means a newly
 # added unguarded network test is caught, not masked by the existing guards.
 test_check_versions_guards_live_tests() {
-    local func block
-    for func in test_missing_env_file test_json_output_format test_json_output_valid; do
-        # The guard must appear within ~6 lines of the function header.
-        block=$(command grep -A6 "^${func}()" "$CHECK_VERSIONS_TEST" || true)
-        if command grep -q "network_tests_disabled" <<<"$block"; then
-            pass_test "check-versions.sh guards $func with network_tests_disabled"
-        else
-            fail_test "check-versions.sh must guard $func with network_tests_disabled"
+    local func=test_json_output_valid block
+    # The guard must appear within ~6 lines of the function header.
+    block=$(command grep -A6 "^${func}()" "$CHECK_VERSIONS_TEST" || true)
+    if command grep -q "network_tests_disabled" <<<"$block"; then
+        pass_test "check-versions.sh guards $func with network_tests_disabled"
+    else
+        fail_test "check-versions.sh must guard $func with network_tests_disabled"
+    fi
+}
+
+# These two run offline against an empty scratch tree (#1269), so they carry no
+# network guard. Pin that instead: the body must go through the scratch runner
+# and must never invoke the live script, which would reach the network unguarded.
+test_check_versions_offline_tests_stay_offline() {
+    # Collect every violation and emit ONE verdict: a pass_test for a later
+    # function would otherwise mask an earlier fail_test in run_test's accounting.
+    local func body problems=""
+    for func in test_missing_env_file test_json_output_format; do
+        body=$(command awk -v f="^${func}\\\\(\\\\)" '$0 ~ f {p=1} p {print} p && /^}/ {exit}' "$CHECK_VERSIONS_TEST")
+        if [ -z "$body" ]; then
+            problems+=" check-versions.sh must define $func;"
+        elif ! command grep -q "run_check_versions_scratch" <<<"$body"; then
+            problems+=" $func must run through run_check_versions_scratch (offline);"
+        # Any spelling of the script path ($PROJECT_ROOT/..., a variable, a
+        # ../ detour) bypasses the scratch tree, so forbid the filename itself.
+        elif command grep -q 'check-versions\.sh' <<<"$body"; then
+            problems+=" $func must not invoke the live script unguarded;"
         fi
     done
+    if [ -n "$problems" ]; then
+        fail_test "${problems# }"
+    else
+        pass_test "offline check-versions tests run via run_check_versions_scratch"
+    fi
 }
 
 # version-resolution.sh routes ~18 network tests through check_network; that
@@ -651,6 +675,7 @@ run_test test_framework_defines_helper "framework.sh defines network_tests_disab
 run_test test_framework_exports_helper "framework.sh exports network_tests_disabled"
 run_test test_helper_keys_on_env "Helper keys on SKIP_NETWORK_TESTS env var"
 run_test test_check_versions_guards_live_tests "check-versions.sh guards live-script tests"
+run_test test_check_versions_offline_tests_stay_offline "check-versions.sh offline tests never hit the live script"
 run_test test_version_resolution_honors_flag "version-resolution.sh honors skip flag"
 run_test test_helper_enabled "network_tests_disabled true when flag=1"
 run_test test_helper_dev_override "network_tests_disabled false when flag=0"

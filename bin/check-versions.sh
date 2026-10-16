@@ -168,8 +168,10 @@ fetch_url() {
     echo "$response" 2>/dev/null || true
 }
 
-# Version storage
-declare -a TOOLS
+# Version storage. TOOLS is initialized because main() reads ${#TOOLS[@]}
+# under `set -u`: a bare declare leaves it unset, so a tree with zero pins
+# died with "TOOLS: unbound variable" instead of reporting no pins (#1269).
+declare -a TOOLS=()
 declare -a CURRENT_VERSIONS
 declare -a LATEST_VERSIONS
 declare -a VERSION_STATUS

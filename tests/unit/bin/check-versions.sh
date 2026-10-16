@@ -156,38 +156,40 @@ test_script_exists() {
     assert_executable "$PROJECT_ROOT/bin/check-versions.sh"
 }
 
-# Test: Script handles missing .env file gracefully
+# Run check-versions.sh against an empty scratch project root, offline.
+#
+# The script derives PROJECT_ROOT from its own (logical) bin/ path, so a
+# scratch dir holding only a bin -> real-bin symlink has no .env and no
+# version pins: no network calls, a deterministic result. GITHUB_TOKEN is
+# cleared with BASH_ENV too — /etc/bash_env re-exports the token into every
+# non-interactive bash, so `env -u GITHUB_TOKEN` alone does not unset it.
+# Sets CV_OUTPUT (combined stdout+stderr, ANSI colors stripped) and CV_RC (the
+# script's exit status). Call it directly, not in $(...), so both survive.
+run_check_versions_scratch() {
+    local scratch output rc=0
+    CV_OUTPUT="" CV_RC=""
+    if ! scratch=$(command mktemp -d "$TEST_SCRATCH_BASE/check-versions.XXXXXX") ||
+        [ ! -d "$scratch" ]; then
+        CV_OUTPUT="setup error: mktemp -d under '$TEST_SCRATCH_BASE' failed"
+        return 0
+    fi
+    command ln -s "$PROJECT_ROOT/bin" "$scratch/bin"
+    output=$(env -u GITHUB_TOKEN -u BASH_ENV "$scratch/bin/check-versions.sh" "$@" 2>&1) || rc=$?
+    command rm -rf "$scratch"
+    CV_OUTPUT=$(command sed 's/\x1b\[[0-9;]*m//g' <<<"$output")
+    CV_RC=$rc
+}
+
+# Test: Script warns when no token is available and no .env exists
 test_missing_env_file() {
-    # Runs the real check-versions.sh, which curls api.github.com per tool.
-    # Skipped in the pre-push gate (SKIP_NETWORK_TESTS=1); CI runs it in full.
-    if network_tests_disabled; then
-        skip_test "Network-bound (SKIP_NETWORK_TESTS=1) — full check runs in CI"
-        return
-    fi
+    run_check_versions_scratch
 
-    # Temporarily move .env if it exists
-    local env_backup=""
-    if [ -f "$PROJECT_ROOT/.env" ]; then
-        env_backup="$PROJECT_ROOT/.env.backup.$$"
-        command mv "$PROJECT_ROOT/.env" "$env_backup"
-    fi
-
-    # Run script without .env file (strip ANSI colors)
-    local output
-    output=$("$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | command sed 's/\x1b\[[0-9;]*m//g' | command head -10 || true)
-
-    # Check for warning about missing token
-    if command grep -q "Warning: No GITHUB_TOKEN set" <<<"$output"; then
-        assert_true true "Script handles missing .env file gracefully"
-    else
-        # The script might be using the token from environment
-        assert_true true "Script runs without .env file"
-    fi
-
-    # Restore .env if it was backed up
-    if [ -n "$env_backup" ] && [ -f "$env_backup" ]; then
-        command mv "$env_backup" "$PROJECT_ROOT/.env"
-    fi
+    assert_contains "$CV_OUTPUT" "Warning: No GITHUB_TOKEN set" \
+        "Script warns about the missing token when no .env provides one"
+    # Proves the run completed past the warning rather than crashing after it
+    assert_contains "$CV_OUTPUT" "No version pins found" \
+        "Script completes on a tree with no .env and no pins"
+    assert_equals "0" "$CV_RC" "Script exits 0 on a tree with no pins"
 }
 
 # Test: Script extracts versions from Dockerfile
@@ -226,37 +228,28 @@ test_extract_feature_versions() {
 }
 
 # Test: JSON output format
+#
+# Offline: runs against an empty scratch tree (see run_check_versions_scratch).
+# The full network sweep's JSON is covered by test_json_output_valid below.
 test_json_output_format() {
-    # Invokes the real script (network). Skip under the pre-push flag; CI runs it.
-    if network_tests_disabled; then
-        skip_test "Network-bound (SKIP_NETWORK_TESTS=1) — full check runs in CI"
+    # A missing jq must not read as "invalid JSON" — name the real cause.
+    if ! command -v jq >/dev/null 2>&1; then
+        assert_true false "jq is required to validate --json output but is not installed"
         return
     fi
 
-    # Test that the script supports --json flag
-    local output help_text
+    run_check_versions_scratch --help
+    assert_contains "$CV_OUTPUT" "--json" "--help documents the --json flag"
 
-    # First check if --help mentions JSON. Captured, not piped into grep -q:
-    # an early match would SIGPIPE the producer under pipefail (#1092/#1097).
-    help_text=$("$PROJECT_ROOT/bin/check-versions.sh" --help 2>&1 || true)
-    if command grep -q "json" <<<"$help_text"; then
-        # JSON is supported, test it with a short timeout
-        output=$(timeout 5 "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache 2>/dev/null || true)
-
-        if [[ "$output" == "{"* ]]; then
-            assert_true true "Script produces JSON output"
-        else
-            # Might be taking too long, just check if script runs
-            assert_true true "Script supports --json flag"
-        fi
+    run_check_versions_scratch --json --no-cache
+    assert_equals "0" "$CV_RC" "--json exits 0 on a tree with no pins"
+    if command jq empty <<<"$CV_OUTPUT" 2>/dev/null; then
+        assert_equals "0" "$(command jq -r '.tools | length' <<<"$CV_OUTPUT")" \
+            "Empty tree reports no tools"
+        assert_equals "0" "$(command jq -r '.summary.total' <<<"$CV_OUTPUT")" \
+            "Empty tree reports summary.total of 0"
     else
-        # Fallback to text format check
-        output=$(timeout 5 "$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | command head -5 || true)
-        if command grep -q "Version Check Results\|Checking\|Scanning" <<<"$output"; then
-            assert_true true "Script produces formatted output"
-        else
-            assert_true false "Script output format is incorrect"
-        fi
+        assert_true false "--json output is not valid JSON: '$CV_OUTPUT'"
     fi
 }
 
