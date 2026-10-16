@@ -37,6 +37,46 @@ fi
 HISTORICAL_COVERAGE_MIN=95
 HISTORICAL_COMMIT_WINDOW=300
 
+# Run `yq eval <expr>` on $CONFORM, capturing stdout, stderr, and the exit
+# code separately (#1100). A `yq ... | grep -q` pipeline discards yq's
+# status and stderr, so a one-off CI failure could not be told apart from
+# a genuinely missing scope. stderr is kept out of stdout so a yq warning
+# can never be matched as a scope entry.
+#
+# Sets YQ_OUT, YQ_ERR and YQ_SETUP_FAILED; returns yq's exit code, or 1
+# with YQ_SETUP_FAILED=1 if the scratch file couldn't be created (yq never
+# ran). The flag is out-of-band so no yq exit code can be mistaken for a
+# setup failure. Callers invoke this as `run_yq ... || rc=$?`, which
+# disables errexit inside it, so a failed mktemp must be caught explicitly
+# or it would surface as a yq failure.
+run_yq() {
+    local expr="$1" errfile rc=0
+    YQ_OUT="" YQ_ERR="" YQ_SETUP_FAILED=0
+    if ! errfile=$(command mktemp "${TMPDIR:-/tmp}/conform-scopes-yq.XXXXXX" 2>/dev/null) ||
+        [ ! -f "$errfile" ]; then
+        YQ_SETUP_FAILED=1
+        YQ_ERR="mktemp failed under ${TMPDIR:-/tmp}"
+        return 1
+    fi
+    YQ_OUT=$(yq eval "$expr" "$CONFORM" 2>"$errfile") || rc=$?
+    YQ_ERR=$(<"$errfile")
+    command rm -f "$errfile"
+    return "$rc"
+}
+
+# Diagnostic for a non-zero run_yq: exit code, stderr, and what stdout held.
+yq_failure_msg() {
+    local rc="$1" lines=0
+    if [ "${YQ_SETUP_FAILED:-0}" -eq 1 ]; then
+        echo "run_yq setup failed before yq ran (rc=$rc): ${YQ_ERR:-<empty>}"
+        return 0
+    fi
+    [ -n "$YQ_OUT" ] && lines=$(command wc -l <<<"$YQ_OUT")
+    echo "yq failed (rc=$rc) reading $CONFORM — stderr: ${YQ_ERR:-<empty>}; stdout ($lines lines): ${YQ_OUT:-<empty>}"
+}
+
+SCOPES_EXPR='.policies[0].spec.conventional.scopes[]'
+
 test_yaml_parseable() {
     if yq eval '.' "$CONFORM" >/dev/null 2>&1; then
         assert_true true ".conform.yaml parses as valid YAML"
@@ -46,9 +86,16 @@ test_yaml_parseable() {
 }
 
 test_scopes_non_empty() {
-    local count
-    count=$(yq eval '.policies[0].spec.conventional.scopes | length' "$CONFORM")
-    if [ "$count" -gt 0 ]; then
+    local count rc=0
+    run_yq '.policies[0].spec.conventional.scopes | length' || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        assert_true false "$(yq_failure_msg "$rc")"
+        return 0
+    fi
+    count="$YQ_OUT"
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        assert_true false "scopes length is not a number: '$count'"
+    elif [ "$count" -gt 0 ]; then
         assert_true true "scopes list is non-empty (count=$count)"
     else
         assert_true false "scopes list is empty — regression of #409 (the original bug rejected every scoped commit)"
@@ -59,12 +106,17 @@ test_release_scope_present() {
     # `chore(release): ...` is what bin/release.sh emits and what
     # docs/development/releasing.md tells contributors to use. If this
     # check fails, releases break.
-    local scopes
-    scopes=$(yq eval '.policies[0].spec.conventional.scopes[]' "$CONFORM" || true)
-    if command grep -qE '^\^?release\$?$' <<<"$scopes"; then
+    local rc=0 lines=0 tail_lines
+    run_yq "$SCOPES_EXPR" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        assert_true false "$(yq_failure_msg "$rc")"
+    elif command grep -qE '^\^?release\$?$' <<<"$YQ_OUT"; then
         assert_true true "release scope present (regression guard for #409)"
     else
-        assert_true false "release scope missing — chore(release): commits will fail the commit-msg hook"
+        # Line count + tail tell a truncated read apart from a removed scope.
+        [ -n "$YQ_OUT" ] && lines=$(command wc -l <<<"$YQ_OUT")
+        tail_lines=$(command tail -n 3 <<<"$YQ_OUT" | command tr '\n' ' ')
+        assert_true false "release scope missing — chore(release): commits will fail the commit-msg hook (yq rc=0, read $lines lines, last: ${tail_lines:-<empty>}; stderr: ${YQ_ERR:-<empty>})"
     fi
 }
 
@@ -72,9 +124,18 @@ test_scopes_are_anchored() {
     # Conform uses unanchored regex matching. Every entry must start with
     # `^` and end with `$`, otherwise short scopes leak (e.g. `op` would
     # match `feat(operation):`).
-    local unanchored
-    unanchored=$(yq eval '.policies[0].spec.conventional.scopes[]' "$CONFORM" |
-        command grep -vE '^\^[^$]+\$$' || true)
+    local unanchored rc=0
+    run_yq "$SCOPES_EXPR" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        assert_true false "$(yq_failure_msg "$rc")"
+        return 0
+    fi
+    if [ -z "$YQ_OUT" ]; then
+        # An empty list has no unanchored entries; don't pass vacuously.
+        assert_true false "yq returned no scope entries from $CONFORM (stderr: ${YQ_ERR:-<empty>})"
+        return 0
+    fi
+    unanchored=$(command grep -vE '^\^[^$]+\$$' <<<"$YQ_OUT" || true)
     if [ -z "$unanchored" ]; then
         assert_true true "every scope entry is anchored ^...\$"
     else
@@ -91,11 +152,14 @@ test_historical_scopes_covered() {
     local total=0
     local covered=0
     local missing=()
-    local allowed_anchored
-    allowed_anchored=$(yq eval '.policies[0].spec.conventional.scopes[]' "$CONFORM")
-    # Bare names (^ and $ stripped), matched below via herestring (#1097).
-    local allowed_bare
-    allowed_bare=$(command sed 's/^\^//; s/\$$//' <<<"$allowed_anchored")
+    local allowed_bare rc=0
+    run_yq "$SCOPES_EXPR" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        assert_true false "$(yq_failure_msg "$rc")"
+        return 0
+    fi
+    # Bare names (anchors stripped), computed once rather than per scope.
+    allowed_bare=$(command sed 's/^\^//; s/\$$//' <<<"$YQ_OUT")
 
     # Skip gracefully on shallow clones (CI sometimes does --depth=1).
     if ! command -v git >/dev/null 2>&1; then
@@ -113,9 +177,8 @@ test_historical_scopes_covered() {
     while IFS= read -r scope; do
         [ -z "$scope" ] && continue
         total=$((total + 1))
-        # Match against anchored entries: scope must equal one of the bare
-        # names (after stripping ^ and $).
-        if command grep -Fxq "$scope" <<<"$allowed_bare"; then
+        # Scope must equal one of the bare allowlist names.
+        if command grep -Fxq -- "$scope" <<<"$allowed_bare"; then
             covered=$((covered + 1))
         else
             missing+=("$scope")
@@ -144,10 +207,70 @@ test_historical_scopes_covered() {
     fi
 }
 
+test_run_yq_reports_failure() {
+    # Drive the diagnostic path the checks above rely on (#1100): a yq
+    # failure must surface a non-zero rc AND yq's stderr in the message,
+    # not just an exit code. CONFORM is shadowed locally (dynamic scope)
+    # so the fixture can't leak into the other tests.
+    # run_test disables errexit here, so check the fixture explicitly: an
+    # empty $scratch would point yq at /bad.yaml and pass on "no such file".
+    local scratch rc=0 msg
+    if ! scratch=$(command mktemp -d "${TMPDIR:-/tmp}/conform-scopes-test.XXXXXX") ||
+        [ ! -d "$scratch" ] ||
+        ! command printf 'policies: [\n  - {broken\n' >"$scratch/bad.yaml"; then
+        assert_true false "fixture setup failed under ${TMPDIR:-/tmp}"
+        return 0
+    fi
+    local CONFORM="$scratch/bad.yaml"
+    run_yq "$SCOPES_EXPR" || rc=$?
+    msg=$(yq_failure_msg "$rc")
+    command rm -rf "$scratch"
+
+    if [ "$rc" -eq 0 ]; then
+        assert_true false "run_yq returned 0 on malformed YAML"
+    elif [ -z "$YQ_ERR" ]; then
+        assert_true false "run_yq captured no stderr for a yq failure (rc=$rc)"
+    elif [[ "$YQ_OUT" == *"$YQ_ERR"* ]]; then
+        assert_true false "yq stderr leaked into captured stdout: $YQ_OUT"
+    elif [[ "$msg" != *"yq failed (rc=$rc) reading $CONFORM"* ]] || [[ "$msg" != *"stderr: $YQ_ERR"* ]]; then
+        assert_true false "yq_failure_msg lacks rc, path, or stderr: $msg"
+    else
+        assert_true true "yq failure reported with rc=$rc and stderr"
+    fi
+    YQ_OUT="" YQ_ERR="" YQ_SETUP_FAILED=0
+}
+
+test_run_yq_reports_setup_failure() {
+    # A scratch-file failure must be labeled as setup, never blamed on yq.
+    # TMPDIR is shadowed with a regular file so mktemp fails
+    # deterministically; run_yq expands it itself, so `local` suffices.
+    local blocker rc=0 msg
+    if ! blocker=$(command mktemp "${TMPDIR:-/tmp}/conform-scopes-blocker.XXXXXX") ||
+        [ ! -f "$blocker" ]; then
+        assert_true false "fixture setup failed under ${TMPDIR:-/tmp}"
+        return 0
+    fi
+    local TMPDIR="$blocker"
+    run_yq "$SCOPES_EXPR" || rc=$?
+    msg=$(yq_failure_msg "$rc")
+    command rm -f "$blocker"
+
+    if [ "$rc" -eq 0 ] || [ "$YQ_SETUP_FAILED" -ne 1 ]; then
+        assert_true false "run_yq didn't flag mktemp failure (rc=$rc, YQ_SETUP_FAILED=$YQ_SETUP_FAILED)"
+    elif [[ "$msg" != *"setup failed before yq ran"* ]] || [[ "$msg" == *"yq failed"* ]]; then
+        assert_true false "setup failure not labeled distinctly: $msg"
+    else
+        assert_true true "mktemp failure reported as setup, not yq"
+    fi
+    YQ_OUT="" YQ_ERR="" YQ_SETUP_FAILED=0
+}
+
 run_test test_yaml_parseable ".conform.yaml is valid YAML"
 run_test test_scopes_non_empty "scopes list is non-empty"
 run_test test_release_scope_present "release scope present (regression for #409)"
 run_test test_scopes_are_anchored "every scope is anchored ^...\$"
 run_test test_historical_scopes_covered ">=${HISTORICAL_COVERAGE_MIN}% of historical scopes are allowed"
+run_test test_run_yq_reports_failure "yq failures report rc and stderr (#1100)"
+run_test test_run_yq_reports_setup_failure "scratch-file failures are not blamed on yq (#1100)"
 
 generate_report
