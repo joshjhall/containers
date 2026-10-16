@@ -139,7 +139,7 @@ live_pin() {
     [ -n "$DOCKERFILE" ] || return 0
     local var
     var="$(command printf '%s' "$1" | command tr '[:lower:]-' '[:upper:]_')_VERSION"
-    command sed -n -E "s/^ARG ${var}=\"?([^\" ]+)\"?[[:space:]]*\$/\\1/p" "$DOCKERFILE" |
+    command sed -n -E "s/^ARG ${var}=\"?([^\"[:space:]]+)\"?[[:space:]]*\$/\\1/p" "$DOCKERFILE" |
         command sed -n '1p'
 }
 
