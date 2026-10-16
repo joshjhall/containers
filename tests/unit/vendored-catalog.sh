@@ -62,14 +62,15 @@ _is_version_token() {
 }
 
 # _vendored_only_target <fixture> <pin> — print the path a drift-vendored-only
-# fixture is staged at, or return 1 when it cannot exercise the live-pin gate:
-# a non-token .version (the guards would check a different path than cp
-# writes), a version either catalog holds (routes through canonical_diff), or
-# the pin itself (skipped, not rejected). Mirrors just/db.just.
+# fixture is staged at, or fail when it cannot exercise the live-pin gate:
+# return 2 for a non-token .version (the guards would check a different path
+# than cp writes), 1 for a version either catalog holds (routes through
+# canonical_diff) or the pin itself (skipped, not rejected). Mirrors
+# just/db.just, which reports the two cases with distinct messages too.
 _vendored_only_target() {
     local version target
     version="$(command jq -r .version "$1")"
-    _is_version_token "$version" || return 1
+    _is_version_token "$version" || return 2
     target="tools/rust/versions/$version.json"
     if [ -e "$VENDORED/$target" ] || [ -e "$UPSTREAM_DB/$target" ] ||
         [ "$version" = "$2" ]; then
@@ -159,8 +160,8 @@ test_drift_fixtures_are_rejected() {
         return 0
     fi
 
-    local accepted="" misstaged="" wrong_reason="" checked=0 index_checked=0 vonly_checked=0
-    local fixture staged target pin expect output
+    local accepted="" misstaged="" bad_token="" wrong_reason="" checked=0 index_checked=0 vonly_checked=0
+    local fixture staged target pin expect output rc
     pin="$(_dockerfile_rust_pin)"
     shopt -s nullglob
     for fixture in "$NEGATIVE"/drift-*.json; do
@@ -180,7 +181,12 @@ test_drift_fixtures_are_rejected() {
                 ;;
             drift-vendored-only-*)
                 vonly_checked=$((vonly_checked + 1))
-                if ! target="$(_vendored_only_target "$fixture" "$pin")"; then
+                rc=0
+                target="$(_vendored_only_target "$fixture" "$pin")" || rc=$?
+                if [ "$rc" -eq 2 ]; then
+                    bad_token="$bad_token $(basename "$fixture")"
+                    continue
+                elif [ "$rc" -ne 0 ]; then
                     misstaged="$misstaged $(basename "$fixture")"
                     continue
                 fi
@@ -211,6 +217,8 @@ test_drift_fixtures_are_rejected() {
         fail_test "no drift-index-*.json fixture in $NEGATIVE — compare_index's branches are unproven"
     elif [ "$vonly_checked" -eq 0 ]; then
         fail_test "no drift-vendored-only-*.json fixture in $NEGATIVE — the live-pin gate is unproven"
+    elif [ -n "$bad_token" ]; then
+        fail_test "drift-vendored-only fixture(s) .version must be a plain version token:$bad_token"
     elif [ -n "$misstaged" ]; then
         fail_test "drift-vendored-only fixture(s) need a version in neither catalog and not the live pin ($pin):$misstaged"
     elif [ -n "$accepted" ]; then
@@ -257,7 +265,7 @@ test_version_token_regex_matches_recipe() {
 # The control fixture proves the helper still stages a well-formed version.
 test_path_shaped_vendored_only_fixture_is_refused() {
     if ! command -v jq >/dev/null 2>&1; then
-        skip_test "jq unavailable"
+        require_upstream_in_ci "jq unavailable"
         return 0
     fi
     local scratch target rc
@@ -270,13 +278,19 @@ test_path_shaped_vendored_only_fixture_is_refused() {
 
     rc=0
     target="$(_vendored_only_target "$scratch/drift-vendored-only-path.json" "9.9.9")" || rc=$?
-    assert_equals "1" "$rc" "a path-shaped .version is refused"
+    assert_equals "2" "$rc" "a path-shaped .version is refused as a non-token"
     assert_equals "" "$target" "no staging path is produced for it"
 
     rc=0
     target="$(_vendored_only_target "$scratch/drift-vendored-only-control.json" "9.9.9")" || rc=$?
     assert_equals "0" "$rc" "a plain unused version is still staged"
     assert_equals "tools/rust/versions/0.0.1-scratch.json" "$target" "staged at its own version path"
+
+    # Same well-formed fixture, but now it IS the pin: refused on the pin
+    # branch (1), not the token branch (2).
+    rc=0
+    target="$(_vendored_only_target "$scratch/drift-vendored-only-control.json" "0.0.1-scratch")" || rc=$?
+    assert_equals "1" "$rc" "a version equal to the live pin is refused on the pin branch"
     command rm -rf "$scratch"
     return 0
 }
