@@ -133,8 +133,8 @@ test_drift_fixtures_are_rejected() {
         return 0
     fi
 
-    local accepted="" misstaged="" checked=0 index_checked=0 vonly_checked=0
-    local fixture staged target version pin
+    local accepted="" misstaged="" wrong_reason="" checked=0 index_checked=0 vonly_checked=0
+    local fixture staged target version pin expect output
     pin="$(_dockerfile_rust_pin)"
     shopt -s nullglob
     for fixture in "$NEGATIVE"/drift-*.json; do
@@ -146,6 +146,7 @@ test_drift_fixtures_are_rejected() {
         # staging every fixture at one path would leave the other unproven.
         # drift-vendored-only-* is staged as a NEW version file, exercising the
         # live-pin gate (#1284) — mirrors just/db.just db-validate-vendored.
+        expect=""
         case "$(basename "$fixture")" in
             drift-index-*)
                 target="tools/rust/index.json"
@@ -155,12 +156,17 @@ test_drift_fixtures_are_rejected() {
                 version="$(command jq -r .version "$fixture")"
                 target="tools/rust/versions/$version.json"
                 vonly_checked=$((vonly_checked + 1))
-                # Overwriting a real entry, or matching the pin, would make it
-                # fail (or pass) for a reason other than the one it exists for.
-                if [ -e "$VENDORED/$target" ] || [ "$version" = "$pin" ]; then
+                # A version either catalog holds would route through
+                # canonical_diff, and the pin would be skipped — either way the
+                # fixture would stop exercising the gate it exists for.
+                if [ -z "$version" ] || [ "$version" = "null" ] ||
+                    [ -e "$VENDORED/$target" ] || [ -e "$UPSTREAM_DB/$target" ] ||
+                    [ "$version" = "$pin" ]; then
                     misstaged="$misstaged $(basename "$fixture")"
                     continue
                 fi
+                # Any drift exits 1; require the rejection to be THIS gate's.
+                expect="${target#tools/}: vendored-only and not the live pin"
                 ;;
             *) target="tools/rust/versions/1.96.0.json" ;;
         esac
@@ -169,10 +175,12 @@ test_drift_fixtures_are_rejected() {
         command mkdir -p "$staged"
         command cp -r "$VENDORED"/. "$staged/"
         command cp "$fixture" "$staged/$target"
-        if command bash "$DRIFT_SCRIPT" --vendored "$staged" \
+        if output="$(command bash "$DRIFT_SCRIPT" --vendored "$staged" \
             --upstream "$UPSTREAM_DB" --dockerfile "$PROJECT_ROOT/Dockerfile" \
-            --quiet >/dev/null 2>&1; then
+            --quiet 2>&1)"; then
             accepted="$accepted $(basename "$fixture")"
+        elif [ -n "$expect" ] && [[ "$output" != *"$expect"* ]]; then
+            wrong_reason="$wrong_reason $(basename "$fixture")"
         fi
         command rm -rf "$staged"
     done
@@ -185,9 +193,11 @@ test_drift_fixtures_are_rejected() {
     elif [ "$vonly_checked" -eq 0 ]; then
         fail_test "no drift-vendored-only-*.json fixture in $NEGATIVE — the live-pin gate is unproven"
     elif [ -n "$misstaged" ]; then
-        fail_test "drift-vendored-only fixture(s) name an existing version or the live pin ($pin):$misstaged"
+        fail_test "drift-vendored-only fixture(s) need a version in neither catalog and not the live pin ($pin):$misstaged"
     elif [ -n "$accepted" ]; then
         fail_test "drift check ACCEPTED fixture(s) it must reject:$accepted"
+    elif [ -n "$wrong_reason" ]; then
+        fail_test "drift check rejected fixture(s) for the wrong reason (not the live-pin gate):$wrong_reason"
     fi
     return 0
 }
