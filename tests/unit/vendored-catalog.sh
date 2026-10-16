@@ -44,6 +44,14 @@ DRIFT_SCRIPT="$PROJECT_ROOT/bin/check-catalog-drift.sh"
 # checkout.
 UPSTREAM_DB="${CONTAINERS_DB_SRC:-$PROJECT_ROOT/../containers-db}"
 
+# _dockerfile_rust_pin — the repo Dockerfile's RUST_VERSION default, parsed
+# the way live_pin parses it (quotes and trailing whitespace stripped, first
+# match only), so a guard comparing against it agrees with the script.
+_dockerfile_rust_pin() {
+    command sed -n -E 's/^ARG RUST_VERSION="?([^"[:space:]]+)"?[[:space:]]*$/\1/p' \
+        "$PROJECT_ROOT/Dockerfile" | command sed -n '1p'
+}
+
 # True when the upstream catalog and jq are both available.
 upstream_available() {
     [ -d "$UPSTREAM_DB/tools" ] && command -v jq >/dev/null 2>&1
@@ -127,7 +135,7 @@ test_drift_fixtures_are_rejected() {
 
     local accepted="" misstaged="" checked=0 index_checked=0 vonly_checked=0
     local fixture staged target version pin
-    pin="$(command sed -n 's/^ARG RUST_VERSION=//p' "$PROJECT_ROOT/Dockerfile")"
+    pin="$(_dockerfile_rust_pin)"
     shopt -s nullglob
     for fixture in "$NEGATIVE"/drift-*.json; do
         checked=$((checked + 1))
@@ -323,7 +331,7 @@ test_drift_reads_quoted_live_pin() {
     # resolve to the bare version, or the live pin would be reported as drift.
     local up="$TEST_TEMP_DIR/qpin-up" ven="$TEST_TEMP_DIR/qpin-ven" line output rc
     _vendored_only_pair "$up" "$ven" 1.1.0
-    for line in 'ARG RUST_VERSION="1.1.0"  ' 'ARG RUST_VERSION=1.1.0	 '; do
+    for line in 'ARG RUST_VERSION="1.1.0"  ' $'ARG RUST_VERSION=1.1.0\t '; do
         command printf 'FROM debian\n%s\n' "$line" >"$ven/Dockerfile"
         rc=0
         output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" \
@@ -358,7 +366,7 @@ test_drift_reads_real_dockerfile_pin() {
     # actual ARG RUST_VERSION line is the form live_pin reads — otherwise a
     # reformatted ARG would only surface via the CI-only upstream comparison.
     local pin up="$TEST_TEMP_DIR/real-up" output rc=0
-    pin="$(command sed -n 's/^ARG RUST_VERSION=//p' "$PROJECT_ROOT/Dockerfile")"
+    pin="$(_dockerfile_rust_pin)"
     if [ -z "$pin" ] || [ ! -f "$VENDORED/tools/rust/versions/$pin.json" ]; then
         fail_test "Dockerfile RUST_VERSION pin [$pin] has no vendored entry"
         return 0
