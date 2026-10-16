@@ -52,6 +52,33 @@ _dockerfile_rust_pin() {
         "$PROJECT_ROOT/Dockerfile" | command sed -n '1p'
 }
 
+# _is_version_token <value> — true for a plain version (1.96.0, 1.2.3-rc.1,
+# 1.0.0-rc.1+build.5). .version becomes a path component, so `/` and `..` must
+# never reach it. Byte-equal to just/db.just db-validate-vendored's copy —
+# test_version_token_regex_matches_recipe pins that.
+_VERSION_TOKEN_RE='^[0-9]+(\.[0-9]+)*(-[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?(\+[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?$'
+_is_version_token() {
+    [[ "$1" =~ $_VERSION_TOKEN_RE ]]
+}
+
+# _vendored_only_target <fixture> <pin> — print the path a drift-vendored-only
+# fixture is staged at, or fail when it cannot exercise the live-pin gate:
+# return 2 for a non-token .version (the guards would check a different path
+# than cp writes), 1 for a version either catalog holds (routes through
+# canonical_diff) or the pin itself (skipped, not rejected). Mirrors
+# just/db.just, which reports the two cases with distinct messages too.
+_vendored_only_target() {
+    local version target
+    version="$(command jq -r .version "$1")"
+    _is_version_token "$version" || return 2
+    target="tools/rust/versions/$version.json"
+    if [ -e "$VENDORED/$target" ] || [ -e "$UPSTREAM_DB/$target" ] ||
+        [ "$version" = "$2" ]; then
+        return 1
+    fi
+    command printf '%s\n' "$target"
+}
+
 # True when the upstream catalog and jq are both available.
 upstream_available() {
     [ -d "$UPSTREAM_DB/tools" ] && command -v jq >/dev/null 2>&1
@@ -133,8 +160,8 @@ test_drift_fixtures_are_rejected() {
         return 0
     fi
 
-    local accepted="" misstaged="" wrong_reason="" checked=0 index_checked=0 vonly_checked=0
-    local fixture staged target version pin expect output
+    local accepted="" misstaged="" bad_token="" wrong_reason="" checked=0 index_checked=0 vonly_checked=0
+    local fixture staged target pin expect output rc
     pin="$(_dockerfile_rust_pin)"
     shopt -s nullglob
     for fixture in "$NEGATIVE"/drift-*.json; do
@@ -153,15 +180,13 @@ test_drift_fixtures_are_rejected() {
                 index_checked=$((index_checked + 1))
                 ;;
             drift-vendored-only-*)
-                version="$(command jq -r .version "$fixture")"
-                target="tools/rust/versions/$version.json"
                 vonly_checked=$((vonly_checked + 1))
-                # A version either catalog holds would route through
-                # canonical_diff, and the pin would be skipped — either way the
-                # fixture would stop exercising the gate it exists for.
-                if [ -z "$version" ] || [ "$version" = "null" ] ||
-                    [ -e "$VENDORED/$target" ] || [ -e "$UPSTREAM_DB/$target" ] ||
-                    [ "$version" = "$pin" ]; then
+                rc=0
+                target="$(_vendored_only_target "$fixture" "$pin")" || rc=$?
+                if [ "$rc" -eq 2 ]; then
+                    bad_token="$bad_token $(basename "$fixture")"
+                    continue
+                elif [ "$rc" -ne 0 ]; then
                     misstaged="$misstaged $(basename "$fixture")"
                     continue
                 fi
@@ -192,6 +217,8 @@ test_drift_fixtures_are_rejected() {
         fail_test "no drift-index-*.json fixture in $NEGATIVE — compare_index's branches are unproven"
     elif [ "$vonly_checked" -eq 0 ]; then
         fail_test "no drift-vendored-only-*.json fixture in $NEGATIVE — the live-pin gate is unproven"
+    elif [ -n "$bad_token" ]; then
+        fail_test "drift-vendored-only fixture(s) .version must be a plain version token:$bad_token"
     elif [ -n "$misstaged" ]; then
         fail_test "drift-vendored-only fixture(s) need a version in neither catalog and not the live pin ($pin):$misstaged"
     elif [ -n "$accepted" ]; then
@@ -199,6 +226,83 @@ test_drift_fixtures_are_rejected() {
     elif [ -n "$wrong_reason" ]; then
         fail_test "drift check rejected fixture(s) for the wrong reason (not the live-pin gate):$wrong_reason"
     fi
+    return 0
+}
+
+test_version_token_predicate() {
+    local v
+    for v in 1.0.1 1.96.0 1.2.3-rc.1 1.0+build 1.0.0-rc.1+build.5 2; do
+        if ! _is_version_token "$v"; then
+            fail_test "plain version '$v' was refused"
+            return 0
+        fi
+    done
+    # The newline pair pins that ^/$ anchor the whole value, not a line —
+    # true of bash's =~, not of a line-oriented grep -E/sed port.
+    for v in ../index 1.0/../x a/b .. 1.. 1... 1.0- 1.0+ 1.0-rc..1 null "" "1.0 " ../../../escaped \
+        $'1.0\n../x' $'../x\n1.0'; do
+        if _is_version_token "$v"; then
+            fail_test "path-shaped or non-version '$v' was accepted"
+            return 0
+        fi
+    done
+    return 0
+}
+
+# The recipe stages fixtures with cp, so ITS regex is the gate; the helper
+# above only mirrors it. Extract the recipe's literal and require equality, so
+# the predicate tests here cover the regex the recipe actually runs.
+test_version_token_regex_matches_recipe() {
+    local recipe_re line
+    line="$(command grep -F '[[ "$version" =~ ' "$PROJECT_ROOT/just/db.just")"
+    recipe_re="${line#*=~ }"
+    recipe_re="${recipe_re% ]]; then}"
+    assert_equals "$_VERSION_TOKEN_RE" "$recipe_re" \
+        "just/db.just's version-token regex equals _is_version_token's"
+    return 0
+}
+
+# A path-shaped .version must be refused, not staged. `../../../escaped` is
+# chosen because it slips past every OTHER guard — the path it names exists in
+# neither catalog and is not the pin — so only the token check can refuse it.
+# The control fixture proves the helper still stages a well-formed version.
+test_path_shaped_vendored_only_fixture_is_refused() {
+    if ! command -v jq >/dev/null 2>&1; then
+        require_upstream_in_ci "jq unavailable"
+        return 0
+    fi
+    local scratch target rc
+    scratch="$TEST_TEMP_DIR/vonly-scratch"
+    command mkdir -p "$scratch"
+    command printf '{"tool":"rust","version":"../../../escaped"}\n' \
+        >"$scratch/drift-vendored-only-path.json"
+    command printf '{"tool":"rust","version":"0.0.1-scratch"}\n' \
+        >"$scratch/drift-vendored-only-control.json"
+
+    rc=0
+    target="$(_vendored_only_target "$scratch/drift-vendored-only-path.json" "9.9.9")" || rc=$?
+    assert_equals "2" "$rc" "a path-shaped .version is refused as a non-token"
+    assert_equals "" "$target" "no staging path is produced for it"
+
+    rc=0
+    target="$(_vendored_only_target "$scratch/drift-vendored-only-control.json" "9.9.9")" || rc=$?
+    assert_equals "0" "$rc" "a plain unused version is still staged"
+    assert_equals "tools/rust/versions/0.0.1-scratch.json" "$target" "staged at its own version path"
+
+    # Same well-formed fixture, but now it IS the pin: refused on the pin
+    # branch (1), not the token branch (2).
+    rc=0
+    target="$(_vendored_only_target "$scratch/drift-vendored-only-control.json" "0.0.1-scratch")" || rc=$?
+    assert_equals "1" "$rc" "a version equal to the live pin is refused on the pin branch"
+
+    # A version the vendored catalog already holds, with a non-matching pin:
+    # refused on the existence branch, where cp would overwrite a real entry.
+    command printf '{"tool":"rust","version":"1.96.0"}\n' \
+        >"$scratch/drift-vendored-only-existing.json"
+    rc=0
+    target="$(_vendored_only_target "$scratch/drift-vendored-only-existing.json" "9.9.9")" || rc=$?
+    assert_equals "1" "$rc" "a version the catalog already holds is refused on the existence branch"
+    command rm -rf "$scratch"
     return 0
 }
 
@@ -547,6 +651,9 @@ test_schema_fixtures_are_rejected() {
 
 run_test "test_vendored_matches_upstream" "vendored catalog matches containers-db"
 run_test "test_drift_fixtures_are_rejected" "drift check rejects planted drift fixtures"
+run_test "test_version_token_predicate" "version-token predicate refuses path-shaped values"
+run_test "test_version_token_regex_matches_recipe" "version-token regex is byte-equal to just/db.just's"
+run_test "test_path_shaped_vendored_only_fixture_is_refused" "a path-shaped drift-vendored-only fixture is refused, not staged"
 run_test "test_drift_ignores_tested_evidence" "drift check ignores tested[] evidence"
 run_test "test_drift_still_catches_install_data" "drift check still catches install-data differences"
 run_test "test_drift_ignores_scanner_activity" "drift check ignores scanner activity, not other index fields"
