@@ -375,7 +375,7 @@ jobs:
   #   - it must report FAILURE whenever the tier did not actually certify this
   #     PR. Reporting green on no evidence is the #854 class this protection
   #     exists to close, relocated one hop upstream.
-  # Behavior is verified offline by tests/unit/required-checks.sh, which
+  # Behavior is verified offline by tests/unit/required-checks-pr-tier.sh, which
   # extracts this run block and executes it across the states below.
   # =====================================
   pr-tier:
