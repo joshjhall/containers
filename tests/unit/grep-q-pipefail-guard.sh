@@ -43,7 +43,7 @@ UNIT_DIR="$PROJECT_ROOT/tests/unit"
 # Directories under tests/unit/ not yet converted, keyed by first path segment;
 # "." is the top-level tests/unit/*.sh files. Remove an entry in the PR that
 # converts it — test_allowlist_is_not_stale fails until you do.
-UNCONVERTED_DIRS=(. host observability runtime)
+UNCONVERTED_DIRS=(. host observability)
 
 # pipe_grep_q_sites ROOT — prints "relpath:line" for every pipe into a grep
 # whose short-option cluster carries q (or --quiet), optionally prefixed by

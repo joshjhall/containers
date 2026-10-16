@@ -314,7 +314,7 @@ test_audit_auth_uses_escape() {
     # Extract audit_auth function body and check for _json_escape usage
     local func_body
     func_body=$(command sed -n '/^audit_auth()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | command grep -q '_json_escape'; then
+    if command grep -q '_json_escape' <<<"$func_body"; then
         pass_test "audit_auth uses _json_escape for field escaping"
     else
         fail_test "audit_auth does not use _json_escape"
@@ -325,7 +325,7 @@ test_audit_auth_uses_escape() {
 test_audit_authz_uses_escape() {
     local func_body
     func_body=$(command sed -n '/^audit_authz()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | command grep -q '_json_escape'; then
+    if command grep -q '_json_escape' <<<"$func_body"; then
         pass_test "audit_authz uses _json_escape for field escaping"
     else
         fail_test "audit_authz does not use _json_escape"
@@ -336,7 +336,7 @@ test_audit_authz_uses_escape() {
 test_audit_data_access_uses_escape() {
     local func_body
     func_body=$(command sed -n '/^audit_data_access()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | command grep -q '_json_escape'; then
+    if command grep -q '_json_escape' <<<"$func_body"; then
         pass_test "audit_data_access uses _json_escape for field escaping"
     else
         fail_test "audit_data_access does not use _json_escape"
@@ -347,7 +347,7 @@ test_audit_data_access_uses_escape() {
 test_audit_config_uses_escape() {
     local func_body
     func_body=$(command sed -n '/^audit_config()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | command grep -q '_json_escape'; then
+    if command grep -q '_json_escape' <<<"$func_body"; then
         pass_test "audit_config uses _json_escape for field escaping"
     else
         fail_test "audit_config does not use _json_escape"
@@ -358,7 +358,7 @@ test_audit_config_uses_escape() {
 test_audit_security_uses_escape() {
     local func_body
     func_body=$(command sed -n '/^audit_security()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | command grep -q '_json_escape'; then
+    if command grep -q '_json_escape' <<<"$func_body"; then
         pass_test "audit_security uses _json_escape for field escaping"
     else
         fail_test "audit_security does not use _json_escape"
@@ -369,7 +369,7 @@ test_audit_security_uses_escape() {
 test_audit_network_uses_escape() {
     local func_body
     func_body=$(command sed -n '/^audit_network()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | command grep -q '_json_escape'; then
+    if command grep -q '_json_escape' <<<"$func_body"; then
         pass_test "audit_network uses _json_escape for field escaping"
     else
         fail_test "audit_network does not use _json_escape"
@@ -380,7 +380,7 @@ test_audit_network_uses_escape() {
 test_audit_file_uses_escape() {
     local func_body
     func_body=$(command sed -n '/^audit_file()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | command grep -q '_json_escape'; then
+    if command grep -q '_json_escape' <<<"$func_body"; then
         pass_test "audit_file uses _json_escape for field escaping"
     else
         fail_test "audit_file does not use _json_escape"
@@ -391,7 +391,7 @@ test_audit_file_uses_escape() {
 test_audit_process_uses_escape() {
     local func_body
     func_body=$(command sed -n '/^audit_process()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | command grep -q '_json_escape'; then
+    if command grep -q '_json_escape' <<<"$func_body"; then
         pass_test "audit_process uses _json_escape for field escaping"
     else
         fail_test "audit_process does not use _json_escape"
@@ -402,7 +402,7 @@ test_audit_process_uses_escape() {
 test_audit_compliance_uses_escape() {
     local func_body
     func_body=$(command sed -n '/^audit_compliance()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | command grep -q '_json_escape'; then
+    if command grep -q '_json_escape' <<<"$func_body"; then
         pass_test "audit_compliance uses _json_escape for field escaping"
     else
         fail_test "audit_compliance does not use _json_escape"
@@ -413,7 +413,7 @@ test_audit_compliance_uses_escape() {
 test_build_json_entry_validates_extra_data() {
     local func_body
     func_body=$(command sed -n '/^build_json_entry()/,/^}/p' "$SOURCE_FILE")
-    if echo "$func_body" | command grep -qE '\{.*\}'; then
+    if command grep -qE '\{.*\}' <<<"$func_body"; then
         pass_test "build_json_entry validates extra_data starts with { and ends with }"
     else
         fail_test "build_json_entry does not validate extra_data structure"
@@ -615,11 +615,11 @@ test_func_json_required_fields() {
     audit_log "system" "info" "Field check" '{}'
     local last_line
     last_line=$(command tail -1 "$AUDIT_LOG_FILE")
-    if echo "$last_line" | command grep -q '"@timestamp"' &&
-        echo "$last_line" | command grep -q '"event_id"' &&
-        echo "$last_line" | command grep -q '"category"' &&
-        echo "$last_line" | command grep -q '"level"' &&
-        echo "$last_line" | command grep -q '"message"'; then
+    if command grep -q '"@timestamp"' <<<"$last_line" &&
+        command grep -q '"event_id"' <<<"$last_line" &&
+        command grep -q '"category"' <<<"$last_line" &&
+        command grep -q '"level"' <<<"$last_line" &&
+        command grep -q '"message"' <<<"$last_line"; then
         pass_test "JSON output contains required fields (@timestamp, event_id, etc.)"
     else
         fail_test "JSON output missing required fields"
@@ -632,8 +632,8 @@ test_func_json_escape() {
     _reset_audit_logger
     local escaped
     escaped=$(_json_escape 'hello "world" with\backslash')
-    if echo "$escaped" | command grep -q '\\"world\\"' &&
-        echo "$escaped" | command grep -q '\\\\backslash'; then
+    if command grep -q '\\"world\\"' <<<"$escaped" &&
+        command grep -q '\\\\backslash' <<<"$escaped"; then
         pass_test "_json_escape escapes special characters"
     else
         fail_test "_json_escape did not properly escape special characters: $escaped"
@@ -647,7 +647,7 @@ test_func_stdout_copy() {
     export AUDIT_STDOUT_COPY="true"
     local stdout_output
     stdout_output=$(audit_log "system" "info" "Stdout test" '{}')
-    if echo "$stdout_output" | command grep -q '"message":"Stdout test"'; then
+    if command grep -q '"message":"Stdout test"' <<<"$stdout_output"; then
         pass_test "AUDIT_STDOUT_COPY=true outputs to stdout"
     else
         fail_test "AUDIT_STDOUT_COPY=true did not output to stdout"
@@ -738,9 +738,9 @@ test_func_sanitize_json() {
     _reset_audit_logger
     local result
     result=$(_sanitize_json_secrets '{"user":"admin","api_key":"supersecretkey123","host":"localhost"}')
-    if echo "$result" | command grep -qF '"user":"admin"' &&
-        echo "$result" | command grep -qF '"api_key":"supe****"' &&
-        echo "$result" | command grep -qF '"host":"localhost"'; then
+    if command grep -qF '"user":"admin"' <<<"$result" &&
+        command grep -qF '"api_key":"supe****"' <<<"$result" &&
+        command grep -qF '"host":"localhost"' <<<"$result"; then
         pass_test "_sanitize_json_secrets masks only secret keys in JSON"
     else
         fail_test "_sanitize_json_secrets returned: $result"

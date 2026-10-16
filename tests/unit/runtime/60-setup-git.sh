@@ -181,7 +181,7 @@ test_setup_git_failure_warns() {
     export STUB_EXIT_CODE=1
     local err
     err=$(_run_script 2>&1 >/dev/null) || true
-    if printf '%s' "$err" | command grep -q 'WARNING'; then
+    if command grep -q 'WARNING' <<<"$err"; then
         pass_test "Warns on stderr when setup-git fails"
     else
         fail_test "Expected a WARNING on stderr, got: $err"
