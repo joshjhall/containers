@@ -265,6 +265,87 @@ test_run_yq_reports_setup_failure() {
     YQ_OUT="" YQ_ERR="" YQ_SETUP_FAILED=0
 }
 
+# Run one check against a fixture and print what it reported, followed by a
+# `__status=<TEST_STATUS>` trailer (#1279). The subshell keeps the check's
+# verdict off the framework's global counters, so a deliberately failing
+# check can't fail this suite. CONFORM is the fixture path inside it only.
+drive_check() {
+    local fixture="$1" check="$2"
+    (
+        CONFORM="$fixture"
+        TEST_STATUS=""
+        "$check"
+        echo "__status=${TEST_STATUS:-<none>}"
+    ) 2>&1 | command sed 's/\x1b\[[0-9;]*m//g'
+}
+
+# Writes the malformed and empty-scopes fixtures into a new scratch dir and
+# prints its path; returns 1 if any step fails.
+make_check_fixtures() {
+    local scratch
+    scratch=$(command mktemp -d "${TMPDIR:-/tmp}/conform-scopes-checks.XXXXXX") &&
+        [ -d "$scratch" ] &&
+        command printf 'policies: [\n  - {broken\n' >"$scratch/bad.yaml" &&
+        command printf 'policies:\n  - type: commit\n    spec:\n      conventional:\n        scopes: []\n' >"$scratch/empty.yaml" &&
+        echo "$scratch"
+}
+
+test_checks_report_yq_failure() {
+    # Each yq-reading check must turn a yq failure into exactly one failed
+    # assertion naming the yq rc (#1279). One FAIL, not just a failed
+    # status: a dropped `return 0` falls through to a second assertion,
+    # which TEST_STATUS alone can't show.
+    local scratch out check fails problems=()
+    if ! scratch=$(make_check_fixtures); then
+        assert_true false "fixture setup failed under ${TMPDIR:-/tmp}"
+        return 0
+    fi
+    for check in test_scopes_non_empty test_release_scope_present \
+        test_scopes_are_anchored test_historical_scopes_covered; do
+        out=$(drive_check "$scratch/bad.yaml" "$check")
+        fails=$(command grep -cx 'FAIL' <<<"$out" || true)
+        if ! command grep -qx '__status=failed' <<<"$out"; then
+            problems+=("$check didn't fail")
+        elif [[ "$out" != *"yq failed (rc="* ]]; then
+            problems+=("$check failure doesn't name the yq rc")
+        elif [ "$fails" -ne 1 ]; then
+            problems+=("$check recorded $fails failed assertions, expected 1")
+        fi
+    done
+    command rm -rf "$scratch"
+
+    if [ "${#problems[@]}" -eq 0 ]; then
+        assert_true true "every yq-reading check reports a yq failure once"
+    else
+        assert_true false "$(command printf '%s; ' "${problems[@]}")"
+    fi
+}
+
+test_empty_scopes_fail_closed() {
+    # `scopes: []` parses cleanly, so only the per-check guards stand between
+    # it and a vacuous pass (#1279).
+    local scratch out problems=()
+    if ! scratch=$(make_check_fixtures); then
+        assert_true false "fixture setup failed under ${TMPDIR:-/tmp}"
+        return 0
+    fi
+    out=$(drive_check "$scratch/empty.yaml" test_scopes_are_anchored)
+    if ! command grep -qx '__status=failed' <<<"$out" || [[ "$out" != *"no scope entries"* ]]; then
+        problems+=("test_scopes_are_anchored didn't fail on no scope entries")
+    fi
+    out=$(drive_check "$scratch/empty.yaml" test_scopes_non_empty)
+    if ! command grep -qx '__status=failed' <<<"$out" || [[ "$out" != *"scopes list is empty"* ]]; then
+        problems+=("test_scopes_non_empty didn't fail on an empty list")
+    fi
+    command rm -rf "$scratch"
+
+    if [ "${#problems[@]}" -eq 0 ]; then
+        assert_true true "empty scopes list fails the anchored and non-empty checks"
+    else
+        assert_true false "$(command printf '%s; ' "${problems[@]}")"
+    fi
+}
+
 run_test test_yaml_parseable ".conform.yaml is valid YAML"
 run_test test_scopes_non_empty "scopes list is non-empty"
 run_test test_release_scope_present "release scope present (regression for #409)"
@@ -272,5 +353,7 @@ run_test test_scopes_are_anchored "every scope is anchored ^...\$"
 run_test test_historical_scopes_covered ">=${HISTORICAL_COVERAGE_MIN}% of historical scopes are allowed"
 run_test test_run_yq_reports_failure "yq failures report rc and stderr (#1100)"
 run_test test_run_yq_reports_setup_failure "scratch-file failures are not blamed on yq (#1100)"
+run_test test_checks_report_yq_failure "each check reports a yq failure exactly once (#1279)"
+run_test test_empty_scopes_fail_closed "empty scopes list fails closed (#1279)"
 
 generate_report
