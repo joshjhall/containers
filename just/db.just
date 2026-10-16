@@ -123,6 +123,7 @@ db-validate-vendored: db-compile
     FIXTURES="{{ justfile_directory() }}/crates/luggage/testdata/fixtures-catalog"
     NEGATIVE="{{ justfile_directory() }}/crates/luggage/testdata/_negative"
     DRIFT="{{ justfile_directory() }}/bin/check-catalog-drift.sh"
+    source "{{ justfile_directory() }}/bin/lib/vendored-only-target.sh"
     cd "{{ CONTAINERS_DB }}"
     ajv() {
         command npx --yes -p ajv-cli@{{ AJV_CLI_VERSION }} -p ajv-formats@{{ AJV_FORMATS_VERSION }} -- ajv "$@"
@@ -173,27 +174,18 @@ db-validate-vendored: db-compile
         case "${fixture##*/}" in
             drift-index-*) target="tools/rust/index.json" ;;
             drift-vendored-only-*)
-                version="$(command jq -r .version "$fixture")"
-                # .version becomes a path component: a value carrying `/` or
-                # `..` would point the existence guards below at one path and
-                # cp at another (or outside the staging dir). Plain tokens only;
-                # this also refuses empty and jq's `null`. Kept byte-equal to
-                # _is_version_token in tests/unit/vendored-catalog.sh.
-                if ! [[ "$version" =~ ^[0-9]+(\.[0-9]+)*(-[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?(\+[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?$ ]]; then
-                    command echo "ERROR: $fixture .version must be a plain version token (got '$version')" >&2
-                    exit 1
-                fi
-                target="tools/rust/versions/$version.json"
-                # A version either catalog holds would route through
-                # canonical_diff instead of the live-pin gate (and cp would
-                # overwrite a real entry) — refuse rather than pass vacuously.
-                # The live pin would be skipped, not rejected — name that here
-                # rather than as a generic "did NOT trip". Parsed like live_pin.
+                # Routing is shared with tests/unit/vendored-catalog.sh (CI
+                # runs only the test), so refuse rather than pass vacuously
+                # with the reason it gives. Pin parsed like live_pin.
                 pin="$(command sed -n -E 's/^ARG RUST_VERSION="?([^"[:space:]]+)"?[[:space:]]*$/\1/p' \
                     "{{ justfile_directory() }}/Dockerfile" | command sed -n '1p')"
-                if [ -e "$VENDORED/$target" ] || [ -e "{{ CONTAINERS_DB }}/$target" ] ||
-                    [ "$version" = "$pin" ]; then
-                    command echo "ERROR: $fixture must name a version in neither catalog and not the live pin $pin (got '$version')" >&2
+                rc=0
+                target="$(vendored_only_target "$fixture" "$VENDORED" "{{ CONTAINERS_DB }}" "$pin")" || rc=$?
+                if [ "$rc" -eq 2 ]; then
+                    command echo "ERROR: $fixture .version must be a plain version token (got '$(command jq -r .version "$fixture")')" >&2
+                    exit 1
+                elif [ "$rc" -ne 0 ]; then
+                    command echo "ERROR: $fixture must name a version in neither catalog and not the live pin $pin (got '$(command jq -r .version "$fixture")')" >&2
                     exit 1
                 fi
                 expect="${target#tools/}: vendored-only and not the live pin"
