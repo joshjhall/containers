@@ -174,6 +174,13 @@ db-validate-vendored: db-compile
             drift-index-*) target="tools/rust/index.json" ;;
             drift-vendored-only-*)
                 version="$(command jq -r .version "$fixture")"
+                # .version becomes a path component: a value carrying `/` or
+                # `..` would point the existence guards below at one path and
+                # cp at another (or outside the staging dir). Plain tokens only.
+                if ! [[ "$version" =~ ^[0-9]+(\.[0-9]+)*([-.+][A-Za-z0-9.]+)?$ ]]; then
+                    command echo "ERROR: $fixture .version must be a plain version token (got '$version')" >&2
+                    exit 1
+                fi
                 target="tools/rust/versions/$version.json"
                 # A version either catalog holds would route through
                 # canonical_diff instead of the live-pin gate (and cp would
