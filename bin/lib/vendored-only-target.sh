@@ -15,6 +15,7 @@
 #
 # Print the catalog-relative path the fixture is staged at and return 0, or
 # print nothing and return:
+#   3 — .version could not be read (malformed JSON, unreadable file, no jq).
 #   2 — .version is not a plain version token. It becomes a path component,
 #       so a value carrying `/` or `..` would point the existence checks at
 #       one path and cp at another (or outside the staging dir). Also covers
@@ -25,7 +26,7 @@
 # Callers word their own error, so each can name its own context.
 vendored_only_target() {
     local fixture="$1" vendored="$2" upstream="$3" pin="$4" version target
-    version="$(command jq -r .version "$fixture")" || return 2
+    version="$(command jq -r .version "$fixture")" || return 3
     [[ "$version" =~ ^[0-9]+(\.[0-9]+)*(-[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?(\+[A-Za-z0-9]+(\.[A-Za-z0-9]+)*)?$ ]] ||
         return 2
     target="tools/rust/versions/$version.json"

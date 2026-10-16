@@ -181,13 +181,15 @@ db-validate-vendored: db-compile
                     "{{ justfile_directory() }}/Dockerfile" | command sed -n '1p')"
                 rc=0
                 target="$(vendored_only_target "$fixture" "$VENDORED" "{{ CONTAINERS_DB }}" "$pin")" || rc=$?
-                if [ "$rc" -eq 2 ]; then
-                    command echo "ERROR: $fixture .version must be a plain version token (got '$(command jq -r .version "$fixture")')" >&2
-                    exit 1
-                elif [ "$rc" -ne 0 ]; then
-                    command echo "ERROR: $fixture must name a version in neither catalog and not the live pin $pin (got '$(command jq -r .version "$fixture")')" >&2
-                    exit 1
-                fi
+                case "$rc" in
+                    0) ;;
+                    1) command echo "ERROR: $fixture must name a version in neither catalog and not the live pin $pin (got '$(command jq -r .version "$fixture")')" >&2
+                        exit 1 ;;
+                    2) command echo "ERROR: $fixture .version must be a plain version token (got '$(command jq -r .version "$fixture")')" >&2
+                        exit 1 ;;
+                    *) command echo "ERROR: could not read .version from $fixture (rc=$rc)" >&2
+                        exit 1 ;;
+                esac
                 expect="${target#tools/}: vendored-only and not the live pin"
                 ;;
             *) target="tools/rust/versions/1.96.0.json" ;;

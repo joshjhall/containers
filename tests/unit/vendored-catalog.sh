@@ -138,7 +138,7 @@ test_drift_fixtures_are_rejected() {
         return 0
     fi
 
-    local accepted="" misstaged="" bad_token="" wrong_reason="" checked=0 index_checked=0 vonly_checked=0
+    local accepted="" misstaged="" bad_token="" unreadable="" wrong_reason="" checked=0 index_checked=0 vonly_checked=0
     local fixture staged target pin expect output rc
     pin="$(_dockerfile_rust_pin)"
     shopt -s nullglob
@@ -161,13 +161,21 @@ test_drift_fixtures_are_rejected() {
                 vonly_checked=$((vonly_checked + 1))
                 rc=0
                 target="$(vendored_only_target "$fixture" "$VENDORED" "$UPSTREAM_DB" "$pin")" || rc=$?
-                if [ "$rc" -eq 2 ]; then
-                    bad_token="$bad_token $(basename "$fixture")"
-                    continue
-                elif [ "$rc" -ne 0 ]; then
-                    misstaged="$misstaged $(basename "$fixture")"
-                    continue
-                fi
+                case "$rc" in
+                    0) ;;
+                    1)
+                        misstaged="$misstaged $(basename "$fixture")"
+                        continue
+                        ;;
+                    2)
+                        bad_token="$bad_token $(basename "$fixture")"
+                        continue
+                        ;;
+                    *)
+                        unreadable="$unreadable $(basename "$fixture")"
+                        continue
+                        ;;
+                esac
                 # Any drift exits 1; require the rejection to be THIS gate's.
                 expect="${target#tools/}: vendored-only and not the live pin"
                 ;;
@@ -195,6 +203,8 @@ test_drift_fixtures_are_rejected() {
         fail_test "no drift-index-*.json fixture in $NEGATIVE — compare_index's branches are unproven"
     elif [ "$vonly_checked" -eq 0 ]; then
         fail_test "no drift-vendored-only-*.json fixture in $NEGATIVE — the live-pin gate is unproven"
+    elif [ -n "$unreadable" ]; then
+        fail_test "drift-vendored-only fixture(s) whose .version could not be read:$unreadable"
     elif [ -n "$bad_token" ]; then
         fail_test "drift-vendored-only fixture(s) .version must be a plain version token:$bad_token"
     elif [ -n "$misstaged" ]; then
@@ -298,6 +308,12 @@ test_path_shaped_vendored_only_fixture_is_refused() {
     rc=0
     target="$(vendored_only_target "$scratch/drift-vendored-only-existing.json" "$empty" "$VENDORED" "9.9.9")" || rc=$?
     assert_equals "1" "$rc" "a version the upstream catalog holds is refused on the existence branch"
+
+    # Malformed JSON is a read failure (3), not a token refusal (2).
+    command printf '{"tool":"rust","version":\n' >"$scratch/drift-vendored-only-broken.json"
+    rc=0
+    target="$(vendored_only_target "$scratch/drift-vendored-only-broken.json" "$VENDORED" "$empty" "9.9.9" 2>/dev/null)" || rc=$?
+    assert_equals "3" "$rc" "an unreadable fixture is a read failure, not a token refusal"
     command rm -rf "$scratch"
     return 0
 }
