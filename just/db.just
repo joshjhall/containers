@@ -178,9 +178,14 @@ db-validate-vendored: db-compile
                 # A version either catalog holds would route through
                 # canonical_diff instead of the live-pin gate (and cp would
                 # overwrite a real entry) — refuse rather than pass vacuously.
+                # The live pin would be skipped, not rejected — name that here
+                # rather than as a generic "did NOT trip". Parsed like live_pin.
+                pin="$(command sed -n -E 's/^ARG RUST_VERSION="?([^"[:space:]]+)"?[[:space:]]*$/\1/p' \
+                    "{{ justfile_directory() }}/Dockerfile" | command sed -n '1p')"
                 if [ -z "$version" ] || [ "$version" = "null" ] ||
-                    [ -e "$VENDORED/$target" ] || [ -e "{{ CONTAINERS_DB }}/$target" ]; then
-                    command echo "ERROR: $fixture must name a version in neither catalog (got '$version')" >&2
+                    [ -e "$VENDORED/$target" ] || [ -e "{{ CONTAINERS_DB }}/$target" ] ||
+                    [ "$version" = "$pin" ]; then
+                    command echo "ERROR: $fixture must name a version in neither catalog and not the live pin $pin (got '$version')" >&2
                     exit 1
                 fi
                 expect="${target#tools/}: vendored-only and not the live pin"

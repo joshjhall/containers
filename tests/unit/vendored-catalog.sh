@@ -355,7 +355,10 @@ test_drift_reads_quoted_live_pin() {
 
 test_drift_no_matching_arg_has_no_pin_suffix() {
     # A Dockerfile with only near-miss ARGs yields no pin: the version is drift
-    # and the message must not carry an empty or wrong "(pin)" suffix.
+    # and the message must not carry an empty or wrong "(pin)" suffix. The
+    # indented ARG is one Docker would accept; live_pin reads only column-0
+    # ARGs on purpose (the repo Dockerfile never indents them), and an unread
+    # pin fails loud as drift rather than opening the skip.
     local up="$TEST_TEMP_DIR/noarg-up" ven="$TEST_TEMP_DIR/noarg-ven" output rc=0
     _vendored_only_pair "$up" "$ven" 1.1.0
     command printf 'FROM debian\nARG RUSTUP_VERSION=1.1.0\nARG GO_VERSION=1.1.0\n  ARG RUST_VERSION=1.1.0\n' \
