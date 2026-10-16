@@ -246,14 +246,14 @@ RUNNER_EOF
 
 assert_called() {
     local calls="$1" needle="$2" message="$3"
-    if ! command printf '%s\n' "$calls" | command grep -qxF "$needle"; then
+    if ! command grep -qxF "$needle" <<<"$calls"; then
         fail_test "$message (recorded calls: ${calls//$'\n'/ | })"
     fi
 }
 
 assert_not_called() {
     local calls="$1" needle="$2" message="$3"
-    if command printf '%s\n' "$calls" | command grep -qxF "$needle"; then
+    if command grep -qxF "$needle" <<<"$calls"; then
         fail_test "$message (recorded calls: ${calls//$'\n'/ | })"
     fi
 }
@@ -490,7 +490,7 @@ test_rate_limit_retries_are_bounded() {
 test_mutations_are_paced() {
     local calls
     calls=$(run_script "$SCRATCH/script.js" "$ISSUES" false)
-    if ! command printf '%s\n' "$calls" | command grep -qE '^sleep [1-9][0-9]*$'; then
+    if ! command grep -qE '^sleep [1-9][0-9]*$' <<<"$calls"; then
         fail_test "no delay between mutating calls — an 82-comment backfill will trip GitHub's secondary rate limiter (recorded: ${calls//$'\n'/ | })"
     fi
 }

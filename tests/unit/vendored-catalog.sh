@@ -279,7 +279,7 @@ test_index_matches_versions_on_disk() {
 
             default="$(command jq -r '.default_version // empty' "$tool_dir/index.json")"
             if [ -n "$default" ] && [ -n "$listed" ] &&
-                ! command printf '%s\n' "$listed" | command grep -qxF "$default"; then
+                ! command grep -qxF "$default" <<<"$listed"; then
                 problems="${problems:+$problems; }default_version $default not in available[]"
             fi
 

@@ -277,14 +277,14 @@ RUNNER_EOF
 # calls.
 assert_called() {
     local calls="$1" needle="$2" message="$3"
-    if ! command printf '%s\n' "$calls" | command grep -qxF "$needle"; then
+    if ! command grep -qxF "$needle" <<<"$calls"; then
         fail_test "$message (recorded calls: ${calls//$'\n'/ | })"
     fi
 }
 
 assert_not_called() {
     local calls="$1" needle="$2" message="$3"
-    if command printf '%s\n' "$calls" | command grep -qxF "$needle"; then
+    if command grep -qxF "$needle" <<<"$calls"; then
         fail_test "$message (recorded calls: ${calls//$'\n'/ | })"
     fi
 }
@@ -603,8 +603,7 @@ test_touched_counts_only_modified_issues() {
         fail_test "sweep threw while counting: $infos"
         return
     fi
-    if ! command printf '%s\n' "$infos" |
-        command grep -qxF "Swept 4 stale label(s) from 3 closed issue(s)."; then
+    if ! command grep -qxF "Swept 4 stale label(s) from 3 closed issue(s)." <<<"$infos"; then
         fail_test "summary miscounted — an issue whose only stale label had already vanished was counted as touched, overstating the sweep (reported: ${infos//$'\n'/ | })"
     fi
 }
@@ -614,7 +613,7 @@ test_touched_counts_only_modified_issues() {
 test_mutations_are_paced() {
     local calls
     calls=$(run_script "$SCRATCH/script.js" "$CLOSED_ISSUES")
-    if ! command printf '%s\n' "$calls" | command grep -qE '^sleep [1-9][0-9]*$'; then
+    if ! command grep -qE '^sleep [1-9][0-9]*$' <<<"$calls"; then
         fail_test "no delay between mutating calls — a 200-issue backfill will trip GitHub's secondary rate limiter (recorded: ${calls//$'\n'/ | })"
     fi
 }

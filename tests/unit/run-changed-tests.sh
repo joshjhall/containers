@@ -63,11 +63,11 @@ test_helper_keys_on_env() {
 # the specific function bodies (rather than a count threshold) means a newly
 # added unguarded network test is caught, not masked by the existing guards.
 test_check_versions_guards_live_tests() {
-    local func
+    local func block
     for func in test_missing_env_file test_json_output_format test_json_output_valid; do
         # The guard must appear within ~6 lines of the function header.
-        if command grep -A6 "^${func}()" "$CHECK_VERSIONS_TEST" |
-            command grep -q "network_tests_disabled"; then
+        block=$(command grep -A6 "^${func}()" "$CHECK_VERSIONS_TEST" || true)
+        if command grep -q "network_tests_disabled" <<<"$block"; then
             pass_test "check-versions.sh guards $func with network_tests_disabled"
         else
             fail_test "check-versions.sh must guard $func with network_tests_disabled"

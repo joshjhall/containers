@@ -179,14 +179,14 @@ test_templates_have_triage_block() {
         if [ -z "$sev" ]; then
             /usr/bin/echo "  $name: missing '- Severity:' Triage line"
             violations=$((violations + 1))
-        elif ! /usr/bin/printf '%s\n' "${SEVERITY_VALUES[@]}" | /usr/bin/grep -qx "$sev"; then
+        elif ! /usr/bin/grep -qx "$sev" <<<"$(/usr/bin/printf '%s\n' "${SEVERITY_VALUES[@]}")"; then
             /usr/bin/echo "  $name: Severity default '$sev' not in taxonomy"
             violations=$((violations + 1))
         fi
         if [ -z "$eff" ]; then
             /usr/bin/echo "  $name: missing '- Effort:' Triage line"
             violations=$((violations + 1))
-        elif ! /usr/bin/printf '%s\n' "${EFFORT_VALUES[@]}" | /usr/bin/grep -qx "$eff"; then
+        elif ! /usr/bin/grep -qx "$eff" <<<"$(/usr/bin/printf '%s\n' "${EFFORT_VALUES[@]}")"; then
             /usr/bin/echo "  $name: Effort default '$eff' not in taxonomy"
             violations=$((violations + 1))
         fi

@@ -64,11 +64,11 @@ test_third_party_actions_are_sha_pinned() {
         owner_repo="${ref%@*}"
         gitref="${ref##*@}"
         # First-party owners are exempt.
-        if /usr/bin/printf '%s\n' "$owner_repo" | /usr/bin/grep -qE "$FIRST_PARTY_OWNERS_RE"; then
+        if /usr/bin/grep -qE "$FIRST_PARTY_OWNERS_RE" <<<"$owner_repo"; then
             continue
         fi
         # Third-party: the ref after @ must be a full 40-char hex SHA.
-        if ! /usr/bin/printf '%s\n' "$gitref" | /usr/bin/grep -qE '^[0-9a-f]{40}$'; then
+        if ! /usr/bin/grep -qE '^[0-9a-f]{40}$' <<<"$gitref"; then
             /usr/bin/echo "  unpinned third-party action: $ref"
             violations=$((violations + 1))
         fi
@@ -91,8 +91,8 @@ test_pinned_actions_have_version_comment() {
         # Strip the leading `<indent>uses: `.
         ref=$(/usr/bin/printf '%s\n' "$line" | /usr/bin/sed -E 's/^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*//')
         # Only SHA-pinned refs are in scope here.
-        /usr/bin/printf '%s\n' "$ref" | /usr/bin/grep -qE '@[0-9a-f]{40}' || continue
-        if ! /usr/bin/printf '%s\n' "$ref" | /usr/bin/grep -qE '@[0-9a-f]{40}[[:space:]]+#[[:space:]]*'; then
+        /usr/bin/grep -qE '@[0-9a-f]{40}' <<<"$ref" || continue
+        if ! /usr/bin/grep -qE '@[0-9a-f]{40}[[:space:]]+#[[:space:]]*' <<<"$ref"; then
             /usr/bin/echo "  SHA-pinned without version comment: $ref"
             violations=$((violations + 1))
         fi
