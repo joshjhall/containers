@@ -253,9 +253,9 @@ pre-commit:
               fi
 
           # Pipe into `grep -q` races under pipefail (SIGPIPE, #1092). The
-          # suite owns the scanner and the per-directory phase allowlist
-          # (#1097); this hook just runs it at commit time so a new site never
-          # reaches a push. bash + awk + find only, so no skip: guard applies.
+          # suite owns the scanner (#1097; no exceptions anywhere under
+          # tests/unit/); this hook just runs it at commit time so a new site
+          # never reaches a push. bash + awk + find only, so no skip: guard applies.
           - name: no-pipe-grep-q
             # Both arms: lefthook's `**` needs at least one directory, so
             # `tests/unit/**/*.sh` alone misses top-level suites.

@@ -17,12 +17,9 @@
 #   command grep -q 'P' <<<"$x"                       # builtin echo/printf
 #   body=$(producer || true); command grep -q 'P' <<<"$body"   # external
 #
-# THE ALLOWLIST IS A PHASE TRACKER, AND IT EMPTIES ITSELF. The 180-odd existing
-# sites are converted one directory per PR (#1097 phases 2-6). Directories not
-# yet converted are listed below; a site anywhere else fails. An allowlisted
-# directory that reaches zero sites ALSO fails ("remove it"), so an entry cannot
-# outlive its conversion and quietly re-authorize regrowth. Phase 7 deletes the
-# empty array.
+# NO EXCEPTIONS. The 180-odd original sites were converted one directory per PR
+# (#1097 phases 1-6), behind a per-directory allowlist that emptied as each
+# phase landed. Phase 7 deleted it: any site anywhere under tests/unit/ fails.
 #
 # Not matched: `grep -q X f || grep -q Y f` (no pipe, just `||`), comment lines,
 # and the herestring idiom itself. This file builds its scanner fixtures from
@@ -39,11 +36,6 @@ init_test_framework
 test_suite "grep -q pipefail guard"
 
 UNIT_DIR="$PROJECT_ROOT/tests/unit"
-
-# Directories under tests/unit/ not yet converted, keyed by first path segment;
-# "." is the top-level tests/unit/*.sh files. Empty since Phase 6: every
-# directory is converted, so any site anywhere fails. Phase 7 deletes the array.
-UNCONVERTED_DIRS=()
 
 # pipe_grep_q_sites ROOT — prints "relpath:line" for every pipe into a grep
 # whose short-option cluster carries q (or --quiet), optionally prefixed by
@@ -81,28 +73,11 @@ pipe_grep_q_sites() {
         ' {} + || true)
 }
 
-# site_bucket RELPATH — first path segment under tests/unit, or "." for a
-# top-level file.
-site_bucket() {
-    case "$1" in
-        */*) command echo "${1%%/*}" ;;
-        *) command echo "." ;;
-    esac
-}
-
-is_unconverted() {
-    local d
-    for d in "${UNCONVERTED_DIRS[@]}"; do
-        [ "$d" = "$1" ] && return 0
-    done
-    return 1
-}
-
 # ---------------------------------------------------------------------------
 # Test: the scanner flags each known shape and nothing else
 #
-# Guards the two real-tree tests from passing vacuously: if the regex stops
-# matching, they would compare empty lists and report a clean tree forever.
+# Guards the real-tree test from passing vacuously: the tree has zero sites, so
+# if the regex stopped matching, that test would report a clean tree forever.
 # Fixture lines are assembled from pieces so this file holds no literal site.
 # ---------------------------------------------------------------------------
 test_scanner_detects_known_shapes() {
@@ -134,32 +109,18 @@ test_scanner_detects_known_shapes() {
 }
 
 # ---------------------------------------------------------------------------
-# Test: the real tree still yields sites (until Phase 7)
+# Test: no pipe into grep -q anywhere under tests/unit
 # ---------------------------------------------------------------------------
-test_scanner_not_vacuous() {
-    local count
-    count=$(pipe_grep_q_sites "$UNIT_DIR" | command wc -l)
-    if [ "${#UNCONVERTED_DIRS[@]}" -eq 0 ]; then
-        assert_equals "0" "$((count))" "allowlist is empty, so tests/unit has no sites"
-        return
-    fi
-    assert_greater_than "$count" 0 \
-        "scanner should find the not-yet-converted sites (found $count) — if this fails with directories still allowlisted, the scanner broke"
-}
-
-# ---------------------------------------------------------------------------
-# Test: no site outside the allowlisted (unconverted) directories
-# ---------------------------------------------------------------------------
-test_no_sites_outside_allowlist() {
+test_no_sites_in_tests_unit() {
     local site bad=""
     while IFS= read -r site; do
         [ -n "$site" ] || continue
-        is_unconverted "$(site_bucket "$site")" || bad+="  tests/unit/$site"$'\n'
+        bad+="  tests/unit/$site"$'\n'
     done < <(pipe_grep_q_sites "$UNIT_DIR")
 
     if [ -n "$bad" ]; then
         tf_fail_assertion \
-            "Pipe into grep -q in a converted directory (SIGPIPE race under pipefail, #1092):" \
+            "Pipe into grep -q under tests/unit (SIGPIPE race under pipefail, #1092):" \
             "$bad" \
             "Capture, then match via a herestring:" \
             "  command grep -q 'P' <<<\"\$x\"" \
@@ -169,38 +130,8 @@ test_no_sites_outside_allowlist() {
     return 0
 }
 
-# ---------------------------------------------------------------------------
-# Test: every allowlisted directory still has a site
-# ---------------------------------------------------------------------------
-test_allowlist_is_not_stale() {
-    local sites d stale=""
-    sites=$(pipe_grep_q_sites "$UNIT_DIR")
-    for d in "${UNCONVERTED_DIRS[@]}"; do
-        local found=false site
-        while IFS= read -r site; do
-            [ -n "$site" ] || continue
-            if [ "$(site_bucket "$site")" = "$d" ]; then
-                found=true
-                break
-            fi
-        done <<<"$sites"
-        [ "$found" = true ] || stale+=" $d"
-    done
-
-    if [ -n "$stale" ]; then
-        tf_fail_assertion \
-            "Directories in UNCONVERTED_DIRS with no remaining sites:$stale" \
-            "Remove them from UNCONVERTED_DIRS in tests/unit/grep-q-pipefail-guard.sh" \
-            "so the guard protects them from regrowth (#1097)."
-        return 1
-    fi
-    return 0
-}
-
 run_test "test_scanner_detects_known_shapes" "Scanner flags each pipe-into-grep-q shape and nothing else"
-run_test "test_scanner_not_vacuous" "Scanner finds the not-yet-converted sites"
-run_test "test_no_sites_outside_allowlist" "No pipe into grep -q outside unconverted directories"
-run_test "test_allowlist_is_not_stale" "Every unconverted directory still has a site"
+run_test "test_no_sites_in_tests_unit" "No pipe into grep -q anywhere under tests/unit"
 
 # Generate report
 generate_report
