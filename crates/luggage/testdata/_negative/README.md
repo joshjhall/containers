@@ -22,13 +22,22 @@ vendored catalog: a dropped `install_methods[].invoke.env` (which silently
 relocates `CARGO_HOME`/`RUSTUP_HOME` off `/cache`) and dropped `support_matrix`
 rows (which make a supported platform look unsupported).
 
-Two staging targets, because the drift check has two comparison paths:
+Three staging targets — one per comparison path, plus the live-pin gate:
 
-| Fixture                    | Staged over                     | Exercises        |
-| -------------------------- | ------------------------------- | ---------------- |
-| `drift-missing-invoke-env` | `tools/rust/versions/1.96.0.json` | `canonical_diff` |
-| `drift-dropped-matrix-rows`| `tools/rust/versions/1.96.0.json` | `canonical_diff` |
-| `drift-index-field`        | `tools/rust/index.json`         | `compare_index`  |
+| Fixture                       | Staged at                                   | Exercises        |
+| ----------------------------- | ------------------------------------------- | ---------------- |
+| `drift-missing-invoke-env`    | `tools/rust/versions/1.96.0.json`           | `canonical_diff` |
+| `drift-dropped-matrix-rows`   | `tools/rust/versions/1.96.0.json`           | `canonical_diff` |
+| `drift-index-field`           | `tools/rust/index.json`                     | `compare_index`  |
+| `drift-vendored-only-non-pin` | `tools/rust/versions/<its .version>.json` (new file) | live-pin gate |
+
+`drift-vendored-only-*` is added as a **new** version file named for its own
+`.version` (`1.0.1`), which neither catalog holds and which is never the
+Dockerfile's `ARG RUST_VERSION` pin. It must be rejected as "vendored-only and
+not the live pin" (#1102, #1284). The recipe passes the real `--dockerfile` for
+every drift fixture, so this one is rejected under the same flags the real check
+runs with, not merely because no pin source was given. The test mirror refuses a
+fixture whose version already exists in the vendored catalog or equals the pin.
 
 `compare_index` is the field-by-field path (it must tolerate the catalog-local
 `available[]` / `default_version` / `minimum_recommended` while catching every

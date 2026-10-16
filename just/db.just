@@ -165,17 +165,48 @@ db-validate-vendored: db-compile
         # drift-index-* replaces a tool index (exercising compare_index's
         # field-by-field branches), everything else replaces a version file
         # (exercising canonical_diff). Staging them all at one path would
-        # leave one of the two comparison paths unproven.
+        # leave one of the two comparison paths unproven. drift-vendored-only-*
+        # is staged as a NEW file named for its own .version — a version neither
+        # catalog holds and that is not the live pin — exercising the live-pin
+        # gate rather than overwriting an existing entry.
+        expect=""
         case "${fixture##*/}" in
             drift-index-*) target="tools/rust/index.json" ;;
-            *)             target="tools/rust/versions/1.96.0.json" ;;
+            drift-vendored-only-*)
+                version="$(command jq -r .version "$fixture")"
+                target="tools/rust/versions/$version.json"
+                # A version either catalog holds would route through
+                # canonical_diff instead of the live-pin gate (and cp would
+                # overwrite a real entry) — refuse rather than pass vacuously.
+                # The live pin would be skipped, not rejected — name that here
+                # rather than as a generic "did NOT trip". Parsed like live_pin.
+                pin="$(command sed -n -E 's/^ARG RUST_VERSION="?([^"[:space:]]+)"?[[:space:]]*$/\1/p' \
+                    "{{ justfile_directory() }}/Dockerfile" | command sed -n '1p')"
+                if [ -z "$version" ] || [ "$version" = "null" ] ||
+                    [ -e "$VENDORED/$target" ] || [ -e "{{ CONTAINERS_DB }}/$target" ] ||
+                    [ "$version" = "$pin" ]; then
+                    command echo "ERROR: $fixture must name a version in neither catalog and not the live pin $pin (got '$version')" >&2
+                    exit 1
+                fi
+                expect="${target#tools/}: vendored-only and not the live pin"
+                ;;
+            *) target="tools/rust/versions/1.96.0.json" ;;
         esac
         staged="$staged_root/$(command basename "$fixture" .json)"
         command mkdir -p "$staged"
         command cp -r "$VENDORED"/. "$staged/"
         command cp "$fixture" "$staged/$target"
-        if command bash "$DRIFT" --vendored "$staged" --upstream "{{ CONTAINERS_DB }}" --quiet >/dev/null 2>&1; then
+        # Same --dockerfile as step 2, so a fixture is rejected under the flags
+        # the real check runs with — not merely because no pin source was given.
+        if output="$(command bash "$DRIFT" --vendored "$staged" --upstream "{{ CONTAINERS_DB }}" \
+            --dockerfile "{{ justfile_directory() }}/Dockerfile" --quiet 2>&1)"; then
             command echo "ERROR: negative fixture $fixture did NOT trip the drift check (staged at $target)" >&2
+            exit 1
+        fi
+        # Any drift exits 1; a fixture with an expected reason must trip THAT gate.
+        if [ -n "$expect" ] && [[ "$output" != *"$expect"* ]]; then
+            command echo "ERROR: negative fixture $fixture was rejected for the wrong reason:" >&2
+            command printf '%s\n' "$output" >&2
             exit 1
         fi
         command echo "correctly rejected by drift check: ${fixture##*/} (via $target)"

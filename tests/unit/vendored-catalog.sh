@@ -44,6 +44,14 @@ DRIFT_SCRIPT="$PROJECT_ROOT/bin/check-catalog-drift.sh"
 # checkout.
 UPSTREAM_DB="${CONTAINERS_DB_SRC:-$PROJECT_ROOT/../containers-db}"
 
+# _dockerfile_rust_pin — the repo Dockerfile's RUST_VERSION default, parsed
+# the way live_pin parses it (quotes and trailing whitespace stripped, first
+# match only), so a guard comparing against it agrees with the script.
+_dockerfile_rust_pin() {
+    command sed -n -E 's/^ARG RUST_VERSION="?([^"[:space:]]+)"?[[:space:]]*$/\1/p' \
+        "$PROJECT_ROOT/Dockerfile" | command sed -n '1p'
+}
+
 # True when the upstream catalog and jq are both available.
 upstream_available() {
     [ -d "$UPSTREAM_DB/tools" ] && command -v jq >/dev/null 2>&1
@@ -125,7 +133,9 @@ test_drift_fixtures_are_rejected() {
         return 0
     fi
 
-    local accepted="" checked=0 index_checked=0 fixture staged target
+    local accepted="" misstaged="" wrong_reason="" checked=0 index_checked=0 vonly_checked=0
+    local fixture staged target version pin expect output
+    pin="$(_dockerfile_rust_pin)"
     shopt -s nullglob
     for fixture in "$NEGATIVE"/drift-*.json; do
         checked=$((checked + 1))
@@ -134,10 +144,29 @@ test_drift_fixtures_are_rejected() {
         # has two comparison paths — compare_index (field-by-field, for tool
         # indexes) and canonical_diff (whole-document, for version files) — so
         # staging every fixture at one path would leave the other unproven.
+        # drift-vendored-only-* is staged as a NEW version file, exercising the
+        # live-pin gate (#1284) — mirrors just/db.just db-validate-vendored.
+        expect=""
         case "$(basename "$fixture")" in
             drift-index-*)
                 target="tools/rust/index.json"
                 index_checked=$((index_checked + 1))
+                ;;
+            drift-vendored-only-*)
+                version="$(command jq -r .version "$fixture")"
+                target="tools/rust/versions/$version.json"
+                vonly_checked=$((vonly_checked + 1))
+                # A version either catalog holds would route through
+                # canonical_diff, and the pin would be skipped — either way the
+                # fixture would stop exercising the gate it exists for.
+                if [ -z "$version" ] || [ "$version" = "null" ] ||
+                    [ -e "$VENDORED/$target" ] || [ -e "$UPSTREAM_DB/$target" ] ||
+                    [ "$version" = "$pin" ]; then
+                    misstaged="$misstaged $(basename "$fixture")"
+                    continue
+                fi
+                # Any drift exits 1; require the rejection to be THIS gate's.
+                expect="${target#tools/}: vendored-only and not the live pin"
                 ;;
             *) target="tools/rust/versions/1.96.0.json" ;;
         esac
@@ -146,9 +175,12 @@ test_drift_fixtures_are_rejected() {
         command mkdir -p "$staged"
         command cp -r "$VENDORED"/. "$staged/"
         command cp "$fixture" "$staged/$target"
-        if command bash "$DRIFT_SCRIPT" --vendored "$staged" \
-            --upstream "$UPSTREAM_DB" --quiet >/dev/null 2>&1; then
+        if output="$(command bash "$DRIFT_SCRIPT" --vendored "$staged" \
+            --upstream "$UPSTREAM_DB" --dockerfile "$PROJECT_ROOT/Dockerfile" \
+            --quiet 2>&1)"; then
             accepted="$accepted $(basename "$fixture")"
+        elif [ -n "$expect" ] && [[ "$output" != *"$expect"* ]]; then
+            wrong_reason="$wrong_reason $(basename "$fixture")"
         fi
         command rm -rf "$staged"
     done
@@ -158,8 +190,14 @@ test_drift_fixtures_are_rejected() {
         fail_test "no drift-*.json fixtures in $NEGATIVE — the drift check is unproven"
     elif [ "$index_checked" -eq 0 ]; then
         fail_test "no drift-index-*.json fixture in $NEGATIVE — compare_index's branches are unproven"
+    elif [ "$vonly_checked" -eq 0 ]; then
+        fail_test "no drift-vendored-only-*.json fixture in $NEGATIVE — the live-pin gate is unproven"
+    elif [ -n "$misstaged" ]; then
+        fail_test "drift-vendored-only fixture(s) need a version in neither catalog and not the live pin ($pin):$misstaged"
     elif [ -n "$accepted" ]; then
         fail_test "drift check ACCEPTED fixture(s) it must reject:$accepted"
+    elif [ -n "$wrong_reason" ]; then
+        fail_test "drift check rejected fixture(s) for the wrong reason (not the live-pin gate):$wrong_reason"
     fi
     return 0
 }
@@ -296,6 +334,70 @@ test_drift_rejects_vendored_only_without_pin_source() {
         --dockerfile "$ven/missing-Dockerfile" --quiet >/dev/null 2>&1 || rc=$?
     assert_equals "2" "$rc" "an unreadable --dockerfile is a usage error, not a pass"
     command rm -rf "$up" "$ven"
+}
+
+test_drift_reads_quoted_live_pin() {
+    # live_pin accepts a quoted default and trailing whitespace; both must still
+    # resolve to the bare version, or the live pin would be reported as drift.
+    local up="$TEST_TEMP_DIR/qpin-up" ven="$TEST_TEMP_DIR/qpin-ven" line output rc
+    _vendored_only_pair "$up" "$ven" 1.1.0
+    for line in 'ARG RUST_VERSION="1.1.0"  ' $'ARG RUST_VERSION=1.1.0\t '; do
+        command printf 'FROM debian\n%s\n' "$line" >"$ven/Dockerfile"
+        rc=0
+        output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" \
+            --dockerfile "$ven/Dockerfile" --quiet 2>&1)" || rc=$?
+        assert_equals "0" "$rc" "pin read from [$line] allows its vendored-only version"
+        assert_contains "$output" "::warning::rust/versions/1.1.0.json is vendored-only" \
+            "pin read from [$line] is warned about"
+    done
+    command rm -rf "$up" "$ven"
+}
+
+test_drift_no_matching_arg_has_no_pin_suffix() {
+    # A Dockerfile with only near-miss ARGs yields no pin: the version is drift
+    # and the message must not carry an empty or wrong "(pin)" suffix. The
+    # indented ARG is one Docker would accept; live_pin reads only column-0
+    # ARGs on purpose (the repo Dockerfile never indents them), and an unread
+    # pin fails loud as drift rather than opening the skip.
+    local up="$TEST_TEMP_DIR/noarg-up" ven="$TEST_TEMP_DIR/noarg-ven" output rc=0
+    _vendored_only_pair "$up" "$ven" 1.1.0
+    command printf 'FROM debian\nARG RUSTUP_VERSION=1.1.0\nARG GO_VERSION=1.1.0\n  ARG RUST_VERSION=1.1.0\n' \
+        >"$ven/Dockerfile"
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" \
+        --dockerfile "$ven/Dockerfile" --quiet 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "no matching ARG means no pin, so a vendored-only version is drift"
+    assert_contains "$output" \
+        "rust/versions/1.1.0.json: vendored-only and not the live pin; publish it upstream" \
+        "with no pin the message has no (pin) suffix"
+    assert_not_contains "$output" "live pin (" "no pin is named when none was found"
+    assert_not_contains "$output" "::warning::" "nothing is skipped when there is no pin"
+    command rm -rf "$up" "$ven"
+}
+
+test_drift_reads_real_dockerfile_pin() {
+    # The recipe's pin source is the repo Dockerfile. Prove offline that its
+    # actual ARG RUST_VERSION line is the form live_pin reads — otherwise a
+    # reformatted ARG would only surface via the CI-only upstream comparison.
+    local pin up="$TEST_TEMP_DIR/real-up" output rc=0
+    pin="$(_dockerfile_rust_pin)"
+    if [ -z "$pin" ] || [ ! -f "$VENDORED/tools/rust/versions/$pin.json" ]; then
+        fail_test "Dockerfile RUST_VERSION pin [$pin] has no vendored entry"
+        return 0
+    fi
+    command mkdir -p "$up"
+    command cp -r "$VENDORED"/. "$up/"
+    command rm "$up/tools/rust/versions/$pin.json"
+
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$VENDORED" --upstream "$up" \
+        --dockerfile "$PROJECT_ROOT/Dockerfile" --quiet 2>&1)" || rc=$?
+    assert_equals "0" "$rc" "the real Dockerfile's pin ($pin) is read as the live pin"
+    assert_contains "$output" "::warning::rust/versions/$pin.json is vendored-only" \
+        "the real pin's vendored-only skip is warned about"
+
+    rc=0
+    command bash "$DRIFT_SCRIPT" --vendored "$VENDORED" --upstream "$up" --quiet >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "the same catalog pair is drift without --dockerfile"
+    command rm -rf "$up"
 }
 
 # ---------------------------------------------------------------------------
@@ -452,6 +554,9 @@ run_test "test_drift_gates_the_support_floor" "drift check gates minimum_recomme
 run_test "test_drift_allows_live_pin_vendored_only" "drift check allows the live pin ahead of upstream, with a warning"
 run_test "test_drift_rejects_non_pin_vendored_only" "drift check rejects a vendored-only version that is not the live pin"
 run_test "test_drift_rejects_vendored_only_without_pin_source" "drift check rejects vendored-only versions when no pin source is given"
+run_test "test_drift_reads_quoted_live_pin" "drift check reads a quoted / trailing-whitespace live pin"
+run_test "test_drift_no_matching_arg_has_no_pin_suffix" "drift check names no pin when the Dockerfile has no matching ARG"
+run_test "test_drift_reads_real_dockerfile_pin" "drift check reads the repo Dockerfile's live pin"
 run_test "test_index_matches_versions_on_disk" "index available[] agrees with versions/"
 run_test "test_no_fixture_leakage_into_production" "no tests-only fixtures in shipped catalog"
 run_test "test_catalogs_validate_against_schemas" "catalogs validate against JSON schemas"
