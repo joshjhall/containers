@@ -113,6 +113,17 @@ test_scanner_detects_known_shapes() {
 # ---------------------------------------------------------------------------
 test_no_sites_in_tests_unit() {
     local site bad=""
+
+    # The scanner swallows its own failures (`|| true`), so a bad UNIT_DIR or a
+    # failed cd would yield an empty list that reads as a clean tree. Prove the
+    # scan root is the real tree first: this suite must be inside it.
+    if [ ! -f "$UNIT_DIR/grep-q-pipefail-guard.sh" ]; then
+        tf_fail_assertion \
+            "Scan root does not contain this suite: $UNIT_DIR" \
+            "A clean result from it would be vacuous."
+        return 1
+    fi
+
     while IFS= read -r site; do
         [ -n "$site" ] || continue
         bad+="  tests/unit/$site"$'\n'
