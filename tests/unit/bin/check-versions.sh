@@ -163,26 +163,33 @@ test_script_exists() {
 # version pins: no network calls, a deterministic result. GITHUB_TOKEN is
 # cleared with BASH_ENV too — /etc/bash_env re-exports the token into every
 # non-interactive bash, so `env -u GITHUB_TOKEN` alone does not unset it.
-# Prints combined stdout+stderr with ANSI colors stripped.
+# Sets CV_OUTPUT (combined stdout+stderr, ANSI colors stripped) and CV_RC (the
+# script's exit status). Call it directly, not in $(...), so both survive.
 run_check_versions_scratch() {
-    local scratch output
-    scratch=$(command mktemp -d "$TEST_SCRATCH_BASE/check-versions.XXXXXX")
+    local scratch output rc=0
+    CV_OUTPUT="" CV_RC=""
+    if ! scratch=$(command mktemp -d "$TEST_SCRATCH_BASE/check-versions.XXXXXX") ||
+        [ ! -d "$scratch" ]; then
+        CV_OUTPUT="setup error: mktemp -d under '$TEST_SCRATCH_BASE' failed"
+        return 0
+    fi
     command ln -s "$PROJECT_ROOT/bin" "$scratch/bin"
-    output=$(env -u GITHUB_TOKEN -u BASH_ENV "$scratch/bin/check-versions.sh" "$@" 2>&1 || true)
+    output=$(env -u GITHUB_TOKEN -u BASH_ENV "$scratch/bin/check-versions.sh" "$@" 2>&1) || rc=$?
     command rm -rf "$scratch"
-    command sed 's/\x1b\[[0-9;]*m//g' <<<"$output"
+    CV_OUTPUT=$(command sed 's/\x1b\[[0-9;]*m//g' <<<"$output")
+    CV_RC=$rc
 }
 
 # Test: Script warns when no token is available and no .env exists
 test_missing_env_file() {
-    local output
-    output=$(run_check_versions_scratch)
+    run_check_versions_scratch
 
-    assert_contains "$output" "Warning: No GITHUB_TOKEN set" \
+    assert_contains "$CV_OUTPUT" "Warning: No GITHUB_TOKEN set" \
         "Script warns about the missing token when no .env provides one"
     # Proves the run completed past the warning rather than crashing after it
-    assert_contains "$output" "No version pins found" \
+    assert_contains "$CV_OUTPUT" "No version pins found" \
         "Script completes on a tree with no .env and no pins"
+    assert_equals "0" "$CV_RC" "Script exits 0 on a tree with no pins"
 }
 
 # Test: Script extracts versions from Dockerfile
@@ -225,19 +232,24 @@ test_extract_feature_versions() {
 # Offline: runs against an empty scratch tree (see run_check_versions_scratch).
 # The full network sweep's JSON is covered by test_json_output_valid below.
 test_json_output_format() {
-    local output help_text
+    # A missing jq must not read as "invalid JSON" — name the real cause.
+    if ! command -v jq >/dev/null 2>&1; then
+        assert_true false "jq is required to validate --json output but is not installed"
+        return
+    fi
 
-    help_text=$(run_check_versions_scratch --help)
-    assert_contains "$help_text" "--json" "--help documents the --json flag"
+    run_check_versions_scratch --help
+    assert_contains "$CV_OUTPUT" "--json" "--help documents the --json flag"
 
-    output=$(run_check_versions_scratch --json --no-cache)
-    if command jq empty <<<"$output" 2>/dev/null; then
-        assert_equals "0" "$(command jq -r '.tools | length' <<<"$output")" \
+    run_check_versions_scratch --json --no-cache
+    assert_equals "0" "$CV_RC" "--json exits 0 on a tree with no pins"
+    if command jq empty <<<"$CV_OUTPUT" 2>/dev/null; then
+        assert_equals "0" "$(command jq -r '.tools | length' <<<"$CV_OUTPUT")" \
             "Empty tree reports no tools"
-        assert_equals "0" "$(command jq -r '.summary.total' <<<"$output")" \
+        assert_equals "0" "$(command jq -r '.summary.total' <<<"$CV_OUTPUT")" \
             "Empty tree reports summary.total of 0"
     else
-        assert_true false "--json output is not valid JSON: '$output'"
+        assert_true false "--json output is not valid JSON: '$CV_OUTPUT'"
     fi
 }
 
