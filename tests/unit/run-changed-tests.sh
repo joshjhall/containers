@@ -86,7 +86,9 @@ test_check_versions_offline_tests_stay_offline() {
             problems+=" check-versions.sh must define $func;"
         elif ! command grep -q "run_check_versions_scratch" <<<"$body"; then
             problems+=" $func must run through run_check_versions_scratch (offline);"
-        elif command grep -q 'PROJECT_ROOT/bin/check-versions.sh' <<<"$body"; then
+        # Any spelling of the script path ($PROJECT_ROOT/..., a variable, a
+        # ../ detour) bypasses the scratch tree, so forbid the filename itself.
+        elif command grep -q 'check-versions\.sh' <<<"$body"; then
             problems+=" $func must not invoke the live script unguarded;"
         fi
     done
