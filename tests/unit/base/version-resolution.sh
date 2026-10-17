@@ -70,19 +70,10 @@ run_test_with_setup() {
     teardown
 }
 
-# Helper function to detect rate limiting
-is_rate_limited() {
-    local http_code="$1"
-    local response="$2"
-
-    # GitHub returns 403 for rate limit exceeded
-    # Most APIs return 429 for rate limiting
-    if [ "$http_code" = "403" ] || [ "$http_code" = "429" ]; then
-        if command grep -qi "rate limit\|too many requests\|API rate limit" <<<"$response"; then
-            return 0
-        fi
-    fi
-    return 1
+# True when resolver output names an upstream problem (rate limit or fetch
+# failure) — an environment issue to skip on, not a code error to fail on.
+is_fetch_failure() {
+    command grep -qi "rate limit\|failed to fetch" <<<"$1"
 }
 
 # Helper function to check if network is available
@@ -152,8 +143,7 @@ test_python_major_minor_resolution() {
     # Test resolving major.minor to latest patch
     local result
     result=$(resolve_python_version "3.12" 2>&1) || {
-        # Check if it's a rate limit issue
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -178,7 +168,7 @@ test_python_major_only_resolution() {
     # Test resolving major only to latest stable
     local result
     result=$(resolve_python_version "3" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -212,7 +202,7 @@ test_node_major_minor_resolution() {
 
     local result
     result=$(resolve_node_version "20.18" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -236,7 +226,7 @@ test_node_major_only_resolution() {
 
     local result
     result=$(resolve_node_version "20" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -270,7 +260,7 @@ test_rust_major_minor_resolution() {
 
     local result
     result=$(resolve_rust_version "1.82" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "GitHub API rate limit (not a code error)"
             if [ -z "${GITHUB_TOKEN:-}" ]; then
                 echo "  💡 TIP: Set GITHUB_TOKEN to increase rate limits"
@@ -307,7 +297,7 @@ test_java_major_only_resolution() {
 
     local result
     result=$(resolve_java_version "21" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "Adoptium API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -341,7 +331,7 @@ test_ruby_major_minor_resolution() {
 
     local result
     result=$(resolve_ruby_version "3.4" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "Ruby website rate limit or fetch failure (not a code error)"
             return
         fi
@@ -365,7 +355,7 @@ test_ruby_major_only_resolution() {
 
     local result
     result=$(resolve_ruby_version "3" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "Ruby website rate limit or fetch failure (not a code error)"
             return
         fi
@@ -399,7 +389,7 @@ test_go_major_minor_resolution() {
 
     local result
     result=$(resolve_go_version "1.23" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "Go website rate limit or fetch failure (not a code error)"
             return
         fi
@@ -423,7 +413,7 @@ test_go_major_only_resolution() {
 
     local result
     result=$(resolve_go_version "1" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "Go website rate limit or fetch failure (not a code error)"
             return
         fi
@@ -457,7 +447,7 @@ test_kotlin_major_minor_resolution() {
 
     local result
     result=$(resolve_kotlin_version "2.1" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "GitHub API rate limit or fetch failure (not a code error)"
             if [ -z "${GITHUB_TOKEN:-}" ]; then
                 echo "  💡 TIP: Set GITHUB_TOKEN to increase rate limits"
@@ -484,7 +474,7 @@ test_kotlin_major_only_resolution() {
 
     local result
     result=$(resolve_kotlin_version "2" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "GitHub API rate limit or fetch failure (not a code error)"
             if [ -z "${GITHUB_TOKEN:-}" ]; then
                 echo "  💡 TIP: Set GITHUB_TOKEN to increase rate limits"
@@ -561,6 +551,55 @@ MOCK_JSON
 }
 
 # ============================================================================
+# Skip/Fail Classifier Tests (mocked, always run offline)
+# ============================================================================
+
+# Assert is_fetch_failure's verdict on one input: expected 0 = skip-worthy.
+assert_classified() {
+    local expected="$1" input="$2" message="$3"
+    local rc=0
+    is_fetch_failure "$input" || rc=$?
+    assert_equals "$expected" "$rc" "$message"
+}
+
+test_is_fetch_failure_classifier() {
+    assert_classified 0 "API rate limit exceeded for 1.2.3.4" "Rate-limit message classifies as fetch failure"
+    assert_classified 0 "Failed to fetch python version list" "Resolver fetch error classifies as fetch failure"
+    assert_classified 0 $'curl: (22) error\nAPI RATE LIMIT exceeded' "Multi-line mixed-case trigger classifies as fetch failure"
+    assert_classified 1 "Failed to resolve python version: 3.99" "Resolver no-match error is not a fetch failure"
+    assert_classified 1 "" "Empty output is not a fetch failure"
+}
+
+# Run a real network test with a stubbed failing resolver and print the
+# status it records. The subshell keeps its skip/fail counter bumps out of
+# this suite's totals.
+status_for_resolver_failure() {
+    local message="$1"
+    (
+        check_network() { return 0; }
+        resolve_python_version() {
+            echo "$message" >&2
+            return 1
+        }
+        TEST_STATUS=""
+        test_python_major_minor_resolution >/dev/null 2>&1 || true
+        printf '%s' "$TEST_STATUS"
+    )
+}
+
+test_fetch_failure_records_skip() {
+    local status
+    status=$(status_for_resolver_failure "Failed to fetch python version list")
+    assert_equals "skipped" "$status" "Resolver fetch failure is recorded as a skip"
+}
+
+test_unrelated_failure_records_fail() {
+    local status
+    status=$(status_for_resolver_failure "Failed to resolve python version: 3.12")
+    assert_equals "failed" "$status" "Resolver code error is recorded as a fail"
+}
+
+# ============================================================================
 # Generic resolve_version Wrapper Tests
 # ============================================================================
 
@@ -572,7 +611,7 @@ test_resolve_version_wrapper_python() {
 
     local result
     result=$(resolve_version "python" "3.12" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -595,7 +634,7 @@ test_resolve_version_wrapper_node() {
 
     local result
     result=$(resolve_version "node" "20" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -619,7 +658,7 @@ test_resolve_version_wrapper_nodejs_alias() {
     # Test that "nodejs" alias works
     local result
     result=$(resolve_version "nodejs" "20" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -643,7 +682,7 @@ test_resolve_version_wrapper_golang_alias() {
     # Test that "golang" alias works
     local result
     result=$(resolve_version "golang" "1.23" 2>&1) || {
-        if command grep -qi "rate limit\|failed to fetch" <<<"$result"; then
+        if is_fetch_failure "$result"; then
             skip_test "API rate limit or fetch failure (not a code error)"
             return
         fi
@@ -729,6 +768,11 @@ run_test_with_setup test_network_failure_full_version_bypasses_network "Full ver
 
 # Edge case tests (mocked, always run offline)
 run_test_with_setup test_rust_stable_channel_returns_error "Rust 'stable' channel returns error"
+
+# Skip/fail classifier tests (mocked, always run offline)
+run_test_with_setup test_is_fetch_failure_classifier "is_fetch_failure classifies resolver output"
+run_test_with_setup test_fetch_failure_records_skip "Fetch failure is recorded as skip"
+run_test_with_setup test_unrelated_failure_records_fail "Unrelated failure is recorded as fail"
 
 # Wrapper function tests
 run_test_with_setup test_resolve_version_wrapper_python "Wrapper: resolve python version"
