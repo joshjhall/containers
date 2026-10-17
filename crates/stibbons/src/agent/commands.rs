@@ -638,6 +638,70 @@ mod tests {
         assert!(err.contains("run `stibbons agent build` first"), "{err:?}");
     }
 
+    /// A `MockDocker` on which `run_start` reaches the scripts-dir step: no
+    /// existing container, image present, network present.
+    fn docker_reaching_scripts_dir() -> MockDocker {
+        let docker = MockDocker::new();
+        docker.on("inspect -f", MockResult::err());
+        docker.on("image inspect", MockResult::ok("ok"));
+        docker.on("network inspect", MockResult::ok("ok"));
+        docker
+    }
+
+    /// #926: no user-private state root is fatal (#924) — and fatal *before*
+    /// the container is created. Asserting only the `Err` would pass if the
+    /// container were started and the error raised afterwards.
+    #[test]
+    fn start_aborts_without_state_root() {
+        let (mut ctx, _tmp) = load_ctx(cfg(&[]));
+        ctx.state_root = None;
+        let docker = docker_reaching_scripts_dir();
+
+        let (_out, res) =
+            capture(|o| run_start(&ctx, &docker, o, "1", StartOptions { rebuild: false }));
+        let err = res.unwrap_err();
+        assert!(
+            matches!(
+                err.downcast_ref::<scripts_dir::ScriptsDirError>(),
+                Some(scripts_dir::ScriptsDirError::NoStateRoot)
+            ),
+            "{err:?}"
+        );
+        assert!(!docker.has_call("run -d"), "no container may be created");
+        assert!(!docker.has_call("network"), "abort precedes network setup");
+    }
+
+    /// #926: a scripts dir planted at a non-private mode is rejected through
+    /// `run_start` — not adopted, not wiped — and no container is created.
+    #[cfg(unix)]
+    #[test]
+    fn start_aborts_on_planted_scripts_dir() {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+
+        let (ctx, _tmp) = load_ctx(cfg(&[]));
+        let parent = ctx.state_root.clone().unwrap().join("stibbons").join("agent-scripts");
+        std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&parent).unwrap();
+        let planted = parent.join(container_name(&ctx.project, 1));
+        std::fs::create_dir(&planted).unwrap();
+        std::fs::set_permissions(&planted, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let sentinel = planted.join("agent-entrypoint.sh");
+        std::fs::write(&sentinel, "planted").unwrap();
+        let docker = docker_reaching_scripts_dir();
+
+        let (_out, res) =
+            capture(|o| run_start(&ctx, &docker, o, "1", StartOptions { rebuild: false }));
+        let err = res.unwrap_err();
+        assert!(
+            matches!(
+                err.downcast_ref::<scripts_dir::ScriptsDirError>(),
+                Some(scripts_dir::ScriptsDirError::UnsafePath { .. })
+            ),
+            "{err:?}"
+        );
+        assert_eq!(std::fs::read_to_string(&sentinel).unwrap(), "planted");
+        assert!(!docker.has_call("run -d"), "no container may be created");
+    }
+
     #[test]
     fn start_new_container_assembles_run_args() {
         let (ctx, _tmp) = load_ctx(cfg(&["python"]));
