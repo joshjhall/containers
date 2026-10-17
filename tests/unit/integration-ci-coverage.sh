@@ -414,8 +414,20 @@ run_extra_suites_loop() {
     printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1" >>"%s/ran"\ncase " %s " in *" $1 "*) exit 1 ;; esac\n' \
         "$dir" "$4" >"$dir/tests/run_integration_tests.sh"
     command chmod +x "$dir/tests/run_integration_tests.sh"
-    out=$(cd "$dir" && EXTRA_SUITES="$3" bash --noprofile --norc -eo pipefail -c "$loop" 2>&1) || rc=$?
+    # BASH_ENV/ENV cleared: --noprofile --norc do not stop a non-interactive
+    # bash sourcing them, and /etc/bash_env rewrites PATH (#618).
+    out=$(cd "$dir" && BASH_ENV='' ENV='' EXTRA_SUITES="$3" \
+        bash --noprofile --norc -eo pipefail -c "$loop" 2>&1) || rc=$?
     printf '%s\nrc=%s\n' "$out" "$rc"
+}
+
+test_extra_suites_loop_is_extracted() {
+    local loop
+    loop=$(extra_suites_loop "$CI_WORKFLOW")
+    # An empty extraction runs as `bash -c ''` and exits 0; name that cause
+    # here instead of leaving the behavioral tests to fail obliquely.
+    assert_contains "$loop" "for suite in" "the step's rider loop is found in ci.yml"
+    assert_contains "$loop" "./tests/run_integration_tests.sh" "the extracted loop calls the runner"
 }
 
 test_extra_suites_step_runs_every_rider() {
@@ -498,6 +510,7 @@ run_test test_real_matrix_is_parsed "Real integration-test matrix parses"
 run_test test_every_suite_has_ci_disposition "Every integration suite has a CI disposition"
 run_test test_matrix_suites_test_published_image "Every merge-tier suite honors IMAGE_TO_TEST"
 run_test test_extra_suites_step_gates "The extra_suites step runs and gates the job"
+run_test test_extra_suites_loop_is_extracted "The extra_suites rider loop is extracted from ci.yml"
 run_test test_extra_suites_step_runs_every_rider "The extra_suites step runs every rider past a failure"
 run_test test_extra_suites_step_names_every_failure "The extra_suites step names every failed rider"
 run_test test_extra_suites_step_passes_when_all_pass "The extra_suites step passes when every rider passes"
