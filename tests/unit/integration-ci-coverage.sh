@@ -405,20 +405,28 @@ extra_suites_loop() {
 }
 
 # run_extra_suites_loop LOOP DIR SUITES FAILING — runs LOOP the way Actions
-# runs a step (bash -eo pipefail) from DIR, whose stub runner logs each suite
-# to DIR/ran and exits 1 for each suite in the space-separated FAILING list.
-# Prints the loop's output then `rc=N`.
+# runs a step (bash -eo pipefail) from DIR, whose stub runner logs
+# `suite:IMAGE_TO_TEST:IMAGE_TO_TEST_MINIMAL` to DIR/ran and exits 1 for each
+# suite in the space-separated FAILING list. IMAGE/MINIMAL (set by the dropped
+# preamble) are supplied as `img`/`min`, so the log proves each rider received
+# both images. Prints the loop's output then a final `rc=N` line.
 run_extra_suites_loop() {
     local loop="$1" dir="$2" rc=0 out
     command mkdir -p "$dir/tests"
-    printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1" >>"%s/ran"\ncase " %s " in *" $1 "*) exit 1 ;; esac\n' \
+    printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1:${IMAGE_TO_TEST-}:${IMAGE_TO_TEST_MINIMAL-}" >>"%s/ran"\ncase " %s " in *" $1 "*) exit 1 ;; esac\n' \
         "$dir" "$4" >"$dir/tests/run_integration_tests.sh"
     command chmod +x "$dir/tests/run_integration_tests.sh"
     # BASH_ENV/ENV cleared: --noprofile --norc do not stop a non-interactive
     # bash sourcing them, and /etc/bash_env rewrites PATH (#618).
-    out=$(cd "$dir" && BASH_ENV='' ENV='' EXTRA_SUITES="$3" \
+    out=$(cd "$dir" && BASH_ENV='' ENV='' IMAGE=img MINIMAL=min EXTRA_SUITES="$3" \
         bash --noprofile --norc -eo pipefail -c "$loop" 2>&1) || rc=$?
     printf '%s\nrc=%s\n' "$out" "$rc"
+}
+
+# loop_rc OUTPUT — the exact exit code from run_extra_suites_loop's last line,
+# so rc=1 cannot be satisfied by rc=127 or rc=126.
+loop_rc() {
+    printf '%s' "${1##*$'\n'rc=}"
 }
 
 test_extra_suites_loop_is_extracted() {
@@ -437,10 +445,10 @@ test_extra_suites_step_runs_every_rider() {
     got=$(run_extra_suites_loop "$loop" "$dir" "a bad c" "bad")
     ran=$(command tr '\n' ' ' <"$dir/ran" 2>/dev/null || :)
     command rm -rf "$dir"
-    assert_equals "a bad c " "$ran" "a failing rider does not stop later riders (#1082)"
+    assert_equals "a:img:min bad:img:min c:img:min " "$ran" "a failing rider does not stop later riders (#1082)"
     assert_contains "$got" "FAIL: bad" "the failing rider is named in the log"
     assert_contains "$got" "PASS: c" "a rider after the failure reports its own result"
-    assert_contains "$got" "rc=1" "the step still fails when any rider fails"
+    assert_equals "1" "$(loop_rc "$got")" "the step still fails when any rider fails"
 }
 
 test_extra_suites_step_names_every_failure() {
@@ -450,10 +458,10 @@ test_extra_suites_step_names_every_failure() {
     got=$(run_extra_suites_loop "$loop" "$dir" "bad ok worse" "bad worse")
     ran=$(command tr '\n' ' ' <"$dir/ran" 2>/dev/null || :)
     command rm -rf "$dir"
-    assert_equals "bad ok worse " "$ran" "every rider runs past two failures"
+    assert_equals "bad:img:min ok:img:min worse:img:min " "$ran" "every rider runs past two failures"
     assert_contains "$got" "extra integration suites failed: bad worse" \
         "the final error names every failed rider, in order"
-    assert_contains "$got" "rc=1" "the step fails when several riders fail"
+    assert_equals "1" "$(loop_rc "$got")" "the step fails when several riders fail"
 }
 
 test_extra_suites_step_passes_when_all_pass() {
@@ -463,8 +471,8 @@ test_extra_suites_step_passes_when_all_pass() {
     got=$(run_extra_suites_loop "$loop" "$dir" "a b" "none")
     ran=$(command tr '\n' ' ' <"$dir/ran" 2>/dev/null || :)
     command rm -rf "$dir"
-    assert_equals "a b " "$ran" "every rider runs"
-    assert_contains "$got" "rc=0" "the step passes when every rider passes"
+    assert_equals "a:img:min b:img:min " "$ran" "every rider runs with both images"
+    assert_equals "0" "$(loop_rc "$got")" "the step passes when every rider passes"
 }
 
 # ---------------------------------------------------------------------------
