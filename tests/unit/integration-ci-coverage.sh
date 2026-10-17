@@ -405,7 +405,8 @@ extra_suites_loop() {
 }
 
 # run_extra_suites_loop LOOP DIR SUITES FAILING — runs LOOP the way Actions
-# runs a step (bash -eo pipefail) from DIR, whose stub runner logs
+# runs this step (no `shell:` key, so `bash -e {0}` — not pipefail) from DIR,
+# whose stub runner logs
 # `suite:IMAGE_TO_TEST:IMAGE_TO_TEST_MINIMAL` to DIR/ran and exits 1 for each
 # suite in the space-separated FAILING list. IMAGE/MINIMAL (set by the dropped
 # preamble) are supplied as `img`/`min`, so the log proves each rider received
@@ -419,7 +420,7 @@ run_extra_suites_loop() {
     # BASH_ENV/ENV cleared: --noprofile --norc do not stop a non-interactive
     # bash sourcing them, and /etc/bash_env rewrites PATH (#618).
     out=$(cd "$dir" && BASH_ENV='' ENV='' IMAGE=img MINIMAL=min EXTRA_SUITES="$3" \
-        bash --noprofile --norc -eo pipefail -c "$loop" 2>&1) || rc=$?
+        bash --noprofile --norc -e -c "$loop" 2>&1) || rc=$?
     printf '%s\nrc=%s\n' "$out" "$rc"
 }
 
