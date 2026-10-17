@@ -460,7 +460,7 @@ test_extra_suites_step_names_every_failure() {
     ran=$(command tr '\n' ' ' <"$dir/ran" 2>/dev/null || :)
     command rm -rf "$dir"
     assert_equals "bad:img:min ok:img:min worse:img:min " "$ran" "every rider runs past two failures"
-    assert_contains "$got" "extra integration suites failed: bad worse" \
+    assert_contains "$got" "::error::extra integration suites failed: bad worse" \
         "the final error names every failed rider, in order"
     assert_equals "1" "$(loop_rc "$got")" "the step fails when several riders fail"
 }
