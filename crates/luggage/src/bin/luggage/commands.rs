@@ -119,9 +119,12 @@ pub fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
     // Dry-run emits the plan to stdout for human inspection. Done before
     // run_with_report so we can short-circuit without spinning up the
     // log directory; run_with_report still produces a report for the
-    // --json-report file via the dry-run branch.
-    if args.dry_run {
-        let plan = installer.plan(&resolved)?;
+    // --json-report file via the dry-run branch. A plan error (e.g. a
+    // verification-guard refusal) prints nothing here and falls through, so
+    // run_with_report still writes the failure report before returning it.
+    if args.dry_run
+        && let Ok(plan) = installer.plan(&resolved)
+    {
         let out = serde_json::to_string_pretty(&plan)
             .map_err(|source| LuggageError::Parse { path: PathBuf::from("<stdout>"), source })?;
         println!("{out}");

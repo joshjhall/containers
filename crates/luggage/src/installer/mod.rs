@@ -271,7 +271,30 @@ impl Installer {
     ///   references an unsupported placeholder.
     /// - [`LuggageError::NotImplemented`] when the resolved platform is
     ///   not in the rustup-target table or the package manager is unknown.
+    /// - Whatever [`verify::ensure_supported`] refuses: an unimplemented or
+    ///   unknown verification tier, a tier-2 entry with no `pinned_checksum`,
+    ///   or tier 4 while verified downloads are required.
     pub fn plan(&self, resolved: &ResolvedInstall) -> Result<InstallPlan> {
+        // Reject an unsupported verification tier — or a tier-2 entry with no
+        // `pinned_checksum`, which can never pass — before any work. The
+        // download derives its digest algorithm from `verification.algorithm`,
+        // and a tier-1 entry legitimately carries `algorithm: "gpg"` — without
+        // this the caller would get "unrecognised digest algorithm `gpg`"
+        // from the digest layer instead of the accurate "tier 1 not
+        // implemented". It also avoids spending a 150MB download to learn
+        // something knowable up front.
+        //
+        // It lives here rather than in `run_stages` because every path goes
+        // through `plan()` first: a refused entry must install no system
+        // packages, and `--dry-run` (which never reaches `run_stages`) must
+        // report the same refusal a real install would (#1042).
+        verify::ensure_supported(
+            &resolved.tool,
+            &resolved.version,
+            &resolved.verification,
+            self.options.require_verified_downloads,
+        )?;
+
         let target = rustup_target_for(&resolved.platform).ok();
         let subs =
             Substitutions { version: Some(resolved.version.as_str()), rustup_target: target };
@@ -323,12 +346,14 @@ impl Installer {
     ///
     /// 1. Idempotency pre-check (skip if `<bin>/<tool> --version` already
     ///    matches and `force` is false).
-    /// 2. Install system packages (apt/apk/dnf).
-    /// 3. Download the source artifact.
-    /// 4. Verify it via the catalog tier (3 implemented, 1/2/4 deferred).
-    /// 5. Run the install method (only `rustup-init` shape implemented).
-    /// 6. Run post-install steps.
-    /// 7. Validate by re-invoking `<bin>/<tool> --version`.
+    /// 2. Plan, which refuses an unsupported verification tier before any
+    ///    side effect (and is where `--dry-run` stops).
+    /// 3. Install system packages (apt/apk/dnf).
+    /// 4. Download the source artifact.
+    /// 5. Verify it via the catalog tier (3 implemented, 1/2/4 deferred).
+    /// 6. Run the install method (only `rustup-init` shape implemented).
+    /// 7. Run post-install steps.
+    /// 8. Validate by re-invoking `<bin>/<tool> --version`.
     ///
     /// # Errors
     ///
@@ -490,22 +515,8 @@ impl Installer {
         plan: InstallPlan,
         logger: Option<&logging::FeatureLogger>,
     ) -> Result<StageOutcome> {
+        // The verification guard already ran in `plan()`, which produced `plan`.
         self.stage_system_packages(resolved, logger)?;
-
-        // Reject an unsupported verification tier — or a tier-2 entry with no
-        // `pinned_checksum`, which can never pass — BEFORE downloading. The
-        // download derives its digest algorithm from `verification.algorithm`,
-        // and a tier-1 entry legitimately carries `algorithm: "gpg"` — without
-        // this the caller would get "unrecognised digest algorithm `gpg`"
-        // from the digest layer instead of the accurate "tier 1 not
-        // implemented". It also avoids spending a 150MB download to learn
-        // something knowable up front.
-        verify::ensure_supported(
-            &resolved.tool,
-            &resolved.version,
-            &resolved.verification,
-            self.options.require_verified_downloads,
-        )?;
 
         // Scratch dir is created BEFORE the download so the artifact can stream
         // straight into it — nothing buffers the whole artifact in memory, which
@@ -753,12 +764,22 @@ mod tests {
         assert!(dry.warnings.is_empty(), "expected empty, got {:?}", dry.warnings);
     }
 
+    /// `sample_resolved_with_deps` with a pinless tier-2 verification — an
+    /// entry the guard always refuses, whatever the strictness.
+    fn pinless_tier_2_resolved() -> ResolvedInstall {
+        let mut resolved = sample_resolved_with_deps();
+        resolved.verification_tier = 2;
+        resolved.verification =
+            Verification { tier: 2, pinned_checksum: None, ..resolved.verification };
+        resolved.source_url_template = Some("https://example.test/artifact.tar.gz".into());
+        resolved
+    }
+
     /// Strict mode must refuse a TOFU install *before* the download, the way
     /// `lib/features/python.sh` does — an operator who said "no unverified
     /// downloads" should not pay for the fetch that is about to be rejected.
-    /// Driving `run_stages` with a client that fails any request proves no
-    /// download was attempted: a strict refusal that happened after the fetch
-    /// would surface as `DownloadFailed` instead.
+    /// `plan()` is pure and every stage runs after it, so a refusal here
+    /// precedes the download and every other side effect.
     #[test]
     fn strict_mode_refuses_tofu_before_downloading() {
         let mut resolved = sample_resolved_with_deps();
@@ -771,35 +792,70 @@ mod tests {
             require_verified_downloads: true,
             ..InstallerOptions::default()
         });
-        let plan = installer.plan(&resolved).unwrap();
-        let err = installer.run_stages(&resolved, plan, None).unwrap_err();
-        match err {
+        match installer.plan(&resolved).unwrap_err() {
             LuggageError::VerificationFailed { tier, .. } => assert_eq!(tier, 4),
             other => panic!("expected a pre-download tier-4 refusal, got {other:?}"),
         }
     }
 
     /// A tier-2 entry with no pin can never verify, so it must be refused
-    /// before the download (#891). As above, the dead `source_url_template`
-    /// means a refusal after the fetch would surface as `DownloadFailed`.
+    /// before the download (#891) — at plan time, as above.
     #[test]
     fn pinless_tier_2_is_refused_before_downloading() {
-        let mut resolved = sample_resolved_with_deps();
-        resolved.verification_tier = 2;
-        resolved.verification =
-            Verification { tier: 2, pinned_checksum: None, ..resolved.verification };
-        resolved.source_url_template = Some("https://example.test/artifact.tar.gz".into());
-
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             ..InstallerOptions::default()
         });
-        let plan = installer.plan(&resolved).unwrap();
-        let err = installer.run_stages(&resolved, plan, None).unwrap_err();
-        match err {
+        match installer.plan(&pinless_tier_2_resolved()).unwrap_err() {
             LuggageError::Catalog(msg) => assert!(msg.contains("pinned_checksum"), "got: {msg}"),
             other => panic!("expected a pre-download Catalog refusal, got {other:?}"),
         }
+    }
+
+    /// A guard-refused entry must install no system packages (#1042).
+    ///
+    /// The fixture also carries an *unmapped* dependency under strict
+    /// `fail_on_unknown_deps`, which makes the system-packages stage fail with
+    /// `UnknownDependency` before it would shell out to a package manager. So
+    /// the error that comes back names whichever ran first: the guard's
+    /// `Catalog` refusal means the stage never started, and `UnknownDependency`
+    /// means it ran ahead of the guard. Neither order touches the host.
+    #[test]
+    fn refused_entry_installs_no_system_packages() {
+        let mut resolved = pinless_tier_2_resolved();
+        resolved.system_deps.unmapped = vec!["frobnicator".into()];
+
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: true,
+            fail_on_unknown_deps: true,
+            log_dir: tempfile::tempdir().unwrap().keep(),
+            ..InstallerOptions::default()
+        });
+        let (report, result) = installer.run_with_report(&resolved);
+        match result.unwrap_err() {
+            LuggageError::Catalog(msg) => assert!(msg.contains("pinned_checksum"), "got: {msg}"),
+            other => panic!("expected the guard to refuse before system packages, got {other:?}"),
+        }
+        assert_eq!(report.error_class, Some(ErrorClass::Unknown));
+    }
+
+    /// `--dry-run` must report the refusal a real install would, not a
+    /// success (#1042). The dry-run branch returns before `run_stages`, so it
+    /// only sees the guard because the guard runs in `plan()`.
+    #[test]
+    fn dry_run_reports_the_guard_refusal() {
+        let installer = Installer::with_options(InstallerOptions {
+            dry_run: true,
+            install_system_packages: false,
+            log_dir: tempfile::tempdir().unwrap().keep(),
+            ..InstallerOptions::default()
+        });
+        let (report, result) = installer.run_with_report(&pinless_tier_2_resolved());
+        match result.unwrap_err() {
+            LuggageError::Catalog(msg) => assert!(msg.contains("pinned_checksum"), "got: {msg}"),
+            other => panic!("expected a dry-run Catalog refusal, got {other:?}"),
+        }
+        assert_eq!(report.error_class, Some(ErrorClass::Unknown));
     }
 
     #[test]
