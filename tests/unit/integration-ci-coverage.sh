@@ -21,6 +21,8 @@
 #     continue-on-error or `|| true`) — a listed-but-unrun rider is the
 #     original rot one level down — and every rider expands
 #     IMAGE_TO_TEST_MINIMAL, so the step's minimal image is actually used.
+#   - that step runs every rider even after one fails, then fails at the end
+#     (#1082) — exercised by executing its real loop against a stub runner.
 #
 # The checker runs against fixtures as well as the real tree, so each rule is
 # shown to FAIL on the defect it exists for.
@@ -392,6 +394,53 @@ YAML
     assert_contains "$got" "swallows failures" "a || true step is flagged"
 }
 
+# extra_suites_loop CI_FILE — the real extra_suites step's rider loop and
+# final gate, from the first `failed=()`/`for suite` line to the end of its
+# run block. The preamble (`${{ }}` expressions, docker pull) is dropped so
+# the loop can run offline.
+extra_suites_loop() {
+    yq -r '.jobs["integration-test"].steps[]
+        | select(.name == "Run extra integration suites") | .run' "$1" |
+        command awk '/^(failed=\(\)|for suite )/ { on = 1 } on'
+}
+
+# run_extra_suites_loop LOOP DIR SUITES FAILING — runs LOOP the way Actions
+# runs a step (bash -eo pipefail) from DIR, whose stub runner logs each suite
+# to DIR/ran and exits 1 for FAILING. Prints the loop's output then `rc=N`.
+run_extra_suites_loop() {
+    local loop="$1" dir="$2" rc=0 out
+    command mkdir -p "$dir/tests"
+    printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1" >>"%s/ran"\n[ "$1" != "%s" ]\n' \
+        "$dir" "$4" >"$dir/tests/run_integration_tests.sh"
+    command chmod +x "$dir/tests/run_integration_tests.sh"
+    out=$(cd "$dir" && EXTRA_SUITES="$3" bash --noprofile --norc -eo pipefail -c "$loop" 2>&1) || rc=$?
+    printf '%s\nrc=%s\n' "$out" "$rc"
+}
+
+test_extra_suites_step_runs_every_rider() {
+    local loop dir got ran
+    loop=$(extra_suites_loop "$CI_WORKFLOW")
+    dir=$(command mktemp -d)
+    got=$(run_extra_suites_loop "$loop" "$dir" "a bad c" "bad")
+    ran=$(command tr '\n' ' ' <"$dir/ran" 2>/dev/null || :)
+    command rm -rf "$dir"
+    assert_equals "a bad c " "$ran" "a failing rider does not stop later riders (#1082)"
+    assert_contains "$got" "FAIL: bad" "the failing rider is named in the log"
+    assert_contains "$got" "PASS: c" "a rider after the failure reports its own result"
+    assert_contains "$got" "rc=1" "the step still fails when any rider fails"
+}
+
+test_extra_suites_step_passes_when_all_pass() {
+    local loop dir got ran
+    loop=$(extra_suites_loop "$CI_WORKFLOW")
+    dir=$(command mktemp -d)
+    got=$(run_extra_suites_loop "$loop" "$dir" "a b" "none")
+    ran=$(command tr '\n' ' ' <"$dir/ran" 2>/dev/null || :)
+    command rm -rf "$dir"
+    assert_equals "a b " "$ran" "every rider runs"
+    assert_contains "$got" "rc=0" "the step passes when every rider passes"
+}
+
 # ---------------------------------------------------------------------------
 # The real tree
 # ---------------------------------------------------------------------------
@@ -435,6 +484,8 @@ run_test test_real_matrix_is_parsed "Real integration-test matrix parses"
 run_test test_every_suite_has_ci_disposition "Every integration suite has a CI disposition"
 run_test test_matrix_suites_test_published_image "Every merge-tier suite honors IMAGE_TO_TEST"
 run_test test_extra_suites_step_gates "The extra_suites step runs and gates the job"
+run_test test_extra_suites_step_runs_every_rider "The extra_suites step runs every rider past a failure"
+run_test test_extra_suites_step_passes_when_all_pass "The extra_suites step passes when every rider passes"
 run_test test_extra_suites_use_published_minimal "Every extra_suites rider honors IMAGE_TO_TEST_MINIMAL"
 
 generate_report
