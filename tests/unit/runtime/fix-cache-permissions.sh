@@ -232,6 +232,12 @@ test_predicate_triggers_on_nested_divergence() {
 
     assert_equals "0" "$(cache_needs_fix_status "$cache" "$uid" "$gid")" \
         "Predicate triggers when only a nested file diverges"
+    # Control: re-align the nested file and the same tree must read aligned,
+    # so the trigger above came from the nested file and not from the root
+    # inheriting a foreign group (setgid TEST_TEMP_DIR, default ACLs).
+    chgrp "$gid" "$cache/sub/deeper/nested"
+    assert_equals "1" "$(cache_needs_fix_status "$cache" "$uid" "$gid")" \
+        "Same tree is aligned once the nested file is re-owned"
 }
 
 # ============================================================================
