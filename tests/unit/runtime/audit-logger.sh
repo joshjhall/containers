@@ -762,7 +762,8 @@ test_func_build_json_entry_validates_extra_data() {
     local baseline actual payload failures=""
     baseline=$(build_json_entry "${args[@]}" "")
 
-    for payload in 'notjson' '[1]' '{"a":1' '"a":1}' '{}'; do
+    for payload in 'notjson' '[1]' '{"a":1' '"a":1}' '{}' \
+        '{ }' '{   }' $'{\n}' $'{\t}'; do
         actual=$(build_json_entry "${args[@]}" "$payload")
         if [ "$actual" != "$baseline" ]; then
             failures+=" rejected-payload [$payload] was merged: $actual;"

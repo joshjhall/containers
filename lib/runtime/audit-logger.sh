@@ -294,7 +294,8 @@ build_json_entry() {
             # Strip outer braces and append
             local extra_content
             extra_content=$(echo "$trimmed" | command sed 's/^{//; s/}$//')
-            if [ -n "$extra_content" ]; then
+            # Whitespace-only content (e.g. "{ }") would leave a dangling comma
+            if [[ "$extra_content" =~ [^[:space:]] ]]; then
                 json+=",$extra_content"
             fi
         fi
