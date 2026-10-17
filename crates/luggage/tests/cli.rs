@@ -331,6 +331,45 @@ fn install_dry_run_writes_json_report() {
     assert_eq!(plan["method_name"], "rustup-init");
 }
 
+/// `--dry-run` must report the verification-guard refusal a real install
+/// would (#1042): a non-zero exit, no plan on stdout, and a `--json-report`
+/// that records the failure rather than a dry-run success.
+#[test]
+fn install_dry_run_reports_the_guard_refusal() {
+    let workdir = tempdir().expect("tempdir");
+    let catalog = workdir.path().join("catalog");
+    copy_tree(&catalog_dir(), &catalog);
+    // Tier 1 is unimplemented, so the guard refuses it in every mode.
+    let path = catalog.join("tools/rust/versions/1.95.0.json");
+    let body = std::fs::read_to_string(&path).expect("read version file");
+    let refused = body.replace("\"tier\": 3", "\"tier\": 1");
+    assert_ne!(refused, body, "fixture must carry a tier-3 entry to rewrite");
+    std::fs::write(&path, refused).expect("write version file");
+
+    let report_path = workdir.path().join("report.json");
+    let scratch = workdir.path().to_str().unwrap();
+    let out = Command::new(binary())
+        .args(["install", "rust@1.95.0", "--os", "debian", "--os-version", "13"])
+        .args(["--arch", "amd64", "--dry-run", "--log-dir", scratch, "--bin-root", scratch])
+        .args(["--cache-root", scratch, "--tmp-root", scratch, "--json-report"])
+        .arg(&report_path)
+        .arg("--catalog")
+        .arg(&catalog)
+        .output()
+        .expect("spawn luggage");
+
+    assert_ne!(out.status.code(), Some(0), "a refused dry-run must not succeed");
+    assert!(out.stdout.is_empty(), "no plan for a refused entry, got: {:?}", out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("tier 1"), "stderr should name the refused tier: {stderr}");
+
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&report_path).expect("read report file"))
+            .expect("parse report JSON");
+    assert_eq!(report["tool"], "rust");
+    assert!(!report["error_class"].is_null(), "a refusal is a failure: {report}");
+}
+
 /// Resolve-time errors (`ToolNotFound`, `UnsupportedPlatform`) return
 /// before `run_with_report` is reached, so no report file is written.
 /// Evidence rows only make sense for tuples that resolve cleanly;
