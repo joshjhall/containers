@@ -754,14 +754,15 @@ test_func_audit_log_masks_secrets() {
 # Called directly (not via audit_log) so secret sanitizing cannot alter the
 # payload, and with PID/host off so the output is deterministic. Rejected
 # payloads must leave the entry byte-identical to one built with no extra_data;
-# the half-braced cases catch a guard weakened to check only one end.
+# the half-braced cases catch a guard weakened to check only one end, and the
+# padded object pins the whitespace trim ahead of the brace check.
 test_func_build_json_entry_validates_extra_data() {
     local AUDIT_INCLUDE_PID="false" AUDIT_INCLUDE_HOST="false"
     local -a args=("2026-01-01T00:00:00Z" "evt-1" "system" "100" "info" "msg")
     local baseline actual payload failures=""
     baseline=$(build_json_entry "${args[@]}" "")
 
-    for payload in 'notjson' '[1]' '{"a":1' '"a":1}'; do
+    for payload in 'notjson' '[1]' '{"a":1' '"a":1}' '{}'; do
         actual=$(build_json_entry "${args[@]}" "$payload")
         if [ "$actual" != "$baseline" ]; then
             failures+=" rejected-payload [$payload] was merged: $actual;"
@@ -769,10 +770,12 @@ test_func_build_json_entry_validates_extra_data() {
     done
 
     local expected="${baseline%\}},\"k\":\"v\"}"
-    actual=$(build_json_entry "${args[@]}" '{"k":"v"}')
-    if [ "$actual" != "$expected" ]; then
-        failures+=" object payload not merged: expected $expected, got $actual;"
-    fi
+    for payload in '{"k":"v"}' '  {"k":"v"}  '; do
+        actual=$(build_json_entry "${args[@]}" "$payload")
+        if [ "$actual" != "$expected" ]; then
+            failures+=" object payload [$payload] not merged: expected $expected, got $actual;"
+        fi
+    done
 
     if [ -z "$failures" ]; then
         pass_test "build_json_entry merges JSON objects and drops non-object extra_data"
