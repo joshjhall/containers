@@ -38,9 +38,9 @@ test_suite "grep -q pipefail guard"
 UNIT_DIR="$PROJECT_ROOT/tests/unit"
 
 # pipe_grep_q_sites ROOT — prints "relpath:line" for every pipe into a grep
-# whose short-option cluster carries q (or --quiet), optionally prefixed by
-# `command` or a /usr/bin/ or /bin/ path. A line ending in `|` continues the
-# pipe onto the next line, which is checked as the consumer.
+# (or egrep/fgrep) whose short-option cluster carries q (or --quiet), optionally
+# prefixed by `command` or a /usr/bin/ or /bin/ path. A line ending in `|` (or
+# `| \`) continues the pipe onto the next line, which is checked as the consumer.
 pipe_grep_q_sites() {
     local root="$1"
     (cd "$root" && command find . -name '*.sh' -type f -exec /usr/bin/awk '
@@ -51,7 +51,7 @@ pipe_grep_q_sites() {
             # flag (value-taking flags like -m1, -A 2, -e P), stopping at a
             # shell separator so a later command on the line is not blamed.
             BEGIN {
-                grep_q = "(command[[:space:]]+|/usr/bin/|/bin/)?grep([[:space:]]+[^|;&[:space:]]+)*[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|$)"
+                grep_q = "(command[[:space:]]+|/usr/bin/|/bin/)?[ef]?grep([[:space:]]+[^|;&[:space:]]+)*[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|$)"
             }
             FNR == 1 { pending = 0 }
             {
@@ -67,8 +67,9 @@ pipe_grep_q_sites() {
                 if (line ~ ("(^|[^|])[|][[:space:]]*" grep_q)) {
                     print substr(FILENAME, 3) ":" FNR
                 }
-                # Trailing single | continues the pipe onto the next line.
-                if (line ~ /(^|[^|])[|][[:space:]]*$/) { pending = 1 }
+                # Trailing single | (optionally followed by a backslash)
+                # continues the pipe onto the next line.
+                if (line ~ /(^|[^|])[|][[:space:]]*(\\[[:space:]]*)?$/) { pending = 1 }
             }
         ' {} + || true)
 }
@@ -81,10 +82,11 @@ pipe_grep_q_sites() {
 # Fixture lines are assembled from pieces so this file holds no literal site.
 # ---------------------------------------------------------------------------
 test_scanner_detects_known_shapes() {
-    local dir got p g
+    local dir got p g b
     dir=$(command mktemp -d)
     p='|'
     g='grep'
+    b='\'
     {
         command printf 'echo "$x" %s command %s -q foo\n' "$p" "$g"                     # 1 flag
         command printf 'producer %s /usr/bin/%s -qxF foo\n' "$p" "$g"                   # 2 flag
@@ -101,11 +103,17 @@ test_scanner_detects_known_shapes() {
         command printf 'producer %s command %s -A 2 -q foo\n' "$p" "$g"                 # 13 flag
         command printf 'producer %s command %s -e foo -q\n' "$p" "$g"                   # 14 flag
         command printf 'producer %s command %s -v "x -q"; y -q\n' "$p" "$g"             # 15
+        command printf 'producer %s e%s -q foo\n' "$p" "$g"                             # 16 flag
+        command printf 'producer %s /bin/f%s -q foo\n' "$p" "$g"                        # 17 flag
+        command printf 'producer %s %s\n' "$p" "$b"                                     # 18
+        command printf '    command %s -q foo\n' "$g"                                   # 19 flag
+        command printf 'command %s -q a f %s%s %s\n' "$g" "$p" "$p" "$b"                # 20
+        command printf '    command %s -q b f\n' "$g"                                   # 21
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 " "$got" \
-        "scanner flags same-line, prefixed, --quiet, value-flag and line-continued pipes into grep -q; ignores ||, comments, herestrings, quoted -q, a later command's -q, and non-q greps"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 " "$got" \
+        "scanner flags same-line, prefixed, --quiet, value-flag, egrep/fgrep, and line-continued (incl. backslash) pipes into grep -q; ignores ||, || \\, comments, herestrings, quoted -q, a later command's -q, and non-q greps"
 }
 
 # ---------------------------------------------------------------------------
