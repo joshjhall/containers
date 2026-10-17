@@ -157,6 +157,10 @@ test_predicate_aligned_cache() {
 
     assert_equals "1" "$(cache_needs_fix_status "$cache" "$uid" "$gid")" \
         "Predicate is silent on aligned cache"
+    # Positive control on the SAME fixture: status 1 also means "find saw
+    # nothing" (missing root, find error), so prove find reached the entries.
+    assert_equals "0" "$(cache_needs_fix_status "$cache" "$((uid + 12345))" "$gid")" \
+        "Same fixture triggers under a foreign UID (find reached the entries)"
 }
 
 # ============================================================================
