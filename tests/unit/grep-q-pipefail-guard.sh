@@ -109,11 +109,13 @@ test_scanner_detects_known_shapes() {
         command printf '    command %s -q foo\n' "$g"                                   # 19 flag
         command printf 'command %s -q a f %s%s %s\n' "$g" "$p" "$p" "$b"                # 20
         command printf '    command %s -q b f\n' "$g"                                   # 21
+        command printf 'producer %s\n' "$b"                                             # 22
+        command printf '    command %s -q foo\n' "$g"                                   # 23
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
     assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 " "$got" \
-        "scanner flags same-line, prefixed, --quiet, value-flag, egrep/fgrep, and line-continued (incl. backslash) pipes into grep -q; ignores ||, || \\, comments, herestrings, quoted -q, a later command's -q, and non-q greps"
+        "scanner flags same-line, prefixed, --quiet, value-flag, egrep/fgrep, and line-continued (incl. backslash) pipes into grep -q; ignores ||, || \\, a pipe-less trailing \\, comments, herestrings, quoted -q, a later command's -q, and non-q greps"
 }
 
 # ---------------------------------------------------------------------------
