@@ -406,11 +406,12 @@ extra_suites_loop() {
 
 # run_extra_suites_loop LOOP DIR SUITES FAILING — runs LOOP the way Actions
 # runs a step (bash -eo pipefail) from DIR, whose stub runner logs each suite
-# to DIR/ran and exits 1 for FAILING. Prints the loop's output then `rc=N`.
+# to DIR/ran and exits 1 for each suite in the space-separated FAILING list.
+# Prints the loop's output then `rc=N`.
 run_extra_suites_loop() {
     local loop="$1" dir="$2" rc=0 out
     command mkdir -p "$dir/tests"
-    printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1" >>"%s/ran"\n[ "$1" != "%s" ]\n' \
+    printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1" >>"%s/ran"\ncase " %s " in *" $1 "*) exit 1 ;; esac\n' \
         "$dir" "$4" >"$dir/tests/run_integration_tests.sh"
     command chmod +x "$dir/tests/run_integration_tests.sh"
     out=$(cd "$dir" && EXTRA_SUITES="$3" bash --noprofile --norc -eo pipefail -c "$loop" 2>&1) || rc=$?
@@ -428,6 +429,19 @@ test_extra_suites_step_runs_every_rider() {
     assert_contains "$got" "FAIL: bad" "the failing rider is named in the log"
     assert_contains "$got" "PASS: c" "a rider after the failure reports its own result"
     assert_contains "$got" "rc=1" "the step still fails when any rider fails"
+}
+
+test_extra_suites_step_names_every_failure() {
+    local loop dir got ran
+    loop=$(extra_suites_loop "$CI_WORKFLOW")
+    dir=$(command mktemp -d)
+    got=$(run_extra_suites_loop "$loop" "$dir" "bad ok worse" "bad worse")
+    ran=$(command tr '\n' ' ' <"$dir/ran" 2>/dev/null || :)
+    command rm -rf "$dir"
+    assert_equals "bad ok worse " "$ran" "every rider runs past two failures"
+    assert_contains "$got" "extra integration suites failed: bad worse" \
+        "the final error names every failed rider, in order"
+    assert_contains "$got" "rc=1" "the step fails when several riders fail"
 }
 
 test_extra_suites_step_passes_when_all_pass() {
@@ -485,6 +499,7 @@ run_test test_every_suite_has_ci_disposition "Every integration suite has a CI d
 run_test test_matrix_suites_test_published_image "Every merge-tier suite honors IMAGE_TO_TEST"
 run_test test_extra_suites_step_gates "The extra_suites step runs and gates the job"
 run_test test_extra_suites_step_runs_every_rider "The extra_suites step runs every rider past a failure"
+run_test test_extra_suites_step_names_every_failure "The extra_suites step names every failed rider"
 run_test test_extra_suites_step_passes_when_all_pass "The extra_suites step passes when every rider passes"
 run_test test_extra_suites_use_published_minimal "Every extra_suites rider honors IMAGE_TO_TEST_MINIMAL"
 
