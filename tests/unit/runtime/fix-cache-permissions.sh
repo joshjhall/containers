@@ -200,6 +200,37 @@ test_predicate_triggers_on_foreign_gid() {
 }
 
 # ============================================================================
+# Test: predicate descends — the ONLY divergent entry is a nested file. The
+# foreign UID/GID tests diverge at the root, so a predicate that stopped at
+# depth 0 would still pass them. Without root we can only re-own a file to one
+# of our own supplementary groups, so skip when there is none.
+# ============================================================================
+test_predicate_triggers_on_nested_divergence() {
+    local uid gid other_gid=""
+    uid=$(id -u)
+    gid=$(id -g)
+    local g
+    for g in $(id -G); do
+        if [ "$g" != "$gid" ]; then
+            other_gid="$g"
+            break
+        fi
+    done
+    if [ -z "$other_gid" ]; then
+        skip_test "no supplementary group to re-own a nested file without root"
+        return 0
+    fi
+
+    local cache="$TEST_TEMP_DIR/nested-divergence-cache"
+    mkdir -p "$cache/sub/deeper"
+    touch "$cache/top" "$cache/sub/deeper/nested"
+    chgrp "$other_gid" "$cache/sub/deeper/nested"
+
+    assert_equals "0" "$(cache_needs_fix_status "$cache" "$uid" "$gid")" \
+        "Predicate triggers when only a nested file diverges"
+}
+
+# ============================================================================
 # Test: scoped sudo (#996) — the reconcile runs through the wrapper instead of
 # bailing on a `sudo -n true` probe. Stubs: `id` reports a target UID/GID that
 # differs from the real /cache owner (forcing the fix branch), `sudo`
@@ -270,6 +301,7 @@ run_test test_fix_cache_function_defined "Function is defined after sourcing"
 run_test test_predicate_aligned_cache "Predicate silent on aligned cache"
 run_test test_predicate_triggers_on_foreign_uid "Predicate triggers on foreign UID (regression)"
 run_test test_predicate_triggers_on_foreign_gid "Predicate triggers on foreign GID"
+run_test test_predicate_triggers_on_nested_divergence "Predicate triggers on nested-only divergence"
 run_test test_cache_scoped_sudo_runs_wrapper "Scoped sudo runs the reconcile-cache-owner wrapper (#996)"
 
 # Generate test report
