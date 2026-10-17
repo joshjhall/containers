@@ -705,11 +705,24 @@ jobs:
           MINIMAL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG_NAME}-minimal"
           docker pull "$MINIMAL"
 
+          # Run every rider even when one fails, then fail the step at the
+          # end: under `bash -e` a bare call aborts on the first red suite
+          # and the later riders report nothing at all (#1082).
+          failed=()
           for suite in $EXTRA_SUITES; do
             echo "Running integration suite ${suite} against ${IMAGE}..."
-            IMAGE_TO_TEST="$IMAGE" IMAGE_TO_TEST_MINIMAL="$MINIMAL" \
-              ./tests/run_integration_tests.sh "$suite"
+            if IMAGE_TO_TEST="$IMAGE" IMAGE_TO_TEST_MINIMAL="$MINIMAL" \
+              ./tests/run_integration_tests.sh "$suite"; then
+              echo "PASS: ${suite}"
+            else
+              echo "FAIL: ${suite}"
+              failed+=("$suite")
+            fi
           done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::extra integration suites failed: ${failed[*]}"
+            exit 1
+          fi
 
       - name: Test shell completions
         run: |
