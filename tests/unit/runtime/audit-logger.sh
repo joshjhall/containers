@@ -409,17 +409,6 @@ test_audit_compliance_uses_escape() {
     fi
 }
 
-# Test: build_json_entry validates extra_data structure
-test_build_json_entry_validates_extra_data() {
-    local func_body
-    func_body=$(command sed -n '/^build_json_entry()/,/^}/p' "$SOURCE_FILE")
-    if command grep -qE '\{.*\}' <<<"$func_body"; then
-        pass_test "build_json_entry validates extra_data starts with { and ends with }"
-    else
-        fail_test "build_json_entry does not validate extra_data structure"
-    fi
-}
-
 # Run Batch 7 tests
 run_test test_json_escape_defined "Defines _json_escape helper function"
 run_test test_json_escape_exported "Exports _json_escape function"
@@ -432,7 +421,6 @@ run_test test_audit_network_uses_escape "audit_network uses _json_escape"
 run_test test_audit_file_uses_escape "audit_file uses _json_escape"
 run_test test_audit_process_uses_escape "audit_process uses _json_escape"
 run_test test_audit_compliance_uses_escape "audit_compliance uses _json_escape"
-run_test test_build_json_entry_validates_extra_data "build_json_entry validates extra_data structure"
 
 # ============================================================================
 # Batch 8: Functional Tests (source and execute audit-logger.sh)
@@ -762,6 +750,38 @@ test_func_audit_log_masks_secrets() {
     _cleanup_func_test
 }
 
+# Test: build_json_entry merges only extra_data shaped like a JSON object.
+# Called directly (not via audit_log) so secret sanitizing cannot alter the
+# payload, and with PID/host off so the output is deterministic. Rejected
+# payloads must leave the entry byte-identical to one built with no extra_data;
+# the half-braced cases catch a guard weakened to check only one end.
+test_func_build_json_entry_validates_extra_data() {
+    local AUDIT_INCLUDE_PID="false" AUDIT_INCLUDE_HOST="false"
+    local -a args=("2026-01-01T00:00:00Z" "evt-1" "system" "100" "info" "msg")
+    local baseline actual payload failures=""
+    baseline=$(build_json_entry "${args[@]}" "")
+
+    for payload in 'notjson' '[1]' '{"a":1' '"a":1}'; do
+        actual=$(build_json_entry "${args[@]}" "$payload")
+        if [ "$actual" != "$baseline" ]; then
+            failures+=" rejected-payload [$payload] was merged: $actual;"
+        fi
+    done
+
+    local expected="${baseline%\}},\"k\":\"v\"}"
+    actual=$(build_json_entry "${args[@]}" '{"k":"v"}')
+    if [ "$actual" != "$expected" ]; then
+        failures+=" object payload not merged: expected $expected, got $actual;"
+    fi
+
+    if [ -z "$failures" ]; then
+        pass_test "build_json_entry merges JSON objects and drops non-object extra_data"
+    else
+        fail_test "build_json_entry extra_data validation:$failures"
+    fi
+}
+
+run_test test_func_build_json_entry_validates_extra_data "build_json_entry validates extra_data structure"
 run_test test_func_is_secret_key "_is_secret_key identifies secret patterns"
 run_test test_func_mask_long_value "_mask_secret_value masks long values"
 run_test test_func_mask_short_value "_mask_secret_value masks short values"
