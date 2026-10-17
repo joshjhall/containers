@@ -67,11 +67,11 @@ pipe_grep_q_sites() {
                 if (line ~ ("(^|[^|])[|][[:space:]]*" grep_q)) {
                     print substr(FILENAME, 3) ":" FNR
                 }
-                # Trailing single | (optionally followed by a backslash)
-                # continues the pipe onto the next line. The backslash must
-                # be the last character: `\ ` escapes a space, it does not
-                # continue the line.
-                if (line ~ /(^|[^|])[|][[:space:]]*(\\)?$/) { pending = 1 }
+                # Trailing single | (optionally followed by a backslash or an
+                # inline comment) continues the pipe onto the next line. The
+                # backslash must be the last character: `\ ` escapes a space,
+                # it does not continue the line.
+                if (line ~ /(^|[^|])[|][[:space:]]*(\\|#.*)?$/) { pending = 1 }
             }
         ' {} + || true)
 }
@@ -117,11 +117,13 @@ test_scanner_detects_known_shapes() {
         command printf '    command %s -q foo\n' "$g"                                   # 25
         command printf 'producer %s %s\n' "$p" "$b"                                     # 26
         command printf '    command e%s -q foo\n' "$g"                                  # 27 flag
+        command printf 'producer %s # why\n' "$p"                                       # 28
+        command printf '    command %s -q foo\n' "$g"                                   # 29 flag
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 " "$got" \
-        "scanner flags same-line, prefixed, --quiet, value-flag, egrep/fgrep, and line-continued (incl. backslash, egrep consumer) pipes into grep -q; ignores ||, || \\, a pipe-less trailing \\, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 " "$got" \
+        "scanner flags same-line, prefixed, --quiet, value-flag, egrep/fgrep, and line-continued (incl. backslash, inline comment, egrep consumer) pipes into grep -q; ignores ||, || \\, a pipe-less trailing \\, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps"
 }
 
 # ---------------------------------------------------------------------------
