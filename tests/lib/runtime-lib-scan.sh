@@ -40,6 +40,15 @@
 root=""
 expect=()
 while [ "$#" -gt 0 ]; do
+    # A valueless trailing flag would leave `shift 2` a no-op and spin forever.
+    case "$1" in
+        --root | --expect)
+            if [ "$#" -lt 2 ]; then
+                command echo "runtime-lib-scan: $1 needs a value" >&2
+                exit 2
+            fi
+            ;;
+    esac
     case "$1" in
         --root)
             root="${2%/}"

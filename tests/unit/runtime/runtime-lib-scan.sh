@@ -139,6 +139,50 @@ EOF
         "A consumer path containing a space must be scanned as one file"
 }
 
+# A grep error must fail rather than silently shrink the scan. An unreadable
+# consumer is the error a typo'd path cannot produce: grep -l skips it with a
+# message on stderr, which must land in errors: and withhold the sentinel.
+test_grep_error_is_reported() {
+    if [ "$(id -u)" -eq 0 ]; then
+        skip_test "root reads a mode-000 file, so no grep error can be induced"
+        return 0
+    fi
+    make_lib
+    consumer /usr/local/bin/c <<'EOF'
+[ -f /opt/container-runtime/lib/good.sh ] && source /opt/container-runtime/lib/good.sh
+EOF
+    consumer /usr/local/bin/locked <<'EOF'
+[ -f /opt/container-runtime/lib/good.sh ] && source /opt/container-runtime/lib/good.sh
+EOF
+    command chmod 000 "$TEST_TEMP_DIR/usr/local/bin/locked"
+    local out
+    # C locale so the pinned message is grep's untranslated wording.
+    out=$(LC_ALL=C scan /usr/local/bin/c)
+    command chmod 644 "$TEST_TEMP_DIR/usr/local/bin/locked"
+    assert_equals "missing: unseen: errors: grep: $TEST_TEMP_DIR/usr/local/bin/locked: Permission denied" "$out" \
+        "A grep error must be reported in errors:, not swallowed"
+}
+
+# The integration test passes no --expect, so the default consumer list is the
+# one that guards the real image; every other test here replaces it.
+test_default_expect_list() {
+    make_lib
+    assert_equals "missing: unseen: /usr/local/bin/entrypoint /usr/local/bin/workspace-fs-health-cron /usr/local/bin/healthcheck /etc/container/startup/42-workspace-fs-health.sh errors: " \
+        "$(bash "$SCAN_SCRIPT" --root "$TEST_TEMP_DIR" 2>&1)" \
+        "With no --expect, all four installed consumers must be required"
+}
+
+# A trailing flag with no value must fail fast, not hang the suite. The timeout
+# turns a regression into a failure rather than a stuck run.
+test_valueless_flag_fails() {
+    local flag rc
+    for flag in --root --expect; do
+        rc=0
+        command timeout 10 bash "$SCAN_SCRIPT" "$flag" >/dev/null 2>&1 || rc=$?
+        assert_equals "2" "$rc" "A trailing $flag with no value must exit 2 (124 = hung)"
+    done
+}
+
 # Run tests
 run_test test_good_consumer_is_ok "Resolvable consumer yields consumers-ok"
 run_test test_typo_fragment_basename "Typo'd fragment basename is reported"
@@ -148,6 +192,9 @@ run_test test_misspelled_use_site_var "Misspelled use-site variable is reported"
 run_test test_typo_computed_var_literal "Typo'd computed-variable literal is reported"
 run_test test_expected_consumer_unseen "Unscanned expected consumer is reported"
 run_test test_consumer_path_with_space "Consumer path with a space is one file"
+run_test test_grep_error_is_reported "Grep error lands in errors:"
+run_test test_default_expect_list "Default --expect list requires the four installed consumers"
+run_test test_valueless_flag_fails "Valueless trailing flag exits 2 instead of hanging"
 
 # Generate test report
 generate_report
