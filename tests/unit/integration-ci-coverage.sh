@@ -22,7 +22,9 @@
 #     original rot one level down — and every rider expands
 #     IMAGE_TO_TEST_MINIMAL, so the step's minimal image is actually used.
 #   - that step runs every rider even after one fails, then fails at the end
-#     (#1082) — exercised by executing its real loop against a stub runner.
+#     (#1082) — exercised by executing its real loop against a stub runner,
+#     plus a check that the step's preamble still defines the IMAGE/MINIMAL
+#     the loop reads (#1298), since the harness supplies those itself.
 #
 # The checker runs against fixtures as well as the real tree, so each rule is
 # shown to FAIL on the defect it exists for.
@@ -404,6 +406,14 @@ extra_suites_loop() {
         command awk '/^(failed=\(\)|for suite )/ { on = 1 } on'
 }
 
+# extra_suites_preamble CI_FILE — the same step's run block BEFORE the loop:
+# the lines extra_suites_loop drops (TAG_NAME/IMAGE/MINIMAL, docker pull).
+extra_suites_preamble() {
+    yq -r '.jobs["integration-test"].steps[]
+        | select(.name == "Run extra integration suites") | .run' "$1" |
+        command awk '/^(failed=\(\)|for suite )/ { exit } { print }'
+}
+
 # run_extra_suites_loop LOOP DIR SUITES FAILING — runs LOOP the way Actions
 # runs this step (no `shell:` key, so `bash -e {0}` — not pipefail) from DIR,
 # whose stub runner logs
@@ -428,6 +438,17 @@ run_extra_suites_loop() {
 # so rc=1 cannot be satisfied by rc=127 or rc=126.
 loop_rc() {
     printf '%s' "${1##*$'\n'rc=}"
+}
+
+test_extra_suites_preamble_defines_images() {
+    local pre image_n minimal_n
+    pre=$(extra_suites_preamble "$CI_WORKFLOW")
+    # run_extra_suites_loop injects IMAGE/MINIMAL itself, so the loop tests
+    # cannot see the real step stop defining them (#1298).
+    image_n=$(command grep -c '^IMAGE=' <<<"$pre" || :)
+    minimal_n=$(command grep -c '^MINIMAL=' <<<"$pre" || :)
+    assert_equals "1" "$image_n" "the step's preamble assigns the IMAGE the loop reads"
+    assert_equals "1" "$minimal_n" "the step's preamble assigns the MINIMAL the loop reads"
 }
 
 test_extra_suites_loop_is_extracted() {
@@ -519,6 +540,7 @@ run_test test_real_matrix_is_parsed "Real integration-test matrix parses"
 run_test test_every_suite_has_ci_disposition "Every integration suite has a CI disposition"
 run_test test_matrix_suites_test_published_image "Every merge-tier suite honors IMAGE_TO_TEST"
 run_test test_extra_suites_step_gates "The extra_suites step runs and gates the job"
+run_test test_extra_suites_preamble_defines_images "The extra_suites step preamble defines IMAGE and MINIMAL"
 run_test test_extra_suites_loop_is_extracted "The extra_suites rider loop is extracted from ci.yml"
 run_test test_extra_suites_step_runs_every_rider "The extra_suites step runs every rider past a failure"
 run_test test_extra_suites_step_names_every_failure "The extra_suites step names every failed rider"
