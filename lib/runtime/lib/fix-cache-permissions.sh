@@ -21,6 +21,15 @@
 # Depends on globals from entrypoint.sh:
 #   RUNNING_AS_ROOT, USERNAME, run_privileged()
 
+# _cache_needs_fix ROOT UID GID
+# Returns 0 when anything under ROOT has a UID OR GID that doesn't match the
+# target, 1 when everything is already aligned. -print -quit bails on the
+# first divergence so this stays cheap on already-aligned caches. Split out
+# so the unit tests exercise this exact predicate rather than a copy of it.
+_cache_needs_fix() {
+    command find "$1" \( ! -uid "$2" -o ! -gid "$3" \) -print -quit 2>/dev/null | command grep -q .
+}
+
 fix_cache_permissions() {
     [ -d "/cache" ] || return 0
 
@@ -36,10 +45,8 @@ fix_cache_permissions() {
         return 0
     fi
 
-    # Trigger if anything under /cache has a UID OR GID that doesn't match
-    # the runtime target. -print -quit bails on the first divergence so this
-    # stays cheap on already-aligned caches.
-    if ! command find /cache \( ! -uid "$target_uid" -o ! -gid "$target_gid" \) -print -quit 2>/dev/null | command grep -q .; then
+    # Trigger if anything under /cache diverges from the runtime target.
+    if ! _cache_needs_fix /cache "$target_uid" "$target_gid"; then
         return 0
     fi
 

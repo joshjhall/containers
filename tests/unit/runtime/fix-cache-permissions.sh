@@ -128,21 +128,19 @@ test_fix_cache_function_defined() {
 }
 
 # ============================================================================
-# Helper: extract the trigger predicate from the script and run it against a
-# test cache directory. We exercise the actual `find` expression used in
-# production rather than reimplementing it, so the test catches predicate
-# regressions.
+# Predicate tests: these call _cache_needs_fix, the trigger predicate that
+# fix_cache_permissions itself runs, sourced from the production lib. A change
+# to the production `find` expression is therefore seen here directly.
+#
+# Helper: run the production predicate and echo its exit status (0 = a fix
+# would be triggered, 1 = everything aligned).
 # ============================================================================
-predicate_needs_fix() {
+cache_needs_fix_status() {
     # $1 = test cache root, $2 = target uid, $3 = target gid
-    # Returns 0 when a fix would be triggered, 1 when the predicate would
-    # short-circuit (i.e., everything already aligned).
-    local hit
-    hit=$(command find "$1" \( ! -uid "$2" -o ! -gid "$3" \) -print -quit 2>/dev/null || true)
-    if [ -n "$hit" ]; then
-        return 0
-    fi
-    return 1
+    source "$PROJECT_ROOT/lib/runtime/lib/fix-cache-permissions.sh"
+    local rc=0
+    _cache_needs_fix "$1" "$2" "$3" || rc=$?
+    echo "$rc"
 }
 
 # ============================================================================
@@ -157,11 +155,8 @@ test_predicate_aligned_cache() {
     uid=$(id -u)
     gid=$(id -g)
 
-    if predicate_needs_fix "$cache" "$uid" "$gid"; then
-        assert_equals "1" "0" "Predicate must NOT trigger when everything is aligned"
-    else
-        assert_equals "0" "0" "Predicate is silent on aligned cache"
-    fi
+    assert_equals "1" "$(cache_needs_fix_status "$cache" "$uid" "$gid")" \
+        "Predicate is silent on aligned cache"
 }
 
 # ============================================================================
@@ -183,11 +178,8 @@ test_predicate_triggers_on_foreign_uid() {
     # a target UID that doesn't match any file in the cache.
     foreign_uid=$((uid + 12345))
 
-    if predicate_needs_fix "$cache" "$foreign_uid" "$gid"; then
-        assert_equals "0" "0" "Predicate triggers when target UID differs from file UIDs"
-    else
-        assert_equals "0" "1" "Predicate FAILED to trigger on UID divergence"
-    fi
+    assert_equals "0" "$(cache_needs_fix_status "$cache" "$foreign_uid" "$gid")" \
+        "Predicate triggers when target UID differs from file UIDs"
 }
 
 # ============================================================================
@@ -203,11 +195,8 @@ test_predicate_triggers_on_foreign_gid() {
     gid=$(id -g)
     foreign_gid=$((gid + 54321))
 
-    if predicate_needs_fix "$cache" "$uid" "$foreign_gid"; then
-        assert_equals "0" "0" "Predicate triggers when target GID differs from file GIDs"
-    else
-        assert_equals "0" "1" "Predicate FAILED to trigger on GID divergence"
-    fi
+    assert_equals "0" "$(cache_needs_fix_status "$cache" "$uid" "$foreign_gid")" \
+        "Predicate triggers when target GID differs from file GIDs"
 }
 
 # ============================================================================
