@@ -2055,11 +2055,22 @@ test_dockerfile_has_override_args() {
 test_claude_agents_plumbing_removed() {
     local root
     root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../" && pwd)"
+    local files=(
+        "$root/Dockerfile"
+        "$root/lib/features/lib/dev-tools/persist-feature-flags.sh"
+        "$root/lib/features/claude-code-setup.sh"
+    )
+    # Positive control: each file must exist and still carry the live
+    # CLAUDE_EXTRA_AGENTS sibling, or an empty grep below would pass vacuously.
+    local f
+    for f in "${files[@]}"; do
+        if ! command grep -q 'CLAUDE_EXTRA_AGENTS' "$f"; then
+            fail_test "control: $f missing or lacks CLAUDE_EXTRA_AGENTS"
+            return
+        fi
+    done
     local hits
-    hits=$(command grep -nE '(^|[^A-Z_])CLAUDE_AGENTS([^A-Z_]|_DEFAULT|_FILE|$)' \
-        "$root/Dockerfile" \
-        "$root/lib/features/lib/dev-tools/persist-feature-flags.sh" \
-        "$root/lib/features/claude-code-setup.sh" || true)
+    hits=$(command grep -nE '(^|[^A-Z_])CLAUDE_AGENTS([^A-Z_]|_DEFAULT|_FILE|$)' "${files[@]}" || true)
     assert_equals "$hits" "" "No CLAUDE_AGENTS plumbing in build sources"
 }
 
