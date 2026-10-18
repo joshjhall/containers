@@ -2002,13 +2002,13 @@ test_persist_script_has_all_override_vars() {
     local persist_src
     persist_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/dev-tools" && pwd)/persist-feature-flags.sh"
     local failures=0
-    for var in CLAUDE_PLUGINS_DEFAULT CLAUDE_MCPS_DEFAULT CLAUDE_AGENTS_DEFAULT CLAUDE_SKILLS_DEFAULT; do
+    for var in CLAUDE_PLUGINS_DEFAULT CLAUDE_MCPS_DEFAULT CLAUDE_SKILLS_DEFAULT; do
         if ! command grep -q "$var" "$persist_src"; then
             echo "  FAIL: $var not found in persist-feature-flags.sh" >&2
             failures=$((failures + 1))
         fi
     done
-    assert_equals "$failures" "0" "All 4 override _DEFAULT vars in persist script"
+    assert_equals "$failures" "0" "All 3 override _DEFAULT vars in persist script"
 }
 
 # --- Source file pattern checks ---
@@ -2040,13 +2040,39 @@ test_dockerfile_has_override_args() {
     local dockerfile
     dockerfile="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../" && pwd)/Dockerfile"
     local failures=0
-    for arg in CLAUDE_PLUGINS CLAUDE_MCPS CLAUDE_AGENTS CLAUDE_SKILLS; do
+    for arg in CLAUDE_PLUGINS CLAUDE_MCPS CLAUDE_SKILLS; do
         if ! command grep -q "ARG $arg" "$dockerfile"; then
             echo "  FAIL: ARG $arg not found in Dockerfile" >&2
             failures=$((failures + 1))
         fi
     done
-    assert_equals "$failures" "0" "All 4 override ARGs in Dockerfile"
+    assert_equals "$failures" "0" "All 3 override ARGs in Dockerfile"
+}
+
+# claude-setup never read CLAUDE_AGENTS (only CLAUDE_EXTRA_AGENTS), so the build
+# must not declare, forward, or persist it (#1051). The (^|[^A-Z_]) prefix
+# rejects longer names ending in CLAUDE_AGENTS (CLAUDE_EXTRA_AGENTS never
+# contains the substring, so it cannot match either way).
+test_claude_agents_plumbing_removed() {
+    local root
+    root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../" && pwd)"
+    local files=(
+        "$root/Dockerfile"
+        "$root/lib/features/lib/dev-tools/persist-feature-flags.sh"
+        "$root/lib/features/claude-code-setup.sh"
+    )
+    # Positive control: each file must exist and still carry the live
+    # CLAUDE_EXTRA_AGENTS sibling, or an empty grep below would pass vacuously.
+    local f
+    for f in "${files[@]}"; do
+        if ! command grep -q 'CLAUDE_EXTRA_AGENTS' "$f"; then
+            fail_test "control: $f missing or lacks CLAUDE_EXTRA_AGENTS"
+            return
+        fi
+    done
+    local hits
+    hits=$(command grep -nE '(^|[^A-Z_])CLAUDE_AGENTS([^A-Z_]|_DEFAULT|_FILE|$)' "${files[@]}" || true)
+    assert_equals "$hits" "" "No CLAUDE_AGENTS plumbing in build sources"
 }
 
 # ============================================================================
@@ -2484,14 +2510,14 @@ test_persist_script_has_file_default_vars() {
     local persist_src
     persist_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/dev-tools" && pwd)/persist-feature-flags.sh"
     local failures=0
-    for var in CLAUDE_SKILLS_FILE_DEFAULT CLAUDE_AGENTS_FILE_DEFAULT CLAUDE_PLUGINS_FILE_DEFAULT CLAUDE_MCPS_FILE_DEFAULT \
+    for var in CLAUDE_SKILLS_FILE_DEFAULT CLAUDE_PLUGINS_FILE_DEFAULT CLAUDE_MCPS_FILE_DEFAULT \
         CLAUDE_EXTRA_SKILLS_FILE_DEFAULT CLAUDE_EXTRA_AGENTS_FILE_DEFAULT CLAUDE_EXTRA_PLUGINS_FILE_DEFAULT CLAUDE_EXTRA_MCPS_FILE_DEFAULT; do
         if ! command grep -q "$var" "$persist_src"; then
             echo "  FAIL: $var not found in persist-feature-flags.sh" >&2
             failures=$((failures + 1))
         fi
     done
-    assert_equals "$failures" "0" "All 8 _FILE_DEFAULT vars in persist script"
+    assert_equals "$failures" "0" "All 7 _FILE_DEFAULT vars in persist script"
 }
 
 # --- Source file checks for new helpers ---
@@ -2545,11 +2571,12 @@ run_test test_resolve_buildtime_default "Resolve: Build-time default"
 run_test test_resolve_buildtime_empty_default "Resolve: Build-time empty default"
 
 run_test test_sentinel_in_persist_script "Persist: __UNSET__ sentinel present"
-run_test test_persist_script_has_all_override_vars "Persist: All 4 override vars present"
+run_test test_persist_script_has_all_override_vars "Persist: All 3 override vars present"
 
 run_test test_claude_setup_has_resolve_override "Source: _resolve_override_list in claude-setup"
 run_test test_claude_setup_has_is_in_list "Source: _is_in_list in claude-setup"
 run_test test_dockerfile_has_override_args "Source: Override ARGs in Dockerfile"
+run_test test_claude_agents_plumbing_removed "Source: dead CLAUDE_AGENTS plumbing removed"
 
 # Secure token storage tests (Issue #62)
 run_test test_no_export_anthropic_auth_token "Security: No export ANTHROPIC_AUTH_TOKEN"
@@ -2690,7 +2717,7 @@ run_test test_json_to_csv_strings "JSON to CSV: String array"
 run_test test_json_to_csv_mixed "JSON to CSV: Mixed string/object array"
 run_test test_json_to_csv_objects_only "JSON to CSV: Object array"
 run_test test_json_to_csv_empty "JSON to CSV: Empty array"
-run_test test_persist_script_has_file_default_vars "Persist: All 8 _FILE_DEFAULT vars"
+run_test test_persist_script_has_file_default_vars "Persist: All 7 _FILE_DEFAULT vars"
 run_test test_claude_setup_has_resolve_override_or_file "Source: _resolve_override_list_or_file in claude-setup"
 run_test test_claude_setup_has_file_json_to_csv "Source: _file_json_to_csv in claude-setup"
 run_test test_claude_setup_has_configure_mcp_from_json_object "Source: configure_mcp_from_json_object in claude-setup"

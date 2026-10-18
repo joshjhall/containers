@@ -509,7 +509,6 @@ ARG CLAUDE_LIBRARIAN_PLUGINS
 # When unset (default), all defaults are installed. Set to empty "" to install none.
 ARG CLAUDE_PLUGINS
 ARG CLAUDE_MCPS
-ARG CLAUDE_AGENTS
 ARG CLAUDE_SKILLS
 # Host-event forwarding feature (opt-in, build-time). When true, the
 # claude-host-event.sh forwarder is staged and wired into settings.json at
@@ -534,7 +533,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     CLAUDE_EXTRA_AGENTS=${CLAUDE_EXTRA_AGENTS} \
     CLAUDE_PLUGINS="${CLAUDE_PLUGINS}" \
     CLAUDE_MCPS="${CLAUDE_MCPS}" \
-    CLAUDE_AGENTS="${CLAUDE_AGENTS}" \
     CLAUDE_SKILLS="${CLAUDE_SKILLS}" \
     CLAUDE_LIBRARIAN_PLUGINS="${CLAUDE_LIBRARIAN_PLUGINS}" \
     INCLUDE_DOCKER=${INCLUDE_DOCKER} \
@@ -587,7 +585,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     CLAUDE_EXTRA_AGENTS=${CLAUDE_EXTRA_AGENTS} \
     CLAUDE_PLUGINS="${CLAUDE_PLUGINS}" \
     CLAUDE_MCPS="${CLAUDE_MCPS}" \
-    CLAUDE_AGENTS="${CLAUDE_AGENTS}" \
     CLAUDE_SKILLS="${CLAUDE_SKILLS}" \
     CLAUDE_LIBRARIAN_PLUGINS="${CLAUDE_LIBRARIAN_PLUGINS}" \
     LIBRARIAN_REF=${LIBRARIAN_REF} \
