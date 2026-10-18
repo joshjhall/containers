@@ -91,8 +91,10 @@ pipe_grep_q_sites() {
                 # Same-line: a single | or |& (not ||) followed by the consumer.
                 if (line ~ ("(^|[^|])[|]&?[[:space:]]*" grep_q)) report(f, n)
                 # A trailing single | or |& continues the pipe onto the next
-                # line. `|\` and `| \` arrive here already joined.
-                if (line ~ /(^|[^|])[|]&?[[:space:]]*$/) pending[v] = 1
+                # line. `|\` and `| \` arrive here already joined. A # tail
+                # after the pipe counts whatever the quote state, because a
+                # quote opened on an earlier line fools both views about it.
+                if (line ~ /(^|[^|])[|]&?[[:space:]]*(#.*)?$/) pending[v] = 1
             }
             # step: feed one physical line to view v. Bash reads on across
             # blank and comment-only lines while a pipe awaits its consumer,
@@ -207,12 +209,12 @@ test_scanner_detects_known_shapes() {
         command printf 'producer %s %s -v x # note %s\n' "$p" "$g" "$b"                 # 56
         command printf '    command %s -q y f\n' "$g"                                   # 57
         command printf 'command %s -E "a%s#b" f\n' "$g" "$p"                            # 58
-        command printf '    command %s -q foo\n' "$g"                                   # 59
+        command printf '    command %s -q foo\n' "$g"                                   # 59 flag (over-report)
         command printf 'echo a#b %s command %s -q foo\n' "$p" "$g"                      # 60 flag
         command printf 'producer %s%s # note\n' "$p" "$p"                               # 61
         command printf '    command %s -q foo\n' "$g"                                   # 62
         command printf "command %s -E 'a %s #b' f\n" "$g" "$p"                          # 63
-        command printf '    command %s -q foo\n' "$g"                                   # 64
+        command printf '    command %s -q foo\n' "$g"                                   # 64 flag (over-report)
         command printf 'echo a%s #x %s\n' "$b" "$p"                                     # 65
         command printf '    command %s -q foo\n' "$g"                                   # 66 flag
         command printf 'echo a%s\n' "$b"                                                # 67
@@ -230,11 +232,25 @@ test_scanner_detects_known_shapes() {
         command printf '    command %s -q foo\n' "$g"                                   # 79 flag
         command printf "echo %s' %s # c\n" "$b" "$p"                                    # 80
         command printf '    command %s -q foo\n' "$g"                                   # 81 flag
+        command printf 'x="abc\n'                                                       # 82
+        command printf 'def" %s # why\n' "$p"                                           # 83
+        command printf '    command %s -q foo\n' "$g"                                   # 84 flag
+        command printf "x='abc\n"                                                       # 85
+        command printf "def' %s# why\n" "$p"                                            # 86
+        command printf '    command %s -q foo\n' "$g"                                   # 87 flag
+        command printf 'producer %s%s # why\n' "$p" "$p"                                # 88
+        command printf '    command %s -q foo\n' "$g"                                   # 89
+        command printf 'x="#"; producer %s # note %s\n' "$p" "$b"                       # 90
+        command printf '    command %s -q foo\n' "$g"                                   # 91 flag
+        command printf "x='#'; producer %s # note %s\n" "$p" "$b"                       # 92
+        command printf '    command %s -q foo\n' "$g"                                   # 93 flag
+        command printf 'x=%s#; producer %s # note %s\n' "$b" "$p" "$b"                  # 94
+        command printf '    command %s -q foo\n' "$g"                                   # 95 flag
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:60 fixture.sh:66 fixture.sh:68 fixture.sh:70 fixture.sh:71 fixture.sh:73 fixture.sh:75 fixture.sh:77 fixture.sh:79 fixture.sh:81 " "$got" \
-        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join and after \$(...)), a site after a quote closed on a later line (incl. across a \\ join), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\, or touching | or |&) after the pipe, an escaped quote before it, blank and comment lines before the consumer, a consumer that pipes on) pipes into grep -q; over-reports a word-start # after a \\ join (the documented cost); ignores ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a quoted |# (single or double), a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:59 fixture.sh:60 fixture.sh:64 fixture.sh:66 fixture.sh:68 fixture.sh:70 fixture.sh:71 fixture.sh:73 fixture.sh:75 fixture.sh:77 fixture.sh:79 fixture.sh:81 fixture.sh:84 fixture.sh:87 fixture.sh:91 fixture.sh:93 fixture.sh:95 " "$got" \
+        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join and after \$(...)), a comment ending in \\ after a quoted or escaped #, a site after a quote closed on a later line (incl. across a \\ join, and a pipe plus comment closing it, double or single), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\, or touching | or |&) after the pipe, an escaped quote before it, blank and comment lines before the consumer, a consumer that pipes on) pipes into grep -q; over-reports a word-start # after a \\ join and a quoted trailing |# (the documented cost); ignores ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
 }
 
 # ---------------------------------------------------------------------------
