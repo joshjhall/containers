@@ -22,9 +22,9 @@
 # phase landed. Phase 7 deleted it: any site anywhere under tests/unit/ fails.
 #
 # Matched: `|` and `|&`, with the consumer on the same logical line or on the
-# next one after a trailing pipe (a comment after the pipe, and blank and
-# comment lines between, are skipped as bash skips them). Backslash
-# continuations are joined first.
+# next one after a trailing pipe (blank and comment lines between are skipped,
+# as bash skips them). Unquoted # comments are stripped first, then backslash
+# continuations joined.
 #
 # Not matched: `grep -q X f || grep -q Y f` (no pipe, just `||`), comment lines,
 # and the herestring idiom itself. This file builds its scanner fixtures from
@@ -52,7 +52,24 @@ UNIT_DIR="$PROJECT_ROOT/tests/unit"
 pipe_grep_q_sites() {
     local root="$1"
     (cd "$root" && command find . -name '*.sh' -type f -exec /usr/bin/awk '
-            function is_comment(s) { return s ~ /^[[:space:]]*#/ }
+            # strip_comment: drop an unquoted # comment. As in bash, # opens
+            # a comment only at the start of a word, and neither a quoted nor
+            # a backslash-escaped # does. Quote state does not carry across
+            # physical lines.
+            function strip_comment(s,   i, n, c, prev, sq, dq) {
+                n = length(s); prev = " "; sq = 0; dq = 0
+                for (i = 1; i <= n; i++) {
+                    c = substr(s, i, 1)
+                    if (sq) { if (c == "\047") sq = 0 }
+                    else if (c == "\\") { i++; prev = "x"; continue }
+                    else if (dq) { if (c == "\"") dq = 0 }
+                    else if (c == "\047") sq = 1
+                    else if (c == "\"") dq = 1
+                    else if (c == "#" && prev ~ /[[:space:]|;&()]/) return substr(s, 1, i - 1)
+                    prev = c
+                }
+                return s
+            }
             # GREP_Q: a grep invocation whose flags include q, anchored where a
             # pipe consumer starts. No `|` precedes it in this regex; callers
             # supply that context. Any tokens may sit between grep and the q
@@ -63,14 +80,16 @@ pipe_grep_q_sites() {
             }
             FNR == 1 { pending = 0; buf = "" }
             {
+                # Comments go first: a backslash inside one does not continue
+                # the line, and a # after a pipe is not the pipe consumer.
                 # Bash reads on across blank and comment-only lines while a
-                # pipe awaits its consumer, so they leave pending alone. A
-                # comment cannot start a join: the # swallows its backslash.
-                if (buf == "" && (is_comment($0) || $0 ~ /^[[:space:]]*$/)) next
+                # pipe awaits its consumer, so they leave pending alone.
+                phys = strip_comment($0)
+                if (buf == "" && phys ~ /^[[:space:]]*$/) next
                 # An odd run of trailing backslashes continues the line; bash
                 # deletes the backslash-newline pair, inserting nothing. An
                 # even run is literal backslashes, and `\ ` escapes a space.
-                line = buf $0
+                line = buf phys
                 if (match(line, /\\+$/) && RLENGTH % 2 == 1) {
                     buf = substr(line, 1, length(line) - 1)
                     next
@@ -89,10 +108,10 @@ pipe_grep_q_sites() {
                 if (!reported && line ~ ("(^|[^|])[|]&?[[:space:]]*" grep_q)) {
                     print substr(FILENAME, 3) ":" FNR
                 }
-                # A trailing single | or |&, optionally followed by a comment,
-                # continues the pipe onto the next line. `|\` and `| \` arrive
-                # here already joined.
-                if (line ~ /(^|[^|])[|]&?[[:space:]]*(#.*)?$/) { pending = 1 }
+                # A trailing single | or |& continues the pipe onto the next
+                # line. `|\` and `| \` arrive here already joined, and a
+                # comment after the pipe already stripped.
+                if (line ~ /(^|[^|])[|]&?[[:space:]]*$/) { pending = 1 }
             }
         ' {} + || true)
 }
@@ -164,11 +183,24 @@ test_scanner_detects_known_shapes() {
         command printf '    command %s -q b\n' "$g"                                     # 51 flag
         command printf 'producer %s\n' "$p"                                             # 52
         command printf '    command %s -q a f %s command %s -q b\n' "$g" "$p" "$g"      # 53 flag once
+        command printf 'producer %s # note %s\n' "$p" "$b"                              # 54
+        command printf '    command %s -q foo\n' "$g"                                   # 55 flag
+        command printf 'producer %s %s -v x # note %s\n' "$p" "$g" "$b"                 # 56
+        command printf '    command %s -q y f\n' "$g"                                   # 57
+        command printf 'command %s -E "a%s#b" f\n' "$g" "$p"                            # 58
+        command printf '    command %s -q foo\n' "$g"                                   # 59
+        command printf 'echo a#b %s command %s -q foo\n' "$p" "$g"                      # 60 flag
+        command printf 'producer %s%s # note\n' "$p" "$p"                               # 61
+        command printf '    command %s -q foo\n' "$g"                                   # 62
+        command printf "command %s -E 'a %s #b' f\n" "$g" "$p"                          # 63
+        command printf '    command %s -q foo\n' "$g"                                   # 64
+        command printf 'echo a%s #x %s\n' "$b" "$p"                                     # 65
+        command printf '    command %s -q foo\n' "$g"                                   # 66 flag
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 " "$got" \
-        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment after the pipe, blank and comment lines before the consumer, a consumer that pipes on) pipes into grep -q; ignores ||, || \\, a pipe-less trailing \\, an even \\\\ run, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:60 fixture.sh:66 " "$got" \
+        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, mid-word #, and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\) after the pipe, blank and comment lines before the consumer, a consumer that pipes on) pipes into grep -q; ignores ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a quoted |# (single or double), a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
 }
 
 # ---------------------------------------------------------------------------
