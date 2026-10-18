@@ -1986,30 +1986,8 @@ test_resolve_buildtime_empty_default() {
     unset TEST_VAR_DEFAULT
 }
 
-# --- Sentinel detection in persisted config ---
-
-test_sentinel_in_persist_script() {
-    local persist_src
-    persist_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/dev-tools" && pwd)/persist-feature-flags.sh"
-    if command grep -q '__UNSET__' "$persist_src"; then
-        pass_test "persist-feature-flags.sh contains __UNSET__ sentinel"
-    else
-        fail_test "persist-feature-flags.sh missing __UNSET__ sentinel"
-    fi
-}
-
-test_persist_script_has_all_override_vars() {
-    local persist_src
-    persist_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/dev-tools" && pwd)/persist-feature-flags.sh"
-    local failures=0
-    for var in CLAUDE_PLUGINS_DEFAULT CLAUDE_MCPS_DEFAULT CLAUDE_SKILLS_DEFAULT; do
-        if ! command grep -q "$var" "$persist_src"; then
-            echo "  FAIL: $var not found in persist-feature-flags.sh" >&2
-            failures=$((failures + 1))
-        fi
-    done
-    assert_equals "$failures" "0" "All 3 override _DEFAULT vars in persist script"
-}
+# persist-feature-flags.sh output (sentinel, override and _FILE_DEFAULT keys)
+# is asserted behaviourally in tests/unit/features/persist-feature-flags.sh.
 
 # --- Source file pattern checks ---
 #
@@ -2504,22 +2482,6 @@ test_json_to_csv_empty() {
     assert_equals "$result" "" "Empty array produces empty string"
 }
 
-# --- Persist script has _FILE_DEFAULT vars ---
-
-test_persist_script_has_file_default_vars() {
-    local persist_src
-    persist_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/dev-tools" && pwd)/persist-feature-flags.sh"
-    local failures=0
-    for var in CLAUDE_SKILLS_FILE_DEFAULT CLAUDE_PLUGINS_FILE_DEFAULT CLAUDE_MCPS_FILE_DEFAULT \
-        CLAUDE_EXTRA_SKILLS_FILE_DEFAULT CLAUDE_EXTRA_AGENTS_FILE_DEFAULT CLAUDE_EXTRA_PLUGINS_FILE_DEFAULT CLAUDE_EXTRA_MCPS_FILE_DEFAULT; do
-        if ! command grep -q "$var" "$persist_src"; then
-            echo "  FAIL: $var not found in persist-feature-flags.sh" >&2
-            failures=$((failures + 1))
-        fi
-    done
-    assert_equals "$failures" "0" "All 7 _FILE_DEFAULT vars in persist script"
-}
-
 # --- Source file checks for new helpers ---
 
 # Definition-anchored against the library that owns them (see the note above
@@ -2569,9 +2531,6 @@ run_test test_resolve_runtime_override "Resolve: Runtime override"
 run_test test_resolve_runtime_empty_override "Resolve: Runtime empty override"
 run_test test_resolve_buildtime_default "Resolve: Build-time default"
 run_test test_resolve_buildtime_empty_default "Resolve: Build-time empty default"
-
-run_test test_sentinel_in_persist_script "Persist: __UNSET__ sentinel present"
-run_test test_persist_script_has_all_override_vars "Persist: All 3 override vars present"
 
 run_test test_claude_setup_has_resolve_override "Source: _resolve_override_list in claude-setup"
 run_test test_claude_setup_has_is_in_list "Source: _is_in_list in claude-setup"
@@ -2717,7 +2676,6 @@ run_test test_json_to_csv_strings "JSON to CSV: String array"
 run_test test_json_to_csv_mixed "JSON to CSV: Mixed string/object array"
 run_test test_json_to_csv_objects_only "JSON to CSV: Object array"
 run_test test_json_to_csv_empty "JSON to CSV: Empty array"
-run_test test_persist_script_has_file_default_vars "Persist: All 7 _FILE_DEFAULT vars"
 run_test test_claude_setup_has_resolve_override_or_file "Source: _resolve_override_list_or_file in claude-setup"
 run_test test_claude_setup_has_file_json_to_csv "Source: _file_json_to_csv in claude-setup"
 run_test test_claude_setup_has_configure_mcp_from_json_object "Source: configure_mcp_from_json_object in claude-setup"
