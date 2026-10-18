@@ -6,7 +6,8 @@
 # the scan accepting good input but never rejecting bad input (#1262). This
 # suite runs the same script against a fixture tree (--root) and pins, by exact
 # output, that each typo class is reported -- so an edit to its regexes or its
-# resolution logic that quietly stops seeing one turns this suite red.
+# resolution logic that quietly stops seeing one turns this suite red. One
+# case also runs it via `bash -c`, the shape the integration test uses.
 
 set -euo pipefail
 
@@ -41,6 +42,16 @@ scan() {
         args+=(--expect "$want")
     done
     bash "$SCAN_SCRIPT" "${args[@]}" 2>&1
+}
+
+# As scan(), but run the script's bytes via `bash -c` -- the integration
+# test's shape -- with the first positional filling $0.
+bash_c_scan() {
+    local args=(--root "$TEST_TEMP_DIR") want
+    for want in "$@"; do
+        args+=(--expect "$want")
+    done
+    bash -c "$(<"$SCAN_SCRIPT")" runtime-lib-scan "${args[@]}" 2>&1
 }
 
 # Control: every resolvable shape at once yields the sentinel. Without it, the
@@ -186,14 +197,37 @@ test_default_expect_list() {
 }
 
 # A trailing flag with no value must fail fast, not hang the suite. The timeout
-# turns a regression into a failure rather than a stuck run.
+# turns a regression into a failure rather than a stuck run. The unknown-
+# argument arm also exits 2, so the exact message pins that the guard is the
+# branch that fired, not just that something exited 2.
 test_valueless_flag_fails() {
-    local flag rc
+    local flag rc err
     for flag in --root --expect; do
         rc=0
-        command timeout 10 bash "$SCAN_SCRIPT" "$flag" >/dev/null 2>&1 || rc=$?
+        err=$(command timeout 10 bash "$SCAN_SCRIPT" "$flag" 2>&1 >/dev/null) || rc=$?
         assert_equals "2" "$rc" "A trailing $flag with no value must exit 2 (124 = hung)"
+        assert_equals "runtime-lib-scan: $flag needs a value" "$err" \
+            "A trailing $flag must be rejected by the valueless-flag guard"
     done
+}
+
+# The integration test runs the script's bytes via `bash -c`, not as a file,
+# so $0 and BASH_SOURCE differ from every other test here. Run that shape
+# (with --root, so the fixture rather than this host's tree is scanned) and
+# pin both a pass and an exact report.
+test_bash_c_invocation() {
+    make_lib
+    consumer /usr/local/bin/c <<'EOF'
+[ -f /opt/container-runtime/lib/good.sh ] && source /opt/container-runtime/lib/good.sh
+EOF
+    assert_equals "consumers-ok" "$(bash_c_scan /usr/local/bin/c)" \
+        "Under bash -c, a resolvable consumer must pass"
+    consumer /usr/local/bin/c <<'EOF'
+[ -f /opt/container-runtime/lib/goood.sh ] && source /opt/container-runtime/lib/goood.sh
+EOF
+    assert_equals "missing: /usr/local/bin/c:/opt/container-runtime/lib/goood.sh unseen: errors: " \
+        "$(bash_c_scan /usr/local/bin/c)" \
+        "Under bash -c, a typo'd fragment must be reported"
 }
 
 # Run tests
@@ -209,6 +243,7 @@ run_test test_consumer_path_with_space "Consumer path with a space is one file"
 run_test test_grep_error_is_reported "Grep error lands in errors:"
 run_test test_default_expect_list "Default --expect list requires the four installed consumers"
 run_test test_valueless_flag_fails "Valueless trailing flag exits 2 instead of hanging"
+run_test test_bash_c_invocation "Scan behaves the same when run via bash -c"
 
 # Generate test report
 generate_report
