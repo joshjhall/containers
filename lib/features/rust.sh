@@ -58,7 +58,7 @@ source /tmp/build-scripts/features/lib/install-github-release.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-RUST_VERSION="${RUST_VERSION:-1.99.0}"
+RUST_VERSION="${RUST_VERSION:-1.99.1}"
 
 # Cargo tool versions. Every cargo (b)install must be --locked and pinned to an
 # explicit @version so upstream drift on crates.io cannot retroactively break
@@ -67,7 +67,7 @@ RUST_VERSION="${RUST_VERSION:-1.99.0}"
 # binaries) to avoid the from-source compile that blew the CI timeout (#517);
 # binstall falls back to `cargo install` for any crate lacking a prebuilt
 # binary. CARGO_BINSTALL_VERSION is kept in sync with rust-dev.sh.
-CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.25.3}"
+CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.26.0}"
 CARGO_WATCH_VERSION="${CARGO_WATCH_VERSION:-8.5.3}"
 MDBOOK_VERSION="${MDBOOK_VERSION:-0.5.4}"
 MDBOOK_MERMAID_VERSION="${MDBOOK_MERMAID_VERSION:-0.17.1}"
