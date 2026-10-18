@@ -284,9 +284,11 @@ test_override_vars_persisted() {
         "grep 'CLAUDE_SKILLS_DEFAULT=\"\\?git-workflow,code-quality' /etc/container/config/enabled-features.conf && echo 'found'" \
         "found"
 
+    # CLAUDE_AGENTS is dead (claude-setup never read it, #1051): a stale
+    # --build-arg must not be persisted.
     assert_command_in_container "$image" \
-        "grep 'CLAUDE_AGENTS_DEFAULT=\"\\?debugger' /etc/container/config/enabled-features.conf && echo 'found'" \
-        "found"
+        "test -s /etc/container/config/enabled-features.conf && ! grep -q '^CLAUDE_AGENTS_DEFAULT=' /etc/container/config/enabled-features.conf && echo 'absent'" \
+        "absent"
 
     # Unset vars should get __UNSET__ sentinel
     assert_command_in_container "$image" \
