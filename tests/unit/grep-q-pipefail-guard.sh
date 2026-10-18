@@ -22,8 +22,9 @@
 # phase landed. Phase 7 deleted it: any site anywhere under tests/unit/ fails.
 #
 # Matched: `|` and `|&`, with the consumer on the same logical line or on the
-# next one after a trailing pipe (blank and comment lines between are skipped,
-# as bash skips them). Backslash continuations are joined first.
+# next one after a trailing pipe (a comment after the pipe, and blank and
+# comment lines between, are skipped as bash skips them). Backslash
+# continuations are joined first.
 #
 # Not matched: `grep -q X f || grep -q Y f` (no pipe, just `||`), comment lines,
 # and the herestring idiom itself. This file builds its scanner fixtures from
@@ -75,19 +76,23 @@ pipe_grep_q_sites() {
                     next
                 }
                 buf = ""
+                # A consumer line can itself end in a pipe, so it falls
+                # through to the trailing check; reported only suppresses a
+                # second print for the same line.
+                reported = 0
                 if (pending && line ~ ("^[[:space:]]*" grep_q)) {
                     print substr(FILENAME, 3) ":" FNR
-                    pending = 0
-                    next
+                    reported = 1
                 }
                 pending = 0
                 # Same-line: a single | or |& (not ||) followed by the consumer.
-                if (line ~ ("(^|[^|])[|]&?[[:space:]]*" grep_q)) {
+                if (!reported && line ~ ("(^|[^|])[|]&?[[:space:]]*" grep_q)) {
                     print substr(FILENAME, 3) ":" FNR
                 }
-                # A trailing single | or |& continues the pipe onto the next
-                # line. `|\` and `| \` arrive here already joined.
-                if (line ~ /(^|[^|])[|]&?[[:space:]]*$/) { pending = 1 }
+                # A trailing single | or |&, optionally followed by a comment,
+                # continues the pipe onto the next line. `|\` and `| \` arrive
+                # here already joined.
+                if (line ~ /(^|[^|])[|]&?[[:space:]]*(#.*)?$/) { pending = 1 }
             }
         ' {} + || true)
 }
@@ -152,11 +157,18 @@ test_scanner_detects_known_shapes() {
         command printf '    command %s -q foo\n' "$g"                                   # 44 flag
         command printf 'producer %s command %s %s%s\n' "$p" "$g" "$b" "$b"              # 45
         command printf '    -q foo\n'                                                   # 46
+        command printf 'producer %s # note\n' "$p"                                      # 47
+        command printf '    command %s -q foo\n' "$g"                                   # 48 flag
+        command printf 'producer %s\n' "$p"                                             # 49
+        command printf '    command %s -q a f %s\n' "$g" "$p"                           # 50 flag
+        command printf '    command %s -q b\n' "$g"                                     # 51 flag
+        command printf 'producer %s\n' "$p"                                             # 52
+        command printf '    command %s -q a f %s command %s -q b\n' "$g" "$p" "$g"      # 53 flag once
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 " "$got" \
-        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, blank and comment lines before the consumer) pipes into grep -q; ignores ||, || \\, a pipe-less trailing \\, an even \\\\ run, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 " "$got" \
+        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment after the pipe, blank and comment lines before the consumer, a consumer that pipes on) pipes into grep -q; ignores ||, || \\, a pipe-less trailing \\, an even \\\\ run, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
 }
 
 # ---------------------------------------------------------------------------
