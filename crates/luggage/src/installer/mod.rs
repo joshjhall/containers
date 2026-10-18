@@ -272,11 +272,12 @@ impl Installer {
     /// - [`LuggageError::NotImplemented`] when the resolved platform is
     ///   not in the rustup-target table or the package manager is unknown.
     /// - Whatever [`verify::ensure_supported`] refuses: an unimplemented or
-    ///   unknown verification tier, a tier-2 entry with no `pinned_checksum`,
-    ///   or tier 4 while verified downloads are required.
+    ///   unknown verification tier, a tier-2 entry with no `pinned_checksum`
+    ///   or a pin that is not a digest of `algorithm`'s width, or tier 4 while
+    ///   verified downloads are required.
     pub fn plan(&self, resolved: &ResolvedInstall) -> Result<InstallPlan> {
         // Reject an unsupported verification tier — or a tier-2 entry with no
-        // `pinned_checksum`, which can never pass — before any work. The
+        // usable `pinned_checksum`, which can never pass — before any work. The
         // download derives its digest algorithm from `verification.algorithm`,
         // and a tier-1 entry legitimately carries `algorithm: "gpg"` — without
         // this the caller would get "unrecognised digest algorithm `gpg`"
@@ -826,6 +827,26 @@ mod tests {
         match installer.plan(&resolved).unwrap_err() {
             LuggageError::VerificationFailed { tier: 2, reason, .. } => {
                 assert!(reason.contains("not a hex digest"), "got: {reason}");
+            }
+            other => panic!("expected a pre-download tier-2 refusal, got {other:?}"),
+        }
+    }
+
+    /// A hex pin of the wrong width for its algorithm can never verify, so it
+    /// is refused at plan time too, before the download (#1311).
+    #[test]
+    fn wrong_length_pin_tier_2_is_refused_before_downloading() {
+        let mut resolved = pinless_tier_2_resolved();
+        resolved.verification.algorithm = Some("sha256".into());
+        resolved.verification.pinned_checksum = Some("9f86d081".into());
+
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        match installer.plan(&resolved).unwrap_err() {
+            LuggageError::VerificationFailed { tier: 2, reason, .. } => {
+                assert!(reason.contains("is 8 hex characters"), "got: {reason}");
             }
             other => panic!("expected a pre-download tier-2 refusal, got {other:?}"),
         }

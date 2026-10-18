@@ -27,21 +27,27 @@
 
 use containers_common::tooldb::Verification;
 
-use super::sha::{digests_equal, is_hex_digest};
+use super::sha::{Algorithm, digests_equal, is_hex_digest};
 use crate::error::{LuggageError, Result};
 
 /// Return the entry's pinned checksum once it is known to be usable, or the
 /// typed error for why it is not.
 ///
 /// Shared by [`verify`] and [`super::ensure_supported`] so the pre-download
-/// guard refuses a pinless or malformed tier-2 entry with exactly the error
-/// dispatch would raise after the download — the same single-source-of-truth
-/// role [`super::unsupported_tier`] plays for unimplemented tiers.
+/// guard refuses a pinless, malformed, or wrong-length tier-2 entry with
+/// exactly the error dispatch would raise after the download — the same
+/// single-source-of-truth role [`super::unsupported_tier`] plays for
+/// unimplemented tiers.
 ///
 /// # Errors
 ///
 /// - [`LuggageError::Catalog`] when `verification.pinned_checksum` is absent.
 /// - [`LuggageError::VerificationFailed`] when the pin is not a hex digest.
+/// - Whatever [`Algorithm::parse`] rejects for `verification.algorithm` — the
+///   error the download's digest sink would otherwise raise once it started.
+/// - [`LuggageError::VerificationFailed`] when the pin's length is not the
+///   algorithm's digest width (a truncated paste, or a sha256 pin on a sha512
+///   entry), which no computed digest could ever match.
 pub(super) fn require_pin<'a>(
     tool: &str,
     version: &str,
@@ -61,6 +67,21 @@ pub(super) fn require_pin<'a>(
             format!(
                 "pinned checksum `{pinned}` is not a hex digest; refusing to treat it as a \
                  verification reference"
+            ),
+        ));
+    }
+
+    let algorithm = Algorithm::parse(verification.algorithm.as_deref())?;
+    if pinned.len() != algorithm.hex_len() {
+        return Err(verification_failed(
+            tool,
+            version,
+            format!(
+                "pinned checksum `{pinned}` is {} hex characters, but a {} digest is {}; no \
+                 artifact could match it",
+                pinned.len(),
+                algorithm.name(),
+                algorithm.hex_len()
             ),
         ));
     }
@@ -93,9 +114,11 @@ fn verification_failed(tool: &str, version: &str, reason: String) -> LuggageErro
 ///   drift — and the fail-closed reading is the only safe one: an entry that
 ///   never said what digest to expect must not pass by default.
 /// - [`LuggageError::VerificationFailed`] when the pinned checksum is not a hex
-///   digest (raised by [`require_pin`]). A malformed pin cannot establish
-///   anything, and treating it as a mismatch (rather than as a pass) is what
-///   keeps a typo'd constant from silently disabling verification.
+///   digest, or not the algorithm's digest width (raised by [`require_pin`]).
+///   A malformed pin cannot establish anything, and treating it as a mismatch
+///   (rather than as a pass) is what keeps a typo'd constant from silently
+///   disabling verification.
+/// - Whatever [`Algorithm::parse`] rejects for `verification.algorithm`.
 /// - [`LuggageError::VerificationFailed`] when the digests differ.
 pub fn verify(
     tool: &str,
@@ -228,26 +251,55 @@ mod tests {
         );
     }
 
-    /// The boundary this guard deliberately stops at: `require_pin` checks the
-    /// pin's *shape* (hex), not its *length* against `algorithm`. A truncated
-    /// hex paste is still hex, so it passes the guard and is refused after the
-    /// download as a digest mismatch — still failing closed, just later.
-    /// Refusing it pre-download needs an algorithm-to-length table; pinned here
-    /// so tightening the guard is a visible, deliberate change.
+    /// A hex pin of the wrong width for its algorithm can never match, so the
+    /// pre-download guard refuses it (#1311) — and `verify` raises the very
+    /// same error rather than a later "digest mismatch".
     #[test]
-    fn require_pin_accepts_a_wrong_length_hex_pin() {
-        let truncated = &DIGEST[..8];
-        assert_eq!(
-            require_pin("node", "24.0.0", &pinned_verification(Some(truncated))).unwrap(),
-            truncated
-        );
-        let err =
-            verify("node", "24.0.0", DIGEST, &pinned_verification(Some(truncated))).unwrap_err();
-        match err {
-            LuggageError::VerificationFailed { tier: 2, reason, .. } => {
-                assert!(reason.contains("digest mismatch"), "got: {reason}");
+    fn require_pin_rejects_a_wrong_length_hex_pin() {
+        let sha512 = |pin: &str| Verification {
+            algorithm: Some("sha512".into()),
+            ..pinned_verification(Some(pin))
+        };
+        let cases = [
+            // A truncated paste on the default-width entry.
+            (pinned_verification(Some(&DIGEST[..8])), "is 8 hex characters", "sha256 digest is 64"),
+            // A correct-looking sha256 pin on a sha512 entry.
+            (sha512(DIGEST), "is 64 hex characters", "sha512 digest is 128"),
+        ];
+        for (verification, got_len, want_len) in cases {
+            let guard = require_pin("node", "24.0.0", &verification).unwrap_err();
+            match &guard {
+                LuggageError::VerificationFailed { tier: 2, reason, .. } => {
+                    assert!(reason.contains(got_len), "got: {reason}");
+                    assert!(reason.contains(want_len), "got: {reason}");
+                }
+                other => panic!("expected VerificationFailed, got {other:?}"),
             }
-            other => panic!("expected VerificationFailed, got {other:?}"),
+            // A digest of the algorithm's real width, so only the pin is wrong.
+            let actual =
+                "0".repeat(Algorithm::parse(verification.algorithm.as_deref()).unwrap().hex_len());
+            let dispatch = verify("node", "24.0.0", &actual, &verification).unwrap_err();
+            assert_eq!(format!("{dispatch:?}"), format!("{guard:?}"));
+        }
+    }
+
+    #[test]
+    fn require_pin_accepts_a_sha512_width_pin_on_a_sha512_entry() {
+        let pin = "a".repeat(128);
+        let v =
+            Verification { algorithm: Some("SHA512".into()), ..pinned_verification(Some(&pin)) };
+        assert_eq!(require_pin("node", "24.0.0", &v).unwrap(), pin);
+    }
+
+    /// An algorithm the digest layer cannot compute is refused by the guard
+    /// with the digest layer's own error, rather than only once the download
+    /// had started.
+    #[test]
+    fn require_pin_rejects_an_unrecognised_algorithm() {
+        let v = Verification { algorithm: Some("md5".into()), ..pinned_verification(Some(DIGEST)) };
+        match require_pin("node", "24.0.0", &v).unwrap_err() {
+            LuggageError::Catalog(msg) => assert!(msg.contains("md5"), "got: {msg}"),
+            other => panic!("expected Catalog, got {other:?}"),
         }
     }
 

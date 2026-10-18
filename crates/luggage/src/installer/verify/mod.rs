@@ -102,8 +102,9 @@ pub fn ensure_supported(
                      REQUIRE_VERIFIED_DOWNLOADS=false"
                 .to_owned(),
         }),
-        // A tier-2 entry with no pin, or a pin that isn't a digest, can never
-        // pass, and that is knowable from the catalog alone — refuse it now
+        // A tier-2 entry with no pin, or a pin that isn't a digest of the
+        // algorithm's width, can never pass, and that is knowable from the
+        // catalog alone — refuse it now
         // rather than after the download.
         // Tier 2 needs no `require_verified` arm: a pinned checksum *is* a
         // verified download, so it satisfies the strict posture rather than
