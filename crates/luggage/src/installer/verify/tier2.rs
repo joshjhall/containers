@@ -187,9 +187,9 @@ mod tests {
 
     /// The dangerous shape: a pin that is present but not a digest must fail,
     /// not pass. A paste carrying a filename or a leaked error string in the
-    /// slot would otherwise be compared against and simply mismatch — which is the right
-    /// outcome, but the dedicated message is what tells the operator the
-    /// *catalog* is wrong rather than the artifact.
+    /// slot would otherwise be compared against and simply mismatch — which is
+    /// the right outcome, but the dedicated message is what tells the operator
+    /// the *catalog* is wrong rather than the artifact.
     #[test]
     fn non_hex_pin_returns_verification_failed() {
         for pin in ["not-a-digest", "zzzz", "9f86d081  node.tar.gz"] {
