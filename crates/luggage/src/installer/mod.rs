@@ -812,6 +812,25 @@ mod tests {
         }
     }
 
+    /// A pin that is present but not a hex digest can never verify either, so
+    /// it too is refused at plan time, before the download (#1041).
+    #[test]
+    fn malformed_pin_tier_2_is_refused_before_downloading() {
+        let mut resolved = pinless_tier_2_resolved();
+        resolved.verification.pinned_checksum = Some("not-a-digest".into());
+
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        match installer.plan(&resolved).unwrap_err() {
+            LuggageError::VerificationFailed { tier: 2, reason, .. } => {
+                assert!(reason.contains("not a hex digest"), "got: {reason}");
+            }
+            other => panic!("expected a pre-download tier-2 refusal, got {other:?}"),
+        }
+    }
+
     /// A guard-refused entry must install no system packages (#1042).
     ///
     /// The fixture also carries an *unmapped* dependency under strict
