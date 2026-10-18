@@ -74,9 +74,10 @@ pub use containers_common::tooldb::VerificationWarning;
 /// - [`LuggageError::NotImplemented`] for tier 1, and
 ///   [`LuggageError::Catalog`] for a tier outside `1..=4` — the same variants
 ///   [`dispatch`] returns for those tiers.
-/// - [`LuggageError::Catalog`] for a tier-2 entry with no `pinned_checksum` —
-///   the same error [`tier2::verify`] raises, built by the same
-///   `tier2::require_pin`, so the guard and dispatch cannot disagree about it.
+/// - [`LuggageError::Catalog`] for a tier-2 entry with no `pinned_checksum`,
+///   and [`LuggageError::VerificationFailed`] for one whose pin is not a hex
+///   digest — the same errors [`tier2::verify`] raises, built by the same
+///   `tier2::require_pin`, so the guard and dispatch cannot disagree about them.
 /// - [`LuggageError::VerificationFailed`] for tier 4 when `require_verified`
 ///   is set. This is a *policy* refusal of a supported tier, not an
 ///   unimplemented one, so it is deliberately not a `NotImplemented`: it maps
@@ -101,8 +102,9 @@ pub fn ensure_supported(
                      REQUIRE_VERIFIED_DOWNLOADS=false"
                 .to_owned(),
         }),
-        // A tier-2 entry with no pin can never pass, and that is knowable from
-        // the catalog alone — refuse it now rather than after the download.
+        // A tier-2 entry with no pin, or a pin that isn't a digest, can never
+        // pass, and that is knowable from the catalog alone — refuse it now
+        // rather than after the download.
         // Tier 2 needs no `require_verified` arm: a pinned checksum *is* a
         // verified download, so it satisfies the strict posture rather than
         // being excused from it.
@@ -435,6 +437,51 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(guard.to_string(), dispatched.to_string());
+    }
+
+    /// A pin that is present but not a digest is just as knowable from the
+    /// catalog as a missing one, so the guard refuses it too (#1041) — in both
+    /// postures.
+    #[test]
+    fn ensure_supported_refuses_a_malformed_tier_2_pin() {
+        let v = Verification { pinned_checksum: Some("not-a-digest".into()), ..verification(2) };
+        for strict in [false, true] {
+            match ensure_supported("node", "24.0.0", &v, strict).unwrap_err() {
+                LuggageError::VerificationFailed { tier: 2, ref reason, .. } => {
+                    assert!(reason.contains("not a hex digest"), "got: {reason}");
+                }
+                other => panic!("expected VerificationFailed (strict={strict}), got {other:?}"),
+            }
+        }
+    }
+
+    /// The early malformed-pin refusal must be dispatch's error, variant and
+    /// all — a `Catalog` error with similar text would classify differently.
+    #[test]
+    fn ensure_supported_refuses_a_malformed_pin_exactly_as_dispatch_does() {
+        for pin in ["", "not-a-digest"] {
+            let v = Verification { pinned_checksum: Some(pin.into()), ..verification(2) };
+            let guard = ensure_supported("node", "24.0.0", &v, false).unwrap_err();
+            let dispatched = dispatch(
+                "node",
+                "24.0.0",
+                "deadbeef",
+                "artifact.tar.gz",
+                &v,
+                &Substitutions::default(),
+                &DeadClient,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(guard, LuggageError::VerificationFailed { tier: 2, .. }),
+                "pin {pin:?}: guard gave {guard:?}"
+            );
+            assert!(
+                matches!(dispatched, LuggageError::VerificationFailed { tier: 2, .. }),
+                "pin {pin:?}: dispatch gave {dispatched:?}"
+            );
+            assert_eq!(guard.to_string(), dispatched.to_string(), "pin {pin:?}");
+        }
     }
 
     /// Strict mode demands verified downloads; a pinned checksum *is* one, so

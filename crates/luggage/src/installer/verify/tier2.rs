@@ -30,27 +30,51 @@ use containers_common::tooldb::Verification;
 use super::sha::{digests_equal, is_hex_digest};
 use crate::error::{LuggageError, Result};
 
-/// Return the entry's pinned checksum, or the typed error for its absence.
+/// Return the entry's pinned checksum once it is known to be usable, or the
+/// typed error for why it is not.
 ///
 /// Shared by [`verify`] and [`super::ensure_supported`] so the pre-download
-/// guard refuses a pinless tier-2 entry with exactly the error dispatch would
-/// raise after the download — the same single-source-of-truth role
-/// [`super::unsupported_tier`] plays for unimplemented tiers.
+/// guard refuses a pinless or malformed tier-2 entry with exactly the error
+/// dispatch would raise after the download — the same single-source-of-truth
+/// role [`super::unsupported_tier`] plays for unimplemented tiers.
 ///
 /// # Errors
 ///
-/// [`LuggageError::Catalog`] when `verification.pinned_checksum` is absent.
+/// - [`LuggageError::Catalog`] when `verification.pinned_checksum` is absent.
+/// - [`LuggageError::VerificationFailed`] when the pin is not a hex digest.
 pub(super) fn require_pin<'a>(
     tool: &str,
     version: &str,
     verification: &'a Verification,
 ) -> Result<&'a str> {
-    verification.pinned_checksum.as_deref().ok_or_else(|| {
+    let pinned = verification.pinned_checksum.as_deref().ok_or_else(|| {
         LuggageError::Catalog(format!(
             "tier 2 verification for {tool}@{version} requires a `pinned_checksum` in the \
              catalog entry"
         ))
-    })
+    })?;
+
+    if !is_hex_digest(pinned) {
+        return Err(verification_failed(
+            tool,
+            version,
+            format!(
+                "pinned checksum `{pinned}` is not a hex digest; refusing to treat it as a \
+                 verification reference"
+            ),
+        ));
+    }
+
+    Ok(pinned)
+}
+
+fn verification_failed(tool: &str, version: &str, reason: String) -> LuggageError {
+    LuggageError::VerificationFailed {
+        tool: tool.to_owned(),
+        version: version.to_owned(),
+        tier: 2,
+        reason,
+    }
 }
 
 /// Verify a precomputed artifact digest against the catalog's pinned checksum.
@@ -69,9 +93,9 @@ pub(super) fn require_pin<'a>(
 ///   drift — and the fail-closed reading is the only safe one: an entry that
 ///   never said what digest to expect must not pass by default.
 /// - [`LuggageError::VerificationFailed`] when the pinned checksum is not a hex
-///   digest. A malformed pin cannot establish anything, and treating it as a
-///   mismatch (rather than as a pass) is what keeps a typo'd constant from
-///   silently disabling verification.
+///   digest (raised by [`require_pin`]). A malformed pin cannot establish
+///   anything, and treating it as a mismatch (rather than as a pass) is what
+///   keeps a typo'd constant from silently disabling verification.
 /// - [`LuggageError::VerificationFailed`] when the digests differ.
 pub fn verify(
     tool: &str,
@@ -81,24 +105,14 @@ pub fn verify(
 ) -> Result<()> {
     let pinned = require_pin(tool, version, verification)?;
 
-    let fail = |reason: String| LuggageError::VerificationFailed {
-        tool: tool.to_owned(),
-        version: version.to_owned(),
-        tier: 2,
-        reason,
-    };
-
-    if !is_hex_digest(pinned) {
-        return Err(fail(format!(
-            "pinned checksum `{pinned}` is not a hex digest; refusing to treat it as a \
-             verification reference"
-        )));
-    }
-
     if digests_equal(actual_digest, pinned) {
         Ok(())
     } else {
-        Err(fail(format!("digest mismatch: expected {pinned}, computed {actual_digest}")))
+        Err(verification_failed(
+            tool,
+            version,
+            format!("digest mismatch: expected {pinned}, computed {actual_digest}"),
+        ))
     }
 }
 
@@ -172,10 +186,10 @@ mod tests {
     }
 
     /// The dangerous shape: a pin that is present but not a digest must fail,
-    /// not pass. A truncated paste or a leaked error string in the slot would
-    /// otherwise be compared against and simply mismatch — which is the right
-    /// outcome, but the dedicated message is what tells the operator the
-    /// *catalog* is wrong rather than the artifact.
+    /// not pass. A paste carrying a filename or a leaked error string in the
+    /// slot would otherwise be compared against and simply mismatch — which is
+    /// the right outcome, but the dedicated message is what tells the operator
+    /// the *catalog* is wrong rather than the artifact.
     #[test]
     fn non_hex_pin_returns_verification_failed() {
         for pin in ["not-a-digest", "zzzz", "9f86d081  node.tar.gz"] {
@@ -187,6 +201,53 @@ mod tests {
                 }
                 other => panic!("pin {pin}: expected VerificationFailed, got {other:?}"),
             }
+        }
+    }
+
+    /// The pre-download guard leans on `require_pin` alone (#1041), so the
+    /// malformed-pin refusal must live there — not only in `verify`, where it
+    /// would fire after the artifact had already been fetched.
+    #[test]
+    fn require_pin_rejects_a_non_hex_pin() {
+        for pin in ["", "not-a-digest", "9f86d081  node.tar.gz"] {
+            let err = require_pin("node", "24.0.0", &pinned_verification(Some(pin))).unwrap_err();
+            match err {
+                LuggageError::VerificationFailed { tier: 2, reason, .. } => {
+                    assert!(reason.contains("not a hex digest"), "pin {pin:?}: got {reason}");
+                }
+                other => panic!("pin {pin:?}: expected VerificationFailed, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn require_pin_returns_a_hex_pin() {
+        assert_eq!(
+            require_pin("node", "24.0.0", &pinned_verification(Some(DIGEST))).unwrap(),
+            DIGEST
+        );
+    }
+
+    /// The boundary this guard deliberately stops at: `require_pin` checks the
+    /// pin's *shape* (hex), not its *length* against `algorithm`. A truncated
+    /// hex paste is still hex, so it passes the guard and is refused after the
+    /// download as a digest mismatch — still failing closed, just later.
+    /// Refusing it pre-download needs an algorithm-to-length table; pinned here
+    /// so tightening the guard is a visible, deliberate change.
+    #[test]
+    fn require_pin_accepts_a_wrong_length_hex_pin() {
+        let truncated = &DIGEST[..8];
+        assert_eq!(
+            require_pin("node", "24.0.0", &pinned_verification(Some(truncated))).unwrap(),
+            truncated
+        );
+        let err =
+            verify("node", "24.0.0", DIGEST, &pinned_verification(Some(truncated))).unwrap_err();
+        match err {
+            LuggageError::VerificationFailed { tier: 2, reason, .. } => {
+                assert!(reason.contains("digest mismatch"), "got: {reason}");
+            }
+            other => panic!("expected VerificationFailed, got {other:?}"),
         }
     }
 
