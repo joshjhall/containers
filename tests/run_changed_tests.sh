@@ -80,6 +80,17 @@ map_to_test() {
             return
             ;;
 
+        # The runtime-lib reference scan the minimal integration test runs in
+        # the image → its fixture suite (#1262). It lives outside tests/unit/,
+        # so without this arm an edit to it runs nothing at push time.
+        tests/lib/runtime-lib-scan.sh)
+            local test_path="${TESTS_DIR}/unit/runtime/runtime-lib-scan.sh"
+            if [ -f "$test_path" ]; then
+                echo "$test_path"
+            fi
+            return
+            ;;
+
         # Test files themselves — run directly
         tests/unit/*.sh)
             if [ -f "${PROJECT_ROOT}/${file}" ]; then

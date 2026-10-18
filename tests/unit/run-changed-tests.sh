@@ -670,6 +670,24 @@ test_devcontainer_mapping_nested_by_path() {
     /usr/bin/rm -rf "$root"
 }
 
+# ============================================================================
+# tests/lib/runtime-lib-scan.sh → its fixture suite (#1262)
+# ============================================================================
+# The scan sits outside tests/unit/, so with no arm an edit to it would run
+# none of the suite that pins its typo classes at push time.
+
+test_runtime_lib_scan_mapping() {
+    local out
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+
+    out=$(command printf '%s\n' tests/lib/runtime-lib-scan.sh | map_changed_files)
+    assert_equals "$TESTS_DIR/unit/runtime/runtime-lib-scan.sh" "$out" \
+        "tests/lib/runtime-lib-scan.sh must collect its fixture suite only"
+}
+
 run_test test_runner_exports_flag "Pre-push runner exports SKIP_NETWORK_TESTS"
 run_test test_framework_defines_helper "framework.sh defines network_tests_disabled"
 run_test test_framework_exports_helper "framework.sh exports network_tests_disabled"
@@ -701,6 +719,7 @@ run_test test_lefthook_mapping_follows_glob "lefthook.yml mapping follows the le
 run_test test_devcontainer_mapping_root_scripts "devcontainer root scripts map to their suites (#1067)"
 run_test test_devcontainer_mapping_unmatched_is_silent "uncovered devcontainer script maps to no test path (#1067)"
 run_test test_devcontainer_mapping_nested_by_path "nested devcontainer script maps by path, not basename (#1067)"
+run_test test_runtime_lib_scan_mapping "runtime-lib scan maps to its fixture suite (#1262)"
 
 # Generate test report
 generate_report
