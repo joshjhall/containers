@@ -54,10 +54,11 @@ pipe_grep_q_sites() {
     (cd "$root" && command find . -name '*.sh' -type f -exec /usr/bin/awk '
             # strip_comment: drop an unquoted # comment. As in bash, # opens
             # a comment only at the start of a word, and neither a quoted nor
-            # a backslash-escaped # does. Quote state does not carry across
-            # physical lines.
-            function strip_comment(s,   i, n, c, prev, sq, dq) {
-                n = length(s); prev = " "; sq = 0; dq = 0
+            # a backslash-escaped # does. p0 is the character before s: the
+            # tail of a pending continuation, else a space. Quote state does
+            # not carry across physical lines.
+            function strip_comment(s, p0,   i, n, c, prev, sq, dq) {
+                n = length(s); prev = p0; sq = 0; dq = 0
                 for (i = 1; i <= n; i++) {
                     c = substr(s, i, 1)
                     if (sq) { if (c == "\047") sq = 0 }
@@ -84,7 +85,7 @@ pipe_grep_q_sites() {
                 # the line, and a # after a pipe is not the pipe consumer.
                 # Bash reads on across blank and comment-only lines while a
                 # pipe awaits its consumer, so they leave pending alone.
-                phys = strip_comment($0)
+                phys = strip_comment($0, buf == "" ? " " : substr(buf, length(buf), 1))
                 if (buf == "" && phys ~ /^[[:space:]]*$/) next
                 # An odd run of trailing backslashes continues the line; bash
                 # deletes the backslash-newline pair, inserting nothing. An
@@ -196,11 +197,15 @@ test_scanner_detects_known_shapes() {
         command printf '    command %s -q foo\n' "$g"                                   # 64
         command printf 'echo a%s #x %s\n' "$b" "$p"                                     # 65
         command printf '    command %s -q foo\n' "$g"                                   # 66 flag
+        command printf 'echo a%s\n' "$b"                                                # 67
+        command printf '#b %s command %s -q foo\n' "$p" "$g"                            # 68 flag
+        command printf 'echo a %s\n' "$b"                                               # 69
+        command printf '#b %s command %s -q foo\n' "$p" "$g"                            # 70
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:60 fixture.sh:66 " "$got" \
-        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, mid-word #, and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\) after the pipe, blank and comment lines before the consumer, a consumer that pipes on) pipes into grep -q; ignores ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a quoted |# (single or double), a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:60 fixture.sh:66 fixture.sh:68 " "$got" \
+        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\) after the pipe, blank and comment lines before the consumer, a consumer that pipes on) pipes into grep -q; ignores ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a quoted |# (single or double), a # after an escaped space, a word-start # after a \\ join, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
 }
 
 # ---------------------------------------------------------------------------
