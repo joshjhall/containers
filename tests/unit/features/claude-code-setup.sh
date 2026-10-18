@@ -2050,8 +2050,9 @@ test_dockerfile_has_override_args() {
 }
 
 # claude-setup never read CLAUDE_AGENTS (only CLAUDE_EXTRA_AGENTS), so the build
-# must not declare, forward, or persist it (#1051). The [^A-Z_] guard keeps
-# CLAUDE_EXTRA_AGENTS from matching; the names list is the full plumbing set.
+# must not declare, forward, or persist it (#1051). The (^|[^A-Z_]) prefix
+# rejects longer names ending in CLAUDE_AGENTS (CLAUDE_EXTRA_AGENTS never
+# contains the substring, so it cannot match either way).
 test_claude_agents_plumbing_removed() {
     local root
     root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../" && pwd)"
