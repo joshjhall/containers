@@ -186,8 +186,8 @@ mod tests {
     }
 
     /// The dangerous shape: a pin that is present but not a digest must fail,
-    /// not pass. A truncated paste or a leaked error string in the slot would
-    /// otherwise be compared against and simply mismatch — which is the right
+    /// not pass. A paste carrying a filename or a leaked error string in the
+    /// slot would otherwise be compared against and simply mismatch — which is the right
     /// outcome, but the dedicated message is what tells the operator the
     /// *catalog* is wrong rather than the artifact.
     #[test]
@@ -226,6 +226,29 @@ mod tests {
             require_pin("node", "24.0.0", &pinned_verification(Some(DIGEST))).unwrap(),
             DIGEST
         );
+    }
+
+    /// The boundary this guard deliberately stops at: `require_pin` checks the
+    /// pin's *shape* (hex), not its *length* against `algorithm`. A truncated
+    /// hex paste is still hex, so it passes the guard and is refused after the
+    /// download as a digest mismatch — still failing closed, just later.
+    /// Refusing it pre-download needs an algorithm-to-length table; pinned here
+    /// so tightening the guard is a visible, deliberate change.
+    #[test]
+    fn require_pin_accepts_a_wrong_length_hex_pin() {
+        let truncated = &DIGEST[..8];
+        assert_eq!(
+            require_pin("node", "24.0.0", &pinned_verification(Some(truncated))).unwrap(),
+            truncated
+        );
+        let err =
+            verify("node", "24.0.0", DIGEST, &pinned_verification(Some(truncated))).unwrap_err();
+        match err {
+            LuggageError::VerificationFailed { tier: 2, reason, .. } => {
+                assert!(reason.contains("digest mismatch"), "got: {reason}");
+            }
+            other => panic!("expected VerificationFailed, got {other:?}"),
+        }
     }
 
     /// An empty pin is the boundary case of the check above: `is_hex_digest`
