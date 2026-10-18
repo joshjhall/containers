@@ -23,8 +23,8 @@
 #
 # Matched: `|` and `|&`, with the consumer on the same logical line or on the
 # next one after a trailing pipe (blank and comment lines between are skipped,
-# as bash skips them). Unquoted # comments are stripped first, then backslash
-# continuations joined.
+# as bash skips them). Backslash continuations are joined, and each file is
+# scanned both with and without inline comments (see pipe_grep_q_sites).
 #
 # Not matched: `grep -q X f || grep -q Y f` (no pipe, just `||`), comment lines,
 # and the herestring idiom itself. This file builds its scanner fixtures from
@@ -49,76 +49,89 @@ UNIT_DIR="$PROJECT_ROOT/tests/unit"
 # a site is reported at the last physical line of its logical line. A logical
 # line ending in a pipe continues onto the next non-blank, non-comment line,
 # which is checked as the consumer.
+#
+# TWO VIEWS, UNION. Each file is scanned twice in one pass: raw (only
+# whole-line comments skipped) and stripped (inline comments removed), and a
+# site found by either is reported. Telling a comment # from a literal one
+# needs a bash parser; this is a line heuristic. Raw alone misses a pipe whose
+# continuation hides behind a comment (`producer | # why`); stripped alone
+# hides a real site whenever stripping guesses wrong (a quote opened on an
+# earlier line). The union keeps every site raw text shows, so a stripping
+# mistake can only add a report, never remove one. The price is an occasional
+# over-report, which fails the guard loudly instead of passing it silently.
 pipe_grep_q_sites() {
     local root="$1"
     (cd "$root" && command find . -name '*.sh' -type f -exec /usr/bin/awk '
-            # strip_comment: drop an unquoted # comment. As in bash, # opens
-            # a comment only at the start of a word, and neither a quoted nor
-            # a backslash-escaped # does. p0 is the character before s: the
-            # tail of a pending continuation, else a space. Quote state does
-            # not carry across physical lines.
-            #
-            # FAIL CLOSED: strip only where # is certainly a comment. Kept
-            # text can only add a false positive; stripped text can hide a
-            # site. So ) is not a word boundary here (`$(x)#y` is one word),
-            # and neither are < and >, at the cost of over-reporting there.
-            function strip_comment(s, p0,   i, n, c, prev, sq, dq) {
-                n = length(s); prev = p0; sq = 0; dq = 0
+            # strip_comment: drop everything from the first # that is not
+            # quoted or backslash-escaped on this physical line. It may strip
+            # too much (`a#b` is one word in bash); the raw view covers that.
+            function strip_comment(s,   i, n, c, sq, dq) {
+                n = length(s); sq = 0; dq = 0
                 for (i = 1; i <= n; i++) {
                     c = substr(s, i, 1)
                     if (sq) { if (c == "\047") sq = 0 }
-                    else if (c == "\\") { i++; prev = "x"; continue }
+                    else if (c == "\\") i++
                     else if (dq) { if (c == "\"") dq = 0 }
                     else if (c == "\047") sq = 1
                     else if (c == "\"") dq = 1
-                    else if (c == "#" && prev ~ /[[:space:]|;&(]/) return substr(s, 1, i - 1)
-                    prev = c
+                    else if (c == "#") return substr(s, 1, i - 1)
                 }
                 return s
+            }
+            # report: print a site once, though both views may find it.
+            function report(f, n) {
+                if (!((f, n) in seen)) { seen[f, n] = 1; print substr(f, 3) ":" n }
+            }
+            # check: match one logical line of view v, ending at line n of f.
+            function check(v, line, f, n) {
+                # A consumer line can itself end in a pipe, so it falls
+                # through to the same-line and trailing checks.
+                if (pending[v] && line ~ ("^[[:space:]]*" grep_q)) report(f, n)
+                pending[v] = 0
+                # Same-line: a single | or |& (not ||) followed by the consumer.
+                if (line ~ ("(^|[^|])[|]&?[[:space:]]*" grep_q)) report(f, n)
+                # A trailing single | or |& continues the pipe onto the next
+                # line. `|\` and `| \` arrive here already joined.
+                if (line ~ /(^|[^|])[|]&?[[:space:]]*$/) pending[v] = 1
+            }
+            # step: feed one physical line to view v. Bash reads on across
+            # blank and comment-only lines while a pipe awaits its consumer,
+            # so they leave pending alone. An odd run of trailing backslashes
+            # continues the line; bash deletes the backslash-newline pair,
+            # inserting nothing. An even run is literal backslashes, and `\ `
+            # escapes a space.
+            function step(v, phys, f, n,   line) {
+                if (buf[v] == "" && phys ~ /^[[:space:]]*(#.*)?$/) return
+                line = buf[v] phys
+                if (match(line, /\\+$/) && RLENGTH % 2 == 1) {
+                    buf[v] = substr(line, 1, length(line) - 1)
+                    return
+                }
+                buf[v] = ""
+                check(v, line, f, n)
+            }
+            # flush: end of file. Bash runs a line still continued at EOF, and
+            # neither a continuation nor a pipe carries into the next file.
+            function flush(v) {
+                if (buf[v] != "") check(v, buf[v], lastf, lastn)
+                buf[v] = ""; pending[v] = 0
             }
             # GREP_Q: a grep invocation whose flags include q, anchored where a
             # pipe consumer starts. No `|` precedes it in this regex; callers
             # supply that context. Any tokens may sit between grep and the q
             # flag (value-taking flags like -m1, -A 2, -e P), stopping at a
-            # shell separator so a later command on the line is not blamed.
+            # shell separator so a later command on the line is not blamed,
+            # and at a word opening with #, which bash reads as a comment.
             BEGIN {
-                grep_q = "(command[[:space:]]+)?(/usr/bin/|/bin/)?[ef]?grep([[:space:]]+[^|;&[:space:]]+)*[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|$)"
+                grep_q = "(command[[:space:]]+)?(/usr/bin/|/bin/)?[ef]?grep([[:space:]]+[^|;&[:space:]#][^|;&[:space:]]*)*[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|$)"
             }
-            FNR == 1 { pending = 0; buf = "" }
+            FNR == 1 { flush(0); flush(1) }
             {
-                # Comments go first: a backslash inside one does not continue
-                # the line, and a # after a pipe is not the pipe consumer.
-                # Bash reads on across blank and comment-only lines while a
-                # pipe awaits its consumer, so they leave pending alone.
-                phys = strip_comment($0, buf == "" ? " " : substr(buf, length(buf), 1))
-                if (buf == "" && phys ~ /^[[:space:]]*$/) next
-                # An odd run of trailing backslashes continues the line; bash
-                # deletes the backslash-newline pair, inserting nothing. An
-                # even run is literal backslashes, and `\ ` escapes a space.
-                line = buf phys
-                if (match(line, /\\+$/) && RLENGTH % 2 == 1) {
-                    buf = substr(line, 1, length(line) - 1)
-                    next
-                }
-                buf = ""
-                # A consumer line can itself end in a pipe, so it falls
-                # through to the trailing check; reported only suppresses a
-                # second print for the same line.
-                reported = 0
-                if (pending && line ~ ("^[[:space:]]*" grep_q)) {
-                    print substr(FILENAME, 3) ":" FNR
-                    reported = 1
-                }
-                pending = 0
-                # Same-line: a single | or |& (not ||) followed by the consumer.
-                if (!reported && line ~ ("(^|[^|])[|]&?[[:space:]]*" grep_q)) {
-                    print substr(FILENAME, 3) ":" FNR
-                }
-                # A trailing single | or |& continues the pipe onto the next
-                # line. `|\` and `| \` arrive here already joined, and a
-                # comment after the pipe already stripped.
-                if (line ~ /(^|[^|])[|]&?[[:space:]]*$/) { pending = 1 }
+                step(0, $0, FILENAME, FNR)
+                step(1, strip_comment($0), FILENAME, FNR)
+                lastf = FILENAME; lastn = FNR
             }
+            END { flush(0); flush(1) }
         ' {} + || true)
 }
 
@@ -205,13 +218,68 @@ test_scanner_detects_known_shapes() {
         command printf 'echo a%s\n' "$b"                                                # 67
         command printf '#b %s command %s -q foo\n' "$p" "$g"                            # 68 flag
         command printf 'echo a %s\n' "$b"                                               # 69
-        command printf '#b %s command %s -q foo\n' "$p" "$g"                            # 70
+        command printf '#b %s command %s -q foo\n' "$p" "$g"                            # 70 flag (over-report)
         command printf 'echo $(producer)#x %s command %s -q foo\n' "$p" "$g"            # 71 flag
+        command printf 'x="abc\n'                                                       # 72
+        command printf 'foo #" ; producer %s command %s -q foo\n' "$p" "$g"             # 73 flag
+        command printf 'producer "a %s\n' "$b"                                          # 74
+        command printf '#b" %s command %s -q foo\n' "$p" "$g"                           # 75 flag
+        command printf 'producer %s# note\n' "$p"                                       # 76
+        command printf '    command %s -q foo\n' "$g"                                   # 77 flag
+        command printf 'producer %s&# note\n' "$p"                                      # 78
+        command printf '    command %s -q foo\n' "$g"                                   # 79 flag
+        command printf "echo %s' %s # c\n" "$b" "$p"                                    # 80
+        command printf '    command %s -q foo\n' "$g"                                   # 81 flag
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:60 fixture.sh:66 fixture.sh:68 fixture.sh:71 " "$got" \
-        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join and after \$(...)), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\) after the pipe, blank and comment lines before the consumer, a consumer that pipes on) pipes into grep -q; ignores ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a quoted |# (single or double), a # after an escaped space, a word-start # after a \\ join, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:60 fixture.sh:66 fixture.sh:68 fixture.sh:70 fixture.sh:71 fixture.sh:73 fixture.sh:75 fixture.sh:77 fixture.sh:79 fixture.sh:81 " "$got" \
+        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join and after \$(...)), a site after a quote closed on a later line (incl. across a \\ join), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\, or touching | or |&) after the pipe, an escaped quote before it, blank and comment lines before the consumer, a consumer that pipes on) pipes into grep -q; over-reports a word-start # after a \\ join (the documented cost); ignores ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a quoted |# (single or double), a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
+}
+
+# ---------------------------------------------------------------------------
+# Test: no state carries from one file into the next
+#
+# find -exec ... {} + hands many files to one awk, so a pending pipe or an open
+# continuation at one file's end must not reach the next file's first line.
+# Each pair of files is identical, so the check holds whatever order find
+# picks. A single-file fixture cannot see either leak.
+# ---------------------------------------------------------------------------
+test_scanner_isolates_files() {
+    local dir got p g b
+    p='|'
+    g='grep'
+    b='\'
+    dir=$(command mktemp -d)
+    for f in a b; do
+        command printf '    command %s -q foo\nproducer %s\n' "$g" "$p" >"$dir/$f.sh"
+    done
+    got=$(pipe_grep_q_sites "$dir")
+    command rm -rf "$dir"
+    assert_equals "" "$got" "a trailing pipe at one file's end does not pend into the next file"
+
+    dir=$(command mktemp -d)
+    for f in a b; do
+        command printf '    -q foo\nproducer %s command %s %s\n' "$p" "$g" "$b" >"$dir/$f.sh"
+    done
+    got=$(pipe_grep_q_sites "$dir")
+    command rm -rf "$dir"
+    assert_equals "" "$got" "a continuation at one file's end does not join the next file's first line"
+}
+
+# ---------------------------------------------------------------------------
+# Test: a site still continued at end of file is reported
+#
+# Bash runs a final line that ends in a continuation backslash. Alone in the
+# scan, the file's last logical line reaches only the END flush.
+# ---------------------------------------------------------------------------
+test_scanner_flushes_at_eof() {
+    local dir got
+    dir=$(command mktemp -d)
+    command printf 'producer %s command %s -q foo %s\n' '|' 'grep' '\' >"$dir/eof.sh"
+    got=$(pipe_grep_q_sites "$dir")
+    command rm -rf "$dir"
+    assert_equals "eof.sh:1" "$got" "scanner reports a site whose line is still continued at end of file"
 }
 
 # ---------------------------------------------------------------------------
@@ -266,6 +334,8 @@ test_no_sites_in_tests_unit() {
 }
 
 run_test "test_scanner_detects_known_shapes" "Scanner flags each pipe-into-grep-q shape and nothing else"
+run_test "test_scanner_isolates_files" "Scanner carries no pipe or continuation across files"
+run_test "test_scanner_flushes_at_eof" "Scanner reports a site continued at end of file"
 run_test "test_scanner_descends_into_subdirs" "Scanner reports sites in nested subdirectories"
 run_test "test_no_sites_in_tests_unit" "No pipe into grep -q anywhere under tests/unit"
 
