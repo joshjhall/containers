@@ -54,7 +54,7 @@ use crate::installer::template::Substitutions;
 pub use containers_common::tooldb::VerificationWarning;
 
 /// Fail fast when `verification` is one this build will not satisfy — an
-/// unsupported tier, or a tier-2 entry with no `pinned_checksum`.
+/// unsupported tier, or a tier-2 entry with no usable `pinned_checksum`.
 ///
 /// Called before the artifact is downloaded, for three reasons. First, it keeps
 /// the *tier's* error the one the caller sees: the download path derives a
@@ -75,9 +75,11 @@ pub use containers_common::tooldb::VerificationWarning;
 ///   [`LuggageError::Catalog`] for a tier outside `1..=4` — the same variants
 ///   [`dispatch`] returns for those tiers.
 /// - [`LuggageError::Catalog`] for a tier-2 entry with no `pinned_checksum`,
-///   and [`LuggageError::VerificationFailed`] for one whose pin is not a hex
-///   digest — the same errors [`tier2::verify`] raises, built by the same
-///   `tier2::require_pin`, so the guard and dispatch cannot disagree about them.
+///   [`LuggageError::VerificationFailed`] for one whose pin is not a hex
+///   digest or not the width of `verification.algorithm`'s digest, and
+///   whatever [`sha::Algorithm::parse`] rejects for that algorithm — the same
+///   errors [`tier2::verify`] raises, built by the same `tier2::require_pin`,
+///   so the guard and dispatch cannot disagree about them.
 /// - [`LuggageError::VerificationFailed`] for tier 4 when `require_verified`
 ///   is set. This is a *policy* refusal of a supported tier, not an
 ///   unimplemented one, so it is deliberately not a `NotImplemented`: it maps

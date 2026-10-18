@@ -293,13 +293,22 @@ mod tests {
 
     /// An algorithm the digest layer cannot compute is refused by the guard
     /// with the digest layer's own error, rather than only once the download
-    /// had started.
+    /// had started — and `verify` raises the same one.
     #[test]
-    fn require_pin_rejects_an_unrecognised_algorithm() {
-        let v = Verification { algorithm: Some("md5".into()), ..pinned_verification(Some(DIGEST)) };
-        match require_pin("node", "24.0.0", &v).unwrap_err() {
-            LuggageError::Catalog(msg) => assert!(msg.contains("md5"), "got: {msg}"),
-            other => panic!("expected Catalog, got {other:?}"),
+    fn require_pin_rejects_an_algorithm_the_digest_layer_cannot_compute() {
+        for algorithm in ["md5", "sha384"] {
+            let v = Verification {
+                algorithm: Some(algorithm.into()),
+                ..pinned_verification(Some(DIGEST))
+            };
+            let guard = require_pin("node", "24.0.0", &v).unwrap_err();
+            match (algorithm, &guard) {
+                ("md5", LuggageError::Catalog(msg)) => assert!(msg.contains("md5"), "got: {msg}"),
+                ("sha384", LuggageError::NotImplemented(_)) => {}
+                (_, other) => panic!("{algorithm}: unexpected {other:?}"),
+            }
+            let dispatch = verify("node", "24.0.0", DIGEST, &v).unwrap_err();
+            assert_eq!(format!("{dispatch:?}"), format!("{guard:?}"), "{algorithm}");
         }
     }
 
