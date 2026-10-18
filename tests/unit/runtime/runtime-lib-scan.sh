@@ -87,6 +87,19 @@ EOF
         "A \$VAR ref must resolve through its file's assignment, so a typo'd assignment is reported"
 }
 
+# The braced ${VAR}/x.sh form goes through the brace-stripping steps, which the
+# unbraced fixtures never reach.
+test_typo_braced_var_assignment() {
+    make_lib
+    consumer /usr/local/bin/c <<'EOF'
+_RUNTIME_LIB="/opt/container-runtim/lib"
+[ -f "${_RUNTIME_LIB}/good.sh" ] && source "${_RUNTIME_LIB}/good.sh"
+EOF
+    assert_equals "missing: /usr/local/bin/c:\${_RUNTIME_LIB}/good.sh@/opt/container-runtim/lib unseen: errors: " \
+        "$(scan /usr/local/bin/c)" \
+        "A braced \${VAR} ref must resolve through its assignment too"
+}
+
 test_misspelled_use_site_var() {
     make_lib
     consumer /usr/local/bin/c <<'EOF'
@@ -188,6 +201,7 @@ run_test test_good_consumer_is_ok "Resolvable consumer yields consumers-ok"
 run_test test_typo_fragment_basename "Typo'd fragment basename is reported"
 run_test test_typo_literal_directory "Typo'd literal directory is reported"
 run_test test_typo_var_assignment "Typo'd \$_RUNTIME_LIB assignment is reported"
+run_test test_typo_braced_var_assignment "Typo'd assignment behind a braced \${VAR} ref is reported"
 run_test test_misspelled_use_site_var "Misspelled use-site variable is reported"
 run_test test_typo_computed_var_literal "Typo'd computed-variable literal is reported"
 run_test test_expected_consumer_unseen "Unscanned expected consumer is reported"
