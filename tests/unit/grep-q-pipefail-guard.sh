@@ -21,6 +21,10 @@
 # (#1097 phases 1-6), behind a per-directory allowlist that emptied as each
 # phase landed. Phase 7 deleted it: any site anywhere under tests/unit/ fails.
 #
+# Matched: `|` and `|&`, with the consumer on the same logical line or on the
+# next one after a trailing pipe (blank and comment lines between are skipped,
+# as bash skips them). Backslash continuations are joined first.
+#
 # Not matched: `grep -q X f || grep -q Y f` (no pipe, just `||`), comment lines,
 # and the herestring idiom itself. This file builds its scanner fixtures from
 # pieces, so it never contains the shape it rejects.
@@ -37,10 +41,13 @@ test_suite "grep -q pipefail guard"
 
 UNIT_DIR="$PROJECT_ROOT/tests/unit"
 
-# pipe_grep_q_sites ROOT — prints "relpath:line" for every pipe into a grep
-# (or egrep/fgrep) whose short-option cluster carries q (or --quiet), optionally
-# prefixed by `command` or a /usr/bin/ or /bin/ path. A line ending in `|` (or
-# `| \`) continues the pipe onto the next line, which is checked as the consumer.
+# pipe_grep_q_sites ROOT — prints "relpath:line" for every pipe (`|` or `|&`)
+# into a grep (or egrep/fgrep) whose short-option cluster carries q (or
+# --quiet), optionally prefixed by `command`, a /usr/bin/ or /bin/ path, or
+# both. Backslash-continued physical lines are joined first, as bash does, and
+# a site is reported at the last physical line of its logical line. A logical
+# line ending in a pipe continues onto the next non-blank, non-comment line,
+# which is checked as the consumer.
 pipe_grep_q_sites() {
     local root="$1"
     (cd "$root" && command find . -name '*.sh' -type f -exec /usr/bin/awk '
@@ -51,27 +58,36 @@ pipe_grep_q_sites() {
             # flag (value-taking flags like -m1, -A 2, -e P), stopping at a
             # shell separator so a later command on the line is not blamed.
             BEGIN {
-                grep_q = "(command[[:space:]]+|/usr/bin/|/bin/)?[ef]?grep([[:space:]]+[^|;&[:space:]]+)*[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|$)"
+                grep_q = "(command[[:space:]]+)?(/usr/bin/|/bin/)?[ef]?grep([[:space:]]+[^|;&[:space:]]+)*[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|$)"
             }
-            FNR == 1 { pending = 0 }
+            FNR == 1 { pending = 0; buf = "" }
             {
-                line = $0
-                if (is_comment(line)) { pending = 0; next }
+                # Bash reads on across blank and comment-only lines while a
+                # pipe awaits its consumer, so they leave pending alone. A
+                # comment cannot start a join: the # swallows its backslash.
+                if (buf == "" && (is_comment($0) || $0 ~ /^[[:space:]]*$/)) next
+                # An odd run of trailing backslashes continues the line; bash
+                # deletes the backslash-newline pair, inserting nothing. An
+                # even run is literal backslashes, and `\ ` escapes a space.
+                line = buf $0
+                if (match(line, /\\+$/) && RLENGTH % 2 == 1) {
+                    buf = substr(line, 1, length(line) - 1)
+                    next
+                }
+                buf = ""
                 if (pending && line ~ ("^[[:space:]]*" grep_q)) {
                     print substr(FILENAME, 3) ":" FNR
                     pending = 0
                     next
                 }
                 pending = 0
-                # Same-line: a single | (not ||) followed by the consumer.
-                if (line ~ ("(^|[^|])[|][[:space:]]*" grep_q)) {
+                # Same-line: a single | or |& (not ||) followed by the consumer.
+                if (line ~ ("(^|[^|])[|]&?[[:space:]]*" grep_q)) {
                     print substr(FILENAME, 3) ":" FNR
                 }
-                # Trailing single | (optionally followed by a backslash)
-                # continues the pipe onto the next line. The backslash must
-                # be the last character: `\ ` escapes a space, it does not
-                # continue the line.
-                if (line ~ /(^|[^|])[|][[:space:]]*(\\)?$/) { pending = 1 }
+                # A trailing single | or |& continues the pipe onto the next
+                # line. `|\` and `| \` arrive here already joined.
+                if (line ~ /(^|[^|])[|]&?[[:space:]]*$/) { pending = 1 }
             }
         ' {} + || true)
 }
@@ -117,11 +133,30 @@ test_scanner_detects_known_shapes() {
         command printf '    command %s -q foo\n' "$g"                                   # 25
         command printf 'producer %s %s\n' "$p" "$b"                                     # 26
         command printf '    command e%s -q foo\n' "$g"                                  # 27 flag
+        command printf 'producer %s command %s %s\n' "$p" "$g" "$b"                     # 28
+        command printf '    -q foo\n'                                                   # 29 flag
+        command printf 'producer %s& %s -q foo\n' "$p" "$g"                             # 30 flag
+        command printf 'producer %s command /usr/bin/%s -q foo\n' "$p" "$g"             # 31 flag
+        command printf 'producer %s command /bin/e%s -q foo\n' "$p" "$g"                # 32 flag
+        command printf 'producer %s\n' "$p"                                             # 33
+        command printf '\n'                                                             # 34
+        command printf '    # comment\n'                                                # 35
+        command printf '    command %s -q foo\n' "$g"                                   # 36 flag
+        command printf 'producer %s%s\n' "$p" "$b"                                      # 37
+        command printf '    command %s -q foo\n' "$g"                                   # 38 flag
+        command printf 'producer %s e%s -c foo\n' "$p" "$g"                             # 39
+        command printf 'producer %s f%s -v foo\n' "$p" "$g"                             # 40
+        command printf 'producer %s\n' "$b"                                             # 41
+        command printf '    %s command %s -q foo\n' "$p" "$g"                           # 42 flag
+        command printf 'producer %s&\n' "$p"                                            # 43
+        command printf '    command %s -q foo\n' "$g"                                   # 44 flag
+        command printf 'producer %s command %s %s%s\n' "$p" "$g" "$b" "$b"              # 45
+        command printf '    -q foo\n'                                                   # 46
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 " "$got" \
-        "scanner flags same-line, prefixed, --quiet, value-flag, egrep/fgrep, and line-continued (incl. backslash, egrep consumer) pipes into grep -q; ignores ||, || \\, a pipe-less trailing \\, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 " "$got" \
+        "scanner flags same-line, |&, prefixed (incl. command + path), --quiet, value-flag, egrep/fgrep, and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, blank and comment lines before the consumer) pipes into grep -q; ignores ||, || \\, a pipe-less trailing \\, an even \\\\ run, an escaped space after |, comments, herestrings, quoted -q, a later command's -q, and non-q greps (incl. egrep/fgrep)"
 }
 
 # ---------------------------------------------------------------------------
