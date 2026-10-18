@@ -3,12 +3,16 @@
 #
 # Writes /etc/container/config/enabled-features.conf so that runtime startup
 # scripts can discover which features were enabled at build time.
+# ENABLED_FEATURES_CONF overrides the output path (unit tests point it at a
+# scratch dir); the build never sets it, so the default path is unchanged.
 
 persist_feature_flags() {
-    log_command "Creating container config directory" \
-        mkdir -p /etc/container/config
+    local conf="${ENABLED_FEATURES_CONF:-/etc/container/config/enabled-features.conf}"
 
-    command cat >/etc/container/config/enabled-features.conf <<FEATURES_EOF
+    log_command "Creating container config directory" \
+        mkdir -p "$(command dirname "$conf")"
+
+    command cat >"$conf" <<FEATURES_EOF
 # Auto-generated at build time - DO NOT EDIT
 # This file passes build-time feature flags to runtime startup scripts
 INCLUDE_PYTHON_DEV=${INCLUDE_PYTHON_DEV:-false}
@@ -74,5 +78,5 @@ INCLUDE_HOST_EVENTS=${INCLUDE_HOST_EVENTS:-false}
 FEATURES_EOF
 
     log_command "Setting config file permissions" \
-        chmod 644 /etc/container/config/enabled-features.conf
+        chmod 644 "$conf"
 }
