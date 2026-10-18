@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.21.2] - 2026-10-18
+
+### Added
+
+- Vendor rust 1.82+ on the 18-tuple matrix; derive evidence matrix from the catalog (#1115)
+- Decouple Rust MSRV from the container toolchain (#1111) (#1112)
+- Add Ubuntu 24.04/26.04, Alpine 3.22-3.24, RHEL 10; fix luggage os_version detection (#1113)
+- Batch evidence into one auto-merged PR per run (#1249)
+
+### CI/CD
+
+- Bound vendored-only versions in check-catalog-drift.sh (#1283)
+
+### Documentation
+
+- Attribute index.lock contention to Zed host/container git ping-pong (#1259)
+
+### Fixed
+
+- Evidence matrix only uses published base images (#1163)
+- Install rust on RHEL; read system package names from the catalog (#1164)
+- Put the tool's bin dir on PATH for post-install (#1165) (#1250)
+- Run stage_fixed pre-commit hooks sequentially (#1251)
+- Stop concurrent bindfs setup stacking two overlays (#1253)
+- Bump rustls 0.23.45 -> 0.23.46 for RUSTSEC-2026-0346..0349 (#1256)
+- Hard-fail Node.js checksum mismatch and fix arm64 lookup (#1257)
+- Probe healthcheck at its installed path in compliance check (#1266)
+- Trigger the PR tier when ci/full-build is added to an open PR (#1270)
+- Run the verification guard at plan time (#1292)
+- Reject whitespace-only extra_data objects in build_json_entry (#1296)
+- Run every extra_suites rider before failing the step (#1297)
+
+### Miscellaneous
+
+- Record evidence batching, catalog deps, virtiofs lock findings (#1254)
+- Record /tmp-clone workaround for persistent index.lock (#1258)
+- Remove dead CLAUDE_AGENTS plumbing (#1307)
+
+### Testing
+
+- Assert every installed runtime-lib reference resolves (#1261)
+- Guard against pipe-into-grep-q and fix high-risk sites (#1260)
+- Convert tests/unit/base pipe-into-grep-q sites (#1267)
+- Convert tests/unit/bin pipe-into-grep-q sites (#1268)
+- Convert tests/unit/features pipe-into-grep-q sites (#1272)
+- Convert tests/unit/runtime pipe-into-grep-q sites (#1274)
+- Harden pr-tier mirror coverage and split required-checks.sh (#1273)
+- Convert remaining pipe-into-grep-q sites (phase 6) (#1277)
+- Make grep-q pipefail guard strict (phase 7) (#1280)
+- Make conform-scopes yq reads diagnosable (#1278)
+- Drive conform-scopes per-check yq-failure and empty-scopes branches (#1281)
+- Drive conform-scopes content-failure branches (#1285)
+- Harden check-catalog-drift.sh live-pin coverage (#1286)
+- Refuse path-shaped drift-vendored-only .version (#1289)
+- Share vendored-only staging routing via bin/lib (#1290)
+- Make check-versions env and JSON tests able to fail (#1291)
+- Exercise version-resolution skip/fail classifier (#1293)
+- Test build_json_entry extra_data guard by behavior (#1295)
+- Check the extra_suites step preamble defines IMAGE and MINIMAL (#1299)
+- Flag egrep/fgrep and backslash-continued pipes in grep -q guard (#1300)
+- Exercise the production /cache predicate, not a hand copy (#1302)
+- Cover run_start abort when scripts dir cannot be prepared (#1303)
+- Commit a regression fixture for the runtime-lib reference scan (#1304)
+- Pin runtime-lib-scan guard message and bash -c shape (#1306)
+
 ## [4.21.1] - 2026-10-12
 
 ### Added
@@ -18,6 +83,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Drift gate ignores tested[] evidence (#1107)
 - Mirror containers-db's catalog entry on a bump (#1106)
 - Replace serde_yaml (RUSTSEC-2024-0449); update Rust deps (#1109)
+
+### Miscellaneous
+
+- Automated version updates to v4.21.1
+- Update compatibility matrix with passing test results
 
 ## [4.21.0] - 2026-10-08
 
@@ -2598,6 +2668,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.21.2]: https://github.com/joshjhall/containers/compare/v4.21.1...v4.21.2
 [4.21.1]: https://github.com/joshjhall/containers/compare/v4.21.0...v4.21.1
 [4.21.0]: https://github.com/joshjhall/containers/compare/v4.20.3...v4.21.0
 [4.20.3]: https://github.com/joshjhall/containers/compare/v4.20.2...v4.20.3
