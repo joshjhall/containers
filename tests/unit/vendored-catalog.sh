@@ -400,6 +400,50 @@ test_drift_still_catches_install_data() {
     command rm -rf "$up" "$ven"
 }
 
+test_drift_rejects_upstream_only_version() {
+    # #1320: upstream published rust 1.99.1 and the vendored snapshot stopped
+    # at 1.99.0, yet the check walked only vendored files and printed
+    # "0 drifted". An upstream-only version of a mirrored tool is drift.
+    local up="$TEST_TEMP_DIR/uponly-up" ven="$TEST_TEMP_DIR/uponly-ven" output rc=0
+    _mini_catalog "$up" 2026-10-01 '[]'
+    _mini_catalog "$ven" 2026-10-01 '[]'
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
+    assert_equals "0" "$rc" "the identical pair passes"
+    assert_not_contains "$output" "upstream-only" "the identical pair reports nothing upstream-only"
+
+    command printf '{"tool":"rust","version":"1.1.0","released":"2026-10-16","tested":[]}\n' \
+        >"$up/tools/rust/versions/1.1.0.json"
+    rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "an upstream-only version is drift"
+    assert_contains "$output" "rust/versions/1.1.0.json: upstream-only; re-mirror it" \
+        "the failure names the upstream-only file"
+    assert_contains "$output" "1 drifted" "exactly the one upstream-only file is counted"
+    command rm -rf "$up" "$ven"
+}
+
+test_drift_rejects_upstream_only_index() {
+    # A mirrored tool whose index.json was never copied is drift too; an
+    # upstream-only TOOL is not (the vendored catalog is a deliberate subset).
+    local up="$TEST_TEMP_DIR/upidx-up" ven="$TEST_TEMP_DIR/upidx-ven" output rc=0
+    _mini_catalog "$up" 2026-10-01 '[]'
+    _mini_catalog "$ven" 2026-10-01 '[]'
+    command mkdir -p "$up/tools/gcc/versions"
+    command printf '{"id":"gcc","available":[{"version":"1.0.0"}]}\n' >"$up/tools/gcc/index.json"
+    command printf '{"tool":"gcc","version":"1.0.0","released":"2026-10-01","tested":[]}\n' \
+        >"$up/tools/gcc/versions/1.0.0.json"
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
+    assert_equals "0" "$rc" "an upstream-only tool is not drift"
+
+    command rm -f "$ven/tools/rust/index.json"
+    rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "a mirrored tool missing its index.json is drift"
+    assert_contains "$output" "rust/index.json: upstream-only; re-mirror it" \
+        "the failure names the missing index"
+    command rm -rf "$up" "$ven"
+}
+
 # _vendored_only_pair <up> <ven> <pin>
 # Identical mini catalogs, plus a vendored-only 1.1.0 and a Dockerfile pinning
 # RUST_VERSION=<pin> at <ven>/Dockerfile.
@@ -671,6 +715,8 @@ run_test "test_drift_ignores_tested_evidence" "drift check ignores tested[] evid
 run_test "test_drift_still_catches_install_data" "drift check still catches install-data differences"
 run_test "test_drift_ignores_scanner_activity" "drift check ignores scanner activity, not other index fields"
 run_test "test_drift_gates_the_support_floor" "drift check gates minimum_recommended, not default_version"
+run_test "test_drift_rejects_upstream_only_version" "drift check rejects an upstream-only version, naming the file"
+run_test "test_drift_rejects_upstream_only_index" "drift check rejects a missing index.json but not an upstream-only tool"
 run_test "test_drift_allows_live_pin_vendored_only" "drift check allows the live pin ahead of upstream, with a warning"
 run_test "test_drift_rejects_non_pin_vendored_only" "drift check rejects a vendored-only version that is not the live pin"
 run_test "test_drift_rejects_vendored_only_without_pin_source" "drift check rejects vendored-only versions when no pin source is given"
