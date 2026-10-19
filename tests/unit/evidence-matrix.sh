@@ -17,6 +17,8 @@ test_suite "Evidence matrix (catalog-derived)"
 
 # shellcheck source=bin/lib/evidence-matrix.sh
 source "$PROJECT_ROOT/bin/lib/evidence-matrix.sh"
+# Tests that rely on the vendored tested[] path must not inherit a source.
+unset EVIDENCE_TESTED_SOURCE EVIDENCE_PUBLISHED_CHECK
 
 # _version <dir> <version> <tuples-csv> [passing-tuple]
 # One version file claiming each `os-osv-arch` in tuples-csv supported, with an
@@ -144,6 +146,171 @@ test_unpublished_images_are_skipped() {
         "with no check configured, every tuple with a Dockerfile is offered"
 }
 
+# _db_version <db_root> <version> <pass-csv> [fail-csv] — a published
+# containers-db version file with a passing row per pass-csv tuple and a
+# failing row per fail-csv tuple.
+_db_version() {
+    local db="$1" v="$2" pass="$3" fail="${4:-}"
+    command mkdir -p "$db/tools/rust/versions"
+    command jq -n --arg v "$v" --arg p "$pass" --arg f "$fail" '
+        def cell: split("-") as $x | {os: $x[0], os_version: $x[1], arch: $x[2]};
+        def rows($csv; $r): $csv | select(. != "") | split(",")[] | cell + {result: $r};
+        {schemaVersion: 1, tool: "rust", version: $v,
+         tested: [ rows($p; "pass"), rows($f; "fail") ]}
+    ' >"$db/tools/rust/versions/$v.json"
+}
+
+test_published_evidence_decides_pending() {
+    # #1319: the vendored snapshot never receives tested[] rows, so pending-ness
+    # comes from the published source. Same catalog, two sources: a passing
+    # published row excludes the cell; without one the cell is included.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 debian-13-amd64
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-arm64" "$(_cells "$out")" \
+        "a cell with a passing published row is excluded"
+
+    _db_version "$db" 1.90.0 ""
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'1.90.0 debian-13-amd64\n1.90.0 debian-13-arm64' "$(_cells "$out")" \
+        "the same cell without a published row is included"
+}
+
+test_published_source_overrides_vendored_tested() {
+    # A vendored pass row does not count once a source is set, and only
+    # passing published rows count; a failing one leaves the cell pending.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 alpine-3.24-amd64 debian-13-arm64
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'1.90.0 debian-13-amd64\n1.90.0 debian-13-arm64' "$(_cells "$out")" \
+        "vendored pass ignored, published fail pending, published pass excluded"
+}
+
+test_version_missing_from_published_is_pending() {
+    # A version vendored but not yet in containers-db has no evidence at all.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    _version "$r/catalog" 1.91.0 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 debian-13-amd64
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.91.0 debian-13-amd64" "$(_cells "$out")" \
+        "a version with no published file is fully pending"
+}
+
+test_open_ingest_pr_rows_count_as_covered() {
+    # A previous run's evidence PR may still be awaiting auto-merge when the
+    # next push resolves its matrix. evidence-run.yml lists that PR's head next
+    # to main; rows from every listed source are unioned.
+    local r main pr out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    main="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    pr="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$main" 1.90.0 debian-13-amd64
+    _db_version "$pr" 1.90.0 debian-13-arm64
+    out="$(EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 alpine-3.24-amd64" "$(_cells "$out")" \
+        "a cell covered by any listed source is excluded"
+
+    local rc=0
+    out="$(EVIDENCE_TESTED_SOURCE="$main:$TEST_TEMP_DIR/no-such-pr" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "any unreadable listed source is exit 1"
+    assert_equals "" "$out" "and prints no matrix"
+}
+
+test_open_prs_filters_trust_and_age() {
+    # Only same-repo ingest branches by the ingest identity, under the age
+    # bound, count. A fork can name a branch evidence/batch/* too.
+    local now prs out
+    now="$(command date -u -d 2026-10-18T12:00:00Z +%s)"
+    prs='[
+      {"number":1,"headRefName":"evidence/batch/111","isCrossRepository":false,"author":{"login":"joshjhall"},"createdAt":"2026-10-18T11:00:00Z"},
+      {"number":2,"headRefName":"evidence/batch/222","isCrossRepository":true,"author":{"login":"joshjhall"},"createdAt":"2026-10-18T11:00:00Z"},
+      {"number":3,"headRefName":"evidence/batch/333","isCrossRepository":false,"author":{"login":"someone"},"createdAt":"2026-10-18T11:00:00Z"},
+      {"number":4,"headRefName":"scan/rust-1.99","isCrossRepository":false,"author":{"login":"joshjhall"},"createdAt":"2026-10-18T11:00:00Z"},
+      {"number":5,"headRefName":"evidence/batch/555","isCrossRepository":false,"author":{"login":"joshjhall"},"createdAt":"2026-10-16T11:00:00Z"},
+      {"number":6,"headRefName":"evidence/batch/666","isCrossRepository":false,"author":{"login":"joshjhall"},"createdAt":"2026-10-18T00:30:00Z"}
+    ]'
+    out="$(evidence_open_prs "$now" <<<"$prs" 2>/dev/null)"
+    assert_equals $'1\n6' "$out" "same-repo, ingest-authored, under 24h only"
+    out="$(evidence_open_prs "$now" <<<"$prs" 2>&1 >/dev/null)"
+    assert_equals "evidence_open_prs: containers-db#5 open over 24h; its rows do not count" "$out" \
+        "a stale ingest PR is skipped with a warning"
+}
+
+test_open_prs_unparsable_listing_is_an_error() {
+    # Without pipefail too: a jq failure must not read as "no open PRs",
+    # which would re-queue every cell those PRs cover (#1319).
+    local out rc=0
+    out="$(
+        set +o pipefail
+        evidence_open_prs 0 <<<'{not json' 2>/dev/null
+    )" || rc=$?
+    assert_equals "1" "$rc" "an unparsable listing is exit 1"
+    assert_equals "" "$out" "and prints no PR numbers"
+
+    # Failing mid-stream: jq has already emitted "ok 1" when the null
+    # createdAt aborts it. Captured output means no PR number escapes.
+    rc=0
+    out="$(
+        set +o pipefail
+        evidence_open_prs 0 2>/dev/null <<<'[
+          {"number":1,"headRefName":"evidence/batch/1","isCrossRepository":false,"author":{"login":"joshjhall"},"createdAt":"1970-01-01T00:00:00Z"},
+          {"number":2,"headRefName":"evidence/batch/2","isCrossRepository":false,"author":{"login":"joshjhall"},"createdAt":null}
+        ]'
+    )" || rc=$?
+    assert_equals "1" "$rc" "a listing jq fails on partway is exit 1"
+    assert_equals "" "$out" "and prints no PR numbers, not even ones before the failure"
+
+    # An empty listing is exit 0 with no output at all (the x sentinel keeps
+    # $(...) from stripping a stray blank line).
+    rc=0
+    out="$(
+        evidence_open_prs 0 <<<'[]' || exit
+        printf x
+    )" || rc=$?
+    assert_equals "0" "$rc" "an empty listing is exit 0"
+    assert_equals "x" "$out" "and prints nothing, not even a blank line"
+}
+
+test_fully_published_coverage_exits_3() {
+    # The end state #1319 is for: the backlog drains, nothing is pending.
+    local r db out rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 debian-13-amd64,debian-13-arm64
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "3" "$rc" "every cell published is exit 3"
+    assert_equals "" "$out" "and prints no matrix"
+}
+
+test_unreadable_published_source_is_an_error() {
+    # An unreachable source must not become "everything pending" (#1319).
+    local r db out rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    out="$(EVIDENCE_TESTED_SOURCE="$TEST_TEMP_DIR/no-such-db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "a missing source is exit 1"
+    assert_equals "" "$out" "and prints no matrix"
+
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    command mkdir -p "$db/tools/rust/versions"
+    command echo '{not json' >"$db/tools/rust/versions/1.90.0.json"
+    rc=0
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "an unparsable source is exit 1"
+    assert_equals "" "$out" "and prints no matrix"
+}
+
 test_missing_index_is_an_error() {
     local rc=0
     evidence_matrix "$TEST_TEMP_DIR/nope" rust "$TEST_TEMP_DIR" >/dev/null 2>&1 || rc=$?
@@ -176,6 +343,14 @@ run_test test_cap_takes_oldest_first "cap keeps the oldest pending cells"
 run_test test_cells_carry_arch_plumbing "cells carry arch plumbing"
 run_test test_unpublished_tuples_are_not_available "tuples absent from the root tree are not offered"
 run_test test_unpublished_images_are_skipped "unpublished images are skipped when a check is set"
+run_test test_published_evidence_decides_pending "published evidence decides pending-ness"
+run_test test_published_source_overrides_vendored_tested "published source overrides vendored tested[]"
+run_test test_version_missing_from_published_is_pending "a version absent from published evidence is pending"
+run_test test_open_ingest_pr_rows_count_as_covered "open ingest PR rows count as covered"
+run_test test_open_prs_filters_trust_and_age "open evidence PRs: trust and age filter"
+run_test test_open_prs_unparsable_listing_is_an_error "open evidence PRs: unparsable listing is an error"
+run_test test_fully_published_coverage_exits_3 "full published coverage exits 3"
+run_test test_unreadable_published_source_is_an_error "an unreadable evidence source is an error, not a full matrix"
 run_test test_missing_index_is_an_error "missing index is an error"
 run_test test_real_catalog_respects_github_cap "shipped catalog stays within GitHub's 256 cap"
 

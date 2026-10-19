@@ -147,6 +147,59 @@ jobs:
           path: _base
           sparse-checkout: base-images
 
+      # Pending-ness is judged against PUBLISHED evidence (#1319): the
+      # vendored catalog never receives tested[] rows, so reading it made every
+      # push re-test the same oldest cells. A failed checkout fails this job
+      # rather than falling back to "everything pending". containers-db is
+      # public, so the default token reads it (ingest's PAT is for writes).
+      - name: Checkout published evidence (containers-db)
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          repository: joshjhall/containers-db
+          path: _db
+          sparse-checkout: tools
+
+      # A previous run's ingest PR (evidence/batch/<run-id>) is often still
+      # awaiting auto-merge when the next push resolves its matrix, so its rows
+      # are not on main yet. Each open one's tools/ tree joins the evidence
+      # source, so those cells count as covered instead of being re-queued.
+      # evidence_open_prs keeps only same-repo PRs by the ingest identity
+      # under 24h old. The PRs are listed BEFORE main is re-fetched, so a PR
+      # that merges in between is on the main read rather than in neither.
+      # A failed listing or fetch fails the job, like the checkout above.
+      - name: Collect open evidence PRs (containers-db)
+        id: db_sources
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # shellcheck source=bin/lib/evidence-matrix.sh
+          source bin/lib/evidence-matrix.sh
+          LIST=$(gh pr list --repo joshjhall/containers-db --state open --limit 1000 \
+            --json number,headRefName,isCrossRepository,author,createdAt)
+          if [ "$(jq length <<<"$LIST")" -ge 1000 ]; then
+            echo "containers-db has 1000+ open PRs; the listing may be truncated" >&2
+            exit 1
+          fi
+          PRS=$(evidence_open_prs "$(date -u +%s)" <<<"$LIST")
+          git -C _db fetch --quiet --depth 1 origin main
+          git -C _db checkout --quiet --detach FETCH_HEAD
+          SOURCES="$PWD/_db"
+          for n in $PRS; do
+            git -C _db fetch --quiet --depth 1 origin "refs/pull/$n/head:refs/evidence-pr/$n"
+            mkdir -p "_db_pr/$n"
+            git -C _db archive "refs/evidence-pr/$n" tools | tar -x --no-same-owner -C "_db_pr/$n"
+            if [ -n "$(find "_db_pr/$n" -type l -print -quit)" ]; then
+              echo "containers-db#$n tools/ contains symlinks; refusing it" >&2
+              exit 1
+            fi
+            SOURCES="$SOURCES:$PWD/_db_pr/$n"
+            echo "Counting open evidence PR joshjhall/containers-db#$n as published evidence"
+          done
+          echo "sources=$SOURCES" >> "$GITHUB_OUTPUT"
+
       - name: Generate matrix and dry-run flag
         id: gen
         env:
@@ -156,6 +209,7 @@ jobs:
           INPUT_TUPLE: ${{ inputs.tuple }}
           INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          DB_SOURCES: ${{ steps.db_sources.outputs.sources }}
         run: |
           set -euo pipefail
           # Map an arch token to its build/run plumbing. The tuple is the
@@ -197,8 +251,9 @@ jobs:
             # Every pending evidence cell, from the catalog (#1111): the newest
             # patch of each minor from the floor up, x each tuple it claims
             # that has a base image, minus cells that already have passing
-            # evidence. Capped under GitHub's 256-job limit; the backlog drains
-            # over successive pushes, oldest versions first.
+            # evidence in published containers-db (#1319). Capped under
+            # GitHub's 256-job limit; the backlog drains over successive
+            # pushes, oldest versions first.
             # shellcheck source=bin/lib/evidence-matrix.sh
             source bin/lib/evidence-matrix.sh
             rc=0
@@ -213,6 +268,10 @@ jobs:
             }
             export -f image_published
             export EVIDENCE_PUBLISHED_CHECK=image_published
+            # containers-db main plus each open evidence PR (colon-separated).
+            # Never empty here: an empty value would read the vendored rows.
+            [ -n "$DB_SOURCES" ] || { echo "No published evidence source resolved" >&2; exit 1; }
+            export EVIDENCE_TESTED_SOURCE="$DB_SOURCES"
             MATRIX=$(evidence_matrix crates/luggage/testdata/catalog rust "$AVAILABLE_ROOT" latest 200) || rc=$?
             case "$rc" in
               0) ;;
