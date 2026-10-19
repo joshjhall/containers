@@ -24,9 +24,10 @@
 # Matched: `|` and `|&` into a grep -q, including one behind other words (env
 # assignments, `env`, `!`) or opening a `{ ...; }` or `( ... )` group, with the consumer on the same
 # logical line or on the next one after a trailing pipe (blank and comment
-# lines between are skipped, as bash skips them). Backslash continuations are
-# joined, and each file is scanned both with and without inline comments (see
-# pipe_grep_q_sites).
+# lines between are skipped, as bash skips them), or at any later command
+# inside a piped group. Backslash continuations are joined, and each file is
+# scanned three ways: raw, without inline comments, and with quotes and
+# substitutions masked (see pipe_grep_q_sites).
 #
 # Not matched: `grep -q X f || grep -q Y f` (no pipe, just `||`), comment lines,
 # and the herestring idiom itself. This file builds its scanner fixtures from
@@ -53,15 +54,18 @@ UNIT_DIR="$PROJECT_ROOT/tests/unit"
 # of its logical line. A logical line ending in a pipe continues onto the next
 # non-blank, non-comment line, which is checked as the consumer.
 #
-# TWO VIEWS, UNION. Each file is scanned twice in one pass: raw (only
-# whole-line comments skipped) and stripped (inline comments removed), and a
-# site found by either is reported. Telling a comment # from a literal one
-# needs a bash parser; this is a line heuristic. Raw alone misses a pipe whose
-# continuation hides behind a comment (`producer | # why`); stripped alone
-# hides a real site whenever stripping guesses wrong (a quote opened on an
-# earlier line). The union keeps every site raw text shows, so a stripping
-# mistake can only add a report, never remove one. The price is an occasional
-# over-report, which fails the guard loudly instead of passing it silently.
+# THREE VIEWS, UNION. Each file is scanned three times in one pass: raw (only
+# whole-line comments skipped), stripped (inline comments removed), and masked
+# (quoted strings and substitutions blanked, piped groups walked; see mask and
+# walk), and a site found by any is reported. Telling a comment # from a
+# literal one needs a bash parser; this is a line heuristic. Raw alone misses
+# a pipe whose continuation hides behind a comment (`producer | # why`);
+# stripped alone hides a real site whenever stripping guesses wrong (a quote
+# opened on an earlier line); neither sees past a ; inside a quoted prefix
+# word, which only masking can. The union keeps every site raw text shows, so
+# a stripping or masking mistake can only add a report, never remove one. The
+# price is an occasional over-report, which fails the guard loudly instead of
+# passing it silently.
 pipe_grep_q_sites() {
     local root="$1"
     (cd "$root" && command find . -name '*.sh' -type f -exec /usr/bin/awk '
@@ -81,12 +85,93 @@ pipe_grep_q_sites() {
                 }
                 return s
             }
-            # report: print a site once, though both views may find it.
+            # skip: s has an opener at i (a quote, a backtick, `$(` or `${`);
+            # return the index of its closing char, or the end of s when it
+            # is not closed on this logical line. Openers nest inside `"`,
+            # `$(` and `${`, so `"$(a ")")"` closes at its last quote.
+            function skip(s, i,   n, c, o, cl, d, k) {
+                n = length(s); c = substr(s, i, 1)
+                if (c == "\047") { k = index(substr(s, i + 1), "\047"); return k ? i + k : n }
+                if (c == "`" || c == "\"") {
+                    for (k = i + 1; k <= n; k++) {
+                        o = substr(s, k, 1)
+                        if (o == "\\") k++
+                        else if (o == c) return k
+                        else if (c == "\"" && (o == "`" || (o == "$" && substr(s, k + 1, 1) ~ /[({]/))) k = skip(s, k)
+                    }
+                    return n
+                }
+                o = substr(s, i + 1, 1); cl = (o == "(") ? ")" : "}"; d = 0
+                for (k = i + 1; k <= n; k++) {
+                    c = substr(s, k, 1)
+                    if (c == "\\") k++
+                    else if (c == "\047" || c == "\"" || c == "`" || (c == "$" && substr(s, k + 1, 1) ~ /[({]/)) k = skip(s, k)
+                    else if (c == o) d++
+                    else if (c == cl && --d == 0) return k
+                }
+                return n
+            }
+            # mask: the masked view of one logical line. Each quoted string,
+            # substitution and escaped char becomes x, an & inside a redirect
+            # (2>&1, &>f) becomes x, and a # opening a word ends the line. So
+            # a ; & or | the shell reads as part of a word no longer ends the
+            # consumer (`A="x;y" grep -q`). Quotes are paired per logical line
+            # only: one opened on an earlier line fools this view, which is
+            # why it adds to the union rather than replacing a view.
+            function mask(s,   n, i, c, out, ws) {
+                n = length(s); out = ""; ws = 1
+                for (i = 1; i <= n; i++) {
+                    c = substr(s, i, 1)
+                    if (c == "\\") { out = out "xx"; i++; ws = 0; continue }
+                    if (c == "\047" || c == "\"" || c == "`" || (c == "$" && substr(s, i + 1, 1) ~ /[({]/)) {
+                        i = skip(s, i); out = out "x"; ws = 0; continue
+                    }
+                    if (c == "#" && ws) return out
+                    if (c == "&" && (substr(s, i - 1, 1) ~ /[<>]/ || substr(s, i + 1, 1) == ">")) c = "x"
+                    out = out c; ws = (c ~ /[[:space:];&|()]/)
+                }
+                return out
+            }
+            # walk: track piped-group depth gd[v] through a masked line, and
+            # report a grep -q at any command start inside the group, not just
+            # the first (`producer | { read -r h; grep -q x; }`). A `{` word or
+            # `(` at a command start opens a group: piped if a pipe precedes
+            # it, nested if a piped group is already open. `}` at a command
+            # start and `)` close one. A `(` elsewhere (`a=(x)`, `<(cmd)`)
+            # pairs with its own `)` on the line. Depth carries across lines,
+            # for a group opened on one line and closed on a later one.
+            function walk(v, s, f, n,   m, i, c, t, cs, pipe, pd) {
+                m = length(s); cs = 1; pipe = pending[v]; pd = 0
+                for (i = 1; i <= m; i++) {
+                    c = substr(s, i, 1); t = substr(s, i + 1, 1)
+                    if (c ~ /[[:space:]]/) continue
+                    if (cs) {
+                        if (c == "(" || (c == "{" && (t == "" || t ~ /[[:space:]]/))) {
+                            if (gd[v] > 0) gd[v]++; else if (pipe) gd[v] = 1
+                            pipe = 0; continue
+                        }
+                        if (c == "}" && (t == "" || t ~ /[[:space:];&|)]/)) {
+                            if (gd[v] > 0) gd[v]--
+                            cs = 0; continue
+                        }
+                        if (gd[v] > 0 && substr(s, i) ~ ("^" grep_q)) report(f, n)
+                        cs = 0
+                    }
+                    if (c == "(") pd++
+                    else if (c == ")") { if (pd > 0) pd--; else if (gd[v] > 0) gd[v]-- }
+                    else if (c == "|") { if (t == "|" || t == "&") i++; pipe = (t != "|"); cs = 1 }
+                    else if (c == ";" || c == "&") { if (t == c) i++; pipe = 0; cs = 1 }
+                }
+            }
+            # report: print a site once, though several views may find it.
             function report(f, n) {
                 if (!((f, n) in seen)) { seen[f, n] = 1; print substr(f, 3) ":" n }
             }
             # check: match one logical line of view v, ending at line n of f.
             function check(v, line, f, n,   keep) {
+                # View 2 sees the masked line, and walks its groups before
+                # the pipe state below moves on to this line.
+                if (v == 2) { line = mask(line); walk(v, line, f, n) }
                 # A consumer line can itself end in a pipe, so it falls
                 # through to the same-line and trailing checks. A line of bare
                 # `{` or `(` openers keeps the pipe waiting for its consumer.
@@ -122,7 +207,7 @@ pipe_grep_q_sites() {
             # neither a continuation nor a pipe carries into the next file.
             function flush(v) {
                 if (buf[v] != "") check(v, buf[v], lastf, lastn)
-                buf[v] = ""; pending[v] = 0
+                buf[v] = ""; pending[v] = 0; gd[v] = 0
             }
             # GREP_Q: a grep invocation whose flags include q, anchored where a
             # pipe consumer starts. No `|` precedes it in this regex; callers
@@ -138,21 +223,24 @@ pipe_grep_q_sites() {
             # Enumerating prefixes was tried first and each review round found
             # a shape the list missed (#1314); this rule over-reports instead
             # (`| xargs grep -q`), which fails loudly rather than passing.
-            # KNOWN MISSES (#1322), pinned as fixtures: no quote or `$(...)`
-            # tracking, so a ; & or | inside a prefix word (`A="x;y"`,
-            # `2>&1`) ends the consumer early; and a grep -q after another
-            # command inside a piped group (`{ read -r h; grep -q x; }`) is
-            # not seen as one.
+            # A separator inside a quoted or substituted prefix word
+            # (`A="x;y"`, `2>&1`) is masked out of view 2 before this regex
+            # runs, and walk applies it at every command start inside a
+            # piped group (#1322). KNOWN MISSES: walk tracks only { } and
+            # ( ) groups, so a grep -q inside a piped while/for/if body is
+            # not seen, and a case-arm `)` inside a piped group closes it
+            # early.
             BEGIN {
                 grep_q = "([(][[:space:]]*)*([^|;&[:space:]#][^|;&[:space:]]*[[:space:]]+)*(/usr/bin/|/bin/)?[ef]?grep([[:space:]]+[^|;&[:space:]#][^|;&[:space:]]*)*[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|$)"
             }
-            FNR == 1 { flush(0); flush(1) }
+            FNR == 1 { flush(0); flush(1); flush(2) }
             {
                 step(0, $0, FILENAME, FNR)
                 step(1, strip_comment($0), FILENAME, FNR)
+                step(2, $0, FILENAME, FNR)
                 lastf = FILENAME; lastn = FNR
             }
-            END { flush(0); flush(1) }
+            END { flush(0); flush(1); flush(2) }
         ' {} + || true)
 }
 
@@ -285,7 +373,7 @@ test_scanner_detects_known_shapes() {
         command printf '    %s -q foo; }\n' "$g"                                        # 113 flag
         command printf 'producer %s\n' "$p"                                             # 114
         command printf '    (\n'                                                        # 115
-        command printf '    command %s -q foo\n' "$g"                                   # 116 flag
+        command printf '    command %s -q foo )\n' "$g"                                 # 116 flag
         command printf 'producer %s A=$(cmd arg) %s -q foo\n' "$p" "$g"                 # 117 flag
         command printf 'producer %s A=x%s y %s -q foo\n' "$p" "$b" "$g"                 # 118 flag
         command printf "producer %s A='x y' echo; %s -q x f\n" "$p" "$g"                # 119
@@ -301,17 +389,30 @@ test_scanner_detects_known_shapes() {
         command printf 'producer %s A=`date +x` %s -q foo\n' "$p" "$g"                  # 129 flag
         command printf 'producer %s& { LC_ALL=C %s -q foo; }\n' "$p" "$g"               # 130 flag
         command printf 'producer %s { # c\n' "$p"                                       # 131
-        command printf '    command %s -q foo\n' "$g"                                   # 132 flag
+        command printf '    command %s -q foo; }\n' "$g"                                # 132 flag
         command printf 'producer %s xargs %s -q foo\n' "$p" "$g"                        # 133 flag (over-report)
         command printf 'producer %s cat #c %s -q foo\n' "$p" "$g"                       # 134
-        command printf 'producer %s A="x;y" %s -q foo\n' "$p" "$g"                      # 135 known miss
-        command printf 'producer %s 2>&1 %s -q foo\n' "$p" "$g"                         # 136 known miss
-        command printf 'producer %s { read -r h; %s -q foo; }\n' "$p" "$g"              # 137 known miss
+        command printf 'producer %s A="x;y" %s -q foo\n' "$p" "$g"                      # 135 flag
+        command printf 'producer %s 2>&1 %s -q foo\n' "$p" "$g"                         # 136 flag
+        command printf 'producer %s { read -r h; %s -q foo; }\n' "$p" "$g"              # 137 flag
+        command printf 'producer %s A=$(a; b) %s -q foo\n' "$p" "$g"                    # 138 flag
+        command printf 'producer %s {\n' "$p"                                           # 139
+        command printf '    head -1\n'                                                  # 140
+        command printf '    %s -q x; }\n' "$g"                                          # 141 flag
+        command printf 'producer %s { read -r h; } ; %s -q x f\n' "$p" "$g"             # 142
+        command printf '{ read -r h; %s -q x f; }\n' "$g"                               # 143
+        command printf 'producer %s { echo "; } "; %s -q x f; }\n' "$p" "$g"            # 144 flag
+        command printf 'producer %s ( cd d && %s -q x f )\n' "$p" "$g"                  # 145 flag
+        command printf 'producer %s &>/dev/null %s -q foo\n' "$p" "$g"                  # 146 flag
+        command printf 'producer %s\n' "$p"                                             # 147
+        command printf '    { read -r h; %s -q x f; }\n' "$g"                           # 148 flag
+        command printf 'producer %s { # )\n' "$p"                                       # 149
+        command printf '    read -r h; %s -q x f; }\n' "$g"                             # 150 flag
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:59 fixture.sh:60 fixture.sh:64 fixture.sh:66 fixture.sh:68 fixture.sh:70 fixture.sh:71 fixture.sh:73 fixture.sh:75 fixture.sh:77 fixture.sh:79 fixture.sh:81 fixture.sh:84 fixture.sh:87 fixture.sh:91 fixture.sh:93 fixture.sh:95 fixture.sh:96 fixture.sh:97 fixture.sh:98 fixture.sh:99 fixture.sh:100 fixture.sh:101 fixture.sh:103 fixture.sh:109 fixture.sh:110 fixture.sh:113 fixture.sh:116 fixture.sh:117 fixture.sh:118 fixture.sh:120 fixture.sh:124 fixture.sh:125 fixture.sh:126 fixture.sh:127 fixture.sh:128 fixture.sh:129 fixture.sh:130 fixture.sh:132 fixture.sh:133 " "$got" \
-        "scanner flags same-line, |&, prefixed (incl. command + path, any leading words: env assignments however quoted or substituted, +=, env, !, time; and { or ( group openers, alone, nested, combined, after |&, or on their own line, even with a comment, before the consumer), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join and after \$(...)), a comment ending in \\ after a quoted or escaped #, a site after a quote closed on a later line (incl. across a \\ join, and a pipe plus comment closing it, double or single), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\, or touching | or |&) after the pipe, an escaped quote before it, blank and comment lines before the consumer, a consumer that pipes on) pipes into $g -q; over-reports a word-start # after a \\ join, a quoted trailing |#, and a $g -q run by another command (xargs) (the documented cost); misses a quoted or redirect separator in a prefix word and a $g -q later inside a piped group (the documented known misses); ignores ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q (incl. after a group or an assignment-prefixed command), a {grep word that opens no group, a grep after a word-start # comment, and non-q greps (incl. egrep/fgrep, and inside a group)"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:59 fixture.sh:60 fixture.sh:64 fixture.sh:66 fixture.sh:68 fixture.sh:70 fixture.sh:71 fixture.sh:73 fixture.sh:75 fixture.sh:77 fixture.sh:79 fixture.sh:81 fixture.sh:84 fixture.sh:87 fixture.sh:91 fixture.sh:93 fixture.sh:95 fixture.sh:96 fixture.sh:97 fixture.sh:98 fixture.sh:99 fixture.sh:100 fixture.sh:101 fixture.sh:103 fixture.sh:109 fixture.sh:110 fixture.sh:113 fixture.sh:116 fixture.sh:117 fixture.sh:118 fixture.sh:120 fixture.sh:124 fixture.sh:125 fixture.sh:126 fixture.sh:127 fixture.sh:128 fixture.sh:129 fixture.sh:130 fixture.sh:132 fixture.sh:133 fixture.sh:135 fixture.sh:136 fixture.sh:137 fixture.sh:138 fixture.sh:141 fixture.sh:144 fixture.sh:145 fixture.sh:146 fixture.sh:148 fixture.sh:150 " "$got" \
+        "scanner flags same-line, |&, prefixed (incl. command + path, any leading words: env assignments however quoted or substituted, +=, env, !, time; and { or ( group openers, alone, nested, combined, after |&, or on their own line, even with a comment, before the consumer), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join and after \$(...)), a comment ending in \\ after a quoted or escaped #, a site after a quote closed on a later line (incl. across a \\ join, and a pipe plus comment closing it, double or single), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\, or touching | or |&) after the pipe, an escaped quote before it, blank and comment lines before the consumer, a consumer that pipes on) pipes into $g -q; over-reports a word-start # after a \\ join, a quoted trailing |#, and a $g -q run by another command (xargs) (the documented cost); flags a ; or & a prefix word quotes, substitutes or redirects (A=\"x;y\", A=\$(a; b), 2>&1, &>f), and a $g -q at any command inside a piped { } or ( ) group (incl. one opened on an earlier line or after a pipe that ends one, past a quoted brace, and past a ) in a comment); ignores a $g -q after a piped group closes, one in an unpiped group, ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q (incl. after a group or an assignment-prefixed command), a {grep word that opens no group, a grep after a word-start # comment, and non-q greps (incl. egrep/fgrep, and inside a group)"
 }
 
 # ---------------------------------------------------------------------------
@@ -342,6 +443,14 @@ test_scanner_isolates_files() {
     got=$(pipe_grep_q_sites "$dir")
     command rm -rf "$dir"
     assert_equals "" "$got" "a continuation at one file's end does not join the next file's first line"
+
+    dir=$(command mktemp -d)
+    for f in a b; do
+        command printf 'echo; command %s -q foo\nproducer %s {\n' "$g" "$p" >"$dir/$f.sh"
+    done
+    got=$(pipe_grep_q_sites "$dir")
+    command rm -rf "$dir"
+    assert_equals "" "$got" "a piped group open at one file's end does not reach into the next file"
 }
 
 # ---------------------------------------------------------------------------
