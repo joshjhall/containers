@@ -54,7 +54,7 @@ use crate::installer::template::Substitutions;
 pub use containers_common::tooldb::VerificationWarning;
 
 /// Fail fast when `verification` is one this build will not satisfy — an
-/// unsupported tier, or a tier-2 entry with no `pinned_checksum`.
+/// unsupported tier, or a tier-2 entry with no usable `pinned_checksum`.
 ///
 /// Called before the artifact is downloaded, for three reasons. First, it keeps
 /// the *tier's* error the one the caller sees: the download path derives a
@@ -75,9 +75,11 @@ pub use containers_common::tooldb::VerificationWarning;
 ///   [`LuggageError::Catalog`] for a tier outside `1..=4` — the same variants
 ///   [`dispatch`] returns for those tiers.
 /// - [`LuggageError::Catalog`] for a tier-2 entry with no `pinned_checksum`,
-///   and [`LuggageError::VerificationFailed`] for one whose pin is not a hex
-///   digest — the same errors [`tier2::verify`] raises, built by the same
-///   `tier2::require_pin`, so the guard and dispatch cannot disagree about them.
+///   [`LuggageError::VerificationFailed`] for one whose pin is not a hex
+///   digest or not the width of `verification.algorithm`'s digest, and
+///   whatever [`sha::Algorithm::parse`] rejects for that algorithm — the same
+///   errors [`tier2::verify`] raises, built by the same `tier2::require_pin`,
+///   so the guard and dispatch cannot disagree about them.
 /// - [`LuggageError::VerificationFailed`] for tier 4 when `require_verified`
 ///   is set. This is a *policy* refusal of a supported tier, not an
 ///   unimplemented one, so it is deliberately not a `NotImplemented`: it maps
@@ -102,8 +104,9 @@ pub fn ensure_supported(
                      REQUIRE_VERIFIED_DOWNLOADS=false"
                 .to_owned(),
         }),
-        // A tier-2 entry with no pin, or a pin that isn't a digest, can never
-        // pass, and that is knowable from the catalog alone — refuse it now
+        // A tier-2 entry with no pin, or a pin that isn't a digest of the
+        // algorithm's width, can never pass, and that is knowable from the
+        // catalog alone — refuse it now
         // rather than after the download.
         // Tier 2 needs no `require_verified` arm: a pinned checksum *is* a
         // verified download, so it satisfies the strict posture rather than
@@ -481,6 +484,46 @@ mod tests {
                 "pin {pin:?}: dispatch gave {dispatched:?}"
             );
             assert_eq!(guard.to_string(), dispatched.to_string(), "pin {pin:?}");
+        }
+    }
+
+    /// The width and algorithm refusals (#1311) hold the same contract at this
+    /// boundary: dispatch's exact error, in both postures.
+    #[test]
+    fn ensure_supported_refuses_an_unusable_pin_width_exactly_as_dispatch_does() {
+        let sha256 = super::sha::digest_hex(Some("sha256"), b"pinned").unwrap();
+        let sha512 = super::sha::digest_hex(Some("sha512"), b"pinned").unwrap();
+        let cases = [
+            (None, "9f86d081".to_owned()),
+            (None, sha512),
+            (Some("sha512"), sha256.clone()),
+            (Some("md5"), sha256.clone()),
+            (Some("sha384"), sha256),
+        ];
+        for (algorithm, pin) in cases {
+            let v = Verification {
+                algorithm: algorithm.map(Into::into),
+                pinned_checksum: Some(pin),
+                ..verification(2)
+            };
+            let dispatched = dispatch(
+                "node",
+                "24.0.0",
+                "deadbeef",
+                "artifact.tar.gz",
+                &v,
+                &Substitutions::default(),
+                &DeadClient,
+            )
+            .unwrap_err();
+            for strict in [false, true] {
+                let guard = ensure_supported("node", "24.0.0", &v, strict).unwrap_err();
+                assert_eq!(
+                    format!("{guard:?}"),
+                    format!("{dispatched:?}"),
+                    "algorithm {algorithm:?}, strict={strict}"
+                );
+            }
         }
     }
 

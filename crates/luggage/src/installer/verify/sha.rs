@@ -16,6 +16,65 @@ use crate::error::{LuggageError, Result};
 /// is `None`. Matches the publishers' historical default.
 pub const DEFAULT_ALGORITHM: &str = "sha256";
 
+/// A digest algorithm this build can compute.
+///
+/// [`Algorithm::parse`] is the one place a catalog algorithm string is
+/// decoded; [`digest_hex`], [`DigestWriter::new`], and tier 2's pin-length
+/// check all go through it, so the hasher a name selects and the digest width
+/// it implies cannot drift apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Algorithm {
+    /// SHA-256 — the catalog default.
+    Sha256,
+    /// SHA-512.
+    Sha512,
+}
+
+impl Algorithm {
+    /// Decode a catalog algorithm name.
+    ///
+    /// `algorithm` is matched case-insensitively. Pass `None` to use
+    /// [`DEFAULT_ALGORITHM`].
+    ///
+    /// # Errors
+    ///
+    /// - [`LuggageError::NotImplemented`] when the algorithm is recognized as a
+    ///   valid SHA-family name we haven't wired up yet.
+    /// - [`LuggageError::Catalog`] when the algorithm is unrecognized.
+    pub fn parse(algorithm: Option<&str>) -> Result<Self> {
+        let algo = algorithm.unwrap_or(DEFAULT_ALGORITHM).to_ascii_lowercase();
+        match algo.as_str() {
+            "sha256" => Ok(Self::Sha256),
+            "sha512" => Ok(Self::Sha512),
+            // Likely-correct future hash-family names get a clear NotImplemented
+            // so a catalog upgrade fails fast without falling through to a
+            // generic Catalog error.
+            "sha384" | "sha224" | "blake3" => {
+                Err(LuggageError::NotImplemented("digest algorithm not wired (only sha256/sha512)"))
+            }
+            _ => Err(LuggageError::Catalog(format!("unrecognised digest algorithm `{algo}`"))),
+        }
+    }
+
+    /// The algorithm's lowercase catalog name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Sha256 => "sha256",
+            Self::Sha512 => "sha512",
+        }
+    }
+
+    /// Length, in hex characters, of a digest this algorithm produces.
+    #[must_use]
+    pub const fn hex_len(self) -> usize {
+        match self {
+            Self::Sha256 => 64,
+            Self::Sha512 => 128,
+        }
+    }
+}
+
 /// Compute a hex digest over `bytes` using the named algorithm.
 ///
 /// `algorithm` is matched case-insensitively. Pass `None` to use
@@ -23,22 +82,12 @@ pub const DEFAULT_ALGORITHM: &str = "sha256";
 ///
 /// # Errors
 ///
-/// - [`LuggageError::NotImplemented`] when the algorithm is recognized as a
-///   valid SHA-family name we haven't wired up yet.
-/// - [`LuggageError::Catalog`] when the algorithm is unrecognized.
+/// Whatever [`Algorithm::parse`] rejects.
 pub fn digest_hex(algorithm: Option<&str>, bytes: &[u8]) -> Result<String> {
-    let algo = algorithm.unwrap_or(DEFAULT_ALGORITHM).to_ascii_lowercase();
-    match algo.as_str() {
-        "sha256" => Ok(hex_lower(&Sha256::digest(bytes))),
-        "sha512" => Ok(hex_lower(&Sha512::digest(bytes))),
-        // Likely-correct future hash-family names get a clear NotImplemented
-        // so a catalog upgrade fails fast without falling through to a
-        // generic Catalog error.
-        "sha384" | "sha224" | "blake3" => {
-            Err(LuggageError::NotImplemented("digest algorithm not wired (only sha256/sha512)"))
-        }
-        _ => Err(LuggageError::Catalog(format!("unrecognised digest algorithm `{algo}`"))),
-    }
+    Ok(match Algorithm::parse(algorithm)? {
+        Algorithm::Sha256 => hex_lower(&Sha256::digest(bytes)),
+        Algorithm::Sha512 => hex_lower(&Sha512::digest(bytes)),
+    })
 }
 
 /// An [`io::Write`] that digests everything written through it.
@@ -47,8 +96,8 @@ pub fn digest_hex(algorithm: Option<&str>, bytes: &[u8]) -> Result<String> {
 /// holding it: bytes are hashed as they stream to disk, so the digest is
 /// finished the moment the last byte lands and nothing re-reads the file.
 ///
-/// The algorithm is decoded by [`digest_hex`]'s same `match` (via
-/// [`DigestWriter::new`]) — this module stays the single place a catalog
+/// The algorithm is decoded by [`Algorithm::parse`], the same decode
+/// [`digest_hex`] uses — this module stays the single place a catalog
 /// algorithm string turns into a hash computation.
 pub struct DigestWriter {
     inner: Hasher,
@@ -84,24 +133,11 @@ impl DigestWriter {
     ///
     /// # Errors
     ///
-    /// - [`LuggageError::NotImplemented`] for a recognized-but-unwired
-    ///   SHA-family name.
-    /// - [`LuggageError::Catalog`] for an unrecognized algorithm.
+    /// Whatever [`Algorithm::parse`] rejects.
     pub fn new(algorithm: Option<&str>) -> Result<Self> {
-        let algo = algorithm.unwrap_or(DEFAULT_ALGORITHM).to_ascii_lowercase();
-        let inner = match algo.as_str() {
-            "sha256" => Hasher::Sha256(Sha256::new()),
-            "sha512" => Hasher::Sha512(Sha512::new()),
-            "sha384" | "sha224" | "blake3" => {
-                return Err(LuggageError::NotImplemented(
-                    "digest algorithm not wired (only sha256/sha512)",
-                ));
-            }
-            _ => {
-                return Err(LuggageError::Catalog(format!(
-                    "unrecognised digest algorithm `{algo}`"
-                )));
-            }
+        let inner = match Algorithm::parse(algorithm)? {
+            Algorithm::Sha256 => Hasher::Sha256(Sha256::new()),
+            Algorithm::Sha512 => Hasher::Sha512(Sha512::new()),
         };
         Ok(Self { inner })
     }
@@ -157,10 +193,12 @@ pub fn digests_equal(a: &str, b: &str) -> bool {
 
 /// `true` when `s` is a non-empty string of hex digits.
 ///
-/// Deliberately does not check length against a specific algorithm: the
-/// catalog's `algorithm` may name a digest whose width this build does not
-/// hard-code. The check that matters is that the value is *a digest at all*
-/// rather than an empty string or an error message that leaked into the slot.
+/// A shape check only — it does not check length against an algorithm.
+/// Tier 4 screens a digest this build computed, whose width is right by
+/// construction; tier 2 checks a pin's width separately against
+/// [`Algorithm::hex_len`]. The check that matters here is that the value is
+/// *a digest at all* rather than an empty string or an error message that
+/// leaked into the slot.
 ///
 /// Both tiers that lack a fetched reference document need this, for opposite
 /// reasons — tier 4 screens the digest it computed (there is nothing else to
@@ -213,6 +251,18 @@ mod tests {
     fn unrecognised_algorithm_returns_catalog_error() {
         let err = digest_hex(Some("md5"), b"abc").unwrap_err();
         assert!(matches!(err, LuggageError::Catalog(_)));
+    }
+
+    /// Tier 2 refuses a pin whose length differs from `hex_len`, so the table
+    /// must match what `digest_hex` actually produces — a wrong entry would
+    /// refuse every correct pin for that algorithm.
+    #[test]
+    fn hex_len_matches_the_digest_each_algorithm_produces() {
+        for algo in [Algorithm::Sha256, Algorithm::Sha512] {
+            let hex = digest_hex(Some(algo.name()), b"abc").unwrap();
+            assert_eq!(hex.len(), algo.hex_len(), "{algo:?}");
+            assert_eq!(Algorithm::parse(Some(algo.name())).unwrap(), algo);
+        }
     }
 
     #[test]
