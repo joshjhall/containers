@@ -3105,11 +3105,13 @@ _extract_symlink_prune() {
         "$PROJECT_ROOT/lib/features/claude-code-setup.sh"
 }
 
-# Run the extracted prune block with LIBRARIAN_DIR=$1, stub loggers, as a child.
+# Run the extracted prune block with LIBRARIAN_DIR=$1, stub loggers, as a child,
+# under the same set -euo pipefail claude-code-setup.sh runs it with.
 _run_symlink_prune() {
     local block
     block="$(_extract_symlink_prune)"
     LIBRARIAN_DIR="$1" bash -c '
+        set -euo pipefail
         log_message() { :; }
         log_error() { command printf "%s\n" "$*" >&2; }
         '"$block"
@@ -3161,6 +3163,7 @@ _run_symlink_prune_stubbed() {
     local block
     block="$(_extract_symlink_prune)"
     env -u BASH_ENV PATH="$1:$PATH" LIBRARIAN_DIR="$2" bash -c '
+        set -euo pipefail
         log_message() { :; }
         log_error() { command printf "%s\n" "$*" >&2; }
         '"$block"
@@ -3209,7 +3212,7 @@ test_librarian_symlink_prune_fails_closed() {
 # survive. Which order the real find produced varied by filesystem, so this
 # stubs find to list .codegraph first, the order that failed in CI.
 test_librarian_symlink_prune_order_independent() {
-    local scratch tree stubs survivors
+    local scratch tree stubs survivors rc
     scratch="$(command mktemp -d)"
     tree="$scratch/librarian"
     stubs="$scratch/stubs"
@@ -3219,11 +3222,32 @@ test_librarian_symlink_prune_order_independent() {
 
     command printf '#!/bin/sh\ncommand printf "%%s\\0" "%s/.codegraph" "%s/chain"\n' "$tree" "$tree" >"$stubs/find"
     command chmod +x "$stubs/find"
-    _run_symlink_prune_stubbed "$stubs" "$tree" >/dev/null 2>&1
+    rc=0
+    _run_symlink_prune_stubbed "$stubs" "$tree" >/dev/null 2>&1 || rc=$?
 
     survivors="$(cd "$tree" && command find . -type l | LC_ALL=C command sort | command tr '\n' ' ')"
     command rm -rf "$scratch"
+    assert_equals "0" "$rc" "the prune succeeds"
     assert_equals "" "$survivors" "a link chained through a pruned link is pruned too"
+}
+
+# Test: a tree whose links all stay in-tree leaves the escaping list empty. The
+# prune must still exit 0 under set -euo pipefail and remove nothing.
+test_librarian_symlink_prune_all_in_tree() {
+    local scratch tree rc survivors
+    scratch="$(command mktemp -d)"
+    tree="$scratch/librarian"
+    command mkdir -p "$tree"
+    command touch "$tree/CLAUDE.md"
+    command ln -s CLAUDE.md "$tree/AGENTS.md"
+
+    rc=0
+    _run_symlink_prune "$tree" >/dev/null 2>&1 || rc=$?
+
+    survivors="$(cd "$tree" && command find . -type l | LC_ALL=C command sort | command tr '\n' ' ')"
+    command rm -rf "$scratch"
+    assert_equals "0" "$rc" "an all-in-tree prune succeeds"
+    assert_equals "./AGENTS.md " "$survivors" "an all-in-tree prune removes nothing"
 }
 
 # Test (#973): the prune runs as root, so an empty or relative LIBRARIAN_DIR
@@ -3290,6 +3314,7 @@ run_test test_default_permissions_has_librarian_read "Librarian grant: DEFAULT_P
 run_test test_librarian_tree_not_group_world_writable "Librarian tree: post-extraction chmod strips group/world write (#1020)"
 run_test test_librarian_escaping_symlinks_pruned "Librarian tree: symlinks escaping the tree are pruned, in-tree kept (#973)"
 run_test test_librarian_symlink_prune_order_independent "Librarian tree: prune result does not depend on find order"
+run_test test_librarian_symlink_prune_all_in_tree "Librarian tree: an all-in-tree prune succeeds and removes nothing"
 run_test test_librarian_symlink_prune_refuses_bad_dir "Librarian tree: prune refuses an empty/relative LIBRARIAN_DIR (#973)"
 run_test test_librarian_symlink_prune_fails_closed "Librarian tree: prune fails closed on find/realpath failure (#973)"
 
