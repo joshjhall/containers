@@ -431,6 +431,21 @@ test_drift_rejects_upstream_only_version() {
     assert_contains "$output" "rust/versions/1.1.0.json: upstream-only; re-mirror it" \
         "the pinned upstream-only file is still named"
     assert_not_contains "$output" "::warning::" "nothing is skipped as a live pin"
+
+    # #1323: a mirrored tool whose vendored copy has index.json but no
+    # versions/ directory at all. Every upstream version is upstream-only.
+    # Upstream-only files add to "drifted" but not to "compared" (as
+    # vendored-only ones do), so only the index pair is compared.
+    command rm -rf "$ven/tools/rust/versions"
+    rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "a mirrored tool with no vendored versions/ is drift"
+    assert_contains "$output" "rust/versions/1.0.0.json: upstream-only; re-mirror it" \
+        "the first upstream version is named"
+    assert_contains "$output" "rust/versions/1.1.0.json: upstream-only; re-mirror it" \
+        "the second upstream version is named"
+    assert_contains "$output" "1 entries compared, 0 skipped (vendored-only tool or live pin), 2 drifted" \
+        "each upstream-only version is counted as drift, none as compared"
     command rm -rf "$up" "$ven"
 }
 
