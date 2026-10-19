@@ -331,9 +331,9 @@ mod tests {
         };
         let short = &DIGEST[..8];
         let cases = [
-            // Absent beats an unparseable algorithm.
+            // Absent beats an unparsable algorithm.
             (with("md5", None), "absent"),
-            // Not-hex beats an unparseable or unwired algorithm.
+            // Not-hex beats an unparsable or unwired algorithm.
             (with("md5", Some("zzzz")), "not hex"),
             (with("sha384", Some("")), "not hex"),
             // The algorithm beats a wrong width.
