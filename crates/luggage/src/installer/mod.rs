@@ -865,11 +865,11 @@ mod tests {
             let mut resolved = pinless_tier_2_resolved();
             resolved.verification.algorithm = Some(algorithm.into());
             resolved.verification.pinned_checksum = Some("ab".repeat(32));
-            match (algorithm, installer.plan(&resolved).unwrap_err()) {
-                ("md5", LuggageError::Catalog(msg)) => assert!(msg.contains("md5"), "got: {msg}"),
-                ("sha384", LuggageError::NotImplemented(_)) => {}
-                (_, other) => panic!("{algorithm}: expected a pre-download refusal, got {other:?}"),
-            }
+            // The digest layer's own error, not merely the same variant: `plan()`
+            // has other `NotImplemented` sources that would otherwise satisfy it.
+            let expected = verify::sha::Algorithm::parse(Some(algorithm)).unwrap_err();
+            let err = installer.plan(&resolved).unwrap_err();
+            assert_eq!(format!("{err:?}"), format!("{expected:?}"), "{algorithm}");
         }
     }
 

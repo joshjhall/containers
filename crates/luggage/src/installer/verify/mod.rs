@@ -487,6 +487,44 @@ mod tests {
         }
     }
 
+    /// The width and algorithm refusals (#1311) hold the same contract at this
+    /// boundary: dispatch's exact error, in both postures.
+    #[test]
+    fn ensure_supported_refuses_an_unusable_pin_width_exactly_as_dispatch_does() {
+        let sha256 = super::sha::digest_hex(Some("sha256"), b"pinned").unwrap();
+        let cases = [
+            (None, "9f86d081".to_owned()),
+            (Some("sha512"), sha256.clone()),
+            (Some("md5"), sha256.clone()),
+            (Some("sha384"), sha256),
+        ];
+        for (algorithm, pin) in cases {
+            let v = Verification {
+                algorithm: algorithm.map(Into::into),
+                pinned_checksum: Some(pin),
+                ..verification(2)
+            };
+            let dispatched = dispatch(
+                "node",
+                "24.0.0",
+                "deadbeef",
+                "artifact.tar.gz",
+                &v,
+                &Substitutions::default(),
+                &DeadClient,
+            )
+            .unwrap_err();
+            for strict in [false, true] {
+                let guard = ensure_supported("node", "24.0.0", &v, strict).unwrap_err();
+                assert_eq!(
+                    format!("{guard:?}"),
+                    format!("{dispatched:?}"),
+                    "algorithm {algorithm:?}, strict={strict}"
+                );
+            }
+        }
+    }
+
     /// Strict mode demands verified downloads; a pinned checksum *is* one, so
     /// the guard must let tier 2 through rather than treating "stricter" as
     /// "fewer tiers". This is the case #849 exists for: the operator who hits
