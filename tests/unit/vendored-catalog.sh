@@ -420,6 +420,17 @@ test_drift_rejects_upstream_only_version() {
         "the failure names the upstream-only file"
     assert_contains "$output" "2 entries compared, 0 skipped (vendored-only tool or live pin), 1 drifted" \
         "exactly the one upstream-only file is counted"
+
+    # The live pin excuses only a vendored-only version; it must not excuse a
+    # pinned release that upstream holds but the vendored copy lacks.
+    command printf 'FROM debian\nARG RUST_VERSION=1.1.0\n' >"$ven/Dockerfile"
+    rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" \
+        --dockerfile "$ven/Dockerfile" --quiet 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "a live pin does not excuse an upstream-only version"
+    assert_contains "$output" "rust/versions/1.1.0.json: upstream-only; re-mirror it" \
+        "the pinned upstream-only file is still named"
+    assert_not_contains "$output" "::warning::" "nothing is skipped as a live pin"
     command rm -rf "$up" "$ven"
 }
 
