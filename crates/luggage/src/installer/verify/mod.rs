@@ -406,6 +406,34 @@ mod tests {
         ensure_supported("node", "24.0.0", &pinned_tier_2(), false).unwrap();
     }
 
+    /// The width check must accept a correct non-default width, not just
+    /// refuse wrong ones — in both postures, and exactly where dispatch would
+    /// go on to pass the matching artifact.
+    #[test]
+    fn ensure_supported_accepts_a_sha512_width_pin_on_a_sha512_entry() {
+        let pin = super::sha::digest_hex(Some("sha512"), b"pinned").unwrap();
+        let v = Verification {
+            algorithm: Some("sha512".into()),
+            pinned_checksum: Some(pin.clone()),
+            ..verification(2)
+        };
+        for strict in [false, true] {
+            ensure_supported("node", "24.0.0", &v, strict)
+                .unwrap_or_else(|e| panic!("strict={strict}: {e:?}"));
+        }
+        let warnings = dispatch(
+            "node",
+            "24.0.0",
+            &pin,
+            "artifact.tar.gz",
+            &v,
+            &Substitutions::default(),
+            &DeadClient,
+        )
+        .unwrap();
+        assert!(warnings.is_empty(), "got: {warnings:?}");
+    }
+
     /// A pinless tier-2 entry can never pass dispatch, so the guard must refuse
     /// it before the download — in both postures, since strict mode only ever
     /// adds refusals.

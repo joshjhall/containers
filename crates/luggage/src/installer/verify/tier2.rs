@@ -320,6 +320,46 @@ mod tests {
         }
     }
 
+    /// `require_pin` checks in a fixed order — absent, not hex, algorithm,
+    /// width — and each entry here fails two of them, so only the order
+    /// decides which error comes back. `verify` must agree on every one.
+    #[test]
+    fn require_pin_refusal_precedence_with_multiple_failures() {
+        let with = |algorithm: &str, pin: Option<&str>| Verification {
+            algorithm: Some(algorithm.into()),
+            ..pinned_verification(pin)
+        };
+        let short = &DIGEST[..8];
+        let cases = [
+            // Absent beats an unparseable algorithm.
+            (with("md5", None), "absent"),
+            // Not-hex beats an unparseable or unwired algorithm.
+            (with("md5", Some("zzzz")), "not hex"),
+            (with("sha384", Some("")), "not hex"),
+            // The algorithm beats a wrong width.
+            (with("sha384", Some(short)), "unwired"),
+            (with("md5", Some(short)), "unrecognised"),
+        ];
+        for (verification, want) in cases {
+            let guard = require_pin("node", "24.0.0", &verification).unwrap_err();
+            match (want, &guard) {
+                ("absent", LuggageError::Catalog(msg)) => {
+                    assert!(msg.contains("pinned_checksum"), "got: {msg}");
+                }
+                ("not hex", LuggageError::VerificationFailed { tier: 2, reason, .. }) => {
+                    assert!(reason.contains("not a hex digest"), "got: {reason}");
+                }
+                ("unwired", LuggageError::NotImplemented(_)) => {}
+                ("unrecognised", LuggageError::Catalog(msg)) => {
+                    assert!(msg.contains("md5"), "got: {msg}");
+                }
+                (_, other) => panic!("{want}: unexpected {other:?}"),
+            }
+            let dispatch = verify("node", "24.0.0", DIGEST, &verification).unwrap_err();
+            assert_eq!(format!("{dispatch:?}"), format!("{guard:?}"), "{want}");
+        }
+    }
+
     /// An empty pin is the boundary case of the check above: `is_hex_digest`
     /// rejects the empty string specifically so a blank constant cannot match
     /// a blank computed digest and pass.

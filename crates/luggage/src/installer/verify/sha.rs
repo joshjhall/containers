@@ -258,10 +258,54 @@ mod tests {
     /// refuse every correct pin for that algorithm.
     #[test]
     fn hex_len_matches_the_digest_each_algorithm_produces() {
-        for algo in [Algorithm::Sha256, Algorithm::Sha512] {
+        let mut checked = 0;
+        let mut next = successor(None);
+        while let Some(algo) = next {
             let hex = digest_hex(Some(algo.name()), b"abc").unwrap();
             assert_eq!(hex.len(), algo.hex_len(), "{algo:?}");
             assert_eq!(Algorithm::parse(Some(algo.name())).unwrap(), algo);
+            checked += 1;
+            next = successor(Some(algo));
+        }
+        assert_eq!(checked, 2, "the successor chain skipped a variant");
+    }
+
+    /// Walks every [`Algorithm`] variant in turn. The `match` is deliberately
+    /// wildcard-free: a newly wired variant fails to compile here until it is
+    /// placed in the chain, so the table test above cannot silently skip it.
+    fn successor(algo: Option<Algorithm>) -> Option<Algorithm> {
+        match algo {
+            None => Some(Algorithm::Sha256),
+            Some(Algorithm::Sha256) => Some(Algorithm::Sha512),
+            Some(Algorithm::Sha512) => None,
+        }
+    }
+
+    /// Every arm of `Algorithm::parse`, called directly. The unwired names
+    /// must stay `NotImplemented`: dropping one would silently demote a
+    /// likely-correct catalog upgrade to a generic `Catalog` error.
+    #[test]
+    fn algorithm_parse_decodes_every_arm() {
+        for (input, want) in [
+            (None, Algorithm::Sha256),
+            (Some("sha256"), Algorithm::Sha256),
+            (Some("SHA512"), Algorithm::Sha512),
+        ] {
+            assert_eq!(Algorithm::parse(input).unwrap(), want, "{input:?}");
+        }
+        for input in ["sha224", "sha384", "blake3", "BLAKE3"] {
+            match Algorithm::parse(Some(input)).unwrap_err() {
+                LuggageError::NotImplemented(_) => {}
+                other => panic!("{input}: expected NotImplemented, got {other:?}"),
+            }
+        }
+        for input in ["md5", "sha-256", ""] {
+            match Algorithm::parse(Some(input)).unwrap_err() {
+                LuggageError::Catalog(msg) => {
+                    assert!(msg.contains(&format!("`{input}`")), "{input}: got {msg}");
+                }
+                other => panic!("{input:?}: expected Catalog, got {other:?}"),
+            }
         }
     }
 
