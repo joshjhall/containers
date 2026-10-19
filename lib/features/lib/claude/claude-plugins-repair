@@ -103,9 +103,9 @@ fi
 # ${VAR}_DEFAULT / __UNSET__ sentinel pair that persist-feature-flags.sh bakes
 # into this file at build time; CLAUDE_LIBRARIAN_PLUGINS_DEFAULT lives there and
 # nowhere else. Without it, _resolve_override_list sees neither the runtime var
-# nor a build-time default, resolves to EMPTY, and the repair cheerfully reports
-# "(none — CLAUDE_LIBRARIAN_PLUGINS set to empty)" while repairing nothing —
-# the same class of silent no-op this script exists to eliminate.
+# nor a build-time default and falls back to the built-in list, silently
+# ignoring a build-time CLAUDE_LIBRARIAN_PLUGINS (including `none`) — the repair
+# would then act on plugins the operator deliberately left out.
 ENABLED_FEATURES_FILE="${ENABLED_FEATURES_FILE:-/etc/container/config/enabled-features.conf}"
 if [ -f "$ENABLED_FEATURES_FILE" ]; then
     # shellcheck source=/dev/null
@@ -147,7 +147,7 @@ run_check() {
 
     plugins=$(librarian_resolve_plugins)
     if [ -z "$plugins" ]; then
-        echo "    (none — CLAUDE_LIBRARIAN_PLUGINS set to empty)"
+        echo "    (none — CLAUDE_LIBRARIAN_PLUGINS=none)"
         [ "$failures" -eq 0 ]
         return
     fi

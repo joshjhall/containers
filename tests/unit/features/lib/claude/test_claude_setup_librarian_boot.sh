@@ -393,9 +393,10 @@ test_boot_succeeds_on_a_healthy_host() {
 }
 
 test_empty_plugin_list_is_not_a_failure() {
-    # CLAUDE_LIBRARIAN_PLUGINS deliberately set to empty: the operator wants no
-    # librarian plugins. Verification must not invent a failure from that.
-    PLUGINS_OVERRIDE=""
+    # CLAUDE_LIBRARIAN_PLUGINS=none: the operator wants no librarian plugins.
+    # Verification must not invent a failure from that. (Not "": an empty value
+    # now means unset and resolves to the defaults, #1316.)
+    PLUGINS_OVERRIDE="none"
     export PLUGINS_OVERRIDE
 
     local output

@@ -47,33 +47,94 @@
 # Component Override Helpers
 # ============================================================================
 
+# Classify one override tier's value (#1316). Prints exactly one word:
+#   unset — empty or whitespace-only: fall through to the next tier
+#   none  — the explicit opt-out: resolve to an empty list
+#   mixed — `none` alongside other entries: refuse, fall through (never partial)
+#   list  — an ordinary list: use it verbatim
+# Usage: kind=$(_classify_override_value "$value")
+_classify_override_value() {
+    local value item has_none=0 has_other=0
+    value=$(_trim "$1")
+    [ -z "$value" ] && {
+        command printf 'unset'
+        return 0
+    }
+    [ "$value" = "none" ] && {
+        command printf 'none'
+        return 0
+    }
+
+    local IFS=','
+    for item in $value; do
+        item=$(_trim "$item")
+        if [ "$item" = "none" ]; then
+            has_none=1
+        elif [ -n "$item" ]; then
+            has_other=1
+        fi
+    done
+    if [ "$has_none" -eq 1 ] && [ "$has_other" -eq 1 ]; then
+        command printf 'mixed'
+    elif [ "$has_none" -eq 1 ]; then
+        command printf 'none'
+    else
+        command printf 'list'
+    fi
+}
+
 # Resolve a component override list from runtime env, build-time default, or fallback.
-# Uses __UNSET__ sentinel to distinguish "not specified" from "set to empty".
+#
+# Tiers, first match wins: runtime ${var}, then build-time ${var}_DEFAULT
+# (persist-feature-flags.sh writes the __UNSET__ sentinel when the build arg was
+# unset or empty), then the built-in defaults. `none` is the ONLY way to ask for
+# no defaults; it means the same at build time and runtime (#1316). An empty
+# value is treated as unset at every tier — build time cannot tell "not passed"
+# from "passed empty", so runtime must not give "" a different meaning.
+# Warnings go to stderr: callers capture stdout with $().
 # Usage: _resolve_override_list "CLAUDE_PLUGINS" "default1,default2"
-# Output: the resolved list string (may be empty)
+# Output: the resolved list string (empty for `none`)
 # Returns: 0 if an explicit override is active, 1 if using defaults
 _resolve_override_list() {
     local var_name="$1"
     local defaults="$2"
     local default_var="${var_name}_DEFAULT"
 
-    # Runtime env var takes priority
     local runtime_val="${!var_name:-}"
     local default_val="${!default_var:-}"
+    [ "$default_val" = "__UNSET__" ] && default_val=""
 
-    # Check if runtime env var is explicitly set (even to empty)
-    if [ -n "${!var_name+x}" ]; then
-        echo "$runtime_val"
-        return 0
-    fi
+    local tier_var tier_val kind
+    for tier_var in "$var_name" "$default_var"; do
+        if [ "$tier_var" = "$var_name" ]; then
+            tier_val="$runtime_val"
+        else
+            tier_val="$default_val"
+        fi
+        kind=$(_classify_override_value "$tier_val")
+        case "$kind" in
+            none)
+                echo ""
+                return 0
+                ;;
+            list)
+                echo "$tier_val"
+                return 0
+                ;;
+            mixed)
+                echo "  ⚠ ${tier_var}=${tier_val} mixes 'none' with other entries — ignored" >&2
+                ;;
+            unset)
+                # Only a set-but-empty RUNTIME value warns: it is the spelling
+                # that used to mean "no defaults" and now does not.
+                if [ "$tier_var" = "$var_name" ] && [ -n "${!var_name+x}" ]; then
+                    echo "  ⚠ ${var_name} is empty — treated as unset; use ${var_name}=none to install no defaults" >&2
+                fi
+                ;;
+        esac
+    done
 
-    # Check build-time default (sentinel means "not specified at build time")
-    if [ "$default_val" != "__UNSET__" ]; then
-        echo "$default_val"
-        return 0
-    fi
-
-    # Neither set — use built-in defaults
+    # No tier resolved — use built-in defaults
     echo "$defaults"
     return 1
 }
@@ -121,6 +182,7 @@ _RESOLVED_FROM_FILE=$(mktemp 2>/dev/null || echo "/tmp/.resolved-from-$$")
 # Checks ${var_name}_FILE (runtime) then ${var_name}_FILE_DEFAULT (build-time).
 # If a valid JSON array file is found, outputs it and writes "file" to _RESOLVED_FROM_FILE.
 # Otherwise falls through to _resolve_override_list and writes "env" or "default".
+# A file holding [] is a valid "no defaults" spelling, alongside the `none` value.
 # Usage: result=$(_resolve_override_list_or_file "CLAUDE_PLUGINS" "default1,default2")
 #        RESOLVED_FROM=$(cat "$_RESOLVED_FROM_FILE")
 # Output: resolved list (JSON array if from file, CSV otherwise)
@@ -510,7 +572,8 @@ DEFAULT_LIBRARIAN_PLUGINS="dev-core,review-audit,workflow"
 # librarian_resolve_plugins — echo the CSV plugin list this host should have.
 # Honors CLAUDE_LIBRARIAN_PLUGINS (and its _FILE variant) exactly as the boot
 # path does, because it IS the boot path. May legitimately echo empty, which
-# means the operator set the variable to empty and wants no librarian plugins.
+# means the operator set the variable to `none` (or a _FILE holding []) and
+# wants no librarian plugins.
 librarian_resolve_plugins() {
     local result
     result=$(_resolve_override_list_or_file "CLAUDE_LIBRARIAN_PLUGINS" "$DEFAULT_LIBRARIAN_PLUGINS") || true
@@ -586,7 +649,7 @@ librarian_install_plugins() {
 
     plugins=$(librarian_resolve_plugins)
     if [ -z "$plugins" ]; then
-        echo "    (none — CLAUDE_LIBRARIAN_PLUGINS set to empty)"
+        echo "    (none — CLAUDE_LIBRARIAN_PLUGINS=none)"
         return 0
     fi
 

@@ -112,6 +112,21 @@ CLAUDE_SKILLS_FILE_DEFAULT="/etc/skills.json"' "$got" \
         "Build-time values are written verbatim"
 }
 
+# `none` is the only build-time spelling for "no defaults" (#1316): it must reach
+# the conf verbatim for the resolver to interpret. An empty build arg is
+# indistinguishable from an unset one, so it must map to the sentinel.
+test_none_passes_through_empty_maps_to_sentinel() {
+    _run_persist ENABLED_FEATURES_CONF="$(_conf)" \
+        CLAUDE_PLUGINS=none \
+        CLAUDE_MCPS=""
+
+    local got
+    got=$(command grep -E '^(CLAUDE_PLUGINS|CLAUDE_MCPS)_DEFAULT=' "$(_conf)")
+    assert_equals 'CLAUDE_PLUGINS_DEFAULT="none"
+CLAUDE_MCPS_DEFAULT="__UNSET__"' "$got" \
+        "none persists verbatim; empty persists as __UNSET__"
+}
+
 test_creates_parent_dir_and_sets_mode() {
     _run_persist ENABLED_FEATURES_CONF="$(_conf)"
 
@@ -139,6 +154,7 @@ test_default_path_unchanged() {
 run_test test_clean_env_writes_exact_defaults "Clean env: exact default key set"
 run_test test_dead_claude_agents_keys_not_persisted "CLAUDE_AGENTS(_FILE) not persisted"
 run_test test_build_values_pass_through "Build-time values written verbatim"
+run_test test_none_passes_through_empty_maps_to_sentinel "none persists verbatim; empty maps to __UNSET__"
 run_test test_creates_parent_dir_and_sets_mode "Creates parent dir, mode 644"
 run_test test_default_path_unchanged "Default path is /etc/container/config"
 
