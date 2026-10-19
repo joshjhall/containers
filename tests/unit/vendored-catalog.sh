@@ -418,7 +418,8 @@ test_drift_rejects_upstream_only_version() {
     assert_equals "1" "$rc" "an upstream-only version is drift"
     assert_contains "$output" "rust/versions/1.1.0.json: upstream-only; re-mirror it" \
         "the failure names the upstream-only file"
-    assert_contains "$output" "1 drifted" "exactly the one upstream-only file is counted"
+    assert_contains "$output" "2 entries compared, 0 skipped (vendored-only tool or live pin), 1 drifted" \
+        "exactly the one upstream-only file is counted"
     command rm -rf "$up" "$ven"
 }
 
@@ -434,6 +435,7 @@ test_drift_rejects_upstream_only_index() {
         >"$up/tools/gcc/versions/1.0.0.json"
     output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
     assert_equals "0" "$rc" "an upstream-only tool is not drift"
+    assert_not_contains "$output" "gcc" "an upstream-only tool is not reported at all"
 
     command rm -f "$ven/tools/rust/index.json"
     rc=0
@@ -441,7 +443,28 @@ test_drift_rejects_upstream_only_index() {
     assert_equals "1" "$rc" "a mirrored tool missing its index.json is drift"
     assert_contains "$output" "rust/index.json: upstream-only; re-mirror it" \
         "the failure names the missing index"
+    assert_contains "$output" "1 entries compared, 0 skipped (vendored-only tool or live pin), 1 drifted" \
+        "the missing index is counted once"
+
+    # The mirror image: a vendored index.json with no upstream counterpart.
+    command mv "$up/tools/rust/index.json" "$ven/tools/rust/index.json"
+    rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "a vendored-only index.json is drift"
+    assert_contains "$output" "rust/index.json: vendored-only; publish it upstream" \
+        "the failure names the vendored-only index"
     command rm -rf "$up" "$ven"
+}
+
+test_drift_help_prints_usage_and_exit() {
+    # --help prints a hand-maintained sed range of the header; a header edit
+    # that forgets to widen it silently drops the Usage/Exit lines.
+    local output rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --help 2>&1)" || rc=$?
+    assert_equals "0" "$rc" "--help exits 0"
+    assert_contains "$output" "# Usage: check-catalog-drift.sh --vendored" "--help prints the usage line"
+    assert_contains "$output" "# Exit:  0 clean, 1 drift found, 2 usage/IO error." "--help prints the exit-code line"
+    assert_not_contains "$output" "set -uo pipefail" "--help stops at the end of the header"
 }
 
 # _vendored_only_pair <up> <ven> <pin>
@@ -716,7 +739,8 @@ run_test "test_drift_still_catches_install_data" "drift check still catches inst
 run_test "test_drift_ignores_scanner_activity" "drift check ignores scanner activity, not other index fields"
 run_test "test_drift_gates_the_support_floor" "drift check gates minimum_recommended, not default_version"
 run_test "test_drift_rejects_upstream_only_version" "drift check rejects an upstream-only version, naming the file"
-run_test "test_drift_rejects_upstream_only_index" "drift check rejects a missing index.json but not an upstream-only tool"
+run_test "test_drift_rejects_upstream_only_index" "drift check rejects a one-sided index.json but not an upstream-only tool"
+run_test "test_drift_help_prints_usage_and_exit" "drift --help prints the whole header, usage and exit codes included"
 run_test "test_drift_allows_live_pin_vendored_only" "drift check allows the live pin ahead of upstream, with a warning"
 run_test "test_drift_rejects_non_pin_vendored_only" "drift check rejects a vendored-only version that is not the live pin"
 run_test "test_drift_rejects_vendored_only_without_pin_source" "drift check rejects vendored-only versions when no pin source is given"

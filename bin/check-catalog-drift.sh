@@ -30,8 +30,9 @@
 #     skipped.
 #   - The reverse direction is drift too: a version file (or index.json) that
 #     upstream holds for a tool the vendored catalog mirrors, but the vendored
-#     copy lacks, fails the check (#1320). Upstream-only TOOLS are not walked:
-#     the vendored catalog is deliberately a subset of containers-db.
+#     copy lacks, fails the check (#1320); so does an index.json present on
+#     only one side. Upstream-only TOOLS are not walked: the vendored catalog
+#     is deliberately a subset of containers-db.
 #   - Index files are compared field-by-field: available[] and
 #     default_version describe what THIS catalog holds and legitimately differ.
 #     minimum_recommended is NOT exempt: luggage enforces it as the support
@@ -82,7 +83,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -h | --help)
-            command sed -n '2,57p' "$0"
+            command sed -n '2,58p' "$0"
             exit 0
             ;;
         *)
@@ -236,6 +237,9 @@ for tool_dir in "$VENDORED"/tools/*/; do
     elif [ -f "$upstream_tool/index.json" ]; then
         failures=$((failures + 1))
         add_report "  $tool/index.json: upstream-only; re-mirror it from containers-db"
+    elif [ -f "$tool_dir/index.json" ]; then
+        failures=$((failures + 1))
+        add_report "  $tool/index.json: vendored-only; publish it upstream (containers-db) or remove it"
     fi
 
     # Upstream-only versions of a mirrored tool. The loop below walks the
