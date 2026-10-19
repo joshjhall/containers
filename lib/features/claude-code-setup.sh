@@ -225,6 +225,11 @@ if ! find "$librarian_root" -type l -print0 >"$librarian_links"; then
     rm -f "$librarian_links"
     exit 1
 fi
+# Resolve every link before deleting any. Deleting while walking made the
+# result depend on find's order: once an escaping link (.codegraph) was gone,
+# a link chained through it (chain -> .codegraph) resolved to the missing
+# in-tree path and survived.
+librarian_escaping=()
 while IFS= read -r -d '' link; do
     resolved="$(realpath -m -- "$link")" || resolved=""
     if [ -z "$resolved" ]; then
@@ -234,13 +239,14 @@ while IFS= read -r -d '' link; do
     fi
     case "$resolved" in
         "$librarian_root"/*) ;;
-        *)
-            rm -f -- "$link"
-            log_message "pruned librarian symlink escaping the tree: ${link}"
-            ;;
+        *) librarian_escaping+=("$link") ;;
     esac
 done <"$librarian_links"
 rm -f "$librarian_links"
+for link in "${librarian_escaping[@]}"; do
+    rm -f -- "$link"
+    log_message "pruned librarian symlink escaping the tree: ${link}"
+done
 # END librarian-symlink-prune
 rm -rf "$librarian_tmp"
 log_message "✓ librarian verified + installed to ${LIBRARIAN_DIR} @ ${LIBRARIAN_REF}"
