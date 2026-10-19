@@ -148,9 +148,25 @@ the base-images tree with
 ```text
 newest patch of each minor, minimum_recommended floor and up
   x  support_matrix `supported` tuples  ∩  base-images/<os>/<osv>/<arch>/Dockerfile
-  -  cells that already have a passing tested[] row
+  -  cells that already have a passing tested[] row in published containers-db
 ```
 
+- **Evidence from published containers-db** (#1319). Versions and claims come
+  from the vendored catalog. The passing `tested[]` rows that remove a cell come
+  from a `joshjhall/containers-db` checkout (`_db`), plus the `tools/` tree of
+  each still-open `evidence/batch/*` PR. The previous run's ingest PR is often
+  still waiting to auto-merge when the next push resolves its matrix. The
+  sources are passed colon-separated as `EVIDENCE_TESTED_SOURCE`, and their
+  rows are unioned. Only same-repo PRs authored by the ingest identity and
+  under 24 hours old count (`evidence_open_prs`). A branch name alone can come
+  from any fork, and a stuck PR must not hide its cells forever. The vendored
+  snapshot never receives `tested[]` rows, and the drift gate ignores them, so
+  judging against it made every push re-test the same oldest ~200 cells. If
+  any source can't be fetched, or holds no readable version files, the step
+  fails. It does not fall back to "everything pending". This is stricter than `luggage reconcile` (below), which warns and
+  uses local rows. A wrong report only costs a warning. A wrong matrix costs up
+  to 200 runners re-testing covered cells. With the variable unset (unit tests,
+  local runs), the vendored `tested[]` decides.
 - **Newest patch per minor**, because that's what `RUST_VERSION=X.Y` installs.
   Superseded patches stay installable but aren't re-tested.
 - **Pending only.** Re-running a covered cell is a no-op at ingest, and the full
