@@ -852,6 +852,29 @@ mod tests {
         }
     }
 
+    /// The plan-time width check must let a correct non-default width
+    /// through, in both postures — a guard that only knew 64 would refuse
+    /// every sha512 entry before it was ever downloaded. `InstallPlan` does
+    /// not carry the algorithm or pin (dispatch reads them from `resolved`),
+    /// so the tier is all there is to check in the plan.
+    #[test]
+    fn sha512_width_pin_on_sha512_entry_is_planned() {
+        let mut resolved = pinless_tier_2_resolved();
+        resolved.verification.algorithm = Some("sha512".into());
+        resolved.verification.pinned_checksum = Some("ab".repeat(64));
+
+        for strict in [false, true] {
+            let installer = Installer::with_options(InstallerOptions {
+                install_system_packages: false,
+                require_verified_downloads: strict,
+                ..InstallerOptions::default()
+            });
+            let plan =
+                installer.plan(&resolved).unwrap_or_else(|e| panic!("strict={strict}: {e:?}"));
+            assert_eq!(plan.verification_tier, 2, "strict={strict}");
+        }
+    }
+
     /// The pin's width depends on the algorithm, so a tier-2 entry whose
     /// algorithm the digest layer cannot compute is refused at plan time with
     /// that layer's own error rather than once the download has started.
