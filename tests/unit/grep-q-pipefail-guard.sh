@@ -138,8 +138,10 @@ pipe_grep_q_sites() {
             # walk: track the open piped groups of view v through a masked
             # line, and report a grep -q at any command start inside one, not
             # just the first (`producer | { read -r h; grep -q x; }`). gs[v]
-            # is the stack of openers, innermost last: `{`, `(`, or c for a
-            # `case` inside a group. A `{` word or `(` at a command start
+            # is the stack of openers, innermost last: `{`, `(`, c for a
+            # `case` inside a group, or l for a while/until/for/select loop
+            # that is piped into or opened inside a group, open until its
+            # `done` (#1334). A `{` word or `(` at a command start
             # opens a group: piped if a pipe precedes it, nested if a piped
             # group is already open. `}` at a command start closes the
             # innermost group. A `)` closes it only when it is a `(` group,
@@ -162,6 +164,12 @@ pipe_grep_q_sites() {
                             if (gs[v] != "") gs[v] = substr(gs[v], 1, length(gs[v]) - 1)
                             cs = 0; continue
                         }
+                        # A piped loop pushes l, because its body reads the
+                        # pipe. `do` keeps the command start for the first
+                        # word of the body, and `done` pops l.
+                        if ((pipe || gs[v] != "") && substr(s, i) ~ /^(while|until|for|select)([[:space:](]|$)/) { gs[v] = gs[v] "l"; pipe = 0 }
+                        if (substr(s, i) ~ /^do([[:space:]]|$)/) { i++; continue }
+                        if (top == "l" && substr(s, i) ~ /^done([[:space:];&|)<>]|$)/) gs[v] = substr(gs[v], 1, length(gs[v]) - 1)
                         if (gs[v] != "" && substr(s, i) ~ ("^" grep_q)) report(f, n)
                         # Inside a piped group, `case` pushes c so the `)`
                         # of each of its arms closes nothing; `esac` pops it.
@@ -241,9 +249,10 @@ pipe_grep_q_sites() {
             # A separator inside a quoted or substituted prefix word
             # (`A="x;y"`, `2>&1`) is masked out of view 2 before this regex
             # runs, and walk applies it at every command start inside a
-            # piped group (#1322). KNOWN MISS, pinned as fixture 151: walk
-            # tracks only { } and ( ) groups, so a grep -q inside a piped
-            # while/for/if body is not seen.
+            # piped group or loop body (#1322, #1334). KNOWN MISS, pinned as
+            # fixture 208: walk does not track if, so a grep -q in the then or
+            # else body of an if piped into at top level is not seen (inside a
+            # piped group it is; #1335).
             BEGIN {
                 grep_q = "([(][[:space:]]*)*([^|;&[:space:]#][^|;&[:space:]]*[[:space:]]+)*(/usr/bin/|/bin/)?[ef]?grep([[:space:]]+[^|;&[:space:]#][^|;&[:space:]]*)*[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|$)"
             }
@@ -422,7 +431,7 @@ test_scanner_detects_known_shapes() {
         command printf '    { read -r h; %s -q x f; }\n' "$g"                                               # 148 flag
         command printf 'producer %s { # )\n' "$p"                                                           # 149
         command printf '    read -r h; %s -q x f; }\n' "$g"                                                 # 150 flag
-        command printf 'producer %s while read -r l; do %s -q x f; done\n' "$p" "$g"                        # 151 known miss
+        command printf 'producer %s while read -r l; do %s -q x f; done\n' "$p" "$g"                        # 151 flag
         command printf 'producer %s { case $x in a) :;; esac; %s -q x f; }\n' "$p" "$g"                     # 152 flag
         command printf 'producer %s { { :; }; %s -q x f; }\n' "$p" "$g"                                     # 153 flag
         command printf 'producer %s { read -r h < <(cmd); %s -q x f; }\n' "$p" "$g"                         # 154 flag
@@ -465,11 +474,39 @@ test_scanner_detects_known_shapes() {
         command printf 'producer %s ( case $x in a) case $y in b) :;; esac;; esac; %s -q x f )\n' "$p" "$g" # 191 flag
         command printf 'producer %s ( ( case $x in a) :;; esac); %s -q x f )\n' "$p" "$g"                   # 192 flag
         command printf 'producer %s ( case $x in a) :;; esac); %s -q x f\n' "$p" "$g"                       # 193
+        command printf 'producer %s while read -r l; do\n' "$p"                                             # 194
+        command printf '    %s -q x f\n' "$g"                                                               # 195 flag
+        command printf 'done\n'                                                                             # 196
+        command printf '%s -q x f\n' "$g"                                                                   # 197
+        command printf 'producer %s while read -r l; do :; done; %s -q x f\n' "$p" "$g"                     # 198
+        command printf 'while read -r l; do %s -q x f; done\n' "$g"                                         # 199
+        command printf 'producer %s for x in a b; do %s -q x f; done\n' "$p" "$g"                           # 200 flag
+        command printf 'producer %s until c; do %s -q x f; done\n' "$p" "$g"                                # 201 flag
+        command printf 'producer %s { while c; do :; done; %s -q x f; }\n' "$p" "$g"                        # 202 flag
+        command printf 'producer %s while read -r l; do { %s -q x f; }; done\n' "$p" "$g"                   # 203 flag
+        command printf 'producer %s while read -r l; do { :; }; %s -q x f; done\n' "$p" "$g"                # 204 flag
+        command printf 'producer %s select x in a; do %s -q x f; done\n' "$p" "$g"                          # 205 flag
+        command printf 'producer %s while c; do while d; do :; done; %s -q x f; done\n' "$p" "$g"           # 206 flag
+        command printf 'producer %s while c; do while d; do :; done; done; %s -q x f\n' "$p" "$g"           # 207
+        command printf 'producer %s if c; then %s -q x f; fi\n' "$p" "$g"                                   # 208 known miss (#1335)
+        command printf 'producer %s while c; do case $x in a) :;; esac; %s -q x f; done\n' "$p" "$g"        # 209 flag
+        command printf 'producer %s while c; do case $x in a) :;; esac; done; %s -q x f\n' "$p" "$g"        # 210
+        command printf 'producer %s while c; do ( :; ); done; %s -q x f\n' "$p" "$g"                        # 211
+        command printf 'producer %s while c\n' "$p"                                                         # 212
+        command printf 'do\n'                                                                               # 213
+        command printf '    %s -q x f\n' "$g"                                                               # 214 flag
+        command printf 'done\n'                                                                             # 215
+        command printf '%s -q x f\n' "$g"                                                                   # 216
+        command printf 'producer %s while %s -q x f; do :; done\n' "$p" "$g"                                # 217 flag
+        command printf 'producer %s ( while c; do :; done ); %s -q x f\n' "$p" "$g"                         # 218
+        command printf 'producer %s while c; do :; done < f; %s -q x f\n' "$p" "$g"                         # 219
+        command printf 'producer %s while c; do %s -q x f; done %s cat\n' "$p" "$g" "$p"                    # 220 flag
+        command printf 'producer %s while c; do donex; %s -q x f; done\n' "$p" "$g"                         # 221 flag
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:59 fixture.sh:60 fixture.sh:64 fixture.sh:66 fixture.sh:68 fixture.sh:70 fixture.sh:71 fixture.sh:73 fixture.sh:75 fixture.sh:77 fixture.sh:79 fixture.sh:81 fixture.sh:84 fixture.sh:87 fixture.sh:91 fixture.sh:93 fixture.sh:95 fixture.sh:96 fixture.sh:97 fixture.sh:98 fixture.sh:99 fixture.sh:100 fixture.sh:101 fixture.sh:103 fixture.sh:109 fixture.sh:110 fixture.sh:113 fixture.sh:116 fixture.sh:117 fixture.sh:118 fixture.sh:120 fixture.sh:124 fixture.sh:125 fixture.sh:126 fixture.sh:127 fixture.sh:128 fixture.sh:129 fixture.sh:130 fixture.sh:132 fixture.sh:133 fixture.sh:135 fixture.sh:136 fixture.sh:137 fixture.sh:138 fixture.sh:141 fixture.sh:144 fixture.sh:145 fixture.sh:146 fixture.sh:148 fixture.sh:150 fixture.sh:152 fixture.sh:153 fixture.sh:154 fixture.sh:155 fixture.sh:161 fixture.sh:164 fixture.sh:166 fixture.sh:167 fixture.sh:168 fixture.sh:169 fixture.sh:170 fixture.sh:173 fixture.sh:178 fixture.sh:179 fixture.sh:184 fixture.sh:185 fixture.sh:186 fixture.sh:191 fixture.sh:192 " "$got" \
-        "scanner flags same-line, |&, prefixed (incl. command + path, any leading words: env assignments however quoted or substituted, +=, env, !, time; and { or ( group openers, alone, nested, combined, after |&, or on their own line, even with a comment, before the consumer), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join and after \$(...)), a comment ending in \\ after a quoted or escaped #, a site after a quote closed on a later line (incl. across a \\ join, and a pipe plus comment closing it, double or single), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\, or touching | or |&) after the pipe, an escaped quote before it, blank and comment lines before the consumer, a consumer that pipes on) pipes into $g -q; over-reports a word-start # after a \\ join, a quoted trailing |#, and a $g -q run by another command (xargs) (the documented cost); flags a ; or & a prefix word quotes, substitutes or redirects (A=\"x;y\", single-quoted, \${...}, backticks, an escaped ;, a quoted \$(...) holding a quote, A=\$(a; b), 2>&1, &>f), and a $g -q at any command inside a piped { } or ( ) group (incl. one opened on an earlier line or after a pipe that ends one, past a quoted brace, a ) in a comment, a nested group, a process substitution or an array assignment, a \$(...) or array closed on a later line, a case arm in either group (incl. one spanning lines, a nested case, and an esac a ) follows), and a then or else body); misses a $g -q in a piped while body (the documented known miss); ignores a $g -q after a piped group closes (incl. a nested one, one closed right after esac, one closed with a redirect, and one after a pipe that && ends), one in an unpiped group (incl. after a case on one line or several), ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q (incl. after a group or an assignment-prefixed command), a {grep word that opens no group, a grep after a word-start # comment, and non-q greps (incl. egrep/fgrep, and inside a group)"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:59 fixture.sh:60 fixture.sh:64 fixture.sh:66 fixture.sh:68 fixture.sh:70 fixture.sh:71 fixture.sh:73 fixture.sh:75 fixture.sh:77 fixture.sh:79 fixture.sh:81 fixture.sh:84 fixture.sh:87 fixture.sh:91 fixture.sh:93 fixture.sh:95 fixture.sh:96 fixture.sh:97 fixture.sh:98 fixture.sh:99 fixture.sh:100 fixture.sh:101 fixture.sh:103 fixture.sh:109 fixture.sh:110 fixture.sh:113 fixture.sh:116 fixture.sh:117 fixture.sh:118 fixture.sh:120 fixture.sh:124 fixture.sh:125 fixture.sh:126 fixture.sh:127 fixture.sh:128 fixture.sh:129 fixture.sh:130 fixture.sh:132 fixture.sh:133 fixture.sh:135 fixture.sh:136 fixture.sh:137 fixture.sh:138 fixture.sh:141 fixture.sh:144 fixture.sh:145 fixture.sh:146 fixture.sh:148 fixture.sh:150 fixture.sh:151 fixture.sh:152 fixture.sh:153 fixture.sh:154 fixture.sh:155 fixture.sh:161 fixture.sh:164 fixture.sh:166 fixture.sh:167 fixture.sh:168 fixture.sh:169 fixture.sh:170 fixture.sh:173 fixture.sh:178 fixture.sh:179 fixture.sh:184 fixture.sh:185 fixture.sh:186 fixture.sh:191 fixture.sh:192 fixture.sh:195 fixture.sh:200 fixture.sh:201 fixture.sh:202 fixture.sh:203 fixture.sh:204 fixture.sh:205 fixture.sh:206 fixture.sh:209 fixture.sh:214 fixture.sh:217 fixture.sh:220 fixture.sh:221 " "$got" \
+        "scanner flags same-line, |&, prefixed (incl. command + path, any leading words: env assignments however quoted or substituted, +=, env, !, time; and { or ( group openers, alone, nested, combined, after |&, or on their own line, even with a comment, before the consumer), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join and after \$(...)), a comment ending in \\ after a quoted or escaped #, a site after a quote closed on a later line (incl. across a \\ join, and a pipe plus comment closing it, double or single), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\, or touching | or |&) after the pipe, an escaped quote before it, blank and comment lines before the consumer, a consumer that pipes on) pipes into $g -q; over-reports a word-start # after a \\ join, a quoted trailing |#, and a $g -q run by another command (xargs) (the documented cost); flags a ; or & a prefix word quotes, substitutes or redirects (A=\"x;y\", single-quoted, \${...}, backticks, an escaped ;, a quoted \$(...) holding a quote, A=\$(a; b), 2>&1, &>f), and a $g -q at any command inside a piped { } or ( ) group (incl. one opened on an earlier line or after a pipe that ends one, past a quoted brace, a ) in a comment, a nested group, a process substitution or an array assignment, a \$(...) or array closed on a later line, a case arm in either group (incl. one spanning lines, a nested case, and an esac a ) follows), and a then or else body), and one in a piped while, until, for or select body reached through do or its condition (incl. one spanning lines, a do on its own line, a done that pipes on, a donex word, a group after do, one after a group, case or nested loop the body closes, and a loop nested in a piped group); misses a $g -q in a then body of an if piped into at top level (the documented known miss, #1335); ignores a $g -q after a piped group closes (incl. a nested one, one closed right after esac, one closed with a redirect, and one after a pipe that && ends) or after a piped loop's done (incl. one whose body holds an inner loop, a case or a ( ) group, one closed with a redirect, and one closed inside a piped ( ) group), one in an unpiped group (incl. after a case on one line or several) or unpiped loop, ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q (incl. after a group or an assignment-prefixed command), a {grep word that opens no group, a grep after a word-start # comment, and non-q greps (incl. egrep/fgrep, and inside a group)"
 }
 
 # ---------------------------------------------------------------------------
