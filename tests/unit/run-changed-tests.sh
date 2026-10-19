@@ -715,6 +715,62 @@ run_test test_collect_dedupes_overlapping_inputs "runner main block runs each ov
 run_test test_collect_sets_run_all "runner main block sets RUN_ALL and stops at ALL (#1031)"
 run_test test_collect_go_test_sentinel "runner main block handles the GO_TEST sentinel (#1031)"
 run_test test_lefthook_mapping_emits_policy_suites "lefthook.yml maps to every lefthook policy suite (#1075)"
+# ============================================================================
+# lib/features/lib/<subdir>/ sibling suites (issue #1331)
+# ============================================================================
+# The arm returned the first tests/unit/features/*<subdir>*.sh match, so the
+# suites split out under tests/unit/features/lib/<subdir>/ never ran at push
+# time for a change to the very file they test.
+
+test_feature_lib_mapping_emits_mirrored_suites() {
+    local out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # The exact sorted set, by name: a dropped or substituted suite changes it.
+    out=$(map_to_test "lib/features/lib/claude/claude-plugin-lib.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/features/claude-code-setup.sh
+$TESTS_DIR/unit/features/lib/claude/startup-scripts.sh
+$TESTS_DIR/unit/features/lib/claude/test_claude_override_resolution.sh
+$TESTS_DIR/unit/features/lib/claude/test_claude_plugins_repair.sh
+$TESTS_DIR/unit/features/lib/claude/test_claude_setup_install.sh
+$TESTS_DIR/unit/features/lib/claude/test_claude_setup_librarian_boot.sh" "$out" \
+        "a claude lib file must map to the parent suite and every mirrored suite"
+}
+
+test_feature_lib_mapping_mirrors_a_second_subdir() {
+    local out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # The mirror glob keys on the subdir, not on `claude`: op-cli's mirrored
+    # suites must ride along with its existing first-match suite.
+    out=$(map_to_test "lib/features/lib/op-cli/50-1password-setup.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/features/lib/op-cli/45-op-secrets.sh
+$TESTS_DIR/unit/features/op-cli.sh" "$out" \
+        "an op-cli lib file must map to every mirrored op-cli suite"
+}
+
+test_feature_lib_toplevel_file_has_no_mirror_glob() {
+    local out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # No subdir: map to the same-named mirror only, never a subdir's suites.
+    out=$(map_to_test "lib/features/lib/install-github-release.sh")
+    assert_equals "$TESTS_DIR/unit/features/lib/install-github-release.sh" "$out" \
+        "a top-level lib file maps to exactly its same-named mirrored suite"
+}
+
+run_test test_feature_lib_mapping_emits_mirrored_suites "feature lib file maps to its mirrored lib/<subdir> suites (#1331)"
+run_test test_feature_lib_mapping_mirrors_a_second_subdir "feature lib mirror glob works for a second subdir (op-cli) (#1331)"
+run_test test_feature_lib_toplevel_file_has_no_mirror_glob "top-level feature lib file maps to its same-named mirror only (#1331)"
 run_test test_lefthook_mapping_follows_glob "lefthook.yml mapping follows the lefthook-*.sh glob (#1075)"
 run_test test_devcontainer_mapping_root_scripts "devcontainer root scripts map to their suites (#1067)"
 run_test test_devcontainer_mapping_unmatched_is_silent "uncovered devcontainer script maps to no test path (#1067)"

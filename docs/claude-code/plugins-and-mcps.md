@@ -81,6 +81,11 @@ docker run -e CLAUDE_PLUGINS="commit-commands,context7" ...
 | Set to `""`               | Same as unset (a runtime `""` logs a warning)        |
 | `none` mixed with entries | Warning; the value is ignored (next tier or default) |
 
+A mixed value is skipped and resolution continues at the **next tier**. For a
+runtime value that is the build-time value, then the built-in defaults. So a
+runtime `none,foo` over a build-time `none` still installs nothing. Empty items
+do not count as entries: `none,` and `, none` mean `none`.
+
 `none` works the same as a build arg and at runtime. An empty value is treated
 as unset at both: build time cannot distinguish an empty `--build-arg` from an
 unpassed one, and compose files often forward an unset host variable as `""`.

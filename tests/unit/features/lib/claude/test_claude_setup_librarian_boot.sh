@@ -407,6 +407,38 @@ test_empty_plugin_list_is_not_a_failure() {
     assert_not_contains "$output" "✗" "no plugin is reported as failing"
 }
 
+test_empty_value_warns_once_per_boot() {
+    # A boot resolves CLAUDE_LIBRARIAN_PLUGINS twice — install, then verify —
+    # and each resolve used to print the set-but-empty warning (#1331). Count
+    # the lines: a substring check passes on the duplicate too.
+    PLUGINS_OVERRIDE=""
+    export PLUGINS_OVERRIDE
+
+    local output count
+    output=$(_run_boot)
+    unset PLUGINS_OVERRIDE
+
+    count=$(command printf '%s\n' "$output" |
+        command grep -c "CLAUDE_LIBRARIAN_PLUGINS is empty" || true)
+    assert_equals "1" "$count" "the empty-value warning prints exactly once per boot"
+    assert_contains "$output" "BOOT_RC=0" "an empty value boots the defaults clean"
+}
+
+test_mixed_none_value_warns_once_per_boot() {
+    # The mixed-value warning is a separate resolver branch from the empty one;
+    # it doubled the same way (#1331).
+    PLUGINS_OVERRIDE="none,foo"
+    export PLUGINS_OVERRIDE
+
+    local output count
+    output=$(_run_boot)
+    unset PLUGINS_OVERRIDE
+
+    count=$(command printf '%s\n' "$output" |
+        command grep -c "mixes 'none' with other entries" || true)
+    assert_equals "1" "$count" "the mixed-value warning prints exactly once per boot"
+}
+
 test_denied_plugin_is_not_a_verification_failure() {
     # CLAUDE_DISABLED_PLUGINS is the operator's own kill-switch (#789). A denied
     # plugin is absent on purpose, so verifying it would fail the boot for a
@@ -485,6 +517,8 @@ run_test test_missing_librarian_dir_is_a_skip_not_a_failure "severity: missing l
 run_test test_boot_returns_2_when_librarian_dir_absent "severity: missing librarian dir returns 2, not 1"
 run_test test_boot_succeeds_on_a_healthy_host "boot: healthy host exits 0 with component counts"
 run_test test_empty_plugin_list_is_not_a_failure "boot: an empty plugin list is not a failure"
+run_test test_empty_value_warns_once_per_boot "boot: an empty-value warning prints once (#1331)"
+run_test test_mixed_none_value_warns_once_per_boot "boot: a mixed-none warning prints once (#1331)"
 run_test test_denied_plugin_is_not_a_verification_failure "boot: honors CLAUDE_DISABLED_PLUGINS (#789)"
 run_test test_claude_setup_calls_the_verifying_entry_point "wiring: claude-setup calls the verifying entry point"
 run_test test_boot_entry_point_verifies_discovery "wiring: the boot entry point installs AND verifies"
