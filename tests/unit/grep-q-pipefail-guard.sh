@@ -272,201 +272,204 @@ test_scanner_detects_known_shapes() {
     g='grep'
     b='\'
     {
-        command printf 'echo "$x" %s command %s -q foo\n' "$p" "$g"                     # 1 flag
-        command printf 'producer %s /usr/bin/%s -qxF foo\n' "$p" "$g"                   # 2 flag
-        command printf 'producer %s %s -E -q foo\n' "$p" "$g"                           # 3 flag
-        command printf 'producer %s %s --quiet foo\n' "$p" "$g"                         # 4 flag
-        command printf 'if producer %s\n' "$p"                                          # 5
-        command printf '    command %s -Fxq foo; then\n' "$g"                           # 6 flag
-        command printf 'command %s -q a f %s%s command %s -q b f\n' "$g" "$p" "$p" "$g" # 7
-        command printf '# echo x %s %s -q foo\n' "$p" "$g"                              # 8
-        command printf 'command %s -q foo <<<"$x"\n' "$g"                               # 9
-        command printf 'producer %s command %s -c foo\n' "$p" "$g"                      # 10
-        command printf 'producer %s command %s -v foo\n' "$p" "$g"                      # 11
-        command printf 'producer %s command %s -m1 -q foo\n' "$p" "$g"                  # 12 flag
-        command printf 'producer %s command %s -A 2 -q foo\n' "$p" "$g"                 # 13 flag
-        command printf 'producer %s command %s -e foo -q\n' "$p" "$g"                   # 14 flag
-        command printf 'producer %s command %s -v "x -q"; y -q\n' "$p" "$g"             # 15
-        command printf 'producer %s e%s -q foo\n' "$p" "$g"                             # 16 flag
-        command printf 'producer %s /bin/f%s -q foo\n' "$p" "$g"                        # 17 flag
-        command printf 'producer %s %s\n' "$p" "$b"                                     # 18
-        command printf '    command %s -q foo\n' "$g"                                   # 19 flag
-        command printf 'command %s -q a f %s%s %s\n' "$g" "$p" "$p" "$b"                # 20
-        command printf '    command %s -q b f\n' "$g"                                   # 21
-        command printf 'producer %s\n' "$b"                                             # 22
-        command printf '    command %s -q foo\n' "$g"                                   # 23
-        command printf 'producer %s %s \n' "$p" "$b"                                    # 24
-        command printf '    command %s -q foo\n' "$g"                                   # 25
-        command printf 'producer %s %s\n' "$p" "$b"                                     # 26
-        command printf '    command e%s -q foo\n' "$g"                                  # 27 flag
-        command printf 'producer %s command %s %s\n' "$p" "$g" "$b"                     # 28
-        command printf '    -q foo\n'                                                   # 29 flag
-        command printf 'producer %s& %s -q foo\n' "$p" "$g"                             # 30 flag
-        command printf 'producer %s command /usr/bin/%s -q foo\n' "$p" "$g"             # 31 flag
-        command printf 'producer %s command /bin/e%s -q foo\n' "$p" "$g"                # 32 flag
-        command printf 'producer %s\n' "$p"                                             # 33
-        command printf '\n'                                                             # 34
-        command printf '    # comment\n'                                                # 35
-        command printf '    command %s -q foo\n' "$g"                                   # 36 flag
-        command printf 'producer %s%s\n' "$p" "$b"                                      # 37
-        command printf '    command %s -q foo\n' "$g"                                   # 38 flag
-        command printf 'producer %s e%s -c foo\n' "$p" "$g"                             # 39
-        command printf 'producer %s f%s -v foo\n' "$p" "$g"                             # 40
-        command printf 'producer %s\n' "$b"                                             # 41
-        command printf '    %s command %s -q foo\n' "$p" "$g"                           # 42 flag
-        command printf 'producer %s&\n' "$p"                                            # 43
-        command printf '    command %s -q foo\n' "$g"                                   # 44 flag
-        command printf 'producer %s command %s %s%s\n' "$p" "$g" "$b" "$b"              # 45
-        command printf '    -q foo\n'                                                   # 46
-        command printf 'producer %s # note\n' "$p"                                      # 47
-        command printf '    command %s -q foo\n' "$g"                                   # 48 flag
-        command printf 'producer %s\n' "$p"                                             # 49
-        command printf '    command %s -q a f %s\n' "$g" "$p"                           # 50 flag
-        command printf '    command %s -q b\n' "$g"                                     # 51 flag
-        command printf 'producer %s\n' "$p"                                             # 52
-        command printf '    command %s -q a f %s command %s -q b\n' "$g" "$p" "$g"      # 53 flag once
-        command printf 'producer %s # note %s\n' "$p" "$b"                              # 54
-        command printf '    command %s -q foo\n' "$g"                                   # 55 flag
-        command printf 'producer %s %s -v x # note %s\n' "$p" "$g" "$b"                 # 56
-        command printf '    command %s -q y f\n' "$g"                                   # 57
-        command printf 'command %s -E "a%s#b" f\n' "$g" "$p"                            # 58
-        command printf '    command %s -q foo\n' "$g"                                   # 59 flag (over-report)
-        command printf 'echo a#b %s command %s -q foo\n' "$p" "$g"                      # 60 flag
-        command printf 'producer %s%s # note\n' "$p" "$p"                               # 61
-        command printf '    command %s -q foo\n' "$g"                                   # 62
-        command printf "command %s -E 'a %s #b' f\n" "$g" "$p"                          # 63
-        command printf '    command %s -q foo\n' "$g"                                   # 64 flag (over-report)
-        command printf 'echo a%s #x %s\n' "$b" "$p"                                     # 65
-        command printf '    command %s -q foo\n' "$g"                                   # 66 flag
-        command printf 'echo a%s\n' "$b"                                                # 67
-        command printf '#b %s command %s -q foo\n' "$p" "$g"                            # 68 flag
-        command printf 'echo a %s\n' "$b"                                               # 69
-        command printf '#b %s command %s -q foo\n' "$p" "$g"                            # 70 flag (over-report)
-        command printf 'echo $(producer)#x %s command %s -q foo\n' "$p" "$g"            # 71 flag
-        command printf 'x="abc\n'                                                       # 72
-        command printf 'foo #" ; producer %s command %s -q foo\n' "$p" "$g"             # 73 flag
-        command printf 'producer "a %s\n' "$b"                                          # 74
-        command printf '#b" %s command %s -q foo\n' "$p" "$g"                           # 75 flag
-        command printf 'producer %s# note\n' "$p"                                       # 76
-        command printf '    command %s -q foo\n' "$g"                                   # 77 flag
-        command printf 'producer %s&# note\n' "$p"                                      # 78
-        command printf '    command %s -q foo\n' "$g"                                   # 79 flag
-        command printf "echo %s' %s # c\n" "$b" "$p"                                    # 80
-        command printf '    command %s -q foo\n' "$g"                                   # 81 flag
-        command printf 'x="abc\n'                                                       # 82
-        command printf 'def" %s # why\n' "$p"                                           # 83
-        command printf '    command %s -q foo\n' "$g"                                   # 84 flag
-        command printf "x='abc\n"                                                       # 85
-        command printf "def' %s# why\n" "$p"                                            # 86
-        command printf '    command %s -q foo\n' "$g"                                   # 87 flag
-        command printf 'producer %s%s # why\n' "$p" "$p"                                # 88
-        command printf '    command %s -q foo\n' "$g"                                   # 89
-        command printf 'x="#"; producer %s # note %s\n' "$p" "$b"                       # 90
-        command printf '    command %s -q foo\n' "$g"                                   # 91 flag
-        command printf "x='#'; producer %s # note %s\n" "$p" "$b"                       # 92
-        command printf '    command %s -q foo\n' "$g"                                   # 93 flag
-        command printf 'x=%s#; producer %s # note %s\n' "$b" "$p" "$b"                  # 94
-        command printf '    command %s -q foo\n' "$g"                                   # 95 flag
-        command printf 'producer %s LC_ALL=C %s -q foo\n' "$p" "$g"                     # 96 flag
-        command printf 'producer %s A=1 B="x" command %s -q foo\n' "$p" "$g"            # 97 flag
-        command printf 'producer %s { %s -q foo; }\n' "$p" "$g"                         # 98 flag
-        command printf 'producer %s ( command %s -q foo )\n' "$p" "$g"                  # 99 flag
-        command printf 'producer %s (%s -q foo)\n' "$p" "$g"                            # 100 flag
-        command printf 'producer %s { LC_ALL=C %s -q foo; }\n' "$p" "$g"                # 101 flag
-        command printf 'producer %s\n' "$p"                                             # 102
-        command printf '    { %s -q foo; }\n' "$g"                                      # 103 flag
-        command printf 'producer %s { echo; } ; %s -q x f\n' "$p" "$g"                  # 104
-        command printf 'producer %s FOO=bar echo; %s -q x f\n' "$p" "$g"                # 105
-        command printf 'producer %s {%s -q foo; }\n' "$p" "$g"                          # 106
-        command printf 'producer %s ( %s -v foo )\n' "$p" "$g"                          # 107
-        command printf 'producer %s { %s -c foo; }\n' "$p" "$g"                         # 108
-        command printf 'producer %s A="x y" %s -q foo\n' "$p" "$g"                      # 109 flag
-        command printf "producer %s A='x y' B=1 %s -q foo\n" "$p" "$g"                  # 110 flag
-        command printf 'producer %s A="x y" echo; %s -q x f\n' "$p" "$g"                # 111
-        command printf 'producer %s {\n' "$p"                                           # 112
-        command printf '    %s -q foo; }\n' "$g"                                        # 113 flag
-        command printf 'producer %s\n' "$p"                                             # 114
-        command printf '    (\n'                                                        # 115
-        command printf '    command %s -q foo )\n' "$g"                                 # 116 flag
-        command printf 'producer %s A=$(cmd arg) %s -q foo\n' "$p" "$g"                 # 117 flag
-        command printf 'producer %s A=x%s y %s -q foo\n' "$p" "$b" "$g"                 # 118 flag
-        command printf "producer %s A='x y' echo; %s -q x f\n" "$p" "$g"                # 119
-        command printf 'producer %s { ( %s -q foo ); }\n' "$p" "$g"                     # 120 flag
-        command printf 'producer %s {\n' "$p"                                           # 121
-        command printf '    echo; }\n'                                                  # 122
-        command printf '%s -q x f\n' "$g"                                               # 123
-        command printf 'producer %s A="x%s"y z" %s -q foo\n' "$p" "$b" "$g"             # 124 flag
-        command printf 'producer %s env LC_ALL=C %s -q foo\n' "$p" "$g"                 # 125 flag
-        command printf 'producer %s ! %s -q foo\n' "$p" "$g"                            # 126 flag
-        command printf 'producer %s time %s -q foo\n' "$p" "$g"                         # 127 flag
-        command printf 'producer %s A+=x %s -q foo\n' "$p" "$g"                         # 128 flag
-        command printf 'producer %s A=`date +x` %s -q foo\n' "$p" "$g"                  # 129 flag
-        command printf 'producer %s& { LC_ALL=C %s -q foo; }\n' "$p" "$g"               # 130 flag
-        command printf 'producer %s { # c\n' "$p"                                       # 131
-        command printf '    command %s -q foo; }\n' "$g"                                # 132 flag
-        command printf 'producer %s xargs %s -q foo\n' "$p" "$g"                        # 133 flag (over-report)
-        command printf 'producer %s cat #c %s -q foo\n' "$p" "$g"                       # 134
-        command printf 'producer %s A="x;y" %s -q foo\n' "$p" "$g"                      # 135 flag
-        command printf 'producer %s 2>&1 %s -q foo\n' "$p" "$g"                         # 136 flag
-        command printf 'producer %s { read -r h; %s -q foo; }\n' "$p" "$g"              # 137 flag
-        command printf 'producer %s A=$(a; b) %s -q foo\n' "$p" "$g"                    # 138 flag
-        command printf 'producer %s {\n' "$p"                                           # 139
-        command printf '    head -1\n'                                                  # 140
-        command printf '    %s -q x; }\n' "$g"                                          # 141 flag
-        command printf 'producer %s { read -r h; } ; %s -q x f\n' "$p" "$g"             # 142
-        command printf '{ read -r h; %s -q x f; }\n' "$g"                               # 143
-        command printf 'producer %s { echo "; } "; %s -q x f; }\n' "$p" "$g"            # 144 flag
-        command printf 'producer %s ( cd d && %s -q x f )\n' "$p" "$g"                  # 145 flag
-        command printf 'producer %s &>/dev/null %s -q foo\n' "$p" "$g"                  # 146 flag
-        command printf 'producer %s\n' "$p"                                             # 147
-        command printf '    { read -r h; %s -q x f; }\n' "$g"                           # 148 flag
-        command printf 'producer %s { # )\n' "$p"                                       # 149
-        command printf '    read -r h; %s -q x f; }\n' "$g"                             # 150 flag
-        command printf 'producer %s while read -r l; do %s -q x f; done\n' "$p" "$g"    # 151 known miss
-        command printf 'producer %s { case $x in a) :;; esac; %s -q x f; }\n' "$p" "$g" # 152 flag
-        command printf 'producer %s { { :; }; %s -q x f; }\n' "$p" "$g"                 # 153 flag
-        command printf 'producer %s { read -r h < <(cmd); %s -q x f; }\n' "$p" "$g"     # 154 flag
-        command printf 'producer %s ( a=(1 2); %s -q x f )\n' "$p" "$g"                 # 155 flag
-        command printf 'producer %s { { :; }; }; %s -q x f\n' "$p" "$g"                 # 156
-        command printf 'producer %s {\n' "$p"                                           # 157
-        command printf '    v=$(\n'                                                     # 158
-        command printf '        foo\n'                                                  # 159
-        command printf '    )\n'                                                        # 160
-        command printf '    %s -q x f; }\n' "$g"                                        # 161 flag
-        command printf 'producer %s ( a=(\n' "$p"                                       # 162
-        command printf '    1 )\n'                                                      # 163
-        command printf '    %s -q x f )\n' "$g"                                         # 164 flag
-        command printf 'producer %s { read -r h; }>/dev/null; %s -q x f\n' "$p" "$g"    # 165
-        command printf "producer %s A='x;y' %s -q foo\n" "$p" "$g"                      # 166 flag
-        command printf 'producer %s A=${x:-a;b} %s -q foo\n' "$p" "$g"                  # 167 flag
-        command printf 'producer %s A=`a;b` %s -q foo\n' "$p" "$g"                      # 168 flag
-        command printf 'producer %s A=x%s;y %s -q foo\n' "$p" "$b" "$g"                 # 169 flag
-        command printf 'producer %s A="$(a ";")" %s -q foo\n' "$p" "$g"                 # 170 flag
-        command printf 'producer %s cat && { %s -q x f; }\n' "$p" "$g"                  # 171
-        command printf 'producer %s ( # )\n' "$p"                                       # 172
-        command printf '    read -r h; %s -q x f )\n' "$g"                              # 173 flag
-        command printf 'producer %s (\n' "$p"                                           # 174
-        command printf '    v=$(\n'                                                     # 175
-        command printf '        foo\n'                                                  # 176
-        command printf '    )\n'                                                        # 177
-        command printf '    %s -q x f )\n' "$g"                                         # 178 flag
-        command printf 'producer %s ( case $x in a) :;; esac; %s -q x f )\n' "$p" "$g"  # 179 flag
-        command printf 'producer %s {\n' "$p"                                           # 180
-        command printf '    case $x in\n'                                               # 181
-        command printf '        a) : ;;\n'                                              # 182
-        command printf '    esac\n'                                                     # 183
-        command printf '    %s -q x f; }\n' "$g"                                        # 184 flag
-        command printf 'producer %s { if c; then %s -q x f; fi; }\n' "$p" "$g"          # 185 flag
-        command printf 'producer %s { if c; then :; else %s -q x f; fi; }\n' "$p" "$g"  # 186 flag
-        command printf 'case $x in a) :;; esac; %s -q x f\n' "$g"                       # 187
-        command printf 'case $x in\n'                                                   # 188
-        command printf '    a) %s -q x f ;;\n' "$g"                                     # 189
-        command printf 'esac\n'                                                         # 190
+        command printf 'echo "$x" %s command %s -q foo\n' "$p" "$g"                                         # 1 flag
+        command printf 'producer %s /usr/bin/%s -qxF foo\n' "$p" "$g"                                       # 2 flag
+        command printf 'producer %s %s -E -q foo\n' "$p" "$g"                                               # 3 flag
+        command printf 'producer %s %s --quiet foo\n' "$p" "$g"                                             # 4 flag
+        command printf 'if producer %s\n' "$p"                                                              # 5
+        command printf '    command %s -Fxq foo; then\n' "$g"                                               # 6 flag
+        command printf 'command %s -q a f %s%s command %s -q b f\n' "$g" "$p" "$p" "$g"                     # 7
+        command printf '# echo x %s %s -q foo\n' "$p" "$g"                                                  # 8
+        command printf 'command %s -q foo <<<"$x"\n' "$g"                                                   # 9
+        command printf 'producer %s command %s -c foo\n' "$p" "$g"                                          # 10
+        command printf 'producer %s command %s -v foo\n' "$p" "$g"                                          # 11
+        command printf 'producer %s command %s -m1 -q foo\n' "$p" "$g"                                      # 12 flag
+        command printf 'producer %s command %s -A 2 -q foo\n' "$p" "$g"                                     # 13 flag
+        command printf 'producer %s command %s -e foo -q\n' "$p" "$g"                                       # 14 flag
+        command printf 'producer %s command %s -v "x -q"; y -q\n' "$p" "$g"                                 # 15
+        command printf 'producer %s e%s -q foo\n' "$p" "$g"                                                 # 16 flag
+        command printf 'producer %s /bin/f%s -q foo\n' "$p" "$g"                                            # 17 flag
+        command printf 'producer %s %s\n' "$p" "$b"                                                         # 18
+        command printf '    command %s -q foo\n' "$g"                                                       # 19 flag
+        command printf 'command %s -q a f %s%s %s\n' "$g" "$p" "$p" "$b"                                    # 20
+        command printf '    command %s -q b f\n' "$g"                                                       # 21
+        command printf 'producer %s\n' "$b"                                                                 # 22
+        command printf '    command %s -q foo\n' "$g"                                                       # 23
+        command printf 'producer %s %s \n' "$p" "$b"                                                        # 24
+        command printf '    command %s -q foo\n' "$g"                                                       # 25
+        command printf 'producer %s %s\n' "$p" "$b"                                                         # 26
+        command printf '    command e%s -q foo\n' "$g"                                                      # 27 flag
+        command printf 'producer %s command %s %s\n' "$p" "$g" "$b"                                         # 28
+        command printf '    -q foo\n'                                                                       # 29 flag
+        command printf 'producer %s& %s -q foo\n' "$p" "$g"                                                 # 30 flag
+        command printf 'producer %s command /usr/bin/%s -q foo\n' "$p" "$g"                                 # 31 flag
+        command printf 'producer %s command /bin/e%s -q foo\n' "$p" "$g"                                    # 32 flag
+        command printf 'producer %s\n' "$p"                                                                 # 33
+        command printf '\n'                                                                                 # 34
+        command printf '    # comment\n'                                                                    # 35
+        command printf '    command %s -q foo\n' "$g"                                                       # 36 flag
+        command printf 'producer %s%s\n' "$p" "$b"                                                          # 37
+        command printf '    command %s -q foo\n' "$g"                                                       # 38 flag
+        command printf 'producer %s e%s -c foo\n' "$p" "$g"                                                 # 39
+        command printf 'producer %s f%s -v foo\n' "$p" "$g"                                                 # 40
+        command printf 'producer %s\n' "$b"                                                                 # 41
+        command printf '    %s command %s -q foo\n' "$p" "$g"                                               # 42 flag
+        command printf 'producer %s&\n' "$p"                                                                # 43
+        command printf '    command %s -q foo\n' "$g"                                                       # 44 flag
+        command printf 'producer %s command %s %s%s\n' "$p" "$g" "$b" "$b"                                  # 45
+        command printf '    -q foo\n'                                                                       # 46
+        command printf 'producer %s # note\n' "$p"                                                          # 47
+        command printf '    command %s -q foo\n' "$g"                                                       # 48 flag
+        command printf 'producer %s\n' "$p"                                                                 # 49
+        command printf '    command %s -q a f %s\n' "$g" "$p"                                               # 50 flag
+        command printf '    command %s -q b\n' "$g"                                                         # 51 flag
+        command printf 'producer %s\n' "$p"                                                                 # 52
+        command printf '    command %s -q a f %s command %s -q b\n' "$g" "$p" "$g"                          # 53 flag once
+        command printf 'producer %s # note %s\n' "$p" "$b"                                                  # 54
+        command printf '    command %s -q foo\n' "$g"                                                       # 55 flag
+        command printf 'producer %s %s -v x # note %s\n' "$p" "$g" "$b"                                     # 56
+        command printf '    command %s -q y f\n' "$g"                                                       # 57
+        command printf 'command %s -E "a%s#b" f\n' "$g" "$p"                                                # 58
+        command printf '    command %s -q foo\n' "$g"                                                       # 59 flag (over-report)
+        command printf 'echo a#b %s command %s -q foo\n' "$p" "$g"                                          # 60 flag
+        command printf 'producer %s%s # note\n' "$p" "$p"                                                   # 61
+        command printf '    command %s -q foo\n' "$g"                                                       # 62
+        command printf "command %s -E 'a %s #b' f\n" "$g" "$p"                                              # 63
+        command printf '    command %s -q foo\n' "$g"                                                       # 64 flag (over-report)
+        command printf 'echo a%s #x %s\n' "$b" "$p"                                                         # 65
+        command printf '    command %s -q foo\n' "$g"                                                       # 66 flag
+        command printf 'echo a%s\n' "$b"                                                                    # 67
+        command printf '#b %s command %s -q foo\n' "$p" "$g"                                                # 68 flag
+        command printf 'echo a %s\n' "$b"                                                                   # 69
+        command printf '#b %s command %s -q foo\n' "$p" "$g"                                                # 70 flag (over-report)
+        command printf 'echo $(producer)#x %s command %s -q foo\n' "$p" "$g"                                # 71 flag
+        command printf 'x="abc\n'                                                                           # 72
+        command printf 'foo #" ; producer %s command %s -q foo\n' "$p" "$g"                                 # 73 flag
+        command printf 'producer "a %s\n' "$b"                                                              # 74
+        command printf '#b" %s command %s -q foo\n' "$p" "$g"                                               # 75 flag
+        command printf 'producer %s# note\n' "$p"                                                           # 76
+        command printf '    command %s -q foo\n' "$g"                                                       # 77 flag
+        command printf 'producer %s&# note\n' "$p"                                                          # 78
+        command printf '    command %s -q foo\n' "$g"                                                       # 79 flag
+        command printf "echo %s' %s # c\n" "$b" "$p"                                                        # 80
+        command printf '    command %s -q foo\n' "$g"                                                       # 81 flag
+        command printf 'x="abc\n'                                                                           # 82
+        command printf 'def" %s # why\n' "$p"                                                               # 83
+        command printf '    command %s -q foo\n' "$g"                                                       # 84 flag
+        command printf "x='abc\n"                                                                           # 85
+        command printf "def' %s# why\n" "$p"                                                                # 86
+        command printf '    command %s -q foo\n' "$g"                                                       # 87 flag
+        command printf 'producer %s%s # why\n' "$p" "$p"                                                    # 88
+        command printf '    command %s -q foo\n' "$g"                                                       # 89
+        command printf 'x="#"; producer %s # note %s\n' "$p" "$b"                                           # 90
+        command printf '    command %s -q foo\n' "$g"                                                       # 91 flag
+        command printf "x='#'; producer %s # note %s\n" "$p" "$b"                                           # 92
+        command printf '    command %s -q foo\n' "$g"                                                       # 93 flag
+        command printf 'x=%s#; producer %s # note %s\n' "$b" "$p" "$b"                                      # 94
+        command printf '    command %s -q foo\n' "$g"                                                       # 95 flag
+        command printf 'producer %s LC_ALL=C %s -q foo\n' "$p" "$g"                                         # 96 flag
+        command printf 'producer %s A=1 B="x" command %s -q foo\n' "$p" "$g"                                # 97 flag
+        command printf 'producer %s { %s -q foo; }\n' "$p" "$g"                                             # 98 flag
+        command printf 'producer %s ( command %s -q foo )\n' "$p" "$g"                                      # 99 flag
+        command printf 'producer %s (%s -q foo)\n' "$p" "$g"                                                # 100 flag
+        command printf 'producer %s { LC_ALL=C %s -q foo; }\n' "$p" "$g"                                    # 101 flag
+        command printf 'producer %s\n' "$p"                                                                 # 102
+        command printf '    { %s -q foo; }\n' "$g"                                                          # 103 flag
+        command printf 'producer %s { echo; } ; %s -q x f\n' "$p" "$g"                                      # 104
+        command printf 'producer %s FOO=bar echo; %s -q x f\n' "$p" "$g"                                    # 105
+        command printf 'producer %s {%s -q foo; }\n' "$p" "$g"                                              # 106
+        command printf 'producer %s ( %s -v foo )\n' "$p" "$g"                                              # 107
+        command printf 'producer %s { %s -c foo; }\n' "$p" "$g"                                             # 108
+        command printf 'producer %s A="x y" %s -q foo\n' "$p" "$g"                                          # 109 flag
+        command printf "producer %s A='x y' B=1 %s -q foo\n" "$p" "$g"                                      # 110 flag
+        command printf 'producer %s A="x y" echo; %s -q x f\n' "$p" "$g"                                    # 111
+        command printf 'producer %s {\n' "$p"                                                               # 112
+        command printf '    %s -q foo; }\n' "$g"                                                            # 113 flag
+        command printf 'producer %s\n' "$p"                                                                 # 114
+        command printf '    (\n'                                                                            # 115
+        command printf '    command %s -q foo )\n' "$g"                                                     # 116 flag
+        command printf 'producer %s A=$(cmd arg) %s -q foo\n' "$p" "$g"                                     # 117 flag
+        command printf 'producer %s A=x%s y %s -q foo\n' "$p" "$b" "$g"                                     # 118 flag
+        command printf "producer %s A='x y' echo; %s -q x f\n" "$p" "$g"                                    # 119
+        command printf 'producer %s { ( %s -q foo ); }\n' "$p" "$g"                                         # 120 flag
+        command printf 'producer %s {\n' "$p"                                                               # 121
+        command printf '    echo; }\n'                                                                      # 122
+        command printf '%s -q x f\n' "$g"                                                                   # 123
+        command printf 'producer %s A="x%s"y z" %s -q foo\n' "$p" "$b" "$g"                                 # 124 flag
+        command printf 'producer %s env LC_ALL=C %s -q foo\n' "$p" "$g"                                     # 125 flag
+        command printf 'producer %s ! %s -q foo\n' "$p" "$g"                                                # 126 flag
+        command printf 'producer %s time %s -q foo\n' "$p" "$g"                                             # 127 flag
+        command printf 'producer %s A+=x %s -q foo\n' "$p" "$g"                                             # 128 flag
+        command printf 'producer %s A=`date +x` %s -q foo\n' "$p" "$g"                                      # 129 flag
+        command printf 'producer %s& { LC_ALL=C %s -q foo; }\n' "$p" "$g"                                   # 130 flag
+        command printf 'producer %s { # c\n' "$p"                                                           # 131
+        command printf '    command %s -q foo; }\n' "$g"                                                    # 132 flag
+        command printf 'producer %s xargs %s -q foo\n' "$p" "$g"                                            # 133 flag (over-report)
+        command printf 'producer %s cat #c %s -q foo\n' "$p" "$g"                                           # 134
+        command printf 'producer %s A="x;y" %s -q foo\n' "$p" "$g"                                          # 135 flag
+        command printf 'producer %s 2>&1 %s -q foo\n' "$p" "$g"                                             # 136 flag
+        command printf 'producer %s { read -r h; %s -q foo; }\n' "$p" "$g"                                  # 137 flag
+        command printf 'producer %s A=$(a; b) %s -q foo\n' "$p" "$g"                                        # 138 flag
+        command printf 'producer %s {\n' "$p"                                                               # 139
+        command printf '    head -1\n'                                                                      # 140
+        command printf '    %s -q x; }\n' "$g"                                                              # 141 flag
+        command printf 'producer %s { read -r h; } ; %s -q x f\n' "$p" "$g"                                 # 142
+        command printf '{ read -r h; %s -q x f; }\n' "$g"                                                   # 143
+        command printf 'producer %s { echo "; } "; %s -q x f; }\n' "$p" "$g"                                # 144 flag
+        command printf 'producer %s ( cd d && %s -q x f )\n' "$p" "$g"                                      # 145 flag
+        command printf 'producer %s &>/dev/null %s -q foo\n' "$p" "$g"                                      # 146 flag
+        command printf 'producer %s\n' "$p"                                                                 # 147
+        command printf '    { read -r h; %s -q x f; }\n' "$g"                                               # 148 flag
+        command printf 'producer %s { # )\n' "$p"                                                           # 149
+        command printf '    read -r h; %s -q x f; }\n' "$g"                                                 # 150 flag
+        command printf 'producer %s while read -r l; do %s -q x f; done\n' "$p" "$g"                        # 151 known miss
+        command printf 'producer %s { case $x in a) :;; esac; %s -q x f; }\n' "$p" "$g"                     # 152 flag
+        command printf 'producer %s { { :; }; %s -q x f; }\n' "$p" "$g"                                     # 153 flag
+        command printf 'producer %s { read -r h < <(cmd); %s -q x f; }\n' "$p" "$g"                         # 154 flag
+        command printf 'producer %s ( a=(1 2); %s -q x f )\n' "$p" "$g"                                     # 155 flag
+        command printf 'producer %s { { :; }; }; %s -q x f\n' "$p" "$g"                                     # 156
+        command printf 'producer %s {\n' "$p"                                                               # 157
+        command printf '    v=$(\n'                                                                         # 158
+        command printf '        foo\n'                                                                      # 159
+        command printf '    )\n'                                                                            # 160
+        command printf '    %s -q x f; }\n' "$g"                                                            # 161 flag
+        command printf 'producer %s ( a=(\n' "$p"                                                           # 162
+        command printf '    1 )\n'                                                                          # 163
+        command printf '    %s -q x f )\n' "$g"                                                             # 164 flag
+        command printf 'producer %s { read -r h; }>/dev/null; %s -q x f\n' "$p" "$g"                        # 165
+        command printf "producer %s A='x;y' %s -q foo\n" "$p" "$g"                                          # 166 flag
+        command printf 'producer %s A=${x:-a;b} %s -q foo\n' "$p" "$g"                                      # 167 flag
+        command printf 'producer %s A=`a;b` %s -q foo\n' "$p" "$g"                                          # 168 flag
+        command printf 'producer %s A=x%s;y %s -q foo\n' "$p" "$b" "$g"                                     # 169 flag
+        command printf 'producer %s A="$(a ";")" %s -q foo\n' "$p" "$g"                                     # 170 flag
+        command printf 'producer %s cat && { %s -q x f; }\n' "$p" "$g"                                      # 171
+        command printf 'producer %s ( # )\n' "$p"                                                           # 172
+        command printf '    read -r h; %s -q x f )\n' "$g"                                                  # 173 flag
+        command printf 'producer %s (\n' "$p"                                                               # 174
+        command printf '    v=$(\n'                                                                         # 175
+        command printf '        foo\n'                                                                      # 176
+        command printf '    )\n'                                                                            # 177
+        command printf '    %s -q x f )\n' "$g"                                                             # 178 flag
+        command printf 'producer %s ( case $x in a) :;; esac; %s -q x f )\n' "$p" "$g"                      # 179 flag
+        command printf 'producer %s {\n' "$p"                                                               # 180
+        command printf '    case $x in\n'                                                                   # 181
+        command printf '        a) : ;;\n'                                                                  # 182
+        command printf '    esac\n'                                                                         # 183
+        command printf '    %s -q x f; }\n' "$g"                                                            # 184 flag
+        command printf 'producer %s { if c; then %s -q x f; fi; }\n' "$p" "$g"                              # 185 flag
+        command printf 'producer %s { if c; then :; else %s -q x f; fi; }\n' "$p" "$g"                      # 186 flag
+        command printf 'case $x in a) :;; esac; %s -q x f\n' "$g"                                           # 187
+        command printf 'case $x in\n'                                                                       # 188
+        command printf '    a) %s -q x f ;;\n' "$g"                                                         # 189
+        command printf 'esac\n'                                                                             # 190
+        command printf 'producer %s ( case $x in a) case $y in b) :;; esac;; esac; %s -q x f )\n' "$p" "$g" # 191 flag
+        command printf 'producer %s ( ( case $x in a) :;; esac); %s -q x f )\n' "$p" "$g"                   # 192 flag
+        command printf 'producer %s ( case $x in a) :;; esac); %s -q x f\n' "$p" "$g"                       # 193
     } >"$dir/fixture.sh"
     got=$(pipe_grep_q_sites "$dir" | command tr '\n' ' ')
     command rm -rf "$dir"
-    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:59 fixture.sh:60 fixture.sh:64 fixture.sh:66 fixture.sh:68 fixture.sh:70 fixture.sh:71 fixture.sh:73 fixture.sh:75 fixture.sh:77 fixture.sh:79 fixture.sh:81 fixture.sh:84 fixture.sh:87 fixture.sh:91 fixture.sh:93 fixture.sh:95 fixture.sh:96 fixture.sh:97 fixture.sh:98 fixture.sh:99 fixture.sh:100 fixture.sh:101 fixture.sh:103 fixture.sh:109 fixture.sh:110 fixture.sh:113 fixture.sh:116 fixture.sh:117 fixture.sh:118 fixture.sh:120 fixture.sh:124 fixture.sh:125 fixture.sh:126 fixture.sh:127 fixture.sh:128 fixture.sh:129 fixture.sh:130 fixture.sh:132 fixture.sh:133 fixture.sh:135 fixture.sh:136 fixture.sh:137 fixture.sh:138 fixture.sh:141 fixture.sh:144 fixture.sh:145 fixture.sh:146 fixture.sh:148 fixture.sh:150 fixture.sh:152 fixture.sh:153 fixture.sh:154 fixture.sh:155 fixture.sh:161 fixture.sh:164 fixture.sh:166 fixture.sh:167 fixture.sh:168 fixture.sh:169 fixture.sh:170 fixture.sh:173 fixture.sh:178 fixture.sh:179 fixture.sh:184 fixture.sh:185 fixture.sh:186 " "$got" \
-        "scanner flags same-line, |&, prefixed (incl. command + path, any leading words: env assignments however quoted or substituted, +=, env, !, time; and { or ( group openers, alone, nested, combined, after |&, or on their own line, even with a comment, before the consumer), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join and after \$(...)), a comment ending in \\ after a quoted or escaped #, a site after a quote closed on a later line (incl. across a \\ join, and a pipe plus comment closing it, double or single), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\, or touching | or |&) after the pipe, an escaped quote before it, blank and comment lines before the consumer, a consumer that pipes on) pipes into $g -q; over-reports a word-start # after a \\ join, a quoted trailing |#, and a $g -q run by another command (xargs) (the documented cost); flags a ; or & a prefix word quotes, substitutes or redirects (A=\"x;y\", single-quoted, \${...}, backticks, an escaped ;, a quoted \$(...) holding a quote, A=\$(a; b), 2>&1, &>f), and a $g -q at any command inside a piped { } or ( ) group (incl. one opened on an earlier line or after a pipe that ends one, past a quoted brace, a ) in a comment, a nested group, a process substitution or an array assignment, a \$(...) or array closed on a later line, a case arm in either group (incl. one spanning lines), and a then or else body); misses a $g -q in a piped while body (the documented known miss); ignores a $g -q after a piped group closes (incl. a nested one, one closed with a redirect, and one after a pipe that && ends), one in an unpiped group (incl. after a case on one line or several), ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q (incl. after a group or an assignment-prefixed command), a {grep word that opens no group, a grep after a word-start # comment, and non-q greps (incl. egrep/fgrep, and inside a group)"
+    assert_equals "fixture.sh:1 fixture.sh:2 fixture.sh:3 fixture.sh:4 fixture.sh:6 fixture.sh:12 fixture.sh:13 fixture.sh:14 fixture.sh:16 fixture.sh:17 fixture.sh:19 fixture.sh:27 fixture.sh:29 fixture.sh:30 fixture.sh:31 fixture.sh:32 fixture.sh:36 fixture.sh:38 fixture.sh:42 fixture.sh:44 fixture.sh:48 fixture.sh:50 fixture.sh:51 fixture.sh:53 fixture.sh:55 fixture.sh:59 fixture.sh:60 fixture.sh:64 fixture.sh:66 fixture.sh:68 fixture.sh:70 fixture.sh:71 fixture.sh:73 fixture.sh:75 fixture.sh:77 fixture.sh:79 fixture.sh:81 fixture.sh:84 fixture.sh:87 fixture.sh:91 fixture.sh:93 fixture.sh:95 fixture.sh:96 fixture.sh:97 fixture.sh:98 fixture.sh:99 fixture.sh:100 fixture.sh:101 fixture.sh:103 fixture.sh:109 fixture.sh:110 fixture.sh:113 fixture.sh:116 fixture.sh:117 fixture.sh:118 fixture.sh:120 fixture.sh:124 fixture.sh:125 fixture.sh:126 fixture.sh:127 fixture.sh:128 fixture.sh:129 fixture.sh:130 fixture.sh:132 fixture.sh:133 fixture.sh:135 fixture.sh:136 fixture.sh:137 fixture.sh:138 fixture.sh:141 fixture.sh:144 fixture.sh:145 fixture.sh:146 fixture.sh:148 fixture.sh:150 fixture.sh:152 fixture.sh:153 fixture.sh:154 fixture.sh:155 fixture.sh:161 fixture.sh:164 fixture.sh:166 fixture.sh:167 fixture.sh:168 fixture.sh:169 fixture.sh:170 fixture.sh:173 fixture.sh:178 fixture.sh:179 fixture.sh:184 fixture.sh:185 fixture.sh:186 fixture.sh:191 fixture.sh:192 " "$got" \
+        "scanner flags same-line, |&, prefixed (incl. command + path, any leading words: env assignments however quoted or substituted, +=, env, !, time; and { or ( group openers, alone, nested, combined, after |&, or on their own line, even with a comment, before the consumer), --quiet, value-flag, egrep/fgrep, mid-word # (incl. across a \\ join and after \$(...)), a comment ending in \\ after a quoted or escaped #, a site after a quote closed on a later line (incl. across a \\ join, and a pipe plus comment closing it, double or single), and line-continued (incl. |\\, | \\, a leading | after \\, a \\ inside the flags, a trailing |&, a comment (even one ending in \\, or touching | or |&) after the pipe, an escaped quote before it, blank and comment lines before the consumer, a consumer that pipes on) pipes into $g -q; over-reports a word-start # after a \\ join, a quoted trailing |#, and a $g -q run by another command (xargs) (the documented cost); flags a ; or & a prefix word quotes, substitutes or redirects (A=\"x;y\", single-quoted, \${...}, backticks, an escaped ;, a quoted \$(...) holding a quote, A=\$(a; b), 2>&1, &>f), and a $g -q at any command inside a piped { } or ( ) group (incl. one opened on an earlier line or after a pipe that ends one, past a quoted brace, a ) in a comment, a nested group, a process substitution or an array assignment, a \$(...) or array closed on a later line, a case arm in either group (incl. one spanning lines, a nested case, and an esac a ) follows), and a then or else body); misses a $g -q in a piped while body (the documented known miss); ignores a $g -q after a piped group closes (incl. a nested one, one closed right after esac, one closed with a redirect, and one after a pipe that && ends), one in an unpiped group (incl. after a case on one line or several), ||, || \\, || # c, a pipe-less trailing \\, an even \\\\ run, a \\ inside a comment, a # after an escaped space, an escaped space after |, comments, herestrings, quoted -q, a later command's -q (incl. after a group or an assignment-prefixed command), a {grep word that opens no group, a grep after a word-start # comment, and non-q greps (incl. egrep/fgrep, and inside a group)"
 }
 
 # ---------------------------------------------------------------------------
