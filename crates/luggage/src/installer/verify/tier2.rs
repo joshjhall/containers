@@ -260,11 +260,19 @@ mod tests {
             algorithm: Some("sha512".into()),
             ..pinned_verification(Some(pin))
         };
+        let too_long = format!("{DIGEST}{DIGEST}");
+        let one_over = format!("{DIGEST}0");
+        // Both directions: a guard that only refused short pins would let an
+        // over-long one through to a post-download mismatch again.
         let cases = [
             // A truncated paste on the default-width entry.
             (pinned_verification(Some(&DIGEST[..8])), "is 8 hex characters", "sha256 digest is 64"),
             // A correct-looking sha256 pin on a sha512 entry.
             (sha512(DIGEST), "is 64 hex characters", "sha512 digest is 128"),
+            // A sha512-width pin on the default-width entry.
+            (pinned_verification(Some(&too_long)), "is 128 hex characters", "sha256 digest is 64"),
+            // A sha256 pin with stray hex pasted after it.
+            (pinned_verification(Some(&one_over)), "is 65 hex characters", "sha256 digest is 64"),
         ];
         for (verification, got_len, want_len) in cases {
             let guard = require_pin("node", "24.0.0", &verification).unwrap_err();

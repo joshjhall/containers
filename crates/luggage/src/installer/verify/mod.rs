@@ -492,8 +492,10 @@ mod tests {
     #[test]
     fn ensure_supported_refuses_an_unusable_pin_width_exactly_as_dispatch_does() {
         let sha256 = super::sha::digest_hex(Some("sha256"), b"pinned").unwrap();
+        let sha512 = super::sha::digest_hex(Some("sha512"), b"pinned").unwrap();
         let cases = [
             (None, "9f86d081".to_owned()),
+            (None, sha512),
             (Some("sha512"), sha256.clone()),
             (Some("md5"), sha256.clone()),
             (Some("sha384"), sha256),
