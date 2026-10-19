@@ -67,17 +67,29 @@ Use `CLAUDE_PLUGINS` to replace the default plugin set entirely:
 docker build --build-arg CLAUDE_PLUGINS="commit-commands,context7,code-review" ...
 
 # Install no core plugins (LSP and extra plugins still work)
-docker build --build-arg CLAUDE_PLUGINS="" ...
+docker build --build-arg CLAUDE_PLUGINS=none ...
 
 # At runtime (overrides build-time value)
 docker run -e CLAUDE_PLUGINS="commit-commands,context7" ...
 ```
 
-| `CLAUDE_PLUGINS` | Behavior                      |
-| ---------------- | ----------------------------- |
-| Unset (default)  | All 10 core plugins installed |
-| Set to list      | Only listed plugins installed |
-| Set to `""`      | No core plugins installed     |
+| `CLAUDE_PLUGINS`          | Behavior                                             |
+| ------------------------- | ---------------------------------------------------- |
+| Unset (default)           | All 10 core plugins installed                        |
+| Set to list               | Only listed plugins installed                        |
+| Set to `none`             | No core plugins installed                            |
+| Set to `""`               | Same as unset (a runtime `""` logs a warning)        |
+| `none` mixed with entries | Warning; the value is ignored (next tier or default) |
+
+`none` works the same as a build arg and at runtime. An empty value is treated
+as unset at both: build time cannot distinguish an empty `--build-arg` from an
+unpassed one, and compose files often forward an unset host variable as `""`.
+A `CLAUDE_PLUGINS_FILE` holding `[]` is another way to say "no defaults".
+
+> **Breaking change (#1316):** a runtime `-e CLAUDE_PLUGINS=""` used to
+> disable the defaults; it now installs them. Use `CLAUDE_PLUGINS=none`. The
+> same applies to `CLAUDE_MCPS`, `CLAUDE_SKILLS`, and
+> `CLAUDE_LIBRARIAN_PLUGINS`.
 
 `CLAUDE_EXTRA_PLUGINS` remains additive on top of whatever `CLAUDE_PLUGINS`
 resolves to. LSP plugins remain tied to `INCLUDE_*_DEV` flags.
@@ -426,21 +438,25 @@ Use `CLAUDE_MCPS` to replace the default MCP set entirely:
 docker build --build-arg CLAUDE_MCPS="filesystem" ...
 
 # No default MCPs at all
-docker build --build-arg CLAUDE_MCPS="" ...
+docker build --build-arg CLAUDE_MCPS=none ...
 
 # At runtime (overrides build-time value)
 docker run -e CLAUDE_MCPS="filesystem" ...
 ```
 
-| `CLAUDE_MCPS`   | Behavior                                  |
-| --------------- | ----------------------------------------- |
-| Unset (default) | `filesystem` + `figma-desktop` configured |
-| Set to list     | Only listed MCPs configured               |
-| Set to `""`     | No default MCPs configured                |
+| `CLAUDE_MCPS`   | Behavior                                      |
+| --------------- | --------------------------------------------- |
+| Unset (default) | `filesystem` + `figma-desktop` configured     |
+| Set to list     | Only listed MCPs configured                   |
+| Set to `none`   | No default MCPs configured                    |
+| Set to `""`     | Same as unset (a runtime `""` logs a warning) |
+
+`none`, empty, and mixed values behave as described for `CLAUDE_PLUGINS`
+above; `CLAUDE_MCPS_FILE` holding `[]` also means "no defaults".
 
 `CLAUDE_EXTRA_MCPS` remains additive on top of whatever `CLAUDE_MCPS`
-resolves to. Auto-detection of GitHub/GitLab MCPs still works unless
-`CLAUDE_MCPS=""` and `CLAUDE_AUTO_DETECT_MCPS=false`.
+resolves to. Auto-detection of GitHub/GitLab MCPs still runs with
+`CLAUDE_MCPS=none`; disable it with `CLAUDE_AUTO_DETECT_MCPS=false`.
 
 **GitHub/GitLab MCPs** are auto-detected from git remotes when the corresponding
 token is set (`GITHUB_TOKEN` / `GITLAB_TOKEN`). They can also be added

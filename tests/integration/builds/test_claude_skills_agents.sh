@@ -275,7 +275,14 @@ test_override_vars_persisted() {
         --build-arg INCLUDE_NODE=true \
         --build-arg "CLAUDE_SKILLS=git-workflow,code-quality" \
         --build-arg "CLAUDE_AGENTS=debugger" \
+        --build-arg "CLAUDE_MCPS=none" \
         -t "$image"
+
+    # `none` is the build-time opt-out (#1316): it must persist verbatim so the
+    # runtime resolver can interpret it.
+    assert_command_in_container "$image" \
+        "grep 'CLAUDE_MCPS_DEFAULT=\"\\?none\"\\?$' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "found"
 
     # Verify override vars are persisted. persist-feature-flags.sh quotes the
     # values (CLAUDE_SKILLS_DEFAULT="git-workflow,code-quality"), so match an
@@ -293,10 +300,6 @@ test_override_vars_persisted() {
     # Unset vars should get __UNSET__ sentinel
     assert_command_in_container "$image" \
         "grep 'CLAUDE_PLUGINS_DEFAULT=\"\\?__UNSET__' /etc/container/config/enabled-features.conf && echo 'found'" \
-        "found"
-
-    assert_command_in_container "$image" \
-        "grep 'CLAUDE_MCPS_DEFAULT=\"\\?__UNSET__' /etc/container/config/enabled-features.conf && echo 'found'" \
         "found"
 
     # CLAUDE_LIBRARIAN_PLUGINS unset at build → __UNSET__ sentinel persisted

@@ -322,7 +322,7 @@ if [ -d "$TEMPLATES_DIR" ]; then
     echo ""
 
     # --- Resolve skill list ---
-    # CLAUDE_SKILLS still gates the build-bound skills below (so CLAUDE_SKILLS=""
+    # CLAUDE_SKILLS still gates the build-bound skills below (so CLAUDE_SKILLS=none
     # suppresses them and the docker/cloud conditionals still honor membership).
     # The general-purpose skills are now selected at PLUGIN level via
     # CLAUDE_LIBRARIAN_PLUGINS, not per-skill here.
@@ -788,7 +788,7 @@ elif is_claude_authenticated; then
             [ -n "$plugin" ] && { install_plugin "$plugin" || true; }
         done
     else
-        echo "    (none — CLAUDE_PLUGINS set to empty)"
+        echo "    (none — CLAUDE_PLUGINS=none)"
     fi
 
     # Language-Specific LSP Plugins (Based on Build Flags)
@@ -1266,7 +1266,7 @@ else
             [ -n "$mcp_item" ] && _install_default_mcp "$mcp_item"
         done
     else
-        echo "    (none — CLAUDE_MCPS set to empty)"
+        echo "    (none — CLAUDE_MCPS=none)"
     fi
 fi
 echo ""

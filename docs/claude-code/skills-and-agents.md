@@ -269,8 +269,17 @@ installs:
 
 ```bash
 # Drop the conditional build-bound skills (container-environment still installs)
-docker build --build-arg CLAUDE_SKILLS="" ...
+docker build --build-arg CLAUDE_SKILLS=none ...
+
+# Install no librarian plugins
+docker build --build-arg CLAUDE_LIBRARIAN_PLUGINS=none ...
 ```
+
+`none` is the only spelling for "no defaults", as a build arg or at runtime.
+An empty value (`""`) is treated as unset and installs the defaults; a runtime
+`""` logs a warning pointing at `none`. A `_FILE` variant holding `[]` also
+means "no defaults". Before #1316 a runtime `""` disabled the defaults — that
+is a breaking change.
 
 - `container-environment` always installs (dynamically generated)
 - Conditional skills (`docker-development`, `cloud-infrastructure`) require both

@@ -42,8 +42,10 @@ CLAUDE_EXTRA_AGENTS_DEFAULT="${CLAUDE_EXTRA_AGENTS:-}"
 
 # Component override lists (comma-separated)
 # When set, these define the FULL set of components to install (replacing defaults).
-# When unset (__UNSET__ sentinel), all defaults are installed.
-# When empty string, no defaults are installed.
+# Unset AND empty both map to the __UNSET__ sentinel (all defaults installed):
+# the Dockerfile forwards every ARG, so an ARG never passed arrives as "" and
+# the two are indistinguishable here. "none" passes through verbatim and means
+# no defaults; claude-setup's resolver interprets it (#1316).
 # Can be overridden at runtime via environment variable.
 CLAUDE_PLUGINS_DEFAULT="${CLAUDE_PLUGINS:-__UNSET__}"
 CLAUDE_MCPS_DEFAULT="${CLAUDE_MCPS:-__UNSET__}"

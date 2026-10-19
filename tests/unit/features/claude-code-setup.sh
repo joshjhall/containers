@@ -132,6 +132,9 @@ _load_production_function "_plugin_status_in_list" "$CLAUDE_PLUGIN_LIB"
 # otherwise it fails at call time with "command not found" rather than at load.
 _load_production_function "_trim" "$CLAUDE_PLUGIN_LIB"
 _load_production_function "_is_in_list" "$CLAUDE_PLUGIN_LIB"
+# The _FILE tests below call the resolver; load the real one, not a mirror.
+_load_production_function "_classify_override_value" "$CLAUDE_PLUGIN_LIB"
+_load_production_function "_resolve_override_list" "$CLAUDE_PLUGIN_LIB"
 _load_production_function "plugin_status" "$CLAUDE_PLUGIN_LIB"
 _load_production_function "enable_plugin" "$CLAUDE_PLUGIN_LIB"
 _load_production_function "_plugin_is_denied" "$CLAUDE_PLUGIN_LIB"
@@ -1811,31 +1814,6 @@ test_plugin_marketplace_variation() {
 # Component Override Helper Tests
 # ============================================================================
 
-# _is_in_list is loaded from production by _load_production_function above
-# (#787) — no mirror here. _resolve_override_list still needs one: it reads
-# ${var}_DEFAULT indirectly, so tests drive it with their own scratch variables.
-_resolve_override_list() {
-    local var_name="$1"
-    local defaults="$2"
-    local default_var="${var_name}_DEFAULT"
-
-    local runtime_val="${!var_name:-}"
-    local default_val="${!default_var:-}"
-
-    if [ -n "${!var_name+x}" ]; then
-        echo "$runtime_val"
-        return 0
-    fi
-
-    if [ "$default_val" != "__UNSET__" ]; then
-        echo "$default_val"
-        return 0
-    fi
-
-    echo "$defaults"
-    return 1
-}
-
 # --- _is_in_list tests ---
 
 test_is_in_list_exact_match() {
@@ -1910,82 +1888,9 @@ test_is_in_list_whitespace_tolerance() {
     fi
 }
 
-# --- _resolve_override_list tests ---
-
-test_resolve_unset_returns_defaults() {
-    # Neither runtime nor build-time var set
-    unset TEST_VAR TEST_VAR_DEFAULT 2>/dev/null || true
-    TEST_VAR_DEFAULT="__UNSET__"
-    local result rc
-    # Use if-else to safely capture return code under set -e
-    if result=$(_resolve_override_list "TEST_VAR" "a,b,c"); then
-        rc=0
-    else
-        rc=1
-    fi
-    assert_equals "$result" "a,b,c" "Unset vars return defaults"
-    assert_equals "$rc" "1" "Return code 1 when using defaults"
-    unset TEST_VAR_DEFAULT
-}
-
-test_resolve_runtime_override() {
-    TEST_VAR="x,y"
-    TEST_VAR_DEFAULT="__UNSET__"
-    local result rc
-    if result=$(_resolve_override_list "TEST_VAR" "a,b,c"); then
-        rc=0
-    else
-        rc=1
-    fi
-    assert_equals "$result" "x,y" "Runtime var overrides defaults"
-    assert_equals "$rc" "0" "Return code 0 when override active"
-    unset TEST_VAR TEST_VAR_DEFAULT
-}
-
-test_resolve_runtime_empty_override() {
-    # shellcheck disable=SC2034  # TEST_VAR used indirectly via _resolve_override_list
-    TEST_VAR=""
-    TEST_VAR_DEFAULT="__UNSET__"
-    local result rc
-    if result=$(_resolve_override_list "TEST_VAR" "a,b,c"); then
-        rc=0
-    else
-        rc=1
-    fi
-    assert_equals "$result" "" "Empty runtime var returns empty"
-    assert_equals "$rc" "0" "Return code 0 when override active (empty)"
-    unset TEST_VAR TEST_VAR_DEFAULT
-}
-
-test_resolve_buildtime_default() {
-    unset TEST_VAR 2>/dev/null || true
-    TEST_VAR_DEFAULT="p,q"
-    local result rc
-    if result=$(_resolve_override_list "TEST_VAR" "a,b,c"); then
-        rc=0
-    else
-        rc=1
-    fi
-    assert_equals "$result" "p,q" "Build-time default overrides built-in defaults"
-    assert_equals "$rc" "0" "Return code 0 when build-time override active"
-    unset TEST_VAR_DEFAULT
-}
-
-test_resolve_buildtime_empty_default() {
-    unset TEST_VAR 2>/dev/null || true
-    # shellcheck disable=SC2034  # TEST_VAR_DEFAULT used indirectly via _resolve_override_list
-    TEST_VAR_DEFAULT=""
-    local result rc
-    if result=$(_resolve_override_list "TEST_VAR" "a,b,c"); then
-        rc=0
-    else
-        rc=1
-    fi
-    assert_equals "$result" "" "Empty build-time default returns empty"
-    assert_equals "$rc" "0" "Return code 0 when build-time override active (empty)"
-    unset TEST_VAR_DEFAULT
-}
-
+# _resolve_override_list (runtime / build-default / none / empty semantics) is
+# tested against the real library in
+# tests/unit/features/lib/claude/test_claude_override_resolution.sh (#1316).
 # persist-feature-flags.sh output (sentinel, override and _FILE_DEFAULT keys)
 # is asserted behaviourally in tests/unit/features/persist-feature-flags.sh.
 
@@ -2525,12 +2430,6 @@ run_test test_is_in_list_no_match "List helper: No match"
 run_test test_is_in_list_empty_list "List helper: Empty list"
 run_test test_is_in_list_empty_needle "List helper: Empty needle"
 run_test test_is_in_list_whitespace_tolerance "List helper: Whitespace tolerance"
-
-run_test test_resolve_unset_returns_defaults "Resolve: Unset returns defaults"
-run_test test_resolve_runtime_override "Resolve: Runtime override"
-run_test test_resolve_runtime_empty_override "Resolve: Runtime empty override"
-run_test test_resolve_buildtime_default "Resolve: Build-time default"
-run_test test_resolve_buildtime_empty_default "Resolve: Build-time empty default"
 
 run_test test_claude_setup_has_resolve_override "Source: _resolve_override_list in claude-setup"
 run_test test_claude_setup_has_is_in_list "Source: _is_in_list in claude-setup"
