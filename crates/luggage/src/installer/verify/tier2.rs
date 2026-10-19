@@ -349,7 +349,9 @@ mod tests {
                 ("not hex", LuggageError::VerificationFailed { tier: 2, reason, .. }) => {
                     assert!(reason.contains("not a hex digest"), "got: {reason}");
                 }
-                ("unwired", LuggageError::NotImplemented(_)) => {}
+                ("unwired", LuggageError::NotImplemented(msg)) => {
+                    assert!(msg.contains("digest algorithm"), "got: {msg}");
+                }
                 ("unrecognised", LuggageError::Catalog(msg)) => {
                     assert!(msg.contains("md5"), "got: {msg}");
                 }

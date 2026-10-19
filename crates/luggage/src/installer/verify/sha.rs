@@ -271,8 +271,10 @@ mod tests {
     }
 
     /// Walks every [`Algorithm`] variant in turn. The `match` is deliberately
-    /// wildcard-free: a newly wired variant fails to compile here until it is
-    /// placed in the chain, so the table test above cannot silently skip it.
+    /// wildcard-free, so a newly wired variant fails to compile here until it
+    /// is given an arm — the prompt to link it into the chain, and to bump the
+    /// count above. The count catches a chain that loses a variant; nothing
+    /// short of an enum-iteration crate can prove a new arm is reachable.
     fn successor(algo: Option<Algorithm>) -> Option<Algorithm> {
         match algo {
             None => Some(Algorithm::Sha256),
