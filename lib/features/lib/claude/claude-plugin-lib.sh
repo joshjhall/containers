@@ -794,7 +794,10 @@ librarian_verify_plugins() {
     local -a plugin_list
     local failures=0
 
-    plugins=$(librarian_resolve_plugins)
+    # stderr discarded: every caller runs librarian_install_plugins first, whose
+    # own resolve already printed any empty/mixed-value warning. Re-printing it
+    # here doubled each warning line on every boot (#1331).
+    plugins=$(librarian_resolve_plugins 2>/dev/null)
     [ -z "$plugins" ] && return 0
 
     IFS=',' read -ra plugin_list <<<"$plugins"

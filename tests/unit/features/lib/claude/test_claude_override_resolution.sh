@@ -10,6 +10,10 @@
 # then the built-in defaults. `none` is the one spelling for "no defaults" at
 # both build time and runtime; an empty value means unset everywhere.
 #
+# A value mixing `none` with entries is refused and resolution continues at the
+# NEXT tier — not straight to the built-ins (#1331). So runtime `none,foo` over
+# a build-time `none` yields the empty list: the build-time opt-out still holds.
+#
 # The functions under test are EXTRACTED FROM PRODUCTION and eval'd, never
 # mirrored by hand: a mirror keeps passing after the real resolver changes
 # underneath it, which is how the pre-#1316 suite pinned the old semantics.
@@ -205,6 +209,46 @@ test_buildtime_mixed_none_falls_back_to_defaults() {
     assert_contains "$ERR" "TV_DEFAULT=none,x" "warning names the _DEFAULT var"
 }
 
+# The fallback is to the NEXT tier, so a mixed runtime value over a build-time
+# `none` lands on that `none` — never on the built-ins (#1331).
+test_runtime_mixed_none_over_buildtime_none_is_empty() {
+    TV="none,foo"
+    TV_DEFAULT="none"
+    _resolve
+    assert_equals "" "$OUT" "mixed runtime none → build-time none → empty list"
+    assert_equals "0" "$RC" "rc 0: the build-time opt-out is active"
+    assert_contains "$ERR" "TV=none,foo" "the refused runtime value still warns"
+}
+
+test_runtime_spaced_mixed_none_falls_back_to_defaults() {
+    TV=" none , plugin-a "
+    TV_DEFAULT="__UNSET__"
+    _resolve
+    assert_equals "d1,d2" "$OUT" "spaced mixed none → built-in defaults"
+    assert_equals "1" "$RC" "rc 1"
+    assert_contains "$ERR" "mixes 'none'" "spaced mixed value warns"
+}
+
+# --- none beside only empty items is still none ---
+
+test_runtime_none_trailing_comma_is_none() {
+    TV="none,"
+    TV_DEFAULT="p,q"
+    _resolve
+    assert_equals "" "$OUT" "none, → empty list, not the build default"
+    assert_equals "0" "$RC" "rc 0: explicit override active"
+    assert_equals "" "$ERR" "empty items are not 'other entries' — no warning"
+}
+
+test_runtime_none_leading_comma_is_none() {
+    TV=" , none"
+    TV_DEFAULT="p,q"
+    _resolve
+    assert_equals "" "$OUT" ", none → empty list"
+    assert_equals "0" "$RC" "rc 0"
+    assert_equals "" "$ERR" "no warning"
+}
+
 # --- stdout carries only the list ---
 
 test_warnings_never_reach_stdout() {
@@ -261,6 +305,10 @@ run_test test_runtime_list_overrides_buildtime_none "Resolve: runtime list beats
 run_test test_runtime_mixed_none_falls_back_to_defaults "Resolve: mixed none → defaults"
 run_test test_runtime_mixed_none_falls_back_to_build_default "Resolve: mixed none → build default"
 run_test test_buildtime_mixed_none_falls_back_to_defaults "Resolve: mixed build none → defaults"
+run_test test_runtime_mixed_none_over_buildtime_none_is_empty "Resolve: mixed none → build none → empty"
+run_test test_runtime_spaced_mixed_none_falls_back_to_defaults "Resolve: spaced mixed none → defaults"
+run_test test_runtime_none_trailing_comma_is_none "Resolve: none, is none"
+run_test test_runtime_none_leading_comma_is_none "Resolve: , none is none"
 run_test test_warnings_never_reach_stdout "Resolve: warnings stay on stderr"
 run_test test_file_empty_array_means_no_defaults "File: [] means no defaults"
 run_test test_file_path_falls_through_to_none "File: falls through to none"

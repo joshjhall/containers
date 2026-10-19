@@ -113,10 +113,23 @@ map_to_test() {
         # lib/features/lib/<subdir>/* → tests/unit/features/*<subdir>*.sh
         # Sub-files are helpers for a parent feature; match via the subdirectory name.
         # e.g. lib/features/lib/claude/claude-setup → tests/unit/features/claude-code-setup.sh
+        # PLUS every suite under the mirrored tests/unit/features/lib/<subdir>/
+        # (#1331): those are split out of the parent suite and were never
+        # selected, so a changed resolver ran none of its own tests at push time.
         lib/features/lib/*)
             # Extract the subdirectory name (e.g. "claude" from lib/features/lib/claude/foo)
-            local subdir
+            local subdir match
             subdir=$(echo "$file" | command sed 's|lib/features/lib/\([^/]*\)/.*|\1|')
+            # Mirrored suites. A top-level lib/features/lib/foo.sh has no subdir
+            # (the sed leaves the path unchanged): map it to its same-named
+            # mirror only, never a subdir glob.
+            if [ "$subdir" != "$file" ]; then
+                for match in "${TESTS_DIR}"/unit/features/lib/"${subdir}"/*.sh; do
+                    [ -f "$match" ] && echo "$match"
+                done
+            elif [ -f "${TESTS_DIR}/unit/features/lib/$(basename "$file")" ]; then
+                echo "${TESTS_DIR}/unit/features/lib/$(basename "$file")"
+            fi
             # First try exact basename match
             local base
             base=$(basename "$file")
@@ -127,7 +140,6 @@ map_to_test() {
                 return
             fi
             # Fall back to glob matching on the subdirectory name
-            local match
             for match in "${TESTS_DIR}"/unit/features/*"${subdir}"*.sh; do
                 if [ -f "$match" ]; then
                     echo "$match"
