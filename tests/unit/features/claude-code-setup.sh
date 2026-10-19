@@ -3203,6 +3203,29 @@ test_librarian_symlink_prune_fails_closed() {
     assert_equals "yes" "$still" "unresolvable link is not deleted"
 }
 
+# Test: the prune must not depend on find's order. With deletion inside the
+# walk, removing an escaping link (.codegraph) before a link chained through
+# it (chain -> .codegraph) let chain resolve to the missing in-tree path and
+# survive. Which order the real find produced varied by filesystem, so this
+# stubs find to list .codegraph first, the order that failed in CI.
+test_librarian_symlink_prune_order_independent() {
+    local scratch tree stubs survivors
+    scratch="$(command mktemp -d)"
+    tree="$scratch/librarian"
+    stubs="$scratch/stubs"
+    command mkdir -p "$tree" "$stubs" "$scratch/outside"
+    command ln -s "$scratch/outside" "$tree/.codegraph"
+    command ln -s .codegraph "$tree/chain"
+
+    command printf '#!/bin/sh\ncommand printf "%%s\\0" "%s/.codegraph" "%s/chain"\n' "$tree" "$tree" >"$stubs/find"
+    command chmod +x "$stubs/find"
+    _run_symlink_prune_stubbed "$stubs" "$tree" >/dev/null 2>&1
+
+    survivors="$(cd "$tree" && command find . -type l | LC_ALL=C command sort | command tr '\n' ' ')"
+    command rm -rf "$scratch"
+    assert_equals "" "$survivors" "a link chained through a pruned link is pruned too"
+}
+
 # Test (#973): the prune runs as root, so an empty or relative LIBRARIAN_DIR
 # must fail the build instead of walking an arbitrary tree.
 test_librarian_symlink_prune_refuses_bad_dir() {
@@ -3266,6 +3289,7 @@ run_test test_librarian_grant_not_written "Librarian grant: claude-setup never r
 run_test test_default_permissions_has_librarian_read "Librarian grant: DEFAULT_PERMISSIONS reads the real install path"
 run_test test_librarian_tree_not_group_world_writable "Librarian tree: post-extraction chmod strips group/world write (#1020)"
 run_test test_librarian_escaping_symlinks_pruned "Librarian tree: symlinks escaping the tree are pruned, in-tree kept (#973)"
+run_test test_librarian_symlink_prune_order_independent "Librarian tree: prune result does not depend on find order"
 run_test test_librarian_symlink_prune_refuses_bad_dir "Librarian tree: prune refuses an empty/relative LIBRARIAN_DIR (#973)"
 run_test test_librarian_symlink_prune_fails_closed "Librarian tree: prune fails closed on find/realpath failure (#973)"
 
