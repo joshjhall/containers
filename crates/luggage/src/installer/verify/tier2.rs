@@ -336,6 +336,8 @@ mod tests {
             // Not-hex beats an unparsable or unwired algorithm.
             (with("md5", Some("zzzz")), "not hex"),
             (with("sha384", Some("")), "not hex"),
+            // Not-hex beats a wrong width on an algorithm that does parse.
+            (with("sha512", Some("zzzz")), "not hex"),
             // The algorithm beats a wrong width.
             (with("sha384", Some(short)), "unwired"),
             (with("md5", Some(short)), "unrecognised"),
