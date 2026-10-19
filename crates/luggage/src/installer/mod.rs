@@ -852,6 +852,27 @@ mod tests {
         }
     }
 
+    /// The pin's width depends on the algorithm, so a tier-2 entry whose
+    /// algorithm the digest layer cannot compute is refused at plan time with
+    /// that layer's own error rather than once the download has started.
+    #[test]
+    fn uncomputable_algorithm_tier_2_is_refused_before_downloading() {
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        for algorithm in ["md5", "sha384"] {
+            let mut resolved = pinless_tier_2_resolved();
+            resolved.verification.algorithm = Some(algorithm.into());
+            resolved.verification.pinned_checksum = Some("ab".repeat(32));
+            match (algorithm, installer.plan(&resolved).unwrap_err()) {
+                ("md5", LuggageError::Catalog(msg)) => assert!(msg.contains("md5"), "got: {msg}"),
+                ("sha384", LuggageError::NotImplemented(_)) => {}
+                (_, other) => panic!("{algorithm}: expected a pre-download refusal, got {other:?}"),
+            }
+        }
+    }
+
     /// A guard-refused entry must install no system packages (#1042).
     ///
     /// The fixture also carries an *unmapped* dependency under strict
