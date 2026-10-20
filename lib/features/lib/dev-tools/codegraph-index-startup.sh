@@ -91,27 +91,26 @@ fi
 #
 # A failed op is benign when a live codegraph daemon owns the index: the
 # editor's MCP server usually starts within a second or two of this hook, takes
-# the index lock, and keeps the graph synced through its own file watcher. The
-# lock refusal is then expected, not a failure, so it is logged as a skip. The
-# daemon is only checked AFTER the op fails, because it routinely appears after
-# this hook has already started.
-export PROJECT_DIR CODEGRAPH_OP CODEGRAPH_CACHE_DIR CODEGRAPH_BIN CODEGRAPH_LOG
+# the index lock, and keeps the graph synced through its own file watcher. Only
+# that exact case is logged as a skip: the op must have been refused with
+# codegraph's lock error, and the PID that error names must be a running
+# `codegraph ... serve` process. Any other failure, or a lock held by something
+# else, is still a failure.
+export PROJECT_DIR CODEGRAPH_OP CODEGRAPH_BIN CODEGRAPH_LOG
 setsid bash -c '
     cd "$PROJECT_DIR" || exit 0
     if "$CODEGRAPH_BIN" "$CODEGRAPH_OP" . >"$CODEGRAPH_LOG" 2>&1; then
         echo "[codegraph-index] $CODEGRAPH_OP complete" >>"$CODEGRAPH_LOG"
         exit 0
     fi
-    # daemon.pid is JSON ({"pid": N, ...}); require the pid to be a running
-    # codegraph process so a stale file or a recycled pid does not count.
-    daemon_pid=$(command sed -n "s/.*\"pid\": *\([0-9][0-9]*\).*/\1/p" \
-        "$CODEGRAPH_CACHE_DIR/daemon.pid" 2>/dev/null | command head -n 1)
-    daemon_cmd=""
-    if [ -n "$daemon_pid" ] && kill -0 "$daemon_pid" 2>/dev/null; then
-        daemon_cmd=$(command tr "\0" " " <"/proc/$daemon_pid/cmdline" 2>/dev/null)
+    holder_pid=$(command sed -n "s/.*locked by another process (PID \([0-9][0-9]*\)).*/\1/p" \
+        "$CODEGRAPH_LOG" 2>/dev/null | command head -n 1)
+    holder_cmd=""
+    if [ -n "$holder_pid" ]; then
+        holder_cmd=$(command tr "\0" " " <"/proc/$holder_pid/cmdline" 2>/dev/null)
     fi
-    if [[ "$daemon_cmd" == *codegraph* ]]; then
-        echo "[codegraph-index] $CODEGRAPH_OP skipped: codegraph daemon (PID $daemon_pid) owns the index and keeps it synced" \
+    if [[ "$holder_cmd" == *codegraph*" serve"* ]]; then
+        echo "[codegraph-index] $CODEGRAPH_OP skipped: codegraph daemon (PID $holder_pid) holds the index lock and keeps it synced" \
             >>"$CODEGRAPH_LOG"
     else
         echo "[codegraph-index] $CODEGRAPH_OP failed (see above); MCP will index on demand" \

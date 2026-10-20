@@ -1448,13 +1448,15 @@ test_codegraph_index_startup_script() {
 
 run_test test_codegraph_index_startup_script "codegraph index bootstrap is an every-boot, setsid-detached startup script"
 
-# Run the codegraph startup hook against a stub codegraph that always fails (as
-# a lock refusal does) and wait for the detached job's verdict line.
-# Usage: _run_codegraph_hook_failing <cache_dir> <log>
-_run_codegraph_hook_failing() {
-    local cache_dir="$1" log="$2"
-    local stub="$TEST_TEMP_DIR/codegraph-stub"
-    command printf '#!/bin/bash\necho "database is locked by another process"\nexit 1\n' >"$stub"
+# Run the codegraph startup hook against a stub codegraph whose sync fails with
+# the given output, and echo the log once the detached job writes its verdict.
+# Usage: out=$(_run_codegraph_hook_with_stub_output <stub_output> <tag>)
+_run_codegraph_hook_with_stub_output() {
+    local stub_output="$1" tag="$2"
+    local stub="$TEST_TEMP_DIR/codegraph-stub-$tag"
+    local log="$TEST_TEMP_DIR/codegraph-$tag.log"
+    local cache_dir="$TEST_TEMP_DIR/cache-codegraph"
+    command printf '#!/bin/bash\ncommand printf "%%s\\n" %q\nexit 1\n' "$stub_output" >"$stub"
     command chmod +x "$stub"
     command mkdir -p "$cache_dir" "$TEST_TEMP_DIR/project"
     : >"$cache_dir/codegraph.db"
@@ -1465,55 +1467,95 @@ _run_codegraph_hook_failing() {
 
     local _
     for _ in $(seq 1 50); do
-        [[ "$(command cat "$log" 2>/dev/null)" == *"[codegraph-index] sync "* ]] && return 0
+        [[ "$(command cat "$log" 2>/dev/null)" == *"[codegraph-index] sync "* ]] && break
         sleep 0.1
     done
-    return 1
+    command cat "$log" 2>/dev/null
 }
 
-# Test: a failed sync is reported as a skip, not a failure, when a live
-# codegraph daemon owns the index (the editor's MCP server starts alongside the
-# hook and takes the lock). A missing or unrelated daemon pid still fails.
+# Test: a failed sync is reported as a skip, not a failure, only when codegraph
+# refused it with its lock error AND the PID that error names is a running
+# `codegraph ... serve` daemon (the editor's MCP server starts alongside the
+# hook and takes the lock). Every other combination is still a failure.
 test_codegraph_index_skips_when_daemon_owns_index() {
-    local cache_dir="$TEST_TEMP_DIR/cache-codegraph" log out
+    local lock_msg="CodeGraph database is locked by another process (PID %s). If this is stale, run 'codegraph unlock'"
+    local out
 
-    # Live daemon: a process whose command line names codegraph.
-    command printf '#!/bin/bash\nexec -a codegraph-daemon sleep 30\n' >"$TEST_TEMP_DIR/codegraph-daemon"
-    bash "$TEST_TEMP_DIR/codegraph-daemon" &
+    # A process shaped like the real daemon: argv `codegraph.js serve --mcp`.
+    # `bash -c CMD ARG0 ARGS...` keeps ARGS in /proc/PID/cmdline without
+    # handing them to sleep; the trailing `:` stops bash exec-ing sleep in place.
+    bash -c 'sleep 30; :' node codegraph.js serve --mcp &
     local daemon_pid=$!
-    command mkdir -p "$cache_dir"
-    command printf '{\n  "pid": %s,\n  "version": "1.6.2"\n}\n' "$daemon_pid" >"$cache_dir/daemon.pid"
-    log="$TEST_TEMP_DIR/live.log"
-    _run_codegraph_hook_failing "$cache_dir" "$log"
-    out=$(command cat "$log")
-    kill "$daemon_pid" 2>/dev/null
-    wait "$daemon_pid" 2>/dev/null
-    assert_contains "$out" "sync skipped: codegraph daemon (PID $daemon_pid) owns the index" \
-        "lock refusal with a live codegraph daemon is logged as a skip"
-    assert_not_contains "$out" "sync failed" \
-        "lock refusal with a live codegraph daemon is not logged as a failure"
-
-    # No daemon.pid: the failure is real.
-    command rm -f "$cache_dir/daemon.pid"
-    log="$TEST_TEMP_DIR/none.log"
-    _run_codegraph_hook_failing "$cache_dir" "$log"
-    assert_contains "$(command cat "$log")" "sync failed (see above)" \
-        "a failed sync with no daemon is logged as a failure"
-
-    # Live pid that is not codegraph (stale file, recycled pid): still a failure.
+    # A live process that mentions codegraph but is not the daemon.
+    bash -c 'sleep 30; :' less /tmp/codegraph-index.log &
+    local reader_pid=$!
+    # A live process with nothing to do with codegraph.
     sleep 30 &
     local other_pid=$!
-    command printf '{"pid":%s}\n' "$other_pid" >"$cache_dir/daemon.pid"
-    log="$TEST_TEMP_DIR/other.log"
-    _run_codegraph_hook_failing "$cache_dir" "$log"
-    out=$(command cat "$log")
-    kill "$other_pid" 2>/dev/null
-    wait "$other_pid" 2>/dev/null
+    out=$(_run_codegraph_hook_with_stub_output "$(command printf "$lock_msg" "$daemon_pid")" daemon)
+    assert_contains "$out" "sync skipped: codegraph daemon (PID $daemon_pid) holds the index lock" \
+        "lock refusal naming a live codegraph serve daemon is logged as a skip"
+    assert_not_contains "$out" "sync failed" \
+        "lock refusal naming a live codegraph serve daemon is not logged as a failure"
+
+    # A non-lock failure while the daemon is alive is a real failure, even when
+    # the error happens to mention the daemon's PID.
+    out=$(_run_codegraph_hook_with_stub_output \
+        "Error: database disk image is malformed (opened by PID $daemon_pid)" corrupt)
     assert_contains "$out" "sync failed (see above)" \
-        "a daemon.pid naming a non-codegraph process does not count as a live daemon"
+        "a non-lock failure is logged as a failure even with a live daemon"
+
+    # Lock held by a live process that only mentions codegraph in its argv.
+    out=$(_run_codegraph_hook_with_stub_output "$(command printf "$lock_msg" "$reader_pid")" reader)
+    assert_contains "$out" "sync failed (see above)" \
+        "a lock holder whose argv merely mentions codegraph is not the daemon"
+
+    # Lock held by an unrelated live process.
+    out=$(_run_codegraph_hook_with_stub_output "$(command printf "$lock_msg" "$other_pid")" other)
+    assert_contains "$out" "sync failed (see above)" \
+        "a lock held by a non-codegraph process is logged as a failure"
+
+    kill "$daemon_pid" "$reader_pid" "$other_pid" 2>/dev/null
+    wait "$daemon_pid" "$reader_pid" "$other_pid" 2>/dev/null
+
+    # Lock error naming a PID that no longer exists (stale lock).
+    out=$(_run_codegraph_hook_with_stub_output "$(command printf "$lock_msg" "$daemon_pid")" stale)
+    assert_contains "$out" "sync failed (see above)" \
+        "a lock error naming a dead PID is logged as a failure"
 }
 
-run_test test_codegraph_index_skips_when_daemon_owns_index "codegraph startup sync logs a skip (not a failure) when a live daemon owns the index"
+run_test test_codegraph_index_skips_when_daemon_owns_index "codegraph startup sync logs a skip only for a lock held by a live codegraph daemon"
+
+# Test: a successful op logs completion, and a missing codegraph binary makes
+# the hook a silent no-op.
+test_codegraph_index_success_and_missing_binary() {
+    local stub="$TEST_TEMP_DIR/codegraph-ok" log="$TEST_TEMP_DIR/codegraph-ok.log" out _
+    command printf '#!/bin/bash\nexit 0\n' >"$stub"
+    command chmod +x "$stub"
+    command mkdir -p "$TEST_TEMP_DIR/project"
+
+    # No codegraph.db yet, so the hook must pick `init`.
+    out=$(WORKING_DIR="$TEST_TEMP_DIR/project" CODEGRAPH_CACHE_DIR="$TEST_TEMP_DIR/cg-ok" \
+        CODEGRAPH_BIN="$stub" CODEGRAPH_LOG="$log" \
+        bash "$PROJECT_ROOT/lib/features/lib/dev-tools/codegraph-index-startup.sh")
+    assert_contains "$out" "no index found; building initial index" \
+        "with no codegraph.db the hook chooses init"
+    for _ in $(seq 1 50); do
+        [[ "$(command cat "$log" 2>/dev/null)" == *"[codegraph-index] "* ]] && break
+        sleep 0.1
+    done
+    assert_contains "$(command cat "$log" 2>/dev/null)" "[codegraph-index] init complete" \
+        "a successful op is logged as complete"
+
+    out=$(WORKING_DIR="$TEST_TEMP_DIR/project" CODEGRAPH_CACHE_DIR="$TEST_TEMP_DIR/cg-none" \
+        CODEGRAPH_BIN="$TEST_TEMP_DIR/no-such-codegraph" CODEGRAPH_LOG="$TEST_TEMP_DIR/none.log" \
+        bash "$PROJECT_ROOT/lib/features/lib/dev-tools/codegraph-index-startup.sh")
+    assert_equals "" "$out" "a missing codegraph binary makes the hook print nothing"
+    assert_false "[ -e '$TEST_TEMP_DIR/cg-none' ]" \
+        "a missing codegraph binary makes the hook touch nothing"
+}
+
+run_test test_codegraph_index_success_and_missing_binary "codegraph startup hook logs init completion and no-ops without the binary"
 
 # Test: the `golem attach <N>` shell shortcut is wired correctly — installed
 # resolver on PATH + a librarian-gated golem() function that resolves the
