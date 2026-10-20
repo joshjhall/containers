@@ -26,3 +26,11 @@ scanner run *logs* (not its conclusion) and for piled-up `scan/*` branches.
 The scanner names branches per day, so a leftover same-day branch blocks that
 day's push — delete stale `scan/*` refs before a manual `scan.yml` dispatch.
 Related: [[vendored-catalog-drift-gate]], [[zero-checks-is-not-green]].
+
+**Second failure mode (2026-10-16):** the scanner compares upstream against
+`main`, so an *unmerged* scan PR's versions look new on every hourly tick. A
+same-day re-run is rejected as non-fast-forward. A next-day re-run would open a
+duplicate PR. Bot-opened scan PRs also sit in `action_required` with zero checks
+until someone approves them by hand, so they stay open. Tracked as
+containers-db #400 (dedup) and #401 (open scan PRs with a non-GITHUB_TOKEN
+identity; needs a maintainer-provisioned secret).

@@ -36,14 +36,17 @@
 
 set -euo pipefail
 
-CODEGRAPH_CACHE_DIR="/cache/codegraph"
+# Overridable for tests only.
+CODEGRAPH_CACHE_DIR="${CODEGRAPH_CACHE_DIR:-/cache/codegraph}"
+CODEGRAPH_BIN="${CODEGRAPH_BIN:-/usr/local/bin/codegraph}"
+CODEGRAPH_LOG="${CODEGRAPH_LOG:-/tmp/codegraph-index.log}"
 
 # Resolve the project root. WORKING_DIR is baked into the image env (Dockerfile
 # `ENV WORKING_DIR`); fall back to $PWD for standalone/manual invocations.
 PROJECT_DIR="${WORKING_DIR:-${PWD:-}}"
 
 # No codegraph binary (e.g. dev-tools not installed) → nothing to do.
-if ! command -v codegraph >/dev/null 2>&1; then
+if [ ! -x "$CODEGRAPH_BIN" ]; then
     exit 0
 fi
 
@@ -85,13 +88,34 @@ fi
 # Detach with setsid so the build survives a transient parent (the Zed
 # recover-entrypoint replay), and redirect all fds so it never holds the
 # startup pipe open.
+#
+# A failed op is benign when a live codegraph daemon owns the index: the
+# editor's MCP server usually starts within a second or two of this hook, takes
+# the index lock, and keeps the graph synced through its own file watcher. Only
+# that exact case is logged as a skip: the op must have been refused with
+# codegraph's lock error, and the PID that error names must be a running
+# `codegraph.js serve` process. Any other failure, or a lock held by something
+# else, is still a failure. Only `sync` can be skipped: a contended `init`, and
+# the lock-file race, report the lock without a PID and so log as failures.
+export PROJECT_DIR CODEGRAPH_OP CODEGRAPH_BIN CODEGRAPH_LOG
 setsid bash -c '
-    cd "'"$PROJECT_DIR"'" || exit 0
-    if /usr/local/bin/codegraph "'"$CODEGRAPH_OP"'" . >/tmp/codegraph-index.log 2>&1; then
-        echo "[codegraph-index] '"$CODEGRAPH_OP"' complete" >>/tmp/codegraph-index.log
+    cd "$PROJECT_DIR" || exit 0
+    if "$CODEGRAPH_BIN" "$CODEGRAPH_OP" . >"$CODEGRAPH_LOG" 2>&1; then
+        echo "[codegraph-index] $CODEGRAPH_OP complete" >>"$CODEGRAPH_LOG"
+        exit 0
+    fi
+    holder_pid=$(command sed -n "s/.*locked by another process (PID \([0-9][0-9]*\)).*/\1/p" \
+        "$CODEGRAPH_LOG" 2>/dev/null | command head -n 1)
+    holder_cmd=""
+    if [ -n "$holder_pid" ]; then
+        holder_cmd=$(command tr "\0" " " <"/proc/$holder_pid/cmdline" 2>/dev/null)
+    fi
+    if [[ "$holder_cmd" == *codegraph.js" serve"* ]]; then
+        echo "[codegraph-index] $CODEGRAPH_OP skipped: codegraph daemon (PID $holder_pid) holds the index lock and keeps it synced" \
+            >>"$CODEGRAPH_LOG"
     else
-        echo "[codegraph-index] '"$CODEGRAPH_OP"' failed (see above); MCP will index on demand" \
-            >>/tmp/codegraph-index.log
+        echo "[codegraph-index] $CODEGRAPH_OP failed (see above); MCP will index on demand" \
+            >>"$CODEGRAPH_LOG"
     fi
 ' </dev/null >/dev/null 2>&1 &
 
