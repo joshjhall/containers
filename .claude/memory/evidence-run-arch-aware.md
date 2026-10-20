@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: fbf73454-3454-4b5c-8104-f120b8e4b38e
+  modified: 2026-10-19T04:36:13.551Z
 ---
 
 `.github/workflows/evidence-run.yml` was made arch-aware in #641 (PR #649). Each
@@ -23,8 +24,10 @@ Emulated arm64 on an amd64 host cross-compiles `aarch64-unknown-linux-musl`.
 
 **arm64 is ACTIVE** (2026-10-12): the hard-coded pilot leg is gone. The
 setup job derives the matrix from the catalog via `bin/lib/evidence-matrix.sh`
-(newest patch per minor x claimed tuples with a base image, pending only,
-capped at 200 for GitHub's 256-job limit), and #1113 published arm64 base
+(newest patch per minor x claimed tuples with a base image, pending only —
+judged against published containers-db since #1319, see
+[[evidence-pending-from-published-db]] — capped at 200 for GitHub's 256-job
+limit), and #1113 published arm64 base
 images for all 9 OS versions. Both arches run native (arm64 on
 `ubuntu-24.04-arm`). The emulated path below still exists for dispatch.
 
