@@ -1448,6 +1448,73 @@ test_codegraph_index_startup_script() {
 
 run_test test_codegraph_index_startup_script "codegraph index bootstrap is an every-boot, setsid-detached startup script"
 
+# Run the codegraph startup hook against a stub codegraph that always fails (as
+# a lock refusal does) and wait for the detached job's verdict line.
+# Usage: _run_codegraph_hook_failing <cache_dir> <log>
+_run_codegraph_hook_failing() {
+    local cache_dir="$1" log="$2"
+    local stub="$TEST_TEMP_DIR/codegraph-stub"
+    command printf '#!/bin/bash\necho "database is locked by another process"\nexit 1\n' >"$stub"
+    command chmod +x "$stub"
+    command mkdir -p "$cache_dir" "$TEST_TEMP_DIR/project"
+    : >"$cache_dir/codegraph.db"
+
+    WORKING_DIR="$TEST_TEMP_DIR/project" CODEGRAPH_CACHE_DIR="$cache_dir" \
+        CODEGRAPH_BIN="$stub" CODEGRAPH_LOG="$log" \
+        bash "$PROJECT_ROOT/lib/features/lib/dev-tools/codegraph-index-startup.sh" >/dev/null
+
+    local _
+    for _ in $(seq 1 50); do
+        [[ "$(command cat "$log" 2>/dev/null)" == *"[codegraph-index] sync "* ]] && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+# Test: a failed sync is reported as a skip, not a failure, when a live
+# codegraph daemon owns the index (the editor's MCP server starts alongside the
+# hook and takes the lock). A missing or unrelated daemon pid still fails.
+test_codegraph_index_skips_when_daemon_owns_index() {
+    local cache_dir="$TEST_TEMP_DIR/cache-codegraph" log out
+
+    # Live daemon: a process whose command line names codegraph.
+    command printf '#!/bin/bash\nexec -a codegraph-daemon sleep 30\n' >"$TEST_TEMP_DIR/codegraph-daemon"
+    bash "$TEST_TEMP_DIR/codegraph-daemon" &
+    local daemon_pid=$!
+    command mkdir -p "$cache_dir"
+    command printf '{\n  "pid": %s,\n  "version": "1.6.2"\n}\n' "$daemon_pid" >"$cache_dir/daemon.pid"
+    log="$TEST_TEMP_DIR/live.log"
+    _run_codegraph_hook_failing "$cache_dir" "$log"
+    out=$(command cat "$log")
+    kill "$daemon_pid" 2>/dev/null
+    wait "$daemon_pid" 2>/dev/null
+    assert_contains "$out" "sync skipped: codegraph daemon (PID $daemon_pid) owns the index" \
+        "lock refusal with a live codegraph daemon is logged as a skip"
+    assert_not_contains "$out" "sync failed" \
+        "lock refusal with a live codegraph daemon is not logged as a failure"
+
+    # No daemon.pid: the failure is real.
+    command rm -f "$cache_dir/daemon.pid"
+    log="$TEST_TEMP_DIR/none.log"
+    _run_codegraph_hook_failing "$cache_dir" "$log"
+    assert_contains "$(command cat "$log")" "sync failed (see above)" \
+        "a failed sync with no daemon is logged as a failure"
+
+    # Live pid that is not codegraph (stale file, recycled pid): still a failure.
+    sleep 30 &
+    local other_pid=$!
+    command printf '{"pid":%s}\n' "$other_pid" >"$cache_dir/daemon.pid"
+    log="$TEST_TEMP_DIR/other.log"
+    _run_codegraph_hook_failing "$cache_dir" "$log"
+    out=$(command cat "$log")
+    kill "$other_pid" 2>/dev/null
+    wait "$other_pid" 2>/dev/null
+    assert_contains "$out" "sync failed (see above)" \
+        "a daemon.pid naming a non-codegraph process does not count as a live daemon"
+}
+
+run_test test_codegraph_index_skips_when_daemon_owns_index "codegraph startup sync logs a skip (not a failure) when a live daemon owns the index"
+
 # Test: the `golem attach <N>` shell shortcut is wired correctly — installed
 # resolver on PATH + a librarian-gated golem() function that resolves the
 # workflow plugin scripts dir dynamically (#731).
