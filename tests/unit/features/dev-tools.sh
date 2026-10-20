@@ -1484,13 +1484,13 @@ test_codegraph_index_skips_when_daemon_owns_index() {
     # A process shaped like the real daemon: argv `codegraph.js serve --mcp`.
     # `bash -c CMD ARG0 ARGS...` keeps ARGS in /proc/PID/cmdline without
     # handing them to sleep; the trailing `:` stops bash exec-ing sleep in place.
-    bash -c 'sleep 30; :' node codegraph.js serve --mcp &
+    bash -c 'sleep 30; :' node /opt/codegraph/lib/dist/bin/codegraph.js serve --mcp </dev/null >/dev/null 2>&1 &
     local daemon_pid=$!
-    # A live process that mentions codegraph but is not the daemon.
-    bash -c 'sleep 30; :' less /tmp/codegraph-index.log &
+    # A live process whose argv mentions codegraph and serve but is not the daemon.
+    bash -c 'sleep 30; :' grep codegraph serve </dev/null >/dev/null 2>&1 &
     local reader_pid=$!
     # A live process with nothing to do with codegraph.
-    sleep 30 &
+    sleep 30 >/dev/null 2>&1 &
     local other_pid=$!
     out=$(_run_codegraph_hook_with_stub_output "$(command printf "$lock_msg" "$daemon_pid")" daemon)
     assert_contains "$out" "sync skipped: codegraph daemon (PID $daemon_pid) holds the index lock" \
@@ -1508,13 +1508,17 @@ test_codegraph_index_skips_when_daemon_owns_index() {
     # Lock held by a live process that only mentions codegraph in its argv.
     out=$(_run_codegraph_hook_with_stub_output "$(command printf "$lock_msg" "$reader_pid")" reader)
     assert_contains "$out" "sync failed (see above)" \
-        "a lock holder whose argv merely mentions codegraph is not the daemon"
+        "a lock holder whose argv merely mentions codegraph and serve is not the daemon"
 
     # Lock held by an unrelated live process.
     out=$(_run_codegraph_hook_with_stub_output "$(command printf "$lock_msg" "$other_pid")" other)
     assert_contains "$out" "sync failed (see above)" \
         "a lock held by a non-codegraph process is logged as a failure"
 
+    # Kill the fixtures' sleep children first: killing only the bash parents
+    # orphans them, and an orphan would outlive the suite.
+    command pkill -P "$daemon_pid" 2>/dev/null
+    command pkill -P "$reader_pid" 2>/dev/null
     kill "$daemon_pid" "$reader_pid" "$other_pid" 2>/dev/null
     wait "$daemon_pid" "$reader_pid" "$other_pid" 2>/dev/null
 

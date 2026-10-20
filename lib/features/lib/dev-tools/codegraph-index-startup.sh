@@ -94,8 +94,9 @@ fi
 # the index lock, and keeps the graph synced through its own file watcher. Only
 # that exact case is logged as a skip: the op must have been refused with
 # codegraph's lock error, and the PID that error names must be a running
-# `codegraph ... serve` process. Any other failure, or a lock held by something
-# else, is still a failure.
+# `codegraph.js serve` process. Any other failure, or a lock held by something
+# else, is still a failure. Only `sync` can be skipped: a contended `init`, and
+# the lock-file race, report the lock without a PID and so log as failures.
 export PROJECT_DIR CODEGRAPH_OP CODEGRAPH_BIN CODEGRAPH_LOG
 setsid bash -c '
     cd "$PROJECT_DIR" || exit 0
@@ -109,7 +110,7 @@ setsid bash -c '
     if [ -n "$holder_pid" ]; then
         holder_cmd=$(command tr "\0" " " <"/proc/$holder_pid/cmdline" 2>/dev/null)
     fi
-    if [[ "$holder_cmd" == *codegraph*" serve"* ]]; then
+    if [[ "$holder_cmd" == *codegraph.js" serve"* ]]; then
         echo "[codegraph-index] $CODEGRAPH_OP skipped: codegraph daemon (PID $holder_pid) holds the index lock and keeps it synced" \
             >>"$CODEGRAPH_LOG"
     else
