@@ -770,6 +770,37 @@ mod tests {
         assert!(dry.warnings.is_empty(), "expected empty, got {:?}", dry.warnings);
     }
 
+    /// `plan()` substitutes `{arch}` from the resolved platform into both the
+    /// source and checksum URLs (#811). Two arches through the same template
+    /// must yield two different URLs — a call site that dropped `arch` would
+    /// fail with `TemplateMissingKey`, and one that hard-coded it would make
+    /// the two plans agree.
+    #[test]
+    fn plan_substitutes_arch_from_the_resolved_platform() {
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        for platform_arch in ["amd64", "arm64"] {
+            let mut resolved = sample_resolved_with_deps();
+            resolved.version = "1.27.2".into();
+            resolved.platform.arch = platform_arch.into();
+            resolved.source_url_template =
+                Some("https://dl.google.com/go/go{version}.linux-{arch}.tar.gz".into());
+            resolved.verification = Verification {
+                checksum_url_template: Some(
+                    "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz.sha256".into(),
+                ),
+                ..resolved.verification
+            };
+            let plan = installer.plan(&resolved).unwrap();
+            let expected =
+                format!("https://dl.google.com/go/go1.27.2.linux-{platform_arch}.tar.gz");
+            assert_eq!(plan.source_url.as_deref(), Some(expected.as_str()));
+            assert_eq!(plan.checksum_url, Some(format!("{expected}.sha256")));
+        }
+    }
+
     /// `sample_resolved_with_deps` with a pinless tier-2 verification — an
     /// entry the guard always refuses, whatever the strictness.
     fn pinless_tier_2_resolved() -> ResolvedInstall {

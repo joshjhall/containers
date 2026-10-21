@@ -310,6 +310,40 @@ mod tests {
         assert!(warnings.is_empty(), "expected empty, got {warnings:?}");
     }
 
+    /// The tier-3 checksum URL is substituted here, separately from `plan()`,
+    /// so `{arch}` must be populated at this call site too (#811). The mock
+    /// serves only the arm64 URL: a stage that left `{arch}` unset would fail
+    /// with `TemplateMissingKey`, and one that hard-coded or mis-sourced it
+    /// would request a URL the mock does not have.
+    #[test]
+    fn stage_verify_substitutes_arch_into_the_checksum_url() {
+        let digest = digest_hex(Some("sha256"), b"hello").unwrap();
+        let mock = MockHttpClient::new();
+        mock.insert(
+            "https://example.test/go1.27.2.linux-arm64.tar.gz.sha256",
+            format!("{digest}\n").into_bytes(),
+        );
+
+        let mut resolved = sample_resolved_with_deps(); // tier 3
+        resolved.version = "1.27.2".into();
+        resolved.platform =
+            Platform { os: "debian".into(), os_version: Some("12".into()), arch: "arm64".into() };
+        resolved.verification = Verification {
+            checksum_url_template: Some(
+                "https://example.test/go{version}.linux-{arch}.tar.gz.sha256".into(),
+            ),
+            ..resolved.verification
+        };
+        let installer = Installer::with_runners(
+            InstallerOptions { install_system_packages: false, ..InstallerOptions::default() },
+            Arc::new(mock),
+            Arc::new(methods::ProcessRunner),
+        );
+        installer
+            .stage_verify(&resolved, &digest, "go1.27.2.linux-arm64.tar.gz", None)
+            .expect("the arm64 checksum URL must be the one fetched");
+    }
+
     #[test]
     fn captured_dependency_versions_none_when_recording_disabled() {
         // With recording off (the default) the success path records no
