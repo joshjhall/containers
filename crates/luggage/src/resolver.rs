@@ -109,6 +109,11 @@ pub struct ResolvedInstall {
     /// construction — they used to derive it independently through a
     /// `match tool` table that only knew about rust.
     pub primary_binary: String,
+    /// Arguments [`Self::primary_binary`] is invoked with for those same two
+    /// probes, from the tool index's `version_args`, falling back to
+    /// `["--version"]`. Resolved here for the same agree-by-construction
+    /// reason as `primary_binary`.
+    pub version_args: Vec<String>,
     /// `binaries` for the chosen method — names to surface in `bin_root`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub binaries: Option<Vec<String>>,
@@ -277,6 +282,7 @@ pub fn resolve_with_policy(
     Ok(build_resolved(
         &entry.index.id,
         entry.index.primary_binary.as_deref(),
+        entry.index.version_args.as_deref(),
         &chosen_doc.version,
         method,
         platform.clone(),
@@ -388,6 +394,7 @@ fn build_partial_constraint(literal: &str) -> Result<String> {
 fn build_resolved(
     tool: &str,
     primary_binary: Option<&str>,
+    version_args: Option<&[String]>,
     version: &str,
     method: &InstallMethod,
     platform: Platform,
@@ -408,6 +415,11 @@ fn build_resolved(
         // The tool id is the fallback: correct wherever the binary shares the
         // catalog id, and the only sane default for an entry that says nothing.
         primary_binary: primary_binary.unwrap_or(tool).to_owned(),
+        // An empty array is treated as absent: probing a bare binary with no
+        // argv can start a REPL or block on stdin rather than print a version.
+        version_args: version_args
+            .filter(|a| !a.is_empty())
+            .map_or_else(|| vec!["--version".to_owned()], <[String]>::to_vec),
         binaries: method.binaries.clone(),
         bin_source_dir: method.bin_source_dir.clone(),
         cache_dirs: method.cache_dirs.clone(),
@@ -451,6 +463,7 @@ mod tests {
             // catalog entries take, and `resolves_primary_binary_*` below
             // covers both halves explicitly.
             primary_binary: None,
+            version_args: None,
             version_style: Some(VersionStyle::Semver),
             tag_prefix: None,
             default_version: Some("1.95.0".into()),
@@ -903,6 +916,36 @@ mod tests {
         entry.index.primary_binary = Some("rustc".into());
         let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
         assert_eq!(r.primary_binary, "rustc");
+    }
+
+    /// Absent `version_args` resolves to `["--version"]` — what every probe
+    /// ran before the field existed, so existing entries are unaffected.
+    #[test]
+    fn version_args_default_to_dash_dash_version() {
+        let entry = entry_with_score(ActivityScore::VeryActive);
+        assert!(entry.index.version_args.is_none(), "fixture must exercise the absent case");
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(r.version_args, ["--version"]);
+    }
+
+    /// A declared `version_args` replaces the default wholesale (#811): go
+    /// declares `["version"]` because `go --version` exits 2.
+    #[test]
+    fn version_args_use_the_catalog_value_when_present() {
+        let mut entry = entry_with_score(ActivityScore::VeryActive);
+        entry.index.version_args = Some(vec!["version".into()]);
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(r.version_args, ["version"]);
+    }
+
+    /// A declared-but-empty `version_args` falls back to the default rather
+    /// than exec'ing the bare binary, which can start a REPL or block on stdin.
+    #[test]
+    fn empty_version_args_fall_back_to_the_default() {
+        let mut entry = entry_with_score(ActivityScore::VeryActive);
+        entry.index.version_args = Some(Vec::new());
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(r.version_args, ["--version"]);
     }
 
     /// The method-level fields ride through resolution untouched, and stay

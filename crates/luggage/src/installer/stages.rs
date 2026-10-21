@@ -111,8 +111,11 @@ impl Installer {
         logger: Option<&logging::FeatureLogger>,
     ) -> Result<Vec<verify::VerificationWarning>> {
         let target = rustup_target_for(&resolved.platform).ok();
-        let subs =
-            Substitutions { version: Some(resolved.version.as_str()), rustup_target: target };
+        let subs = Substitutions {
+            version: Some(resolved.version.as_str()),
+            rustup_target: target,
+            arch: Some(resolved.platform.arch.as_str()),
+        };
         if let Some(l) = logger {
             l.step(&format!("verify (tier {})", resolved.verification_tier));
         }
@@ -210,6 +213,7 @@ impl Installer {
         validate::check(
             &resolved.tool,
             &resolved.primary_binary,
+            &resolved.version_args,
             &resolved.version,
             &self.options.bin_root,
             env_map,
@@ -304,6 +308,72 @@ mod tests {
         );
         let warnings = installer.stage_verify(&resolved, &digest, "art", None).unwrap();
         assert!(warnings.is_empty(), "expected empty, got {warnings:?}");
+    }
+
+    /// The tier-3 checksum URL is substituted here, separately from `plan()`,
+    /// so `{arch}` must be populated at this call site too (#811). The mock
+    /// serves only the arm64 URL: a stage that left `{arch}` unset would fail
+    /// with `TemplateMissingKey`, and one that hard-coded or mis-sourced it
+    /// would request a URL the mock does not have.
+    #[test]
+    fn stage_verify_substitutes_arch_into_the_checksum_url() {
+        let digest = digest_hex(Some("sha256"), b"hello").unwrap();
+        let mock = MockHttpClient::new();
+        mock.insert(
+            "https://example.test/go1.27.2.linux-arm64.tar.gz.sha256",
+            format!("{digest}\n").into_bytes(),
+        );
+
+        let mut resolved = sample_resolved_with_deps(); // tier 3
+        resolved.version = "1.27.2".into();
+        resolved.platform =
+            Platform { os: "debian".into(), os_version: Some("12".into()), arch: "arm64".into() };
+        resolved.verification = Verification {
+            checksum_url_template: Some(
+                "https://example.test/go{version}.linux-{arch}.tar.gz.sha256".into(),
+            ),
+            ..resolved.verification
+        };
+        let installer = Installer::with_runners(
+            InstallerOptions { install_system_packages: false, ..InstallerOptions::default() },
+            Arc::new(mock),
+            Arc::new(methods::ProcessRunner),
+        );
+        installer
+            .stage_verify(&resolved, &digest, "go1.27.2.linux-arm64.tar.gz", None)
+            .expect("the arm64 checksum URL must be the one fetched");
+    }
+
+    /// Post-install validation runs `resolved.version_args`, not a hard-coded
+    /// `--version` (#811): `["version"]` validates a go-shaped shim, and the
+    /// default argv — which the shim rejects with exit 2 — fails it.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn stage_validate_uses_the_resolved_version_args() {
+        use crate::installer::idempotency::write_subcommand_shim;
+
+        let dir = tempfile::tempdir().unwrap();
+        write_subcommand_shim(dir.path(), "go", "go version go1.27.2 linux/arm64");
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            bin_root: dir.path().to_owned(),
+            ..InstallerOptions::default()
+        });
+        let mut resolved = sample_resolved_with_deps();
+        resolved.tool = "go".into();
+        resolved.version = "1.27.2".into();
+        resolved.primary_binary = "go".into();
+        let env = BTreeMap::new();
+
+        resolved.version_args = vec!["version".into()];
+        let captured = installer.stage_validate(&resolved, &env, None).unwrap();
+        assert_eq!(captured, "go version go1.27.2 linux/arm64");
+
+        resolved.version_args = vec!["--version".into()];
+        installer
+            .stage_validate(&resolved, &env, None)
+            .expect_err("`go --version` exits 2; validation must fail");
     }
 
     #[test]

@@ -297,8 +297,11 @@ impl Installer {
         )?;
 
         let target = rustup_target_for(&resolved.platform).ok();
-        let subs =
-            Substitutions { version: Some(resolved.version.as_str()), rustup_target: target };
+        let subs = Substitutions {
+            version: Some(resolved.version.as_str()),
+            rustup_target: target,
+            arch: Some(resolved.platform.arch.as_str()),
+        };
 
         let source_url = match resolved.source_url_template.as_deref() {
             Some(t) => Some(substitute_url(t, &subs)?),
@@ -385,6 +388,7 @@ impl Installer {
         if !self.options.force
             && idempotency::already_installed(
                 &resolved.primary_binary,
+                &resolved.version_args,
                 &resolved.version,
                 &self.options.bin_root,
             )
@@ -632,6 +636,7 @@ mod tests {
                 unmapped: Vec::new(),
             },
             primary_binary: "rustc".into(),
+            version_args: vec!["--version".into()],
             binaries: None,
             bin_source_dir: None,
             cache_dirs: None,
@@ -763,6 +768,73 @@ mod tests {
         let plan = installer.plan(&resolved).unwrap();
         let dry = Installer::report_dry_run(plan, None, 0.0);
         assert!(dry.warnings.is_empty(), "expected empty, got {:?}", dry.warnings);
+    }
+
+    /// `plan()` substitutes `{arch}` from the resolved platform into both the
+    /// source and checksum URLs (#811). Two arches through the same template
+    /// must yield two different URLs — a call site that dropped `arch` would
+    /// fail with `TemplateMissingKey`, and one that hard-coded it would make
+    /// the two plans agree.
+    #[test]
+    fn plan_substitutes_arch_from_the_resolved_platform() {
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        for platform_arch in ["amd64", "arm64"] {
+            let mut resolved = sample_resolved_with_deps();
+            resolved.version = "1.27.2".into();
+            resolved.platform.arch = platform_arch.into();
+            resolved.source_url_template =
+                Some("https://dl.google.com/go/go{version}.linux-{arch}.tar.gz".into());
+            resolved.verification = Verification {
+                checksum_url_template: Some(
+                    "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz.sha256".into(),
+                ),
+                ..resolved.verification
+            };
+            let plan = installer.plan(&resolved).unwrap();
+            let expected =
+                format!("https://dl.google.com/go/go1.27.2.linux-{platform_arch}.tar.gz");
+            assert_eq!(plan.source_url.as_deref(), Some(expected.as_str()));
+            assert_eq!(plan.checksum_url, Some(format!("{expected}.sha256")));
+        }
+    }
+
+    /// The idempotency skip probes with `resolved.version_args`, not a
+    /// hard-coded `--version` (#811). Against a go-shaped shim, `["version"]`
+    /// must skip the install; the default argv, which the shim rejects with
+    /// exit 2, must not — so the positive cannot be a shim that answers
+    /// anything. The negative run then proceeds to a real install attempt,
+    /// whose outcome is irrelevant here (log/cache/tmp all point at the
+    /// tempdir); only `already_installed` is asserted.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn idempotency_skip_uses_the_resolved_version_args() {
+        let dir = tempfile::tempdir().unwrap();
+        idempotency::write_subcommand_shim(dir.path(), "go", "go version go1.27.2 linux/arm64");
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            bin_root: dir.path().to_owned(),
+            log_dir: dir.path().join("log"),
+            cache_root: dir.path().join("cache"),
+            tmp_root: dir.path().join("tmp"),
+            ..InstallerOptions::default()
+        });
+        let mut resolved = sample_resolved_with_deps();
+        resolved.tool = "go".into();
+        resolved.version = "1.27.2".into();
+        resolved.primary_binary = "go".into();
+
+        resolved.version_args = vec!["version".into()];
+        let (report, result) = installer.run_with_report(&resolved);
+        result.unwrap();
+        assert!(report.already_installed, "declared argv must confirm the install");
+
+        resolved.version_args = vec!["--version".into()];
+        let (report, _) = installer.run_with_report(&resolved);
+        assert!(!report.already_installed, "`go --version` exits 2; it must not skip");
     }
 
     /// `sample_resolved_with_deps` with a pinless tier-2 verification — an

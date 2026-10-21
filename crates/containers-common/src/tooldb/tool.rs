@@ -44,6 +44,15 @@ pub struct Tool {
     /// explicitly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_binary: Option<String>,
+    /// Arguments passed to [`Self::primary_binary`] for the already-installed
+    /// probe and post-install validation; the output must contain the
+    /// installed version.
+    ///
+    /// `None` means `["--version"]` — correct for most tools, wrong for those
+    /// that only answer a subcommand (`go --version` exits 2; `go version`
+    /// works), which must set it explicitly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_args: Option<Vec<String>>,
     /// How version strings on this tool should be parsed. Defaults to semver.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version_style: Option<VersionStyle>,
@@ -340,6 +349,33 @@ mod tests {
         let tool: Tool = serde_json::from_str(json).unwrap();
         assert_eq!(tool.tag_prefix, Some(TagPrefix::V));
         assert_eq!(tool.default_version.as_deref(), Some("0.36.0"));
+    }
+
+    /// `version_args` parses when present, defaults to `None` when absent
+    /// (the rust fixture predates it), and round-trips. The absent case must
+    /// serialize without the key: the containers-db schema types the field
+    /// as an array, so a written-back `null` would fail validation there.
+    #[test]
+    fn parses_and_round_trips_version_args() {
+        let json = r#"{
+            "schemaVersion": 1,
+            "id": "go",
+            "display_name": "Go",
+            "kind": "language",
+            "activity": { "score": "active", "scanned_at": "2026-01-01T00:00:00Z" },
+            "version_args": ["version"]
+        }"#;
+        let tool: Tool = serde_json::from_str(json).unwrap();
+        assert_eq!(tool.version_args.as_deref(), Some(&["version".to_owned()][..]));
+        let reparsed: Tool = serde_json::from_str(&serde_json::to_string(&tool).unwrap()).unwrap();
+        assert_eq!(reparsed.version_args, tool.version_args);
+
+        let rust: Tool = serde_json::from_str(RUST_INDEX).unwrap();
+        assert!(rust.version_args.is_none());
+        assert!(
+            !serde_json::to_string(&rust).unwrap().contains("version_args"),
+            "an absent field must not serialize",
+        );
     }
 
     #[test]
