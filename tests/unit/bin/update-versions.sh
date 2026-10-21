@@ -1425,6 +1425,103 @@ EOF
 }
 
 # ============================================================================
+# Test: the Go arm propagates a failed catalog update the same way (#811)
+# ============================================================================
+# golang.sh installs via luggage since #811, so the Go arm gained the same
+# `update_luggage_catalog "go" "$latest" || return "$RC_UPDATE_FAILED"` line as
+# Rust. A Go ARG bumped without its vendored catalog entry is the same
+# unbuildable half-update, so it must be fatal too. Same stub-failure shape as
+# the Rust test above, so the failure is the propagation under test and not an
+# exec error (127) that would pass for the wrong reason.
+test_go_luggage_catalog_failure_exits_three() {
+    local test_dir
+    test_dir=$(mktemp -d)
+    mkdir -p "$test_dir/lib/features"
+    command cat >"$test_dir/Dockerfile" <<'EOF'
+ARG GO_VERSION=1.27.2
+EOF
+    command cat >"$test_dir/lib/features/golang.sh" <<'EOF'
+#!/bin/bash
+GO_VERSION="${GO_VERSION:-1.27.2}"
+EOF
+    # The stub records its argv before failing, so the test can tell a call
+    # for go@<latest> from a copy-pasted "rust" arm or a $current argument —
+    # both of which fail identically and would otherwise pass.
+    command cat >"$test_dir/luggage-stub" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >>"$(dirname "$0")/luggage-argv.log"
+echo "stub luggage: catalog add-version failed" >&2
+exit 1
+EOF
+    command chmod +x "$test_dir/luggage-stub"
+
+    local ok=true rc=0
+    (
+        source "$PROJECT_ROOT/bin/lib/common.sh"
+        source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+        source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+
+        # shellcheck disable=SC2030,SC2034 # consumed by update_version() from the sourced module
+        PROJECT_ROOT="$test_dir"
+        # shellcheck disable=SC2030,SC2034 # ditto
+        DRY_RUN=false
+        # shellcheck disable=SC2030,SC2034 # ditto
+        LUGGAGE_BIN="$test_dir/luggage-stub"
+
+        update_version "Go" "1.27.2" "1.27.3" "Dockerfile" >/dev/null 2>&1
+    ) || rc=$?
+
+    # The catalog call targets go at the NEW version, exactly.
+    command grep -qE '^catalog add-version go@1\.27\.3( |$)' "$test_dir/luggage-argv.log" 2>/dev/null || {
+        echo "    expected 'catalog add-version go@1.27.3', got: $(command cat "$test_dir/luggage-argv.log" 2>/dev/null || echo '<no call>')"
+        ok=false
+    }
+
+    local expected_rc
+    expected_rc=$(
+        source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+        printf '%s' "$RC_UPDATE_FAILED"
+    )
+    [ "$rc" -eq "$expected_rc" ] || {
+        echo "    update_version Go: expected RC_UPDATE_FAILED ($expected_rc), got $rc"
+        ok=false
+    }
+
+    # The pin edits still ran before the catalog step failed — so a non-fatal
+    # catalog failure would leave exactly this half-updated tree behind.
+    command grep -q '^ARG GO_VERSION=1.27.3$' "$test_dir/Dockerfile" || {
+        echo "    expected the Dockerfile ARG bumped before the catalog step"
+        ok=false
+    }
+
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "Go", "current": "1.27.2", "latest": "1.27.3", "file": "Dockerfile", "status": "outdated"}
+  ]
+}
+EOF
+    command cat >"$test_dir/Dockerfile" <<'EOF'
+ARG GO_VERSION=1.27.2
+EOF
+    local script_rc=0
+    (
+        cd "$test_dir" || exit 1
+        # shellcheck disable=SC2031 # separate subshell from the one above
+        PROJECT_ROOT_OVERRIDE="$test_dir" LUGGAGE_BIN="$test_dir/luggage-stub" \
+            "$PROJECT_ROOT/bin/update-versions.sh" \
+            --no-commit --no-bump --input test.json >/dev/null 2>&1
+    ) || script_rc=$?
+    [ "$script_rc" -eq 3 ] || {
+        echo "    update-versions.sh Go: expected exit 3, got $script_rc"
+        ok=false
+    }
+
+    command rm -rf "$test_dir"
+    assert_true "$ok" "A failed Go luggage catalog update returns RC_UPDATE_FAILED and exits 3"
+}
+
+# ============================================================================
 # Test: a minor Rust bump moves the container default, never the build chain
 # ============================================================================
 # Since #1111 the Rust arm moves only the Rust a container installs by default
@@ -1852,6 +1949,7 @@ run_test test_gemfile_case_rewrites_triage_pin "gitlab-triage rewrites the Gemfi
 run_test test_unknown_gemfile_tool_returns_no_updater_case "unknown Gemfile tool reports a missing updater case"
 run_test test_failed_rewrite_exits_three "Failed rewrite exits 3 (fatal), not 2 (tolerated)"
 run_test test_luggage_catalog_failure_exits_three "Failed luggage catalog update returns RC_UPDATE_FAILED and exits 3"
+run_test test_go_luggage_catalog_failure_exits_three "Failed Go luggage catalog update returns RC_UPDATE_FAILED and exits 3"
 run_test test_rust_minor_bump_leaves_build_chain "A minor Rust bump moves the container default, not the build chain"
 run_test test_failure_summary_separates_causes "Failure summary separates causes and names the tools"
 

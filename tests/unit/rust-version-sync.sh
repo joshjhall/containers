@@ -86,6 +86,30 @@ test_ci_toolchain_pins() {
         "All CI toolchain: pins must equal Cargo.toml rust-version ($MSRV)"
 }
 
+test_integration_fixture_builders() {
+    # The luggage integration fixtures build luggage from the workspace in
+    # their own `FROM rust:... AS builder` stage, so they are build chain too.
+    # They sat outside this suite and stayed on rust:1.98.0 after the MSRV
+    # moved to 1.99, failing `cargo build` on rust-version unnoticed (#811).
+    local violations=0 found=0 file val
+    while IFS= read -r line; do
+        found=$((found + 1))
+        file="${line%%:*}"
+        # Tolerate `--platform=...` and a registry/namespace prefix
+        # (docker.io/library/rust:...) so a respelled builder cannot slip past.
+        val="$(printf '%s' "${line#*:}" | command sed -E 's#^[0-9]+:FROM( --platform=[^ ]+)? ([^ /]+/)*rust:([0-9]+\.[0-9]+).*#\3#')"
+        if [ "$val" != "$MSRV" ]; then
+            echo "  DRIFT: $file builds on rust:$val (expected $MSRV)"
+            violations=$((violations + 1))
+        fi
+    done < <(command grep -nE '^FROM( --platform=[^ ]+)? ([^ /]+/)*rust:[0-9]' "$PROJECT_ROOT"/tests/integration/builds/*/Dockerfile.* 2>/dev/null || true)
+
+    # A glob that stopped matching would otherwise pass with nothing checked.
+    assert_not_equals "0" "$found" "found integration fixture builder stages to check"
+    assert_equals "0" "$violations" \
+        "Integration fixture builder images must match Cargo.toml rust-version ($MSRV)"
+}
+
 # --- Container default -------------------------------------------------------
 
 test_default_parses() {
@@ -145,6 +169,7 @@ run_test "test_msrv_parses" "Cargo.toml rust-version parses as X.Y"
 run_test "test_clippy_msrv" "build chain: clippy.toml msrv matches MSRV"
 run_test "test_luggage_builder_base_image" "build chain: luggage-builder image matches MSRV"
 run_test "test_ci_toolchain_pins" "build chain: CI toolchain pins match MSRV"
+run_test "test_integration_fixture_builders" "build chain: integration fixture builders match MSRV"
 run_test "test_default_parses" "default: Dockerfile RUST_VERSION parses as X.Y.Z"
 run_test "test_devcontainer_compose_pin" "default: devcontainer compose pin matches"
 run_test "test_rust_sh_fallback" "default: rust.sh fallback matches"

@@ -1,0 +1,101 @@
+{
+  "channel": "stable",
+  "install_methods": [
+    {
+      "bin_source_dir": "go/bin",
+      "binaries": [
+        "go",
+        "gofmt"
+      ],
+      "cache_dirs": {
+        "GOCACHE": "go-build",
+        "GOMODCACHE": "go-mod",
+        "GOPATH": "go"
+      },
+      "dependencies": [
+        {
+          "tool": "ca_certificates"
+        }
+      ],
+      "method_kind": "binary-tarball",
+      "name": "go-tarball",
+      "platform": {
+        "arch": [
+          "amd64",
+          "arm64"
+        ],
+        "os": [
+          "debian",
+          "ubuntu"
+        ]
+      },
+      "prefix": "/usr/local",
+      "source_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz",
+      "strip_components": 0,
+      "verification": {
+        "algorithm": "sha256",
+        "checksum_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz.sha256",
+        "tier": 3
+      }
+    }
+  ],
+  "metadata": {
+    "added_at": "2026-10-21T18:55:21Z",
+    "schema_version": 1,
+    "updated_at": "2026-10-21T18:55:21Z"
+  },
+  "released": "2026-06-02",
+  "schemaVersion": 1,
+  "support_matrix": [
+    {
+      "arch": "amd64",
+      "os": "debian",
+      "os_version": "12",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "debian",
+      "os_version": "12",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "debian",
+      "os_version": "13",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "debian",
+      "os_version": "13",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "status": "supported"
+    }
+  ],
+  "tool": "go",
+  "version": "1.25.11"
+}

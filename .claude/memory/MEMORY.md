@@ -118,7 +118,7 @@
 - [Report I/O decides suite exit](report-io-decides-suite-exit.md) — a suite's last command sets its status
 - [Build-time chown breaks UID remap](build-time-chown-breaks-uid-remap.md) — a build-time owner is wrong under Zed's remap
 - [Mock fidelity gates assertions](mock-fidelity-gates-assertions.md) — a stub answering what the real tool could not lets tests pass on impossible…
-- [Harness placeholder args fake a review](harness-placeholder-args-fake-review.md) — a stand-in string in `args.diff` returns clean:true on nothing
+- [Harness placeholder args fake a review](harness-placeholder-args-fake-review.md) — a stand-in or cross-repo-omitted `args.diff` returns clean:true on the wrong bytes
 - [Ambient injection misses ordering](ambient-injection-tests-miss-ordering.md) — to pin an unset-after-source ordering, the hostile value must come from the…
 - [mawk drops literal NUL in printf](mawk-drops-literal-nul-in-printf.md) — use `printf "%s%c", str, 0`
 - [Symlink xattr ELOOP is virtiofs, not bindfs](symlink-xattr-eloop-is-virtiofs-not-bindfs.md) — fixed by bindfs --xattr-none

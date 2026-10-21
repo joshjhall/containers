@@ -26,6 +26,15 @@ origin/main...HEAD`, costing extra tool calls but reading real bytes. Omit only
 after confirming the three-dot diff actually matches what you committed (on a
 single-commit branch level with main, it does). Never pass a stand-in.
 
+**Never omit `diff` when the PR is in a different repo from the cwd.** The
+fallback is cwd-relative: reviewing a containers-db PR from a containers
+worktree with `diff` omitted made every dimension review the *cwd branch's*
+unrelated work and still return `clean: true` (#811, containers-db#456 cycle 2;
+only scope-drift noticed). For a cross-repo PR, pass the diff inline — trim
+mechanically generated files to one representative plus a uniformity proof —
+say in `issue.title` that the cwd diff is out of scope, and treat any cycle that
+ran without it as invalid rather than counting it toward convergence.
+
 Related: [[assertions-must-discriminate]] — a result that passes for the wrong
 reason is worse than a failure. [[degraded-review-gate-is-not-a-pass]] — a
 dimension that returns no verdict is not a clean one.

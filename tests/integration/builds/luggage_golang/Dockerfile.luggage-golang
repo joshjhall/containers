@@ -1,0 +1,84 @@
+# syntax=docker/dockerfile:1.7
+# Minimal fixture for the luggage go smoke test (issue #811).
+#
+# Builds luggage from the in-tree workspace, then runs
+# `luggage install go@<GO_VERSION>` against the in-tree vendored catalog.
+# The first go entry on the binary-tarball method: it exercises the
+# `{arch}` URL placeholder, tier-3 `.sha256` verification, extraction under
+# /usr/local, the go/gofmt links, and the catalog-declared `version_args`
+# (`go version` — `go --version` exits 2).
+#
+# Build context is the repo root (`BUILD_CONTEXT=$CONTAINERS_DIR`), so
+# every COPY here is repo-root-relative.
+
+ARG GO_VERSION=1.27.2
+
+# ─── Stage 1: compile the luggage binary ───
+FROM rust:1.99-slim-trixie AS builder
+
+WORKDIR /workspace
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/workspace/target \
+    cargo build --release -p luggage --bin luggage \
+    && cp target/release/luggage /tmp/luggage
+
+# ─── Stage 2: install go via luggage on a fresh debian ───
+FROM debian:trixie-slim AS runtime
+
+ARG GO_VERSION
+
+# luggage shells out to `su` and `apt-get`; the slim image has the
+# former but needs adduser to create the install user. No jq: the partial
+# resolve below reads luggage's output with sed, exactly as golang.sh does,
+# so this fixture proves golang.sh's dependency set is enough.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends adduser ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create the install user plus the `/cache` and `/var/log/luggage` roots.
+# luggage itself creates the go / go-build / go-mod cache subdirs from the
+# catalog's cache_dirs and chowns them to the install user, so this fixture
+# deliberately does NOT pre-create them.
+RUN adduser --disabled-password --gecos '' --shell /bin/bash vscode \
+    && mkdir -p /cache /var/log/luggage \
+    && chown vscode:vscode /cache /var/log/luggage
+ENV USERNAME=vscode
+
+COPY --from=builder /tmp/luggage /usr/local/bin/luggage
+COPY crates/luggage/testdata/catalog /opt/containers-db
+
+# Resolve a partial GO_VERSION ("1.26") the way golang.sh does, so the
+# fixture can be built with either an exact or a partial pin, then install
+# with the same flags golang.sh passes (--cache-root / --log-dir included, so
+# the cache-dir assertions do not lean on luggage's defaults). bash with
+# pipefail, not dash: a failed `luggage resolve` must fail this step, not
+# be masked by the pipe and resurface as `luggage install go@` (empty).
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+RUN v="${GO_VERSION}"; \
+    case "$v" in \
+        *.*.*) ;; \
+        *) v=$(/usr/local/bin/luggage resolve go --version "$v" \
+               --catalog /opt/containers-db --json \
+               | sed -n 's/^  "version": "\([^"]*\)",\{0,1\}$/\1/p') ;; \
+    esac; \
+    [ -n "$v" ] || { echo "resolve of GO_VERSION=${GO_VERSION} yielded no version" >&2; exit 1; }; \
+    echo "$v" > /etc/go-resolved-version; \
+    /usr/local/bin/luggage install "go@${v}" \
+        --catalog /opt/containers-db \
+        --user vscode \
+        --cache-root /cache \
+        --log-dir /var/log/luggage
+
+# NOTE: PATH deliberately does NOT add /usr/local/go/bin. Production reaches
+# go via luggage's /usr/local/bin links, and adding GOROOT/bin here would
+# mask a broken link step.
+ENV GOPATH=/cache/go \
+    GOCACHE=/cache/go-build \
+    GOMODCACHE=/cache/go-mod
+
+USER vscode
+WORKDIR /home/vscode
+CMD ["bash"]
