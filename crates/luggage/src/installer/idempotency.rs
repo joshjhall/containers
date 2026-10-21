@@ -1,17 +1,16 @@
 //! Idempotency pre-check: skip install when the tool is already at the
 //! target version.
 //!
-//! For the rust pilot the convention is "`<bin_root>/<tool> --version`
-//! contains `<version>`" — exactly what bash's `lib/features/rust.sh` does
-//! with `command -v rustc && rustc --version | grep -q "$RUST_VERSION"`.
-//!
-//! When the catalog tool id and its primary binary name differ (e.g.
-//! `rust` → `rustc`), [`primary_binary`] keeps a small in-code mapping.
-//! This is a stopgap; a future catalog field (issue #404) will declare a
-//! per-tool version-check command so each tool can decide what "already
-//! installed" means.
+//! The convention is "`<bin_root>/<binary> <version_args…>` contains
+//! `<version>`" — exactly what bash's `lib/features/rust.sh` does with
+//! `command -v rustc && rustc --version | grep -q "$RUST_VERSION"`. Both the
+//! binary and its argv come from the catalog
+//! ([`crate::ResolvedInstall::primary_binary`] and
+//! [`crate::ResolvedInstall::version_args`]), so a tool that only answers a
+//! subcommand (`go version`) is probed the way it understands.
 
 use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::path::Path;
 use std::process::{Command, Output};
 use std::thread;
@@ -22,12 +21,12 @@ use std::time::Duration;
 /// concurrent `fork`/`exec`. Transient, not "binary absent". See issue #518.
 const ETXTBSY: i32 = 26;
 
-/// Bounded retry budget for the `--version` exec when it hits `ETXTBSY`, and
+/// Bounded retry budget for the version-probe exec when it hits `ETXTBSY`, and
 /// the backoff between attempts.
 const ETXTBSY_RETRIES: u32 = 3;
 const ETXTBSY_BACKOFF: Duration = Duration::from_millis(50);
 
-/// Run `<binary> --version` with `env` layered on the inherited environment,
+/// Run `<binary> <args…>` with `env` layered on the inherited environment,
 /// retrying on a transient `ETXTBSY`.
 ///
 /// Writing an executable and immediately `exec`ing it races with any
@@ -39,13 +38,14 @@ const ETXTBSY_BACKOFF: Duration = Duration::from_millis(50);
 /// retry a bounded number of times with a short backoff; every other I/O
 /// error (and every success) is returned to the caller on the first
 /// occurrence.
-pub(crate) fn run_version_check(
+pub(crate) fn run_version_check<S: AsRef<OsStr>>(
     binary: &Path,
+    args: &[S],
     env: &BTreeMap<String, String>,
 ) -> std::io::Result<Output> {
     let mut attempt = 0;
     loop {
-        match Command::new(binary).arg("--version").envs(env).output() {
+        match Command::new(binary).args(args).envs(env).output() {
             Err(e) if e.raw_os_error() == Some(ETXTBSY) && attempt < ETXTBSY_RETRIES => {
                 attempt += 1;
                 thread::sleep(ETXTBSY_BACKOFF);
@@ -55,27 +55,33 @@ pub(crate) fn run_version_check(
     }
 }
 
-/// Check whether `binary` reports `version` from `<bin_root>/<binary>`.
+/// Check whether `<bin_root>/<binary> <args…>` reports `version`.
 ///
 /// `binary` is the catalog-resolved
 /// [`crate::ResolvedInstall::primary_binary`] — the tool's `primary_binary`
 /// index field, or its id when that field is absent. It used to be derived
 /// here from a `match tool` table that only knew `"rust" => "rustc"`, which
 /// silently returned the wrong name for every tool whose binary differs from
-/// its id (python installs `python3`).
+/// its id (python installs `python3`). `args` is the resolved
+/// [`crate::ResolvedInstall::version_args`].
 ///
 /// Returns `false` for any reason it can't confirm — missing binary,
 /// non-zero exit, output without the version literal, I/O error. The
 /// caller must treat `false` as "go install"; only `true` should skip.
 #[must_use]
-pub fn already_installed(binary: &str, version: &str, bin_root: &Path) -> bool {
+pub fn already_installed<S: AsRef<OsStr>>(
+    binary: &str,
+    args: &[S],
+    version: &str,
+    bin_root: &Path,
+) -> bool {
     let binary = bin_root.join(binary);
     if !binary.exists() {
         return false;
     }
     // Retries a transient ETXTBSY; any other launch error still means "can't
     // confirm → go install" per the contract above.
-    let Ok(output) = run_version_check(&binary, &BTreeMap::new()) else {
+    let Ok(output) = run_version_check(&binary, args, &BTreeMap::new()) else {
         return false;
     };
     if !output.status.success() {
@@ -86,6 +92,28 @@ pub fn already_installed(binary: &str, version: &str, bin_root: &Path) -> bool {
     stdout.contains(version) || stderr.contains(version)
 }
 
+/// Write an executable shim at `dir/name` that behaves like `go`: the
+/// `version` subcommand prints `version_line`, anything else (including
+/// `--version`) is a usage error with exit 2. Shared by the idempotency and
+/// validate tests that pin the catalog-declared `version_args` (#811).
+#[cfg(all(test, unix))]
+pub(crate) fn write_subcommand_shim(dir: &Path, name: &str, version_line: &str) {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let path = dir.join(name);
+    std::fs::write(
+        &path,
+        format!(
+            "#!/bin/sh\nif [ \"$1\" = version ]; then echo '{version_line}'; exit 0; fi\n\
+             echo \"flag provided but not defined: $1\" >&2\nexit 2\n"
+        ),
+    )
+    .unwrap();
+    let mut perms = std::fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&path, perms).unwrap();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,6 +122,9 @@ mod tests {
     use std::os::unix::fs::PermissionsExt as _;
 
     use tempfile::tempdir;
+
+    /// The catalog default argv (`version_args` absent).
+    const VERSION_ARGS: &[&str] = &["--version"];
 
     #[cfg(unix)]
     fn write_shim(dir: &Path, name: &str, version_line: &str) {
@@ -117,7 +148,7 @@ mod tests {
     #[test]
     fn missing_binary_returns_false() {
         let dir = tempdir().unwrap();
-        assert!(!already_installed("rustc", "1.95.0", dir.path()));
+        assert!(!already_installed("rustc", VERSION_ARGS, "1.95.0", dir.path()));
     }
 
     #[cfg(unix)]
@@ -126,7 +157,7 @@ mod tests {
     fn matching_version_returns_true() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
-        assert!(already_installed("rustc", "1.95.0", dir.path()));
+        assert!(already_installed("rustc", VERSION_ARGS, "1.95.0", dir.path()));
     }
 
     #[cfg(unix)]
@@ -137,7 +168,7 @@ mod tests {
         // match the version there too, not only on stdout.
         let dir = tempdir().unwrap();
         write_shim_to(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)", true);
-        assert!(already_installed("rustc", "1.95.0", dir.path()));
+        assert!(already_installed("rustc", VERSION_ARGS, "1.95.0", dir.path()));
     }
 
     #[cfg(unix)]
@@ -148,7 +179,7 @@ mod tests {
         // apostrophe must still be emitted verbatim and matched.
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 o'brien");
-        assert!(already_installed("rustc", "o'brien", dir.path()));
+        assert!(already_installed("rustc", VERSION_ARGS, "o'brien", dir.path()));
     }
 
     #[cfg(unix)]
@@ -164,7 +195,7 @@ mod tests {
         perms.set_mode(0o755);
         fs::set_permissions(&path, perms).unwrap();
         assert!(
-            !already_installed("rustc", "1.95.0", dir.path()),
+            !already_installed("rustc", VERSION_ARGS, "1.95.0", dir.path()),
             "non-zero exit must return false even if the version appears in output",
         );
     }
@@ -180,7 +211,7 @@ mod tests {
         fs::write(&path, b"not executable").unwrap();
         // Mode 000: present on disk but not executable.
         fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
-        assert!(!already_installed("rustc", "1.95.0", dir.path()));
+        assert!(!already_installed("rustc", VERSION_ARGS, "1.95.0", dir.path()));
     }
 
     #[cfg(unix)]
@@ -189,7 +220,7 @@ mod tests {
     fn nonmatching_version_returns_false() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.84.0 (abcdef0)");
-        assert!(!already_installed("rustc", "1.95.0", dir.path()));
+        assert!(!already_installed("rustc", VERSION_ARGS, "1.95.0", dir.path()));
     }
 
     /// The check runs whatever binary name it is handed, with no per-tool
@@ -202,7 +233,7 @@ mod tests {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
         assert!(
-            already_installed("rustc", "1.95.0", dir.path()),
+            already_installed("rustc", VERSION_ARGS, "1.95.0", dir.path()),
             "the resolved binary name is what gets version-checked",
         );
     }
@@ -218,8 +249,26 @@ mod tests {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
         assert!(
-            !already_installed("rust", "1.95.0", dir.path()),
+            !already_installed("rust", VERSION_ARGS, "1.95.0", dir.path()),
             "no built-in id→binary mapping survives; only `rustc` is on disk",
+        );
+    }
+
+    /// The probe runs the argv it is given (#811): a subcommand-only binary
+    /// is seen as installed under `["version"]`, and NOT under the default
+    /// `--version`, which it rejects with exit 2. Both halves matter — the
+    /// negative one proves the positive is the argv's doing, not a shim that
+    /// answers anything.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn probes_with_the_given_version_args() {
+        let dir = tempdir().unwrap();
+        write_subcommand_shim(dir.path(), "go", "go version go1.27.2 linux/arm64");
+        assert!(already_installed("go", &["version"], "1.27.2", dir.path()));
+        assert!(
+            !already_installed("go", VERSION_ARGS, "1.27.2", dir.path()),
+            "`go --version` exits 2, so the default argv must not confirm the install",
         );
     }
 
@@ -237,7 +286,7 @@ mod tests {
         let missing = dir.path().join("does-not-exist");
 
         let start = Instant::now();
-        let result = run_version_check(&missing, &BTreeMap::new());
+        let result = run_version_check(&missing, VERSION_ARGS, &BTreeMap::new());
         let elapsed = start.elapsed();
 
         let err = result.expect_err("a missing binary must surface its launch error");
@@ -281,7 +330,7 @@ mod tests {
             drop(writer);
         });
 
-        let result = run_version_check(&binary, &BTreeMap::new());
+        let result = run_version_check(&binary, VERSION_ARGS, &BTreeMap::new());
         releaser.join().expect("releaser thread panicked");
 
         let output = result.expect("a transient ETXTBSY that clears must resolve to success");
@@ -325,7 +374,7 @@ mod tests {
         let _writer = OpenOptions::new().write(true).open(&binary).unwrap();
 
         let start = Instant::now();
-        let result = run_version_check(&binary, &BTreeMap::new());
+        let result = run_version_check(&binary, VERSION_ARGS, &BTreeMap::new());
         let elapsed = start.elapsed();
 
         let err = result.expect_err("held write fd must force ETXTBSY exhaustion");
@@ -357,7 +406,7 @@ mod tests {
         let _writer = OpenOptions::new().write(true).open(dir.path().join("rustc")).unwrap();
 
         assert!(
-            !already_installed("rust", "1.95.0", dir.path()),
+            !already_installed("rust", VERSION_ARGS, "1.95.0", dir.path()),
             "persistent ETXTBSY must resolve to false, not a spurious true",
         );
     }

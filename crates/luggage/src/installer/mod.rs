@@ -297,8 +297,11 @@ impl Installer {
         )?;
 
         let target = rustup_target_for(&resolved.platform).ok();
-        let subs =
-            Substitutions { version: Some(resolved.version.as_str()), rustup_target: target };
+        let subs = Substitutions {
+            version: Some(resolved.version.as_str()),
+            rustup_target: target,
+            arch: Some(resolved.platform.arch.as_str()),
+        };
 
         let source_url = match resolved.source_url_template.as_deref() {
             Some(t) => Some(substitute_url(t, &subs)?),
@@ -385,6 +388,7 @@ impl Installer {
         if !self.options.force
             && idempotency::already_installed(
                 &resolved.primary_binary,
+                &resolved.version_args,
                 &resolved.version,
                 &self.options.bin_root,
             )
@@ -632,6 +636,7 @@ mod tests {
                 unmapped: Vec::new(),
             },
             primary_binary: "rustc".into(),
+            version_args: vec!["--version".into()],
             binaries: None,
             bin_source_dir: None,
             cache_dirs: None,

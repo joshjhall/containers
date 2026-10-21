@@ -111,8 +111,11 @@ impl Installer {
         logger: Option<&logging::FeatureLogger>,
     ) -> Result<Vec<verify::VerificationWarning>> {
         let target = rustup_target_for(&resolved.platform).ok();
-        let subs =
-            Substitutions { version: Some(resolved.version.as_str()), rustup_target: target };
+        let subs = Substitutions {
+            version: Some(resolved.version.as_str()),
+            rustup_target: target,
+            arch: Some(resolved.platform.arch.as_str()),
+        };
         if let Some(l) = logger {
             l.step(&format!("verify (tier {})", resolved.verification_tier));
         }
@@ -210,6 +213,7 @@ impl Installer {
         validate::check(
             &resolved.tool,
             &resolved.primary_binary,
+            &resolved.version_args,
             &resolved.version,
             &self.options.bin_root,
             env_map,

@@ -1,8 +1,8 @@
 //! URL template substitution.
 //!
 //! Catalog `source_url_template` and `verification.checksum_url_template`
-//! values carry placeholders like `{rustup_target}` and `{version}`. This
-//! module fills them in from a [`Substitutions`] table.
+//! values carry placeholders like `{rustup_target}`, `{arch}`, and
+//! `{version}`. This module fills them in from a [`Substitutions`] table.
 //!
 //! Unknown placeholders return [`crate::LuggageError::TemplateMissingKey`]
 //! rather than silently leaving them in the output, so a misconfigured
@@ -20,13 +20,18 @@ pub struct Substitutions<'a> {
     pub version: Option<&'a str>,
     /// Substituted for `{rustup_target}`.
     pub rustup_target: Option<&'a str>,
+    /// Substituted for `{arch}` — the resolved platform's catalog arch
+    /// (`amd64` / `arm64`), verbatim. Upstreams that name artifacts by
+    /// Debian-style arch (go's `go{version}.linux-{arch}.tar.gz`) use it
+    /// directly; anything needing a different spelling gets its own key.
+    pub arch: Option<&'a str>,
 }
 
 impl<'a> Substitutions<'a> {
-    /// Build a substitution table with both fields set.
+    /// Build a substitution table with `version` and `rustup_target` set.
     #[must_use]
     pub const fn new(version: &'a str, rustup_target: &'a str) -> Self {
-        Self { version: Some(version), rustup_target: Some(rustup_target) }
+        Self { version: Some(version), rustup_target: Some(rustup_target), arch: None }
     }
 
     /// Look up the value for a placeholder name.
@@ -34,6 +39,7 @@ impl<'a> Substitutions<'a> {
         match key {
             "version" => self.version,
             "rustup_target" => self.rustup_target,
+            "arch" => self.arch,
             _ => None,
         }
     }
@@ -84,7 +90,10 @@ mod tests {
 
     #[test]
     fn substitutes_single_placeholder() {
-        let subs = Substitutions { rustup_target: Some("x86_64-unknown-linux-gnu"), version: None };
+        let subs = Substitutions {
+            rustup_target: Some("x86_64-unknown-linux-gnu"),
+            ..Substitutions::default()
+        };
         let s = substitute_url(
             "https://static.rust-lang.org/rustup/dist/{rustup_target}/rustup-init",
             &subs,
@@ -117,6 +126,33 @@ mod tests {
         let subs = Substitutions::new("1.95.0", "x86_64-unknown-linux-gnu");
         let err = substitute_url("base/{frobnicator}", &subs).unwrap_err();
         assert!(matches!(err, LuggageError::TemplateMissingKey(_)));
+    }
+
+    /// `{arch}` is the catalog arch verbatim (#811) — go's artifact URL is
+    /// the motivating case.
+    #[test]
+    fn substitutes_arch() {
+        let subs = Substitutions {
+            version: Some("1.27.2"),
+            arch: Some("arm64"),
+            ..Substitutions::default()
+        };
+        let s = substitute_url("https://dl.google.com/go/go{version}.linux-{arch}.tar.gz", &subs)
+            .unwrap();
+        assert_eq!(s, "https://dl.google.com/go/go1.27.2.linux-arm64.tar.gz");
+    }
+
+    /// An `{arch}` template with no arch in the table fails loudly rather
+    /// than emitting a URL with a literal `{arch}` in it — `new()` leaves it
+    /// unset, so a call site that forgets to populate it is caught here.
+    #[test]
+    fn arch_missing_returns_template_missing_key() {
+        let subs = Substitutions::new("1.27.2", "x86_64-unknown-linux-gnu");
+        let err = substitute_url("go{version}.linux-{arch}.tar.gz", &subs).unwrap_err();
+        match err {
+            LuggageError::TemplateMissingKey(key) => assert_eq!(key, "arch"),
+            other => panic!("expected TemplateMissingKey, got {other:?}"),
+        }
     }
 
     #[test]

@@ -1,8 +1,9 @@
 //! Post-install validation.
 //!
 //! After running an install method + post-install steps, validate the
-//! end-state by invoking `<bin_root>/<binary> --version` and confirming the
-//! output contains the target version. Mirrors the bash feature scripts'
+//! end-state by invoking `<bin_root>/<binary> <version_args…>` (`--version`
+//! unless the catalog says otherwise) and confirming the output contains the
+//! target version. Mirrors the bash feature scripts'
 //! `<tool> --version | grep -q $VERSION` smoke check.
 
 use std::collections::BTreeMap;
@@ -11,12 +12,15 @@ use std::path::Path;
 use crate::error::{LuggageError, Result};
 use crate::installer::idempotency::run_version_check;
 
-/// Confirm that `tool` reports `version` from `<bin_root>/<binary> --version`.
+/// Confirm that `tool` reports `version` from
+/// `<bin_root>/<binary> <args…>`.
 ///
 /// `binary` is the catalog-resolved
 /// [`crate::ResolvedInstall::primary_binary`]; `tool` is carried separately
 /// because it names the tool in the error variants, and the two differ
-/// whenever a tool's binary is not its catalog id (rust → `rustc`).
+/// whenever a tool's binary is not its catalog id (rust → `rustc`). `args` is
+/// [`crate::ResolvedInstall::version_args`] — `["version"]` for go, whose
+/// `--version` exits 2.
 ///
 /// `env` is layered on top of the inherited process environment with
 /// [`Command::envs`]. For rustup-proxy binaries this must include
@@ -36,6 +40,7 @@ use crate::installer::idempotency::run_version_check;
 pub fn check(
     tool: &str,
     binary: &str,
+    args: &[String],
     version: &str,
     bin_root: &Path,
     env: &BTreeMap<String, String>,
@@ -48,21 +53,22 @@ pub fn check(
             message: format!("binary not found at {}", binary.display()),
         });
     }
+    let probe = format!("{} {}", binary.display(), args.join(" "));
     // Retries a transient ETXTBSY before surfacing a launch failure; see
     // [`run_version_check`] for why exec-after-write can race under
     // parallelism (issue #518).
-    let output = run_version_check(&binary, env).map_err(|e| LuggageError::ValidationFailed {
-        tool: tool.to_owned(),
-        version: version.to_owned(),
-        message: format!("failed to launch `{} --version`: {e}", binary.display()),
-    })?;
+    let output =
+        run_version_check(&binary, args, env).map_err(|e| LuggageError::ValidationFailed {
+            tool: tool.to_owned(),
+            version: version.to_owned(),
+            message: format!("failed to launch `{probe}`: {e}"),
+        })?;
     if !output.status.success() {
         return Err(LuggageError::ValidationFailed {
             tool: tool.to_owned(),
             version: version.to_owned(),
             message: format!(
-                "`{} --version` exited {}: {}",
-                binary.display(),
+                "`{probe}` exited {}: {}",
                 output.status,
                 String::from_utf8_lossy(&output.stderr).trim_end(),
             ),
@@ -93,6 +99,41 @@ mod tests {
 
     use tempfile::tempdir;
 
+    /// The catalog default argv (`version_args` absent).
+    fn version_args() -> Vec<String> {
+        vec!["--version".to_owned()]
+    }
+
+    /// A catalog-declared argv is what gets run (#811). Against a go-shaped
+    /// shim, `["version"]` validates and the default `--version` fails on
+    /// the shim's exit 2 — and the failure message names the argv actually
+    /// run, so a misdeclared catalog entry is diagnosable from the log.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn runs_the_declared_version_args() {
+        use crate::installer::idempotency::write_subcommand_shim;
+
+        let dir = tempdir().unwrap();
+        write_subcommand_shim(dir.path(), "go", "go version go1.27.2 linux/arm64");
+        let env = BTreeMap::new();
+
+        let captured =
+            check("go", "go", &["version".to_owned()], "1.27.2", dir.path(), &env).unwrap();
+        assert_eq!(captured, "go version go1.27.2 linux/arm64");
+
+        let err = check("go", "go", &version_args(), "1.27.2", dir.path(), &env).unwrap_err();
+        match err {
+            LuggageError::ValidationFailed { message, .. } => {
+                assert!(
+                    message.contains("go --version` exited"),
+                    "the non-zero-exit branch must name the argv it ran, got: {message}",
+                );
+            }
+            other => panic!("expected ValidationFailed, got {other:?}"),
+        }
+    }
+
     #[cfg(unix)]
     fn write_shim(dir: &Path, name: &str, line: &str) {
         let path = dir.join(name);
@@ -105,7 +146,8 @@ mod tests {
     #[test]
     fn missing_binary_returns_validation_failed() {
         let dir = tempdir().unwrap();
-        let err = check("rust", "rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        let err = check("rust", "rustc", &version_args(), "1.95.0", dir.path(), &BTreeMap::new())
+            .unwrap_err();
         assert!(matches!(err, LuggageError::ValidationFailed { .. }));
     }
 
@@ -115,7 +157,9 @@ mod tests {
     fn matching_output_passes() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
-        let captured = check("rust", "rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap();
+        let captured =
+            check("rust", "rustc", &version_args(), "1.95.0", dir.path(), &BTreeMap::new())
+                .unwrap();
         assert_eq!(captured, "rustc 1.95.0 (abcdef0)");
     }
 
@@ -125,7 +169,8 @@ mod tests {
     fn mismatched_output_returns_validation_failed() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.84.0");
-        let err = check("rust", "rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        let err = check("rust", "rustc", &version_args(), "1.95.0", dir.path(), &BTreeMap::new())
+            .unwrap_err();
         match err {
             LuggageError::ValidationFailed { message, .. } => {
                 assert!(message.contains("1.95.0"));
@@ -157,11 +202,12 @@ mod tests {
         let mut env = BTreeMap::new();
         env.insert("LUGGAGE_TEST_VERSION".to_owned(), "1.95.0".to_owned());
 
-        check("rust", "rustc", "1.95.0", dir.path(), &env).unwrap();
+        check("rust", "rustc", &version_args(), "1.95.0", dir.path(), &env).unwrap();
 
         // Negative case: without the env entry, the shim emits `rustc ` and
         // the contains-version assertion must fail.
-        let err = check("rust", "rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        let err = check("rust", "rustc", &version_args(), "1.95.0", dir.path(), &BTreeMap::new())
+            .unwrap_err();
         assert!(matches!(err, LuggageError::ValidationFailed { .. }));
     }
 
@@ -173,7 +219,9 @@ mod tests {
     #[test]
     fn error_names_the_tool_but_the_path_uses_the_binary() {
         let dir = tempdir().unwrap();
-        let err = check("python", "python3", "3.13.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        let err =
+            check("python", "python3", &version_args(), "3.13.0", dir.path(), &BTreeMap::new())
+                .unwrap_err();
         match err {
             LuggageError::ValidationFailed { tool, version, message } => {
                 assert_eq!(tool, "python", "the error identifies the tool");
@@ -208,7 +256,8 @@ mod tests {
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (never runs)");
         let _writer = OpenOptions::new().write(true).open(dir.path().join("rustc")).unwrap();
 
-        let err = check("rust", "rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        let err = check("rust", "rustc", &version_args(), "1.95.0", dir.path(), &BTreeMap::new())
+            .unwrap_err();
         match err {
             LuggageError::ValidationFailed { tool, version, message } => {
                 // The error names the TOOL (`rust`), not the binary it probed

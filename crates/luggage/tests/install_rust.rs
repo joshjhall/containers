@@ -417,7 +417,7 @@ fn already_installed_survives_etxtbsy_under_parallel_write_then_exec() {
                         &format!("rustc {version} (regression)"),
                     );
                     assert!(
-                        already_installed("rustc", &version, dir.path()),
+                        already_installed("rustc", &["--version"], &version, dir.path()),
                         "freshly-written shim must be seen as installed despite ETXTBSY \
                          (thread {t}, iter {i})",
                     );
@@ -458,7 +458,7 @@ fn already_installed_survives_etxtbsy_under_parallel_write_then_exec_stderr() {
                         &format!("rustc {version} (regression)"),
                     );
                     assert!(
-                        already_installed("rustc", &version, dir.path()),
+                        already_installed("rustc", &["--version"], &version, dir.path()),
                         "freshly-written stderr shim must be seen as installed despite \
                          ETXTBSY (thread {t}, iter {i})",
                     );
@@ -502,13 +502,20 @@ fn validate_check_survives_etxtbsy_under_parallel_write_then_exec() {
                         &dir.path().join("rustc"),
                         &format!("rustc {version} (regression)"),
                     );
-                    let captured = check("rust", "rustc", &version, dir.path(), &BTreeMap::new())
-                        .unwrap_or_else(|e| {
-                            panic!(
-                                "freshly-written shim must validate despite ETXTBSY \
+                    let captured = check(
+                        "rust",
+                        "rustc",
+                        &["--version".to_owned()],
+                        &version,
+                        dir.path(),
+                        &BTreeMap::new(),
+                    )
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "freshly-written shim must validate despite ETXTBSY \
                                  (thread {t}, iter {i}): {e}"
-                            )
-                        });
+                        )
+                    });
                     assert!(
                         captured.contains(&version),
                         "validate must capture the just-written version (thread {t}, iter {i}), \

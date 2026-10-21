@@ -44,6 +44,15 @@ pub struct Tool {
     /// explicitly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_binary: Option<String>,
+    /// Arguments passed to [`Self::primary_binary`] for the already-installed
+    /// probe and post-install validation; the output must contain the
+    /// installed version.
+    ///
+    /// `None` means `["--version"]` — correct for most tools, wrong for those
+    /// that only answer a subcommand (`go --version` exits 2; `go version`
+    /// works), which must set it explicitly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_args: Option<Vec<String>>,
     /// How version strings on this tool should be parsed. Defaults to semver.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version_style: Option<VersionStyle>,
