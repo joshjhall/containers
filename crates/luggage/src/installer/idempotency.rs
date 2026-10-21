@@ -272,6 +272,32 @@ mod tests {
         );
     }
 
+    /// A multi-element argv reaches the binary as separate arguments, not as
+    /// one space-joined string. The shim answers only when `$1` and `$2` are
+    /// `version` and `-short` individually; the joined form arrives as a
+    /// single `$1` and is rejected.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn multi_element_version_args_are_passed_as_separate_argv() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("tool");
+        fs::write(
+            &path,
+            "#!/bin/sh\n[ \"$1\" = version ] && [ \"$2\" = -short ] && echo 'tool 2.0.0' && exit 0\nexit 2\n",
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).unwrap();
+
+        assert!(already_installed("tool", &["version", "-short"], "2.0.0", dir.path()));
+        assert!(
+            !already_installed("tool", &["version -short"], "2.0.0", dir.path()),
+            "a joined argv must not satisfy a shim that checks $1 and $2 separately",
+        );
+    }
+
     /// A non-`ETXTBSY` launch error must be returned on the *first* attempt,
     /// never retried. Pointing at a path with no file on disk makes `exec`
     /// fail with `ENOENT`, which the `other => return other` arm must surface
