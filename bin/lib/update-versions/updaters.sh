@@ -189,6 +189,9 @@ update_version() {
                     sed_inplace "s/^ARG GO_VERSION=.*/ARG GO_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in golang.sh
                     sed_inplace "s/GO_VERSION=\"\${GO_VERSION:-[^}]*}\"/GO_VERSION=\"\${GO_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/golang.sh" || return "$RC_UPDATE_FAILED"
+                    # Go installs via luggage (#811) — keep the vendored
+                    # catalog in lockstep with the pin, as for rust.
+                    update_luggage_catalog "go" "$latest" || return "$RC_UPDATE_FAILED"
                     ;;
                 Rust)
                     sed_inplace "s/^ARG RUST_VERSION=.*/ARG RUST_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"

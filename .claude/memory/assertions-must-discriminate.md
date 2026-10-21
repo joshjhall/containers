@@ -19,6 +19,18 @@ shipped as coverage that was not:
   `${9FOO-}: bad substitution` — also non-zero. The assertion could never have
   failed for the reason it claimed. Fixed by keying on the guard's own
   diagnostic string, which only the guard emits.
+- **Fixture has no decoy.** #811's anchored `sed` (`^  "version": "…"`) was
+  "proven" to skip a nested `"version"` — but the fixture's nested one was a
+  bare array element (`version_args`), which no `"version": "…"` pattern can
+  match at any indent. Loosening the anchor to `^ *` still passed. Fixed by
+  adding the real hazard: a dependency object with its own `"version": "…"`
+  key printed first, deeper.
+- **The harness turns off what it tests.** A test that a failing install
+  aborts the script captured with `out=$( set -e; …; source block ) ||
+  rc=$?`. That `||` context disables `set -e` inside the whole subshell, so
+  the failure was swallowed and correct code failed the test. Run the
+  code-under-test as its own `bash script.sh` process, captured between
+  `set +e` / `set -e`, never inside `||`, `&&`, `if`, or `!`.
 
 **Why:** both were the *obvious* assertion for the property. The obvious
 assertion is exactly where this hides, because it looks right and passes.

@@ -1,0 +1,249 @@
+{
+  "activity": {
+    "scan_cadence_days": 1,
+    "scanned_at": "2026-10-21T18:55:21Z",
+    "score": "very-active",
+    "signals": {
+      "last_commit_at": "2026-10-21T14:42:52Z",
+      "last_release_at": "2026-10-20T01:26:11Z",
+      "releases_last_90d": 11
+    }
+  },
+  "available": [
+    {
+      "version": "1.22.0"
+    },
+    {
+      "version": "1.22.1"
+    },
+    {
+      "version": "1.22.2"
+    },
+    {
+      "version": "1.22.3"
+    },
+    {
+      "version": "1.22.4"
+    },
+    {
+      "version": "1.22.5"
+    },
+    {
+      "version": "1.22.6"
+    },
+    {
+      "version": "1.22.7"
+    },
+    {
+      "version": "1.22.8"
+    },
+    {
+      "version": "1.22.9"
+    },
+    {
+      "version": "1.22.10"
+    },
+    {
+      "version": "1.22.11"
+    },
+    {
+      "version": "1.22.12"
+    },
+    {
+      "version": "1.23.0"
+    },
+    {
+      "version": "1.23.1"
+    },
+    {
+      "version": "1.23.2"
+    },
+    {
+      "version": "1.23.3"
+    },
+    {
+      "version": "1.23.4"
+    },
+    {
+      "version": "1.23.5"
+    },
+    {
+      "version": "1.23.6"
+    },
+    {
+      "version": "1.23.7"
+    },
+    {
+      "version": "1.23.8"
+    },
+    {
+      "version": "1.23.9"
+    },
+    {
+      "version": "1.23.10"
+    },
+    {
+      "version": "1.23.11"
+    },
+    {
+      "version": "1.23.12"
+    },
+    {
+      "version": "1.24.0"
+    },
+    {
+      "version": "1.24.1"
+    },
+    {
+      "version": "1.24.2"
+    },
+    {
+      "version": "1.24.3"
+    },
+    {
+      "version": "1.24.4"
+    },
+    {
+      "version": "1.24.5"
+    },
+    {
+      "version": "1.24.6"
+    },
+    {
+      "version": "1.24.7"
+    },
+    {
+      "version": "1.24.8"
+    },
+    {
+      "version": "1.24.9"
+    },
+    {
+      "version": "1.24.10"
+    },
+    {
+      "version": "1.24.11"
+    },
+    {
+      "version": "1.24.12"
+    },
+    {
+      "version": "1.24.13"
+    },
+    {
+      "version": "1.25.0"
+    },
+    {
+      "version": "1.25.1"
+    },
+    {
+      "version": "1.25.2"
+    },
+    {
+      "version": "1.25.3"
+    },
+    {
+      "version": "1.25.4"
+    },
+    {
+      "version": "1.25.5"
+    },
+    {
+      "version": "1.25.6"
+    },
+    {
+      "version": "1.25.7"
+    },
+    {
+      "version": "1.25.8"
+    },
+    {
+      "version": "1.25.9"
+    },
+    {
+      "version": "1.25.10"
+    },
+    {
+      "version": "1.25.11"
+    },
+    {
+      "version": "1.25.12"
+    },
+    {
+      "version": "1.25.13"
+    },
+    {
+      "version": "1.25.14"
+    },
+    {
+      "version": "1.26.0"
+    },
+    {
+      "version": "1.26.1"
+    },
+    {
+      "version": "1.26.2"
+    },
+    {
+      "version": "1.26.3"
+    },
+    {
+      "version": "1.26.4"
+    },
+    {
+      "version": "1.26.5"
+    },
+    {
+      "version": "1.26.6"
+    },
+    {
+      "version": "1.26.7"
+    },
+    {
+      "version": "1.26.8"
+    },
+    {
+      "version": "1.26.9"
+    },
+    {
+      "version": "1.26.10"
+    },
+    {
+      "version": "1.27.0"
+    },
+    {
+      "version": "1.27.1"
+    },
+    {
+      "version": "1.27.2"
+    },
+    {
+      "version": "1.27.3"
+    }
+  ],
+  "channels": {
+    "stable": {
+      "default": true,
+      "description": "Production-grade releases. A new minor release roughly every six months; point releases for security and bug fixes as needed."
+    }
+  },
+  "default_version": "1.27.2",
+  "display_name": "Go",
+  "homepage": "https://go.dev",
+  "id": "go",
+  "kind": "language",
+  "license": "BSD-3-Clause",
+  "minimum_recommended": "1.22.0",
+  "ordering": {},
+  "schemaVersion": 1,
+  "source_repo": "https://github.com/golang/go",
+  "validation_tiers": {
+    "tier3": {
+      "available": true,
+      "notes": "Release tarball verified against the publisher SHA256 at dl.google.com/go/go<version>.linux-<arch>.tar.gz.sha256 (a bare 64-hex digest)."
+    }
+  },
+  "version_args": [
+    "version"
+  ]
+}

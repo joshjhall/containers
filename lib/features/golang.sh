@@ -6,7 +6,12 @@
 #   Configures workspace and cache directories for optimal container usage.
 #
 # Features:
-#   - Go compiler and runtime with 4-tier checksum verification
+#   - Go compiler and runtime, installed by luggage (binary-tarball method,
+#     tier-3 publisher-checksum verification) from the containers-db catalog
+#   - amd64 and arm64 only, matching docs/reference/supported-platforms.md.
+#     The pre-luggage script also mapped armhf/i386, platforms this project
+#     never built; luggage now refuses them by name ("no install method for
+#     go@X matches debian/armhf").
 #   - Basic Go tools (gofmt, go vet, etc.)
 #   - Module support
 #   - Proper cache directory configuration
@@ -16,9 +21,10 @@
 #   - Allows volume mounting for persistent module cache across container rebuilds
 #
 # Environment Variables:
-#   - GO_VERSION: Version specification (default: 1.25.3)
-#     * Major.minor only (e.g., "1.23"): Resolves to latest 1.23.x with pinned checksum
-#     * Specific version (e.g., "1.23.5"): Uses exact version
+#   - GO_VERSION: Version specification (default: 1.27.2)
+#     * Major.minor only (e.g., "1.26"): Resolves to the newest 1.26.x in the
+#       luggage catalog
+#     * Specific version (e.g., "1.26.3"): Uses exact version
 #   - GOPATH: Go workspace directory (default: /cache/go)
 #   - GOCACHE: Go build cache (default: /cache/go-build)
 #
@@ -33,21 +39,7 @@ source /tmp/build-scripts/base/apt-utils.sh
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 
-# Source version resolution for partial version support
-source /tmp/build-scripts/base/version-resolution.sh
-
-# Source download verification utilities
-source /tmp/build-scripts/base/download-verify.sh
-
-# Source checksum fetching utilities
-source /tmp/build-scripts/base/checksum-fetch.sh
-
-# Source 4-tier checksum verification system
-source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
-
-# Source path utilities for secure PATH management
-source /tmp/build-scripts/base/path-utils.sh
 
 # ============================================================================
 # Template Loading Helper
@@ -92,147 +84,105 @@ validate_go_version "$GO_VERSION" || {
     exit 1
 }
 
-# Resolve partial versions to full versions (e.g., "1.23" -> "1.23.5")
-# This enables users to use partial versions and get latest patches with pinned checksums
+# The catalog starts at 1.22.0, so an older request cannot install. Refuse it
+# here, by name, rather than letting it surface as a luggage "no matching
+# version" error. Both "1.21" and "1.21.5" carry their major.minor up front.
+GO_MAJOR=$(echo "$GO_VERSION" | command cut -d. -f1)
+GO_MINOR=$(echo "$GO_VERSION" | command cut -d. -f2)
+if [ "$GO_MAJOR" -eq 1 ] && [ "$GO_MINOR" -lt 22 ]; then
+    log_error "Go ${GO_VERSION} is not supported: the luggage catalog starts at 1.22.0"
+    exit 1
+fi
+
+# Resolve a partial version ("1.26") to the newest patch the luggage catalog
+# holds (e.g. "1.26.10"). The catalog is the single source of truth for which
+# patches exist and are supported: asking upstream could pick a patch the
+# catalog lacks, which then fails to install, and it breaks offline builds.
+# `luggage install go@1.26` resolves the same way on its own; resolving here
+# only makes the log and the feature summary name the version actually
+# installed.
+#
+# The top-level `version` key is read with sed rather than jq, which no base
+# image guarantees. luggage pretty-prints with a two-space indent, so the
+# top-level key is the only `"version": "…"` at exactly that depth — a
+# dependency's own `version` field prints deeper and is skipped. luggage's own
+# stderr is kept so a failure says why (missing version, bad catalog path,
+# broken binary) instead of always blaming the catalog.
 if [[ "$GO_VERSION" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
     ORIGINAL_VERSION="$GO_VERSION"
-    GO_VERSION=$(resolve_go_version "$GO_VERSION" 2>/dev/null || echo "$GO_VERSION")
+    resolve_err=$(command mktemp)
+    if ! resolve_json=$(/usr/local/bin/luggage resolve go \
+        --version "$ORIGINAL_VERSION" \
+        --catalog "${CONTAINERS_DB:-/opt/containers-db}" \
+        --json 2>"$resolve_err"); then
+        log_error "Could not resolve Go ${ORIGINAL_VERSION} via luggage (catalog: ${CONTAINERS_DB:-/opt/containers-db}):"
+        log_error "$(command cat "$resolve_err")"
+        command rm -f "$resolve_err"
+        exit 1
+    fi
+    command rm -f "$resolve_err"
+    GO_VERSION=$(printf '%s\n' "$resolve_json" |
+        command sed -n 's/^  "version": "\([^"]*\)",\{0,1\}$/\1/p')
+    if [ -z "$GO_VERSION" ]; then
+        log_error "luggage resolved Go ${ORIGINAL_VERSION} but its output carried no top-level version"
+        exit 1
+    fi
 
     if [ "$ORIGINAL_VERSION" != "$GO_VERSION" ]; then
         log_message "📍 Version Resolution: $ORIGINAL_VERSION → $GO_VERSION"
-        log_message "   Using latest patch version with pinned checksum verification"
+        log_message "   Newest patch in the luggage catalog"
     fi
 fi
-
-# Extract major.minor version for comparison
-GO_MAJOR=$(echo "$GO_VERSION" | command cut -d. -f1)
-GO_MINOR=$(echo "$GO_VERSION" | command cut -d. -f2)
 
 # Start logging
 log_feature_start "Golang" "${GO_VERSION}"
 
-# Go releases are supported for 2 major versions
-# As of July 2025, Go 1.22 would be the minimum supported
-if [ "$GO_MAJOR" -eq 1 ] && [ "$GO_MINOR" -lt 22 ]; then
-    log_warning "Go $GO_VERSION is outdated"
-    log_warning "Go versions older than 1.22 are no longer supported"
-    log_warning "Continuing with installation, but consider upgrading"
-fi
-
-# ============================================================================
-# Architecture Detection
-# ============================================================================
-log_message "Detecting system architecture..."
-
-# Detect architecture
-ARCH=$(dpkg --print-architecture)
-case ${ARCH} in
-    amd64)
-        GO_ARCH="amd64"
-        ;;
-    arm64 | aarch64)
-        GO_ARCH="arm64"
-        ;;
-    armhf)
-        GO_ARCH="armv6l"
-        ;;
-    386 | i386)
-        GO_ARCH="386"
-        ;;
-    *)
-        log_error "Unsupported architecture: ${ARCH}"
-        log_feature_end
-        exit 1
-        ;;
-esac
-
-log_message "Architecture: ${GO_ARCH}"
-
 # ============================================================================
 # System Dependencies
 # ============================================================================
+# luggage installs the catalog's own dependencies (ca-certificates). git is
+# not a Go install dependency — `go get` / module fetches need it at runtime —
+# so the catalog does not declare it and it stays here.
 log_message "Installing system dependencies for Go..."
 
-# Update package lists with retry logic
 apt_update
-
-# Install system dependencies with retry logic
-apt_install \
-    curl \
-    ca-certificates \
-    git
+apt_install git
 
 # ============================================================================
-# Go Installation
+# Go Installation (delegated to luggage)
 # ============================================================================
-log_message "Downloading and installing Go ${GO_VERSION}..."
+# luggage picks the artifact for this platform's arch, downloads it,
+# verifies it against the publisher's .sha256 (tier 3), extracts it under
+# /usr/local, creates + chowns the GOPATH/GOCACHE/GOMODCACHE cache dirs, links
+# go and gofmt into /usr/local/bin, and validates with `go version`.
+log_message "Installing Go via luggage..."
 
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-
-# Download Go tarball with 4-tier checksum verification
-GO_TARBALL="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
-GO_URL="https://go.dev/dl/${GO_TARBALL}"
-
-# Download Go tarball
-log_message "Downloading Go ${GO_VERSION} for ${GO_ARCH}..."
-if ! command curl -fsSL "$GO_URL" -o "$GO_TARBALL"; then
-    log_error "Failed to download Go ${GO_VERSION}"
-    log_error "Please verify version exists: https://go.dev/dl/#go${GO_VERSION}"
-    log_feature_end
-    exit 1
-fi
-
-# Verify using 4-tier system (GPG → Pinned → Published → Calculated)
-# This will try each tier in order and log which method succeeded
-# Exit codes: 0=verified, 1=failed, 2=unverified (TOFU fallback)
-verify_download_or_fail "language" "go" "$GO_VERSION" "$GO_TARBALL" "$GO_ARCH" || {
-    log_feature_end
-    exit 1
-}
-
-# Extract Go to /usr/local
-log_command "Extracting Go to /usr/local" \
-    tar -xzf "$GO_TARBALL" -C /usr/local
-
-# Clean up
-cd /
-log_command "Cleaning up Go build directory" \
-    command rm -rf "$BUILD_TEMP"
+log_command "luggage install go@${GO_VERSION}" \
+    /usr/local/bin/luggage install "go@${GO_VERSION}" \
+    --catalog "${CONTAINERS_DB:-/opt/containers-db}" \
+    --user "${USERNAME}" \
+    --cache-root /cache \
+    --log-dir /var/log/luggage
 
 # ============================================================================
 # Cache and Path Configuration
 # ============================================================================
 log_message "Configuring Go cache and paths..."
 
-# ALWAYS use /cache paths for consistency with other languages
-# This will either use cache mount (faster rebuilds) or be created in the image
+# ALWAYS use /cache paths for consistency with other languages. luggage
+# created the three roots from the catalog's cache_dirs; the GOPATH
+# subdirectories are a workspace convention, not install layout.
 GOPATH="/cache/go"
 GOCACHE="/cache/go-build"
 GOMODCACHE="/cache/go-mod"
 
-# Create cache directories with correct ownership
-# Use shared utility for atomic directory creation with correct ownership
-# Important: Create parent /cache/go directory first to ensure correct ownership
-create_cache_directories "${GOPATH}" "${GOPATH}/bin" "${GOPATH}/src" "${GOPATH}/pkg" "${GOCACHE}" "${GOMODCACHE}"
+create_cache_directories "${GOPATH}/bin" "${GOPATH}/src" "${GOPATH}/pkg"
 
 log_message "Go installation paths:"
 log_message "  GOROOT: /usr/local/go"
 log_message "  GOPATH: ${GOPATH}"
 log_message "  GOCACHE: ${GOCACHE}"
 log_message "  GOMODCACHE: ${GOMODCACHE}"
-
-# ============================================================================
-# Create symlinks for Go binaries
-# ============================================================================
-log_message "Creating Go symlinks..."
-
-# Create /usr/local/bin symlinks for consistency with other languages
-for cmd in go gofmt; do
-    if [ -f "/usr/local/go/bin/${cmd}" ]; then
-        create_symlink "/usr/local/go/bin/${cmd}" "/usr/local/bin/${cmd}" "${cmd} command"
-    fi
-done
 
 # ============================================================================
 # System-wide Environment Configuration
