@@ -801,6 +801,42 @@ mod tests {
         }
     }
 
+    /// The idempotency skip probes with `resolved.version_args`, not a
+    /// hard-coded `--version` (#811). Against a go-shaped shim, `["version"]`
+    /// must skip the install; the default argv, which the shim rejects with
+    /// exit 2, must not — so the positive cannot be a shim that answers
+    /// anything. The negative run then proceeds to a real install attempt,
+    /// whose outcome is irrelevant here (log/cache/tmp all point at the
+    /// tempdir); only `already_installed` is asserted.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn idempotency_skip_uses_the_resolved_version_args() {
+        let dir = tempfile::tempdir().unwrap();
+        idempotency::write_subcommand_shim(dir.path(), "go", "go version go1.27.2 linux/arm64");
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            bin_root: dir.path().to_owned(),
+            log_dir: dir.path().join("log"),
+            cache_root: dir.path().join("cache"),
+            tmp_root: dir.path().join("tmp"),
+            ..InstallerOptions::default()
+        });
+        let mut resolved = sample_resolved_with_deps();
+        resolved.tool = "go".into();
+        resolved.version = "1.27.2".into();
+        resolved.primary_binary = "go".into();
+
+        resolved.version_args = vec!["version".into()];
+        let (report, result) = installer.run_with_report(&resolved);
+        result.unwrap();
+        assert!(report.already_installed, "declared argv must confirm the install");
+
+        resolved.version_args = vec!["--version".into()];
+        let (report, _) = installer.run_with_report(&resolved);
+        assert!(!report.already_installed, "`go --version` exits 2; it must not skip");
+    }
+
     /// `sample_resolved_with_deps` with a pinless tier-2 verification — an
     /// entry the guard always refuses, whatever the strictness.
     fn pinless_tier_2_resolved() -> ResolvedInstall {

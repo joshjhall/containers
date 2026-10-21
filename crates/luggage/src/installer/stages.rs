@@ -344,6 +344,38 @@ mod tests {
             .expect("the arm64 checksum URL must be the one fetched");
     }
 
+    /// Post-install validation runs `resolved.version_args`, not a hard-coded
+    /// `--version` (#811): `["version"]` validates a go-shaped shim, and the
+    /// default argv — which the shim rejects with exit 2 — fails it.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn stage_validate_uses_the_resolved_version_args() {
+        use crate::installer::idempotency::write_subcommand_shim;
+
+        let dir = tempfile::tempdir().unwrap();
+        write_subcommand_shim(dir.path(), "go", "go version go1.27.2 linux/arm64");
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            bin_root: dir.path().to_owned(),
+            ..InstallerOptions::default()
+        });
+        let mut resolved = sample_resolved_with_deps();
+        resolved.tool = "go".into();
+        resolved.version = "1.27.2".into();
+        resolved.primary_binary = "go".into();
+        let env = BTreeMap::new();
+
+        resolved.version_args = vec!["version".into()];
+        let captured = installer.stage_validate(&resolved, &env, None).unwrap();
+        assert_eq!(captured, "go version go1.27.2 linux/arm64");
+
+        resolved.version_args = vec!["--version".into()];
+        installer
+            .stage_validate(&resolved, &env, None)
+            .expect_err("`go --version` exits 2; validation must fail");
+    }
+
     #[test]
     fn captured_dependency_versions_none_when_recording_disabled() {
         // With recording off (the default) the success path records no

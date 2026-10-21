@@ -415,7 +415,11 @@ fn build_resolved(
         // The tool id is the fallback: correct wherever the binary shares the
         // catalog id, and the only sane default for an entry that says nothing.
         primary_binary: primary_binary.unwrap_or(tool).to_owned(),
-        version_args: version_args.map_or_else(|| vec!["--version".to_owned()], <[String]>::to_vec),
+        // An empty array is treated as absent: probing a bare binary with no
+        // argv can start a REPL or block on stdin rather than print a version.
+        version_args: version_args
+            .filter(|a| !a.is_empty())
+            .map_or_else(|| vec!["--version".to_owned()], <[String]>::to_vec),
         binaries: method.binaries.clone(),
         bin_source_dir: method.bin_source_dir.clone(),
         cache_dirs: method.cache_dirs.clone(),
@@ -932,6 +936,16 @@ mod tests {
         entry.index.version_args = Some(vec!["version".into()]);
         let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
         assert_eq!(r.version_args, ["version"]);
+    }
+
+    /// A declared-but-empty `version_args` falls back to the default rather
+    /// than exec'ing the bare binary, which can start a REPL or block on stdin.
+    #[test]
+    fn empty_version_args_fall_back_to_the_default() {
+        let mut entry = entry_with_score(ActivityScore::VeryActive);
+        entry.index.version_args = Some(Vec::new());
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(r.version_args, ["--version"]);
     }
 
     /// The method-level fields ride through resolution untouched, and stay
