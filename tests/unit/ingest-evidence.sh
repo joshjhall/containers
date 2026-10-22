@@ -483,6 +483,25 @@ test_repeated_fail_offset_tested_at() {
     merge_evidence_row "$f" "$skewed"
     assert_equals "$before" "$(command cat "$f")" \
         "a -99:59 repeat is unparsable, so it never counts as newer"
+
+    # Range boundaries, matching the matrix side: each instant below is newer
+    # than the stored 2026-10-01T01:30:00Z, so only an unparsable form (epoch
+    # 0) leaves the file untouched. +05:60 drives the minute clause alone.
+    local at row
+    for at in 2026-10-02T00:00:00+14:01 2026-10-01T12:00:00-12:01 \
+        2026-10-02T00:00:00+05:60 2026-10-02T00:00:00+15:00; do
+        row=$(jq -c --arg at "$at" '. + {"result": "fail", "error_class": "verify", "tested_at": $at}' "$SAMPLE_ROW")
+        before=$(command cat "$f")
+        merge_evidence_row "$f" "$row"
+        assert_equals "$before" "$(command cat "$f")" \
+            "an out-of-range $at repeat is unparsable, so it never counts as newer"
+    done
+    for at in 2026-10-02T00:00:00+14:00 2026-10-01T14:00:00-12:00; do
+        row=$(jq -c --arg at "$at" '. + {"result": "fail", "error_class": "verify", "tested_at": $at}' "$SAMPLE_ROW")
+        merge_evidence_row "$f" "$row"
+        assert_equals "$at" "$(jq -r '.tested[0].tested_at' "$f")" \
+            "a boundary $at repeat parses and, being newer, refreshes the row"
+    done
     command rm -f "$f"
 }
 
