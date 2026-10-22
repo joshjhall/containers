@@ -187,7 +187,10 @@ newest patch of each minor, minimum_recommended floor and up
     would just fail again.
   - After the cooldown the cell is pending again, because a fix may have landed.
     It sorts **after every never-tested cell**, so a persistent failure only
-    uses budget that untested work leaves free.
+    uses budget that untested work leaves free. A retry that fails again
+    refreshes the row's `tested_at` at ingest (see
+    [Merge policy](#merge-policy)), which restarts the cooldown. So a
+    persistent failure costs one runner per window, not one per push.
   - A passing row always wins. A fail row with a missing or unparsable
     `tested_at` counts as stale, so it is retried last but is never hidden.
   - A base-image rebuild still re-evidences its tuple right away through
@@ -386,6 +389,13 @@ anything *meaningful* changed:
   reproduces the same result deterministically, so a fresher timestamp
   alone carries no new evidence — and would otherwise churn a
   review-required PR on every `push → main`.
+- **Exception: a repeated `fail`** (#1326) → **replaced**, even when only
+  volatile fields differ. A fail row's `tested_at` records the last attempt,
+  and the matrix's fail cooldown keys on it
+  ([Push and PR matrix](#push-and-pr-matrix-catalog-derived)). A no-op would
+  freeze the first failure's timestamp, so after one cooldown the cell would
+  retry on every push. The cost is at most one row update per failing cell per
+  cooldown window, carried in the run's batched ingest PR.
 
 Rationale:
 

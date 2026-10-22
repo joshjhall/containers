@@ -328,6 +328,48 @@ test_noop_on_volatile_only_reingest() {
     cleanup_db
 }
 
+test_repeated_fail_refreshes_tested_at() {
+    # #1326: a fail row's tested_at is the last attempt, which the evidence
+    # matrix's fail cooldown keys on. A repeated failure on the same digest
+    # must replace the row (newer tested_at), not no-op, or the cooldown
+    # would expire once and the cell would retry on every push after that.
+    RESULT_DB="$(command mktemp -d)"
+    make_fake_db "$RESULT_DB"
+    RESULT_FILE="$RESULT_DB/tools/rust/versions/1.95.0.json"
+    local fail_row refail_row
+    fail_row=$(command mktemp)
+    refail_row=$(command mktemp)
+    jq '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T00:00:00Z"}' \
+        "$SAMPLE_ROW" >"$fail_row"
+    jq '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-09T00:00:00.5Z", "ci_run": "https://example.com/runs/99"}' \
+        "$SAMPLE_ROW" >"$refail_row"
+
+    GITHUB_RUN_ID=1 "$INGEST" \
+        --row "$fail_row" --db-path "$RESULT_DB" \
+        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1
+    local head1 rc=0
+    head1=$(git -C "$RESULT_DB" rev-parse HEAD)
+    GITHUB_RUN_ID=2 "$INGEST" \
+        --row "$refail_row" --db-path "$RESULT_DB" \
+        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "repeated-fail re-ingest exits 0"
+
+    assert_equals "1" "$(jq '.tested | length' "$RESULT_FILE")" \
+        "a repeated failure replaces its row, not appends"
+    assert_equals "fail 2026-10-09T00:00:00.5Z" \
+        "$(jq -r '.tested[0] | "\(.result) \(.tested_at)"' "$RESULT_FILE")" \
+        "the row carries the latest attempt's tested_at"
+    local head2
+    head2=$(git -C "$RESULT_DB" rev-parse HEAD)
+    if [ "$head1" != "$head2" ]; then
+        assert_true true "the refresh is committed"
+    else
+        assert_true false "a repeated failure produced no commit"
+    fi
+    command rm -f "$fail_row" "$refail_row"
+    cleanup_db
+}
+
 test_stdin_row_via_dash() {
     local db
     db=$(command mktemp -d)
@@ -404,6 +446,7 @@ run_test test_dedup_replaces_same_tuple_same_digest "dedup replaces same (tuple,
 run_test test_dedup_appends_different_digest "different image_digest accumulates as history"
 run_test test_noop_on_identical_reingest "identical re-ingest is a clean no-op"
 run_test test_noop_on_volatile_only_reingest "volatile-only re-ingest is a clean no-op"
+run_test test_repeated_fail_refreshes_tested_at "a repeated failure refreshes tested_at for the fail cooldown"
 run_test test_stdin_row_via_dash "--row - reads JSON from stdin"
 run_test test_rejects_missing_required_flag "missing --db-path is exit 2"
 run_test test_rejects_unknown_argument "unknown flag is exit 2"

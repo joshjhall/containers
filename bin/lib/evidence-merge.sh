@@ -12,6 +12,11 @@
 # (same content-addressed image, same result), only a newer timestamp, so the
 # file is left untouched. Volatile fields: tested_at, ci_run, duration_seconds.
 #
+# Except for a `fail` row (#1326): its tested_at is the last attempt, which the
+# evidence matrix's fail cooldown reads. A no-op there would freeze the first
+# failure's timestamp, so after one cooldown a persistent failure would be
+# retried on every push. A repeated failure therefore replaces the row.
+#
 # Requires jq.
 
 # merge_evidence_row <version-file> <row-json>
@@ -52,7 +57,8 @@ merge_evidence_row() {
         def strip_volatile: del(.tested_at, .ci_run, .duration_seconds);
         ($new | strip_volatile) as $new_core
         | (.tested // []) as $rows
-        | if ($rows | map(select(dedup_match)) | any(strip_volatile == $new_core))
+        | if $new.result != "fail"
+             and ($rows | map(select(dedup_match)) | any(strip_volatile == $new_core))
           then .
           else .tested = (($rows | map(select(dedup_match | not))) + [$new])
           end

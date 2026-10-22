@@ -407,10 +407,17 @@ test_fail_cooldown_override() {
         "a three-day-old failure is retried under a two-day cooldown"
     out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_FAIL_COOLDOWN_DAYS=4 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
     assert_equals "3" "$rc" "and waits under a four-day one"
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_FAIL_COOLDOWN_DAYS=3 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-amd64" "$(_cells "$out")" \
+        "a failure exactly one cooldown old is retried"
 
     rc=0
     out="$(EVIDENCE_FAIL_COOLDOWN_DAYS=7d EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
     assert_equals "1" "$rc" "a non-integer cooldown is an error"
+    assert_equals "" "$out" "and prints no matrix"
+    rc=0
+    out="$(EVIDENCE_NOW=abc EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "a non-integer EVIDENCE_NOW is an error"
     assert_equals "" "$out" "and prints no matrix"
 }
 
