@@ -394,8 +394,11 @@ anything *meaningful* changed:
   and the matrix's fail cooldown keys on it
   ([Push and PR matrix](#push-and-pr-matrix-catalog-derived)). A no-op would
   freeze the first failure's timestamp, so after one cooldown the cell would
-  retry on every push. The cost is at most one row update per failing cell per
-  cooldown window, carried in the run's batched ingest PR.
+  retry on every push. The refresh happens only when the new `tested_at` is
+  newer; an identical or older fail row (a saved row re-ingested late) is
+  still a no-op, so the timestamp never moves backwards. The row is updated in
+  place, keeping `tested[]` order. The cost is at most one row update per
+  failing cell per cooldown window, carried in the run's batched ingest PR.
 
 Rationale:
 

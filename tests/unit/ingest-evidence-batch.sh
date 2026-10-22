@@ -58,10 +58,12 @@ STUB
     command chmod +x "$STUB_DIR/gh"
 }
 
+# _run <rows> <db> [run-id] — run id defaults to 4242; a later run in the
+# same test needs its own, as a real evidence run would have.
 _run() {
-    local rows="$1" db="$2" rc=0
+    local rows="$1" db="$2" run_id="${3:-4242}" rc=0
     OUT=$(PATH="$STUB_DIR:$PATH" GH_TOKEN=dummy BASH_ENV='' \
-        "$BATCH" --rows-dir "$rows" --db-path "$db" --run-id 4242 --no-validate 2>/dev/null) || rc=$?
+        "$BATCH" --rows-dir "$rows" --db-path "$db" --run-id "$run_id" --no-validate 2>/dev/null) || rc=$?
     RC="$rc"
 }
 
@@ -114,6 +116,42 @@ test_nothing_new_is_a_clean_noop() {
     assert_equals "0" "$(command grep -c '^pr create' "$GH_LOG" || true)" "and opens no PR"
 }
 
+test_repeated_fail_refreshes_and_identical_is_noop() {
+    # #1326: on the production (batch) path, a same-digest repeated failure
+    # with a newer tested_at is a change (it restarts the matrix's fail
+    # cooldown), while the identical row again is still "nothing new".
+    local d db rows rows2
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    db="$d/db"
+    rows="$d/rows"
+    rows2="$d/rows2"
+    _fake_db "$db"
+    _gh_stub
+    _row "$rows" r1 1.82.0 debian 13 amd64 fail
+    _run "$rows" "$db"
+    git -C "$db" checkout -q main
+    git -C "$db" reset -q --hard evidence/batch/4242
+
+    _row "$rows2" r1 1.82.0 debian 13 amd64 fail
+    command jq '.tested_at = "2026-10-20T00:00:00Z"' "$rows2/r1.json" >"$rows2/r1.tmp"
+    command mv "$rows2/r1.tmp" "$rows2/r1.json"
+    : >"$GH_LOG"
+    _run "$rows2" "$db" 4243
+    assert_equals "0" "$RC" "repeated-fail batch ingest exits 0"
+    assert_equals "evidence/batch/4243" "$OUT" "the refresh is a change: a batch branch is printed"
+    assert_equals "1 2026-10-20T00:00:00Z" \
+        "$(git -C "$d/db.git" show evidence/batch/4243:tools/rust/versions/1.82.0.json | command jq -r '"\(.tested | length) \(.tested[0].tested_at)"')" \
+        "one row, carrying the newer tested_at"
+
+    git -C "$db" checkout -q main
+    git -C "$db" reset -q --hard evidence/batch/4243
+    : >"$GH_LOG"
+    _run "$rows2" "$db" 4244
+    assert_equals "0" "$RC" "identical fail re-ingest exits 0"
+    assert_equals "" "$OUT" "prints no branch"
+    assert_equals "0" "$(command grep -c '^pr create' "$GH_LOG" || true)" "and opens no PR"
+}
+
 test_rows_for_unknown_versions_are_skipped() {
     local d db rows
     d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
@@ -137,6 +175,7 @@ test_unsafe_run_id_is_refused() {
 
 run_test test_many_rows_one_pr_with_automerge "many rows land as one PR with auto-merge"
 run_test test_nothing_new_is_a_clean_noop "re-ingesting recorded rows opens no PR"
+run_test test_repeated_fail_refreshes_and_identical_is_noop "a newer repeated fail refreshes; the identical row is a no-op"
 run_test test_rows_for_unknown_versions_are_skipped "rows for versions not in the db are skipped"
 run_test test_unsafe_run_id_is_refused "unsafe run id is refused"
 

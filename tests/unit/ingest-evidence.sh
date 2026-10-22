@@ -415,6 +415,14 @@ test_repeated_fail_merge_edge_cases() {
         "rows sharing a dedup key collapse into one refreshed row in the first slot"
     assert_equals "2" "$(jq '.tested | length' "$f")" "the duplicate match is dropped"
 
+    # An OLDER repeated failure (a saved row re-ingested late) is a no-op:
+    # tested_at must not move backwards and cut the cooldown short.
+    local before
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$fail2"
+    assert_equals "$before" "$(command cat "$f")" \
+        "an older repeated failure leaves the file byte-identical"
+
     merge_evidence_row "$f" "$newclass"
     assert_equals "pass|fail install 2026-10-10T00:00:00Z" \
         "$(jq -r '[.tested[0].result, (.tested[1] | "\(.result) \(.error_class) \(.tested_at)")] | join("|")' "$f")" \
