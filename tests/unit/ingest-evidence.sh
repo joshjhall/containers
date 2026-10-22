@@ -474,6 +474,15 @@ test_repeated_fail_offset_tested_at() {
     merge_evidence_row "$f" "$stale"
     assert_equals "$before" "$(command cat "$f")" \
         "a Z repeat older than a stored offset row is a no-op"
+
+    # An out-of-range offset reads as epoch 0, not a skewed future instant,
+    # so it cannot pin "newest" and starve later genuine refreshes.
+    local skewed
+    skewed=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T00:00:00-99:59"}' "$SAMPLE_ROW")
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$skewed"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a -99:59 repeat is unparsable, so it never counts as newer"
     command rm -f "$f"
 }
 

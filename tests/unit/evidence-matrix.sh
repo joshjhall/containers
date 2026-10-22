@@ -406,6 +406,26 @@ test_offset_tested_at_decides_cooldown() {
         "+00:00 and -05:00 failures inside the window wait; +02:00 one outside it is retried"
 }
 
+test_near_miss_tested_at_is_stale() {
+    # #1349: forms the parse rejects read as epoch 0 (stale, retried), never
+    # as a recent failure. Each wall clock is one day before _NOW, so a parser
+    # that loosened to accept it would hide the cell. -99:59 would otherwise
+    # land four days in the future and hold the cooldown past its window.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    command mkdir -p "$db/tools/rust/versions"
+    command jq -n '{schemaVersion: 1, tool: "rust", version: "1.90.0", tested: [
+        {os: "debian", os_version: "13", arch: "amd64", result: "fail", tested_at: "2026-10-20T00:00:00+0200"},
+        {os: "debian", os_version: "13", arch: "arm64", result: "fail", tested_at: "2026-10-20T00:00:00z"},
+        {os: "alpine", os_version: "3.24", arch: "amd64", result: "fail", tested_at: "2026-10-20T00:00:00-99:59"}]}' \
+        >"$db/tools/rust/versions/1.90.0.json"
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'1.90.0 alpine-3.24-amd64\n1.90.0 debian-13-amd64\n1.90.0 debian-13-arm64' "$(_cells "$out")" \
+        "+HHMM, lowercase z, and an out-of-range offset are stale, so all three retry"
+}
+
 test_pass_beats_recent_fail() {
     local r db out
     r="$(_fixture 1.0.0)"
@@ -517,6 +537,7 @@ run_test test_only_recent_failures_exits_3 "only recent failures exits 3"
 run_test test_stale_fail_sorts_after_untested "stale failures retry after never-tested cells"
 run_test test_newest_fail_row_decides_cooldown "the newest fail row decides the cooldown"
 run_test test_offset_tested_at_decides_cooldown "a numeric-offset tested_at is converted to UTC for the cooldown"
+run_test test_near_miss_tested_at_is_stale "near-miss tested_at forms read as stale failures"
 run_test test_pass_beats_recent_fail "a pass row beats a recent fail row"
 run_test test_fail_cooldown_override "EVIDENCE_FAIL_COOLDOWN_DAYS overrides the cooldown"
 run_test test_vendored_recent_fail_is_not_pending "the cooldown applies to vendored tested[]"
