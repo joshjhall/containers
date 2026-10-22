@@ -58,8 +58,11 @@ merge_evidence_row() {
             and (.arch // "") == $arch
             and (.image_digest // "") == $digest;
         def strip_volatile: del(.tested_at, .ci_run, .duration_seconds);
-        # same parse as evidence-matrix.sh em_epoch: unreadable -> 0
-        def epoch: ((.tested_at // "" | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)? // 0);
+        # same parse as evidence-matrix.sh em_epoch: Z or +-HH:MM offset,
+        # optional fraction; unreadable -> 0
+        def epoch: ((.tested_at // "" | capture("^(?<b>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\\.[0-9]+)?(?<z>Z|(?<s>[+-])(?<h>[0-9]{2}):(?<m>[0-9]{2}))$")
+            | (.b + "Z" | fromdateiso8601)
+              - (if .z == "Z" then 0 else (if .s == "-" then -1 else 1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60) end))? // 0);
         ($new | strip_volatile) as $new_core
         | (.tested // []) as $rows
         | ($rows | map(select(dedup_match))) as $matches

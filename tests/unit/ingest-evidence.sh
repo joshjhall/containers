@@ -445,6 +445,38 @@ test_repeated_fail_merge_edge_cases() {
     command rm -f "$f"
 }
 
+test_repeated_fail_offset_tested_at() {
+    # #1349: "newer" compares UTC instants, so a numeric-offset tested_at is
+    # converted, not read as epoch 0 or compared by its wall clock.
+    # shellcheck source=bin/lib/evidence-merge.sh
+    source "$PROJECT_ROOT/bin/lib/evidence-merge.sh"
+    local f stored behind ahead stale before
+    f=$(command mktemp)
+    stored=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T00:00:00Z"}' "$SAMPLE_ROW")
+    # 2026-09-30T23:00:00Z: a later wall clock, but an earlier instant.
+    behind=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T01:00:00+02:00"}' "$SAMPLE_ROW")
+    # 2026-10-01T01:30:00Z: an earlier wall clock, but a later instant.
+    ahead=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T00:30:00.5-01:00"}' "$SAMPLE_ROW")
+    # 2026-10-01T01:00:00Z: older than the offset row it would replace.
+    stale=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T01:00:00Z"}' "$SAMPLE_ROW")
+    jq -n --argjson a "$stored" '{schemaVersion: 1, tool: "rust", version: "1.95.0", tested: [$a]}' >"$f"
+
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$behind"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a +02:00 repeat whose UTC instant is older is a no-op"
+
+    merge_evidence_row "$f" "$ahead"
+    assert_equals "2026-10-01T00:30:00.5-01:00" "$(jq -r '.tested[0].tested_at' "$f")" \
+        "a -01:00 repeat whose UTC instant is newer refreshes the row"
+
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$stale"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a Z repeat older than a stored offset row is a no-op"
+    command rm -f "$f"
+}
+
 test_stdin_row_via_dash() {
     local db
     db=$(command mktemp -d)
@@ -523,6 +555,7 @@ run_test test_noop_on_identical_reingest "identical re-ingest is a clean no-op"
 run_test test_noop_on_volatile_only_reingest "volatile-only re-ingest is a clean no-op"
 run_test test_repeated_fail_refreshes_tested_at "a repeated failure refreshes tested_at for the fail cooldown"
 run_test test_repeated_fail_merge_edge_cases "repeated-fail merge: duplicate matches collapse, a new error_class replaces"
+run_test test_repeated_fail_offset_tested_at "repeated-fail merge compares numeric-offset tested_at as UTC"
 run_test test_stdin_row_via_dash "--row - reads JSON from stdin"
 run_test test_rejects_missing_required_flag "missing --db-path is exit 2"
 run_test test_rejects_unknown_argument "unknown flag is exit 2"
