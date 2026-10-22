@@ -328,6 +328,123 @@ test_noop_on_volatile_only_reingest() {
     cleanup_db
 }
 
+test_repeated_fail_refreshes_tested_at() {
+    # #1326: a fail row's tested_at is the last attempt, which the evidence
+    # matrix's fail cooldown keys on. A repeated failure on the same digest
+    # must replace the row (newer tested_at), not no-op, or the cooldown
+    # would expire once and the cell would retry on every push after that.
+    RESULT_DB="$(command mktemp -d)"
+    make_fake_db "$RESULT_DB"
+    RESULT_FILE="$RESULT_DB/tools/rust/versions/1.95.0.json"
+    local fail_row refail_row
+    fail_row=$(command mktemp)
+    refail_row=$(command mktemp)
+    jq '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T00:00:00Z"}' \
+        "$SAMPLE_ROW" >"$fail_row"
+    jq '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-09T00:00:00.5Z", "ci_run": "https://example.com/runs/99"}' \
+        "$SAMPLE_ROW" >"$refail_row"
+
+    local rc=0
+    GITHUB_RUN_ID=1 "$INGEST" \
+        --row "$fail_row" --db-path "$RESULT_DB" \
+        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "first fail ingest exits 0"
+    # A later row for another digest, so an append-at-end would reorder.
+    local other tmp
+    other=$(jq -c '. + {"image_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"}' "$SAMPLE_ROW")
+    tmp=$(command mktemp)
+    jq --argjson row "$other" '.tested += [$row]' "$RESULT_FILE" >"$tmp"
+    command mv "$tmp" "$RESULT_FILE"
+    git -C "$RESULT_DB" -c user.email=test@example.com -c user.name=test \
+        commit -q -am "seed a later row"
+    assert_equals "fail 2026-10-01T00:00:00Z|pass" \
+        "$(jq -r '[(.tested[0] | "\(.result) \(.tested_at)"), .tested[1].result] | join("|")' "$RESULT_FILE")" \
+        "precondition: the first failure is recorded ahead of another row"
+    local head1
+    head1=$(git -C "$RESULT_DB" rev-parse HEAD)
+    rc=0
+    GITHUB_RUN_ID=2 "$INGEST" \
+        --row "$refail_row" --db-path "$RESULT_DB" \
+        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "repeated-fail re-ingest exits 0"
+
+    assert_equals "fail 2026-10-09T00:00:00.5Z|pass" \
+        "$(jq -r '[(.tested[0] | "\(.result) \(.tested_at)"), .tested[1].result] | join("|")' "$RESULT_FILE")" \
+        "the row is refreshed in place with the latest attempt's tested_at"
+    local head2
+    head2=$(git -C "$RESULT_DB" rev-parse HEAD)
+    if [ "$head1" != "$head2" ]; then
+        assert_true true "the refresh is committed"
+    else
+        assert_true false "a repeated failure produced no commit"
+    fi
+
+    # The byte-identical fail row again (a re-run of the same job) is a no-op.
+    local head3
+    head3=$(git -C "$RESULT_DB" rev-parse HEAD)
+    rc=0
+    GITHUB_RUN_ID=3 "$INGEST" \
+        --row "$refail_row" --db-path "$RESULT_DB" \
+        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "identical fail re-ingest exits 0"
+    assert_equals "$head3" "$(git -C "$RESULT_DB" rev-parse HEAD)" \
+        "an identical fail row creates no new commit"
+    command rm -f "$fail_row" "$refail_row"
+    cleanup_db
+}
+
+test_repeated_fail_merge_edge_cases() {
+    # merge_evidence_row directly: two rows on one dedup key collapse to one
+    # refreshed row in the first slot; a fail with a different error_class
+    # is a meaningful change and replaces the row (appended, as before).
+    # shellcheck source=bin/lib/evidence-merge.sh
+    source "$PROJECT_ROOT/bin/lib/evidence-merge.sh"
+    local f other fail1 fail2 refail newclass
+    f=$(command mktemp)
+    other=$(jq -c '. + {"image_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"}' "$SAMPLE_ROW")
+    fail1=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T00:00:00Z"}' "$SAMPLE_ROW")
+    fail2=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-02T00:00:00Z"}' "$SAMPLE_ROW")
+    refail=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-09T00:00:00Z"}' "$SAMPLE_ROW")
+    newclass=$(jq -c '. + {"result": "fail", "error_class": "install", "tested_at": "2026-10-10T00:00:00Z"}' "$SAMPLE_ROW")
+    jq -n --argjson a "$fail1" --argjson b "$other" --argjson c "$fail2" \
+        '{schemaVersion: 1, tool: "rust", version: "1.95.0", tested: [$a, $b, $c]}' >"$f"
+
+    merge_evidence_row "$f" "$refail"
+    assert_equals "fail verify 2026-10-09T00:00:00Z|pass" \
+        "$(jq -r '[(.tested[0] | "\(.result) \(.error_class) \(.tested_at)"), .tested[1].result] | join("|")' "$f")" \
+        "rows sharing a dedup key collapse into one refreshed row in the first slot"
+    assert_equals "2" "$(jq '.tested | length' "$f")" "the duplicate match is dropped"
+
+    # An OLDER repeated failure (a saved row re-ingested late) is a no-op:
+    # tested_at must not move backwards and cut the cooldown short.
+    local before
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$fail2"
+    assert_equals "$before" "$(command cat "$f")" \
+        "an older repeated failure leaves the file byte-identical"
+
+    merge_evidence_row "$f" "$newclass"
+    assert_equals "pass|fail install 2026-10-10T00:00:00Z" \
+        "$(jq -r '[.tested[0].result, (.tested[1] | "\(.result) \(.error_class) \(.tested_at)")] | join("|")' "$f")" \
+        "a fail with a different error_class replaces the row"
+
+    # Missing tested_at reads as epoch 0: a stamped repeat refreshes an
+    # unstamped (legacy) row, and an unstamped repeat never overwrites a
+    # stamped one.
+    local bare
+    bare=$(jq -c 'del(.tested_at)' <<<"$newclass")
+    jq --argjson r "$bare" '.tested[1] = $r' "$f" >"$f.tmp"
+    command mv "$f.tmp" "$f"
+    merge_evidence_row "$f" "$newclass"
+    assert_equals "2026-10-10T00:00:00Z" "$(jq -r '.tested[1].tested_at' "$f")" \
+        "a stamped repeat refreshes an unstamped fail row"
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$bare"
+    assert_equals "$before" "$(command cat "$f")" \
+        "an unstamped repeat leaves a stamped fail row untouched"
+    command rm -f "$f"
+}
+
 test_stdin_row_via_dash() {
     local db
     db=$(command mktemp -d)
@@ -404,6 +521,8 @@ run_test test_dedup_replaces_same_tuple_same_digest "dedup replaces same (tuple,
 run_test test_dedup_appends_different_digest "different image_digest accumulates as history"
 run_test test_noop_on_identical_reingest "identical re-ingest is a clean no-op"
 run_test test_noop_on_volatile_only_reingest "volatile-only re-ingest is a clean no-op"
+run_test test_repeated_fail_refreshes_tested_at "a repeated failure refreshes tested_at for the fail cooldown"
+run_test test_repeated_fail_merge_edge_cases "repeated-fail merge: duplicate matches collapse, a new error_class replaces"
 run_test test_stdin_row_via_dash "--row - reads JSON from stdin"
 run_test test_rejects_missing_required_flag "missing --db-path is exit 2"
 run_test test_rejects_unknown_argument "unknown flag is exit 2"

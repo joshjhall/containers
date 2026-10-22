@@ -149,6 +149,8 @@ the base-images tree with
 newest patch of each minor, minimum_recommended floor and up
   x  support_matrix `supported` tuples  ∩  base-images/<os>/<osv>/<arch>/Dockerfile
   -  cells that already have a passing tested[] row in published containers-db
+  -  cells whose newest failing row is inside the fail cooldown (default 7 days)
+  ordered: never-tested cells, then stale-failure retries; oldest version first in each
 ```
 
 - **Evidence from published containers-db** (#1319). Versions and claims come
@@ -173,8 +175,37 @@ newest patch of each minor, minimum_recommended floor and up
   product (18 versions × 18 tuples = 324) exceeds GitHub's 256-job matrix cap.
   A base-image rebuild re-evidences its tuple separately
   ([`dispatch-evidence-for-tuple.sh`](../../bin/dispatch-evidence-for-tuple.sh)).
-- **Capped at 200 per run, oldest versions first**, so a backlog (a new platform,
-  or the 1.82+ backfill) drains over successive pushes, floor first.
+- **Failing cells cool down, then retry last** (#1326). Only a passing row
+  covers a cell, so without a policy a tuple that always fails (a broken
+  toolchain/distro combination) came back on every push. It used a runner each
+  time, re-commented on its auto-issue
+  ([Failure surfacing](#failure-surfacing--auto-issue-on-a-fail-row)), and took
+  cap budget ahead of untested newer versions. The policy:
+  - A cell whose **newest** `fail` row has a `tested_at` within
+    `EVIDENCE_FAIL_COOLDOWN_DAYS` (default **7**) is evidenced (failed), not
+    pending. The auto-issue already tracks it, and a retry inside the window
+    would just fail again.
+  - After the cooldown the cell is pending again, because a fix may have landed.
+    It sorts **after every never-tested cell**, so a persistent failure only
+    uses budget that untested work leaves free. A retry that fails again
+    refreshes the row's `tested_at` at ingest (see
+    [Merge policy](#merge-policy)), which restarts the cooldown. So a
+    persistent failure costs one runner per window, not one per push.
+  - A passing row always wins. A fail row with a missing or unparsable
+    `tested_at` counts as stale, so it is retried last but is never hidden.
+  - The cooldown is keyed by tuple, not by image digest. A base-image rebuild
+    (new digest) still re-evidences its tuple right away through
+    `dispatch-evidence-for-tuple.sh`, which dispatches whenever the newest
+    *passing* digest differs and does not read this matrix or its cooldown.
+    So a failing cell on a rebuilt image is retried at rebuild time, not
+    after the window.
+
+  `EVIDENCE_FAIL_COOLDOWN_DAYS=0` retries every failure on the next push (still
+  ordered last). Tests pin the clock with `EVIDENCE_NOW` (epoch seconds). The
+  same rule applies to vendored `tested[]` when no published source is set.
+- **Capped at 200 per run, oldest versions first** (never-tested cells before
+  failure retries), so a backlog (a new platform, or the 1.82+ backfill) drains
+  over successive pushes, floor first.
 - **Published images only.** A tuple is available only if
   `ghcr.io/.../base-<tuple>:latest` exists. On the merge that adds a tuple, the
   matrix runs alongside the base-image publish; without this, the first run
@@ -183,8 +214,8 @@ newest patch of each minor, minimum_recommended floor and up
   published.
 - **Nothing pending** → `has_cells=false` and the evidence job is skipped (an
   empty matrix is a hard error in Actions).
-- **Pull requests** dry-run only the oldest pending cell. That proves the
-  pipeline still works without re-evidencing the backlog on every PR.
+- **Pull requests** dry-run only the first pending cell in that order. That
+  proves the pipeline still works without re-evidencing the backlog on every PR.
 
 Both arches run natively: arm64 on `ubuntu-24.04-arm`, amd64 on
 `ubuntu-latest`. The supported platform set lives in
@@ -362,6 +393,16 @@ anything *meaningful* changed:
   reproduces the same result deterministically, so a fresher timestamp
   alone carries no new evidence — and would otherwise churn a
   review-required PR on every `push → main`.
+- **Exception: a repeated `fail`** (#1326) → **replaced**, even when only
+  volatile fields differ. A fail row's `tested_at` records the last attempt,
+  and the matrix's fail cooldown keys on it
+  ([Push and PR matrix](#push-and-pr-matrix-catalog-derived)). A no-op would
+  freeze the first failure's timestamp, so after one cooldown the cell would
+  retry on every push. The refresh happens only when the new `tested_at` is
+  newer; an identical or older fail row (a saved row re-ingested late) is
+  still a no-op, so the timestamp never moves backwards. The row is updated in
+  place, keeping `tested[]` order. The cost is at most one row update per
+  failing cell per cooldown window, carried in the run's batched ingest PR.
 
 Rationale:
 
