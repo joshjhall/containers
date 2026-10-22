@@ -74,11 +74,18 @@ _em_available_tuples() {
 # tested[] rows to {pass: ["os-osv-arch", ...], fail: {"os-osv-arch": <newest
 # fail epoch>}}. A fail row whose tested_at is missing or unparsable gets epoch
 # 0: it reads as a stale failure (retried last), never a recent one, so an
-# unreadable age cannot hide a cell forever. tested_at carries nanoseconds,
-# which fromdateiso8601 rejects, so the fraction is dropped first.
+# unreadable age cannot hide a cell forever. Accepted tested_at forms (#1349):
+# a calendar-valid YYYY-MM-DDTHH:MM:SS with optional fractional seconds, then
+# `Z` or a `+HH:MM`/`-HH:MM` offset within -12:00..+14:00. fromdateiso8601
+# takes only whole-second `Z`, so the fraction is dropped, the base parsed as
+# UTC, and the offset subtracted. libc normalizes a date like Feb 30 into
+# March, so the base must also round-trip through todate unchanged.
 _EM_EVIDENCE_JQ='
 def em_cell: "\(.os)-\(.os_version // "")-\(.arch)";
-def em_epoch: ((.tested_at // "" | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)? // 0);
+def em_epoch: ((.tested_at // "" | capture("^(?<b>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\\.[0-9]+)?(?<z>Z|(?<s>[+-])(?<h>[0-9]{2}):(?<m>[0-9]{2}))$")
+    | select(.z == "Z" or ((.m | tonumber) < 60 and (.h | tonumber) * 60 + (.m | tonumber) <= (if .s == "+" then 840 else 720 end)))
+    | ((.b + "Z") as $u | $u | fromdateiso8601 | select(todate == $u))
+      - (if .z == "Z" then 0 else (if .s == "-" then -1 else 1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60) end))? // 0);
 def em_evidence:
     { pass: ([ .[] | select(.result == "pass") | em_cell ] | unique),
       fail: (reduce (.[] | select(.result == "fail")) as $r ({};

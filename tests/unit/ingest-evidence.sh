@@ -445,6 +445,90 @@ test_repeated_fail_merge_edge_cases() {
     command rm -f "$f"
 }
 
+test_repeated_fail_offset_tested_at() {
+    # #1349: "newer" compares UTC instants, so a numeric-offset tested_at is
+    # converted, not read as epoch 0 or compared by its wall clock.
+    # shellcheck source=bin/lib/evidence-merge.sh
+    source "$PROJECT_ROOT/bin/lib/evidence-merge.sh"
+    local f stored behind ahead stale before
+    f=$(command mktemp)
+    stored=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T00:00:00Z"}' "$SAMPLE_ROW")
+    # 2026-09-30T23:00:00Z: a later wall clock, but an earlier instant.
+    behind=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T01:00:00+02:00"}' "$SAMPLE_ROW")
+    # 2026-10-01T01:30:00Z: an earlier wall clock, but a later instant.
+    ahead=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T00:30:00.5-01:00"}' "$SAMPLE_ROW")
+    # 2026-10-01T01:00:00Z: older than the offset row it would replace.
+    stale=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T01:00:00Z"}' "$SAMPLE_ROW")
+    jq -n --argjson a "$stored" '{schemaVersion: 1, tool: "rust", version: "1.95.0", tested: [$a]}' >"$f"
+
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$behind"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a +02:00 repeat whose UTC instant is older is a no-op"
+
+    merge_evidence_row "$f" "$ahead"
+    assert_equals "2026-10-01T00:30:00.5-01:00" "$(jq -r '.tested[0].tested_at' "$f")" \
+        "a -01:00 repeat whose UTC instant is newer refreshes the row"
+
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$stale"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a Z repeat older than a stored offset row is a no-op"
+
+    # An out-of-range offset reads as epoch 0, not a skewed future instant,
+    # so it cannot pin "newest" and starve later genuine refreshes.
+    local skewed
+    skewed=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T00:00:00-99:59"}' "$SAMPLE_ROW")
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$skewed"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a -99:59 repeat is unparsable, so it never counts as newer"
+
+    # Range boundaries, matching the matrix side: each instant below is newer
+    # than the stored 2026-10-01T01:30:00Z, so only an unparsable form (epoch
+    # 0) leaves the file untouched. +05:60 drives the minute clause alone;
+    # +0200 and lowercase z are the near-miss forms the matrix side pins.
+    local at row
+    for at in 2026-10-02T00:00:00+14:01 2026-10-01T12:00:00-12:01 \
+        2026-10-02T00:00:00+05:60 2026-10-02T00:00:00+15:00 \
+        2026-10-02T00:00:00+0200 2026-10-02T00:00:00z; do
+        row=$(jq -c --arg at "$at" '. + {"result": "fail", "error_class": "verify", "tested_at": $at}' "$SAMPLE_ROW")
+        before=$(command cat "$f")
+        merge_evidence_row "$f" "$row"
+        assert_equals "$before" "$(command cat "$f")" \
+            "a rejected $at repeat is unparsable, so it never counts as newer"
+    done
+    for at in 2026-10-02T00:00:00+14:00 2026-10-01T14:00:00-12:00; do
+        row=$(jq -c --arg at "$at" '. + {"result": "fail", "error_class": "verify", "tested_at": $at}' "$SAMPLE_ROW")
+        merge_evidence_row "$f" "$row"
+        assert_equals "$at" "$(jq -r '.tested[0].tested_at' "$f")" \
+            "a boundary $at repeat parses and, being newer, refreshes the row"
+    done
+
+    # Minute offsets apply exactly. The stored row is now
+    # 2026-10-02T02:00:00Z (the -12:00 boundary above). +05:30 at 07:20 is
+    # 01:50Z, older, so a no-op; dropping the minute term would read 02:20Z,
+    # newer. Then 07:40 is 02:10Z, newer, so it refreshes.
+    row=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-02T07:20:00+05:30"}' "$SAMPLE_ROW")
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$row"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a +05:30 repeat thirty minutes behind in UTC is a no-op"
+    row=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-02T07:40:00+05:30"}' "$SAMPLE_ROW")
+    merge_evidence_row "$f" "$row"
+    assert_equals "2026-10-02T07:40:00+05:30" "$(jq -r '.tested[0].tested_at' "$f")" \
+        "a +05:30 repeat ten minutes ahead in UTC refreshes the row"
+
+    # A calendar-impossible base is unparsable, not normalized: 2026-10-31
+    # 23:59:60 would roll to a far-newer 2026-11-01 and pin "newest".
+    row=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-31T23:59:60Z"}' "$SAMPLE_ROW")
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$row"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a 23:59:60 repeat is unparsable, so it never counts as newer"
+    command rm -f "$f"
+}
+
 test_stdin_row_via_dash() {
     local db
     db=$(command mktemp -d)
@@ -523,6 +607,7 @@ run_test test_noop_on_identical_reingest "identical re-ingest is a clean no-op"
 run_test test_noop_on_volatile_only_reingest "volatile-only re-ingest is a clean no-op"
 run_test test_repeated_fail_refreshes_tested_at "a repeated failure refreshes tested_at for the fail cooldown"
 run_test test_repeated_fail_merge_edge_cases "repeated-fail merge: duplicate matches collapse, a new error_class replaces"
+run_test test_repeated_fail_offset_tested_at "repeated-fail merge compares numeric-offset tested_at as UTC"
 run_test test_stdin_row_via_dash "--row - reads JSON from stdin"
 run_test test_rejects_missing_required_flag "missing --db-path is exit 2"
 run_test test_rejects_unknown_argument "unknown flag is exit 2"
