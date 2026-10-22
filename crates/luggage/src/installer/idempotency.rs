@@ -199,19 +199,36 @@ pub(crate) fn write_subcommand_shim(dir: &Path, name: &str, version_line: &str) 
     std::fs::set_permissions(&path, perms).unwrap();
 }
 
-/// Write an executable shim at `dir/name` that prints a version line and then
-/// `exec`s `sleep 30`, standing in for a misdeclared `version_args` that
-/// starts a long-running subcommand (#1344). The `exec` makes the sleeper the
-/// direct child, so the timeout's `kill` ends it rather than orphaning it.
+/// Write an executable shim at `dir/name` that records its pid in
+/// `dir/name.pid`, prints a version line, then `exec`s `sleep 30` — standing
+/// in for a misdeclared `version_args` that starts a long-running subcommand
+/// (#1344). The `exec` keeps the pid, so the recorded pid IS the direct child
+/// the timeout must kill; [`assert_probe_child_gone`] checks it.
 #[cfg(all(test, unix))]
 pub(crate) fn write_sleeping_shim(dir: &Path, name: &str) {
     use std::os::unix::fs::PermissionsExt as _;
 
     let path = dir.join(name);
-    std::fs::write(&path, "#!/bin/sh\necho 'tool 1.0.0'\nexec sleep 30\n").unwrap();
+    std::fs::write(&path, "#!/bin/sh\necho $$ > \"$0.pid\"\necho 'tool 1.0.0'\nexec sleep 30\n")
+        .unwrap();
     let mut perms = std::fs::metadata(&path).unwrap().permissions();
     perms.set_mode(0o755);
     std::fs::set_permissions(&path, perms).unwrap();
+}
+
+/// Assert the probe child recorded by [`write_sleeping_shim`] no longer
+/// exists — killed **and** reaped. A merely-dropped `Child` keeps running,
+/// and a killed-but-unwaited one lingers as a zombie; `kill -0` succeeds on
+/// both, so either leak fails here, where an elapsed-time bound alone would
+/// pass (the timeout returns early whether or not the child is ended).
+#[cfg(all(test, unix))]
+pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
+    let pid = std::fs::read_to_string(dir.join(format!("{name}.pid"))).unwrap();
+    let pid = pid.trim();
+    assert!(!pid.is_empty(), "the shim must have recorded its pid");
+    let alive =
+        Command::new("kill").args(["-0", pid]).stderr(Stdio::null()).status().unwrap().success();
+    assert!(!alive, "the timed-out probe child (pid {pid}) must be killed and reaped");
 }
 
 #[cfg(test)]
@@ -403,8 +420,8 @@ mod tests {
     const TEST_TIMEOUT: Duration = Duration::from_millis(300);
 
     /// A probe still running at the deadline is killed and surfaces as
-    /// `TimedOut` (#1344). The elapsed bound proves the child was killed,
-    /// not waited out — without the kill this call takes the shim's 30s.
+    /// `TimedOut` (#1344). The elapsed bound proves the call did not wait the
+    /// shim's 30s out; the pid check proves the child was actually ended.
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
@@ -425,6 +442,7 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::TimedOut, "got: {err}");
         assert!(elapsed >= TEST_TIMEOUT, "must wait out the deadline first ({elapsed:?})");
         assert!(elapsed < Duration::from_secs(5), "the hung child must be killed ({elapsed:?})");
+        assert_probe_child_gone(dir.path(), "tool");
     }
 
     /// Counterpart to the timeout test: a probe that exits promptly is
@@ -457,6 +475,7 @@ mod tests {
             VERSION_PROBE_TIMEOUT,
         )
         .expect("a prompt probe must succeed");
+        assert!(err.status.success());
         assert_eq!(String::from_utf8_lossy(&err.stdout), "");
         assert_eq!(String::from_utf8_lossy(&err.stderr), "tool 2.0.0 stderr\n");
     }
@@ -503,6 +522,7 @@ mod tests {
             already_installed_within("tool", VERSION_ARGS, "1.0.0", dir.path(), TEST_TIMEOUT);
         assert!(!installed, "a timed-out probe must not confirm the install");
         assert!(start.elapsed() < Duration::from_secs(5), "the hung child must be killed");
+        assert_probe_child_gone(dir.path(), "tool");
     }
 
     /// A non-`ETXTBSY` launch error must be returned on the *first* attempt,

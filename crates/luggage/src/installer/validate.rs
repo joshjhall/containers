@@ -303,7 +303,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn hung_probe_times_out_as_validation_failed() {
-        use crate::installer::idempotency::write_sleeping_shim;
+        use crate::installer::idempotency::{assert_probe_child_gone, write_sleeping_shim};
         use std::time::Instant;
 
         let dir = tempdir().unwrap();
@@ -316,6 +316,7 @@ mod tests {
             check_within("tool", "tool", &args, "1.0.0", dir.path(), &BTreeMap::new(), timeout)
                 .unwrap_err();
         assert!(start.elapsed() < Duration::from_secs(5), "the hung child must be killed");
+        assert_probe_child_gone(dir.path(), "tool");
         match err {
             LuggageError::ValidationFailed { tool, version, message } => {
                 assert_eq!(tool, "tool");
