@@ -393,6 +393,35 @@ test_repeated_fail_refreshes_tested_at() {
     cleanup_db
 }
 
+test_repeated_fail_merge_edge_cases() {
+    # merge_evidence_row directly: two rows on one dedup key collapse to one
+    # refreshed row in the first slot; a fail with a different error_class
+    # is a meaningful change and replaces the row (appended, as before).
+    # shellcheck source=bin/lib/evidence-merge.sh
+    source "$PROJECT_ROOT/bin/lib/evidence-merge.sh"
+    local f other fail1 fail2 refail newclass
+    f=$(command mktemp)
+    other=$(jq -c '. + {"image_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"}' "$SAMPLE_ROW")
+    fail1=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-01T00:00:00Z"}' "$SAMPLE_ROW")
+    fail2=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-02T00:00:00Z"}' "$SAMPLE_ROW")
+    refail=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-09T00:00:00Z"}' "$SAMPLE_ROW")
+    newclass=$(jq -c '. + {"result": "fail", "error_class": "install", "tested_at": "2026-10-10T00:00:00Z"}' "$SAMPLE_ROW")
+    jq -n --argjson a "$fail1" --argjson b "$other" --argjson c "$fail2" \
+        '{schemaVersion: 1, tool: "rust", version: "1.95.0", tested: [$a, $b, $c]}' >"$f"
+
+    merge_evidence_row "$f" "$refail"
+    assert_equals "fail verify 2026-10-09T00:00:00Z|pass" \
+        "$(jq -r '[(.tested[0] | "\(.result) \(.error_class) \(.tested_at)"), .tested[1].result] | join("|")' "$f")" \
+        "rows sharing a dedup key collapse into one refreshed row in the first slot"
+    assert_equals "2" "$(jq '.tested | length' "$f")" "the duplicate match is dropped"
+
+    merge_evidence_row "$f" "$newclass"
+    assert_equals "pass|fail install 2026-10-10T00:00:00Z" \
+        "$(jq -r '[.tested[0].result, (.tested[1] | "\(.result) \(.error_class) \(.tested_at)")] | join("|")' "$f")" \
+        "a fail with a different error_class replaces the row"
+    command rm -f "$f"
+}
+
 test_stdin_row_via_dash() {
     local db
     db=$(command mktemp -d)
@@ -470,6 +499,7 @@ run_test test_dedup_appends_different_digest "different image_digest accumulates
 run_test test_noop_on_identical_reingest "identical re-ingest is a clean no-op"
 run_test test_noop_on_volatile_only_reingest "volatile-only re-ingest is a clean no-op"
 run_test test_repeated_fail_refreshes_tested_at "a repeated failure refreshes tested_at for the fail cooldown"
+run_test test_repeated_fail_merge_edge_cases "repeated-fail merge: duplicate matches collapse, a new error_class replaces"
 run_test test_stdin_row_via_dash "--row - reads JSON from stdin"
 run_test test_rejects_missing_required_flag "missing --db-path is exit 2"
 run_test test_rejects_unknown_argument "unknown flag is exit 2"
