@@ -422,6 +422,19 @@ test_fail_cooldown_override() {
     out="$(EVIDENCE_NOW=abc EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
     assert_equals "1" "$rc" "a non-integer EVIDENCE_NOW is an error"
     assert_equals "" "$out" "and prints no matrix"
+
+    # A value that would overflow the 64-bit product (and wrap the cooldown
+    # negative, re-queuing every failure) is refused, not silently disabled.
+    rc=0
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_FAIL_COOLDOWN_DAYS=999999999999999 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "an overflowing cooldown is an error"
+    assert_equals "" "$out" "and prints no matrix"
+    rc=0
+    out="$(EVIDENCE_NOW=99999999999999999999 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "an overflowing EVIDENCE_NOW is an error"
+    rc=0
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_FAIL_COOLDOWN_DAYS=999999 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "3" "$rc" "the largest accepted cooldown still keeps the failure out"
 }
 
 test_vendored_recent_fail_is_not_pending() {

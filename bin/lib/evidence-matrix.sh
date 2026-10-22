@@ -185,8 +185,11 @@ evidence_matrix() {
 
     local cooldown_days="${EVIDENCE_FAIL_COOLDOWN_DAYS:-7}" now="${EVIDENCE_NOW:-}"
     [ -n "$now" ] || now="$(command date +%s)"
-    [[ "$cooldown_days" =~ ^[0-9]+$ && "$now" =~ ^[0-9]+$ ]] || {
-        command echo "evidence_matrix: EVIDENCE_FAIL_COOLDOWN_DAYS and EVIDENCE_NOW must be non-negative integers" >&2
+    # Digit caps keep the bash arithmetic below in range: an unbounded value
+    # would wrap the signed 64-bit product negative and silently disable the
+    # cooldown. 6 digits is ~2700 years of cooldown; 12 is epochs to year 33658.
+    [[ "$cooldown_days" =~ ^[0-9]{1,6}$ && "$now" =~ ^[0-9]{1,12}$ ]] || {
+        command echo "evidence_matrix: EVIDENCE_FAIL_COOLDOWN_DAYS (1-6 digits) and EVIDENCE_NOW (1-12 digits) must be non-negative integers" >&2
         return 1
     }
 
