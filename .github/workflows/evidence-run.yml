@@ -251,9 +251,10 @@ jobs:
             # Every pending evidence cell, from the catalog (#1111): the newest
             # patch of each minor from the floor up, x each tuple it claims
             # that has a base image, minus cells that already have passing
-            # evidence in published containers-db (#1319). Capped under
-            # GitHub's 256-job limit; the backlog drains over successive
-            # pushes, oldest versions first.
+            # evidence in published containers-db (#1319) or a failure inside
+            # the cooldown (#1326). Capped under GitHub's 256-job limit; the
+            # backlog drains over successive pushes, oldest versions first,
+            # never-tested cells before failure retries.
             # shellcheck source=bin/lib/evidence-matrix.sh
             source bin/lib/evidence-matrix.sh
             rc=0
@@ -284,7 +285,7 @@ jobs:
             if [ "$EVENT" = "pull_request" ]; then
               DRY="true"
               # A PR only needs to prove the pipeline still works, not
-              # re-evidence the backlog: one cell (the oldest pending) keeps a
+              # re-evidence the backlog: one cell (the first pending) keeps a
               # PR to one runner instead of up to 200.
               MATRIX=$(jq -c '{include: .include[0:1]}' <<<"$MATRIX")
             else

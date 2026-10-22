@@ -146,19 +146,24 @@ test_unpublished_images_are_skipped() {
         "with no check configured, every tuple with a Dockerfile is offered"
 }
 
-# _db_version <db_root> <version> <pass-csv> [fail-csv] — a published
+# _db_version <db_root> <version> <pass-csv> [fail-csv] [failed-at] — a published
 # containers-db version file with a passing row per pass-csv tuple and a
-# failing row per fail-csv tuple.
+# failing row per fail-csv tuple. failed-at (ISO 8601) stamps the fail rows'
+# tested_at; without it they carry none, which reads as a stale failure.
 _db_version() {
-    local db="$1" v="$2" pass="$3" fail="${4:-}"
+    local db="$1" v="$2" pass="$3" fail="${4:-}" at="${5:-}"
     command mkdir -p "$db/tools/rust/versions"
-    command jq -n --arg v "$v" --arg p "$pass" --arg f "$fail" '
+    command jq -n --arg v "$v" --arg p "$pass" --arg f "$fail" --arg at "$at" '
         def cell: split("-") as $x | {os: $x[0], os_version: $x[1], arch: $x[2]};
         def rows($csv; $r): $csv | select(. != "") | split(",")[] | cell + {result: $r};
+        def stamp: if $at == "" then . else . + {tested_at: $at} end;
         {schemaVersion: 1, tool: "rust", version: $v,
-         tested: [ rows($p; "pass"), rows($f; "fail") ]}
+         tested: [ rows($p; "pass"), (rows($f; "fail") | stamp) ]}
     ' >"$db/tools/rust/versions/$v.json"
 }
+
+# Fixed clock for the fail-cooldown tests: 2026-10-21T00:00:00Z.
+_NOW=1792540800
 
 test_published_evidence_decides_pending() {
     # #1319: the vendored snapshot never receives tested[] rows, so pending-ness
@@ -181,7 +186,8 @@ test_published_evidence_decides_pending() {
 
 test_published_source_overrides_vendored_tested() {
     # A vendored pass row does not count once a source is set, and only
-    # passing published rows count; a failing one leaves the cell pending.
+    # passing published rows count; a failing one with no tested_at is a
+    # stale failure, so the cell stays pending (#1326 cooldown tests below).
     local r db out
     r="$(_fixture 1.0.0)"
     _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64 debian-13-amd64
@@ -311,6 +317,117 @@ test_unreadable_published_source_is_an_error() {
     assert_equals "" "$out" "and prints no matrix"
 }
 
+test_recent_fail_is_not_pending() {
+    # #1326: a cell that failed inside the cooldown is evidenced (failed), not
+    # re-queued on every push. One day ago, against the default 7 days. The
+    # timestamp carries nanoseconds, as real ingest rows do.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 "" debian-13-arm64 2026-10-20T00:00:00.123456789Z
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'1.90.0 alpine-3.24-amd64\n1.90.0 debian-13-amd64' "$(_cells "$out")" \
+        "a recently failed cell is not pending"
+}
+
+test_only_recent_failures_exits_3() {
+    # A version whose every cell recently failed has nothing pending.
+    local r db out rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 "" debian-13-amd64 2026-10-20T00:00:00Z
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "3" "$rc" "only recent failures is exit 3"
+    assert_equals "" "$out" "and prints no matrix"
+}
+
+test_stale_fail_sorts_after_untested() {
+    # A failure older than the cooldown is retried, but after every
+    # never-tested cell, even ones at newer versions, so it cannot take cap
+    # budget from untested work.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.80.0 debian-13-amd64
+    _version "$r/catalog" 1.81.0 debian-13-amd64,debian-13-arm64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.80.0 "" debian-13-amd64 2026-10-01T00:00:00Z
+    _db_version "$db" 1.81.0 "" debian-13-arm64 2026-09-01T00:00:00Z
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'1.81.0 debian-13-amd64\n1.80.0 debian-13-amd64\n1.81.0 debian-13-arm64' \
+        "$(command jq -r '.include[] | "\(.version) \(.tuple)"' <<<"$out")" \
+        "untested first, then stale-failure retries, oldest version first in each"
+    assert_equals "0" "$(command jq '[.include[] | select(has("retry"))] | length' <<<"$out")" \
+        "the sort key is not emitted into the matrix"
+
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" latest 1 2>/dev/null)"
+    assert_equals "1.81.0 debian-13-amd64" "$(_cells "$out")" \
+        "under the cap the untested newer cell beats the older failure"
+}
+
+test_newest_fail_row_decides_cooldown() {
+    # Several fail rows for one cell: the newest one sets the cooldown, not
+    # the last one listed. An unparsable tested_at reads as stale, never as
+    # recent.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    command mkdir -p "$db/tools/rust/versions"
+    command jq -n '{schemaVersion: 1, tool: "rust", version: "1.90.0", tested: [
+        {os: "debian", os_version: "13", arch: "amd64", result: "fail", tested_at: "2026-10-19T00:00:00Z"},
+        {os: "debian", os_version: "13", arch: "amd64", result: "fail", tested_at: "2026-01-01T00:00:00Z"},
+        {os: "debian", os_version: "13", arch: "arm64", result: "fail", tested_at: "yesterday"}]}' \
+        >"$db/tools/rust/versions/1.90.0.json"
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-arm64" "$(_cells "$out")" \
+        "newest fail row is recent so amd64 waits; unparsable age is retried"
+}
+
+test_pass_beats_recent_fail() {
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 debian-13-amd64 debian-13-amd64 2026-10-20T00:00:00Z
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_FAIL_COOLDOWN_DAYS=0 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-arm64" "$(_cells "$out")" \
+        "a passing row excludes the cell whatever its fail rows say"
+}
+
+test_fail_cooldown_override() {
+    local r db out rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 "" debian-13-amd64 2026-10-18T00:00:00Z
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_FAIL_COOLDOWN_DAYS=2 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-amd64" "$(_cells "$out")" \
+        "a three-day-old failure is retried under a two-day cooldown"
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_FAIL_COOLDOWN_DAYS=4 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "3" "$rc" "and waits under a four-day one"
+
+    rc=0
+    out="$(EVIDENCE_FAIL_COOLDOWN_DAYS=7d EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "a non-integer cooldown is an error"
+    assert_equals "" "$out" "and prints no matrix"
+}
+
+test_vendored_recent_fail_is_not_pending() {
+    # The policy applies to the vendored tested[] too (no source set).
+    local r out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64
+    command jq '.tested = [{os: "debian", os_version: "13", arch: "arm64", result: "fail",
+                            tested_at: "2026-10-20T00:00:00Z"}]' \
+        "$r/catalog/tools/rust/versions/1.90.0.json" >"$r/v.json"
+    command mv "$r/v.json" "$r/catalog/tools/rust/versions/1.90.0.json"
+    out="$(EVIDENCE_NOW="$_NOW" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-amd64" "$(_cells "$out")" \
+        "a recent vendored fail row keeps its cell out"
+}
+
 test_missing_index_is_an_error() {
     local rc=0
     evidence_matrix "$TEST_TEMP_DIR/nope" rust "$TEST_TEMP_DIR" >/dev/null 2>&1 || rc=$?
@@ -351,6 +468,13 @@ run_test test_open_prs_filters_trust_and_age "open evidence PRs: trust and age f
 run_test test_open_prs_unparsable_listing_is_an_error "open evidence PRs: unparsable listing is an error"
 run_test test_fully_published_coverage_exits_3 "full published coverage exits 3"
 run_test test_unreadable_published_source_is_an_error "an unreadable evidence source is an error, not a full matrix"
+run_test test_recent_fail_is_not_pending "a recently failed cell is not pending"
+run_test test_only_recent_failures_exits_3 "only recent failures exits 3"
+run_test test_stale_fail_sorts_after_untested "stale failures retry after never-tested cells"
+run_test test_newest_fail_row_decides_cooldown "the newest fail row decides the cooldown"
+run_test test_pass_beats_recent_fail "a pass row beats a recent fail row"
+run_test test_fail_cooldown_override "EVIDENCE_FAIL_COOLDOWN_DAYS overrides the cooldown"
+run_test test_vendored_recent_fail_is_not_pending "the cooldown applies to vendored tested[]"
 run_test test_missing_index_is_an_error "missing index is an error"
 run_test test_real_catalog_respects_github_cap "shipped catalog stays within GitHub's 256 cap"
 

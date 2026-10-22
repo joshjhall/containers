@@ -17,7 +17,10 @@
 # whole catalog instead of one bumped version.
 #
 # Only PENDING cells are emitted: those with no passing `tested[]` row for that
-# tuple. Evidence comes from EVIDENCE_TESTED_SOURCE when set (see
+# tuple and no failing row newer than EVIDENCE_FAIL_COOLDOWN_DAYS (default 7).
+# A cell that failed before the cooldown is retried, but after every
+# never-tested cell, so a persistent failure cannot take cap budget from
+# untested work (#1326). Evidence comes from EVIDENCE_TESTED_SOURCE when set (see
 # _em_published_evidence): the vendored snapshot never receives `tested[]`
 # rows, so judging against it re-ran the same oldest cells forever (#1319).
 # Re-running a covered cell is a no-op at ingest (the dedup key matches),
@@ -25,7 +28,8 @@
 # tuples = 324) exceeds GitHub's 256-job matrix cap outright. A base-image
 # rebuild re-evidences its tuple separately (dispatch-evidence-for-tuple.sh).
 # `max_cells` caps one run; the backlog drains over successive pushes, oldest
-# versions first so the floor gets covered before the newest release.
+# versions first so the floor gets covered before the newest release (within
+# each group: never-tested cells, then stale-failure retries).
 #
 # Sourced by .github/workflows/evidence-run.yml and tests/unit/evidence-matrix.sh.
 # Requires jq.
@@ -65,9 +69,25 @@ _em_available_tuples() {
     done
 }
 
-# _em_published_evidence <tool> <out_file> — writes the passing evidence tuples
-# per version from EVIDENCE_TESTED_SOURCE to out_file, as
-# {"<version>": ["os-osv-arch", ...]}. The source is a colon-separated list of
+# _EM_EVIDENCE_JQ — jq defs shared by the published and vendored paths, so the
+# fail policy is computed in one place. `em_evidence` reduces an array of
+# tested[] rows to {pass: ["os-osv-arch", ...], fail: {"os-osv-arch": <newest
+# fail epoch>}}. A fail row whose tested_at is missing or unparsable gets epoch
+# 0: it reads as a stale failure (retried last), never a recent one, so an
+# unreadable age cannot hide a cell forever. tested_at carries nanoseconds,
+# which fromdateiso8601 rejects, so the fraction is dropped first.
+_EM_EVIDENCE_JQ='
+def em_cell: "\(.os)-\(.os_version // "")-\(.arch)";
+def em_epoch: ((.tested_at // "" | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)? // 0);
+def em_evidence:
+    { pass: ([ .[] | select(.result == "pass") | em_cell ] | unique),
+      fail: (reduce (.[] | select(.result == "fail")) as $r ({};
+                ($r | em_cell) as $c | .[$c] = ([.[$c] // 0, ($r | em_epoch)] | max))) };
+'
+
+# _em_published_evidence <tool> <out_file> — writes the evidence per version
+# from EVIDENCE_TESTED_SOURCE to out_file, as {"<version>": <em_evidence>}.
+# The source is a colon-separated list of
 # directories laid out like containers-db (tools/<tool>/versions/*.json); rows
 # from all of them are unioned. evidence-run.yml passes containers-db main plus
 # the head of each still-open evidence/batch/* PR, so cells a previous run
@@ -96,11 +116,9 @@ _em_published_evidence() {
         fi
         files+=("${found[@]}")
     done
-    command jq -cs '
-        map({version, pass: [ .tested[]? | select(.result == "pass")
-                              | "\(.os)-\(.os_version // "")-\(.arch)" ]})
-        | group_by(.version)
-        | map({key: .[0].version, value: (map(.pass[]) | unique)})
+    command jq -cs "$_EM_EVIDENCE_JQ"'
+        group_by(.version)
+        | map({key: .[0].version, value: ([ .[].tested[]? ] | em_evidence)})
         | from_entries
     ' "${files[@]}" >"$out" || {
         command echo "evidence_matrix: unreadable published evidence for $tool in $EVIDENCE_TESTED_SOURCE" >&2
@@ -148,15 +166,27 @@ evidence_open_prs() {
 # Prints the matrix JSON on stdout (max_cells defaults to 200, under GitHub's
 # 256 cap). Exit status:
 #   0  a non-empty matrix was printed
-#   1  error (no index, bad catalog, unreadable EVIDENCE_TESTED_SOURCE) —
-#      nothing printed
-#   3  nothing pending — every cell already has passing evidence; nothing
-#      printed. Callers skip the evidence job rather than run an empty matrix.
+#   1  error (no index, bad catalog, unreadable EVIDENCE_TESTED_SOURCE, or a
+#      non-integer EVIDENCE_FAIL_COOLDOWN_DAYS / EVIDENCE_NOW) — nothing printed
+#   3  nothing pending — every cell has passing or recently failed evidence;
+#      nothing printed. Callers skip the evidence job rather than run an empty
+#      matrix.
+#
+# EVIDENCE_FAIL_COOLDOWN_DAYS (default 7) is how long a failing row keeps its
+# cell out of the matrix; 0 retries every failure on the next push.
+# EVIDENCE_NOW (epoch seconds, default the current time) pins the clock for tests.
 evidence_matrix() {
     local catalog="$1" tool="$2" root="$3" image_tag="${4:-latest}" max_cells="${5:-200}"
     local index="$catalog/tools/$tool/index.json"
     [ -f "$index" ] || {
         command echo "evidence_matrix: no index for $tool at $index" >&2
+        return 1
+    }
+
+    local cooldown_days="${EVIDENCE_FAIL_COOLDOWN_DAYS:-7}" now="${EVIDENCE_NOW:-}"
+    [ -n "$now" ] || now="$(command date +%s)"
+    [[ "$cooldown_days" =~ ^[0-9]+$ && "$now" =~ ^[0-9]+$ ]] || {
+        command echo "evidence_matrix: EVIDENCE_FAIL_COOLDOWN_DAYS and EVIDENCE_NOW must be non-negative integers" >&2
         return 1
     }
 
@@ -182,8 +212,10 @@ evidence_matrix() {
         --arg tag "$image_tag" \
         --argjson available "$available" \
         --argjson plumbing "$plumbing" \
+        --argjson now "$((10#$now))" \
+        --argjson cooldown "$((10#$cooldown_days * 86400))" \
         --slurpfile evidence "$evidence" \
-        --slurpfile index "$index" '
+        --slurpfile index "$index" "$_EM_EVIDENCE_JQ"'
         def vkey: split(".") | map(tonumber? // 0);
         $evidence[0] as $evidence
         | ($index[0].minimum_recommended // "0") as $floor
@@ -193,23 +225,28 @@ evidence_matrix() {
         | map(max_by(.version | vkey))
         | sort_by(.version | vkey)
         | [ .[] as $v
+            # evidence for this version — from the published source when
+            # given, else the vendored tested[]
+            | (if $evidence == null then [ $v.tested[]? ] | em_evidence
+               else ($evidence[$v.version] // {pass: [], fail: {}}) end) as $ev
             | $v.support_matrix[]?
             | select(.status == "supported" and (.os_version // null) != null)
             | "\(.os)-\(.os_version)-\(.arch)" as $tuple
             | select($available | index($tuple))
             | select($plumbing[.arch])
-            # pending: no passing evidence row for this exact tuple — from
-            # the published source when given, else the vendored tested[]
-            | select(if $evidence == null then
-                       [ $v.tested[]? | select(.result == "pass")
-                         | "\(.os)-\(.os_version // "")-\(.arch)" ]
-                     else ($evidence[$v.version] // []) end
-                     | index($tuple) | not)
+            # pending: no passing row for this exact tuple, and no failing
+            # row inside the cooldown (#1326)
+            | select($ev.pass | index($tuple) | not)
+            | $ev.fail[$tuple] as $failed_at
+            | select($failed_at == null or $failed_at <= $now - $cooldown)
             | {tool: $tool, version: $v.version, tuple: $tuple, image_tag: $tag,
                arch: .arch, runner: $plumbing[.arch][0], runtime: $plumbing[.arch][1],
-               rust_target: $plumbing[.arch][2]} ]
+               rust_target: $plumbing[.arch][2], retry: ($failed_at != null)} ]
         | unique_by([.version, .tuple])
-        | sort_by([(.version | vkey), .tuple])
+        # never-tested cells first, stale-failure retries last; oldest
+        # version first within each
+        | sort_by([.retry, (.version | vkey), .tuple])
+        | map(del(.retry))
         | {include: .[0:'"$max_cells"'], pending_total: length}
     ' "$catalog/tools/$tool/versions/"*.json)" || rc=1
     command rm -f "$evidence"
@@ -222,7 +259,7 @@ evidence_matrix() {
         return 3
     fi
     if [ "$total" -gt "$max_cells" ]; then
-        command echo "evidence_matrix: $total pending cells for $tool; running the oldest $max_cells this time" >&2
+        command echo "evidence_matrix: $total pending cells for $tool; running the first $max_cells this time (untested before failure retries, oldest first)" >&2
     fi
     command jq -c 'del(.pending_total)' <<<"$out"
 }
