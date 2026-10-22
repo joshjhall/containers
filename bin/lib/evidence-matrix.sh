@@ -76,12 +76,12 @@ _em_available_tuples() {
 # 0: it reads as a stale failure (retried last), never a recent one, so an
 # unreadable age cannot hide a cell forever. Accepted tested_at forms (#1349):
 # YYYY-MM-DDTHH:MM:SS with optional fractional seconds, then `Z` or a
-# `+HH:MM`/`-HH:MM` offset (HH <= 14, MM < 60). fromdateiso8601 takes only whole-second `Z`, so the
+# `+HH:MM`/`-HH:MM` offset within -12:00..+14:00. fromdateiso8601 takes only whole-second `Z`, so the
 # fraction is dropped, the base parsed as UTC, and the offset subtracted.
 _EM_EVIDENCE_JQ='
 def em_cell: "\(.os)-\(.os_version // "")-\(.arch)";
 def em_epoch: ((.tested_at // "" | capture("^(?<b>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\\.[0-9]+)?(?<z>Z|(?<s>[+-])(?<h>[0-9]{2}):(?<m>[0-9]{2}))$")
-    | select(.z == "Z" or ((.h | tonumber) <= 14 and (.m | tonumber) < 60))
+    | select(.z == "Z" or ((.m | tonumber) < 60 and (.h | tonumber) * 60 + (.m | tonumber) <= (if .s == "+" then 840 else 720 end)))
     | (.b + "Z" | fromdateiso8601)
       - (if .z == "Z" then 0 else (if .s == "-" then -1 else 1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60) end))? // 0);
 def em_evidence:

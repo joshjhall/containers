@@ -194,8 +194,8 @@ newest patch of each minor, minimum_recommended floor and up
   - A passing row always wins. A fail row with a missing or unparsable
     `tested_at` counts as stale, so it is retried last but is never hidden.
     Parsable means `YYYY-MM-DDTHH:MM:SS`, optional fractional seconds, then
-    `Z` or a `+HH:MM`/`-HH:MM` offset with `HH` at most 14 and `MM` under 60
-    (converted to UTC). `record-evidence` always writes `Z` with nanoseconds.
+    `Z` or a `+HH:MM`/`-HH:MM` offset from `-12:00` to `+14:00` (converted
+    to UTC). `record-evidence` always writes `Z` with nanoseconds.
     Lowercase `z`, `+HHMM`, an out-of-range offset such as `+99:99`, and bare
     dates are unparsable. The same parse decides "newer" at ingest.
   - The cooldown is keyed by tuple, not by image digest. A base-image rebuild

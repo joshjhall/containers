@@ -426,6 +426,32 @@ test_near_miss_tested_at_is_stale() {
         "+HHMM, lowercase z, and an out-of-range offset are stale, so all three retry"
 }
 
+test_offset_range_boundaries() {
+    # #1349: real offsets span -12:00..+14:00. Each row's UTC instant is one
+    # day before _NOW, so a parsed row waits out the cooldown and an
+    # unparsable one (epoch 0) retries. The minute clause is driven alone by
+    # +05:60, whose hour is in range.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    _version "$r/catalog" 1.91.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    command mkdir -p "$db/tools/rust/versions"
+    command jq -n '{schemaVersion: 1, tool: "rust", version: "1.90.0", tested: [
+        {os: "debian", os_version: "13", arch: "amd64", result: "fail", tested_at: "2026-10-20T14:00:00+14:00"},
+        {os: "debian", os_version: "13", arch: "arm64", result: "fail", tested_at: "2026-10-19T12:00:00-12:00"},
+        {os: "alpine", os_version: "3.24", arch: "amd64", result: "fail", tested_at: "2026-10-20T14:01:00+14:01"}]}' \
+        >"$db/tools/rust/versions/1.90.0.json"
+    command jq -n '{schemaVersion: 1, tool: "rust", version: "1.91.0", tested: [
+        {os: "debian", os_version: "13", arch: "amd64", result: "fail", tested_at: "2026-10-19T11:59:00-12:01"},
+        {os: "debian", os_version: "13", arch: "arm64", result: "fail", tested_at: "2026-10-20T06:00:00+05:60"},
+        {os: "alpine", os_version: "3.24", arch: "amd64", result: "fail", tested_at: "2026-10-20T15:00:00+15:00"}]}' \
+        >"$db/tools/rust/versions/1.91.0.json"
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'1.90.0 alpine-3.24-amd64\n1.91.0 alpine-3.24-amd64\n1.91.0 debian-13-amd64\n1.91.0 debian-13-arm64' "$(_cells "$out")" \
+        "+14:00 and -12:00 parse; +14:01, -12:01, +05:60 and +15:00 are stale"
+}
+
 test_pass_beats_recent_fail() {
     local r db out
     r="$(_fixture 1.0.0)"
@@ -538,6 +564,7 @@ run_test test_stale_fail_sorts_after_untested "stale failures retry after never-
 run_test test_newest_fail_row_decides_cooldown "the newest fail row decides the cooldown"
 run_test test_offset_tested_at_decides_cooldown "a numeric-offset tested_at is converted to UTC for the cooldown"
 run_test test_near_miss_tested_at_is_stale "near-miss tested_at forms read as stale failures"
+run_test test_offset_range_boundaries "offsets parse only within -12:00..+14:00"
 run_test test_pass_beats_recent_fail "a pass row beats a recent fail row"
 run_test test_fail_cooldown_override "EVIDENCE_FAIL_COOLDOWN_DAYS overrides the cooldown"
 run_test test_vendored_recent_fail_is_not_pending "the cooldown applies to vendored tested[]"
