@@ -11,10 +11,12 @@
 
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
+use std::fs::File;
+use std::io::{self, Read as _, Seek as _, SeekFrom};
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// `errno` for `ETXTBSY` ("text file busy"), returned by `exec` when another
 /// thread in this process briefly holds a writable fd to the binary across a
@@ -26,8 +28,37 @@ const ETXTBSY: i32 = 26;
 const ETXTBSY_RETRIES: u32 = 3;
 const ETXTBSY_BACKOFF: Duration = Duration::from_millis(50);
 
+/// Deadline for one version-probe exec (#1344). A `--version` answers in
+/// milliseconds; the headroom is for JVM-style tools cold-starting under
+/// qemu emulation. Since #811 the argv is a catalog input, so a misdeclared
+/// `version_args` that starts a long-running subcommand (`serve`, a daemon
+/// verb, a tool blocking on a lock) would otherwise hang the install forever.
+/// Hitting it means the argv is wrong, not that the machine is slow.
+pub(crate) const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Interval between `try_wait` polls while the probe runs.
+const VERSION_PROBE_POLL: Duration = Duration::from_millis(10);
+
+/// [`run_version_check_within`] at the production [`VERSION_PROBE_TIMEOUT`];
+/// the ETXTBSY tests exercise the retry loop through it.
+#[cfg(test)]
+pub(crate) fn run_version_check<S: AsRef<OsStr>>(
+    binary: &Path,
+    args: &[S],
+    env: &BTreeMap<String, String>,
+) -> io::Result<Output> {
+    run_version_check_within(binary, args, env, VERSION_PROBE_TIMEOUT)
+}
+
 /// Run `<binary> <args…>` with `env` layered on the inherited environment,
-/// retrying on a transient `ETXTBSY`.
+/// bounded by `timeout` and retrying on a transient `ETXTBSY`.
+///
+/// A child still running at `timeout` is killed and reaped, and the call
+/// returns an [`io::ErrorKind::TimedOut`] error. Only the direct child is
+/// killed. Its stdout/stderr go to anonymous tempfiles rather than pipes, so
+/// polling never deadlocks on a full pipe buffer, and a grandchild that
+/// inherited the write end cannot block us after the kill. stdin is null,
+/// as with [`Command::output`].
 ///
 /// Writing an executable and immediately `exec`ing it races with any
 /// concurrent `fork` in the same process: the child momentarily inherits a
@@ -37,22 +68,60 @@ const ETXTBSY_BACKOFF: Duration = Duration::from_millis(50);
 /// misfire in real igor flows that write a binary then version-check it. We
 /// retry a bounded number of times with a short backoff; every other I/O
 /// error (and every success) is returned to the caller on the first
-/// occurrence.
-pub(crate) fn run_version_check<S: AsRef<OsStr>>(
+/// occurrence. `ETXTBSY` is an exec-time error, so the retry wraps `spawn`.
+pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
     binary: &Path,
     args: &[S],
     env: &BTreeMap<String, String>,
-) -> std::io::Result<Output> {
+    timeout: Duration,
+) -> io::Result<Output> {
+    let mut stdout = tempfile::tempfile()?;
+    let mut stderr = tempfile::tempfile()?;
     let mut attempt = 0;
-    loop {
-        match Command::new(binary).args(args).envs(env).output() {
+    let mut child = loop {
+        let spawned = Command::new(binary)
+            .args(args)
+            .envs(env)
+            .stdin(Stdio::null())
+            .stdout(stdout.try_clone()?)
+            .stderr(stderr.try_clone()?)
+            .spawn();
+        match spawned {
             Err(e) if e.raw_os_error() == Some(ETXTBSY) && attempt < ETXTBSY_RETRIES => {
                 attempt += 1;
                 thread::sleep(ETXTBSY_BACKOFF);
             }
-            other => return other,
+            other => break other?,
         }
-    }
+    };
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            // `kill` fails only if the child already exited; either way the
+            // `wait` reaps it.
+            let _ = child.kill();
+            child.wait()?;
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("timed out after {timeout:?}"),
+            ));
+        }
+        thread::sleep(VERSION_PROBE_POLL);
+    };
+
+    Ok(Output { status, stdout: read_back(&mut stdout)?, stderr: read_back(&mut stderr)? })
+}
+
+/// Rewind a capture tempfile and read everything the child wrote to it.
+fn read_back(file: &mut File) -> io::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    file.seek(SeekFrom::Start(0))?;
+    file.read_to_end(&mut buf)?;
+    Ok(buf)
 }
 
 /// Check whether `<bin_root>/<binary> <args…>` reports `version`.
@@ -66,8 +135,9 @@ pub(crate) fn run_version_check<S: AsRef<OsStr>>(
 /// [`crate::ResolvedInstall::version_args`].
 ///
 /// Returns `false` for any reason it can't confirm — missing binary,
-/// non-zero exit, output without the version literal, I/O error. The
-/// caller must treat `false` as "go install"; only `true` should skip.
+/// non-zero exit, output without the version literal, I/O error, or a probe
+/// still running past the 10s probe deadline. The caller must treat `false`
+/// as "go install"; only `true` should skip.
 #[must_use]
 pub fn already_installed<S: AsRef<OsStr>>(
     binary: &str,
@@ -75,13 +145,24 @@ pub fn already_installed<S: AsRef<OsStr>>(
     version: &str,
     bin_root: &Path,
 ) -> bool {
+    already_installed_within(binary, args, version, bin_root, VERSION_PROBE_TIMEOUT)
+}
+
+/// [`already_installed`] with an explicit probe deadline.
+pub(crate) fn already_installed_within<S: AsRef<OsStr>>(
+    binary: &str,
+    args: &[S],
+    version: &str,
+    bin_root: &Path,
+    timeout: Duration,
+) -> bool {
     let binary = bin_root.join(binary);
     if !binary.exists() {
         return false;
     }
-    // Retries a transient ETXTBSY; any other launch error still means "can't
-    // confirm → go install" per the contract above.
-    let Ok(output) = run_version_check(&binary, args, &BTreeMap::new()) else {
+    // Retries a transient ETXTBSY; any other launch error, and a timeout,
+    // still means "can't confirm → go install" per the contract above.
+    let Ok(output) = run_version_check_within(&binary, args, &BTreeMap::new(), timeout) else {
         return false;
     };
     if !output.status.success() {
@@ -109,6 +190,21 @@ pub(crate) fn write_subcommand_shim(dir: &Path, name: &str, version_line: &str) 
         ),
     )
     .unwrap();
+    let mut perms = std::fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&path, perms).unwrap();
+}
+
+/// Write an executable shim at `dir/name` that prints a version line and then
+/// `exec`s `sleep 30`, standing in for a misdeclared `version_args` that
+/// starts a long-running subcommand (#1344). The `exec` makes the sleeper the
+/// direct child, so the timeout's `kill` ends it rather than orphaning it.
+#[cfg(all(test, unix))]
+pub(crate) fn write_sleeping_shim(dir: &Path, name: &str) {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let path = dir.join(name);
+    std::fs::write(&path, "#!/bin/sh\necho 'tool 1.0.0'\nexec sleep 30\n").unwrap();
     let mut perms = std::fs::metadata(&path).unwrap().permissions();
     perms.set_mode(0o755);
     std::fs::set_permissions(&path, perms).unwrap();
@@ -296,6 +392,85 @@ mod tests {
             !already_installed("tool", &["version -short"], "2.0.0", dir.path()),
             "a joined argv must not satisfy a shim that checks $1 and $2 separately",
         );
+    }
+
+    /// Short deadline for the timeout tests; the sleeping shim runs 30s.
+    #[cfg(unix)]
+    const TEST_TIMEOUT: Duration = Duration::from_millis(300);
+
+    /// A probe still running at the deadline is killed and surfaces as
+    /// `TimedOut` (#1344). The elapsed bound proves the child was killed,
+    /// not waited out — without the kill this call takes the shim's 30s.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn run_version_check_times_out_and_kills_a_hung_probe() {
+        let dir = tempdir().unwrap();
+        write_sleeping_shim(dir.path(), "tool");
+
+        let start = Instant::now();
+        let result = run_version_check_within(
+            &dir.path().join("tool"),
+            VERSION_ARGS,
+            &BTreeMap::new(),
+            TEST_TIMEOUT,
+        );
+        let elapsed = start.elapsed();
+
+        let err = result.expect_err("a probe past its deadline must fail");
+        assert_eq!(err.kind(), io::ErrorKind::TimedOut, "got: {err}");
+        assert!(elapsed >= TEST_TIMEOUT, "must wait out the deadline first ({elapsed:?})");
+        assert!(elapsed < Duration::from_secs(5), "the hung child must be killed ({elapsed:?})");
+    }
+
+    /// Counterpart to the timeout test: under the same short deadline, a
+    /// probe that exits promptly is captured in full, so the timeout path is
+    /// not simply firing for every probe.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn run_version_check_within_deadline_captures_output() {
+        let dir = tempdir().unwrap();
+        write_shim_to(dir.path(), "out", "tool 2.0.0 stdout", false);
+        write_shim_to(dir.path(), "err", "tool 2.0.0 stderr", true);
+
+        let out = run_version_check_within(
+            &dir.path().join("out"),
+            VERSION_ARGS,
+            &BTreeMap::new(),
+            TEST_TIMEOUT,
+        )
+        .expect("a prompt probe must succeed");
+        assert!(out.status.success());
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "tool 2.0.0 stdout\n");
+        assert_eq!(String::from_utf8_lossy(&out.stderr), "");
+
+        let err = run_version_check_within(
+            &dir.path().join("err"),
+            VERSION_ARGS,
+            &BTreeMap::new(),
+            TEST_TIMEOUT,
+        )
+        .expect("a prompt probe must succeed");
+        assert_eq!(String::from_utf8_lossy(&err.stdout), "");
+        assert_eq!(String::from_utf8_lossy(&err.stderr), "tool 2.0.0 stderr\n");
+    }
+
+    /// `already_installed` folds a timeout into "can't confirm → false", even
+    /// though the hung shim already printed the matching version before it
+    /// stalled — a probe that never exits has no success status to trust.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn already_installed_returns_false_when_the_probe_times_out() {
+        let dir = tempdir().unwrap();
+        write_sleeping_shim(dir.path(), "tool");
+
+        let start = Instant::now();
+        let installed =
+            already_installed_within("tool", VERSION_ARGS, "1.0.0", dir.path(), TEST_TIMEOUT);
+        assert!(!installed, "a timed-out probe must not confirm the install");
+        assert!(start.elapsed() < Duration::from_secs(5), "the hung child must be killed");
     }
 
     /// A non-`ETXTBSY` launch error must be returned on the *first* attempt,

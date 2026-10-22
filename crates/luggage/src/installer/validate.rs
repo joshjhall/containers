@@ -7,10 +7,12 @@
 //! `<tool> --version | grep -q $VERSION` smoke check.
 
 use std::collections::BTreeMap;
+use std::io;
 use std::path::Path;
+use std::time::Duration;
 
 use crate::error::{LuggageError, Result};
-use crate::installer::idempotency::run_version_check;
+use crate::installer::idempotency::{VERSION_PROBE_TIMEOUT, run_version_check_within};
 
 /// Confirm that `tool` reports `version` from
 /// `<bin_root>/<binary> <args…>`.
@@ -35,8 +37,9 @@ use crate::installer::idempotency::run_version_check;
 /// # Errors
 ///
 /// - [`LuggageError::ValidationFailed`] when the binary is missing, the
-///   command fails to launch, the exit status is non-zero, or the output
-///   doesn't mention the target version.
+///   command fails to launch, it is still running at
+///   the 10s probe deadline (it is killed), the exit status is non-zero,
+///   or the output doesn't mention the target version.
 pub fn check(
     tool: &str,
     binary: &str,
@@ -44,6 +47,19 @@ pub fn check(
     version: &str,
     bin_root: &Path,
     env: &BTreeMap<String, String>,
+) -> Result<String> {
+    check_within(tool, binary, args, version, bin_root, env, VERSION_PROBE_TIMEOUT)
+}
+
+/// [`check`] with an explicit probe deadline.
+pub(crate) fn check_within(
+    tool: &str,
+    binary: &str,
+    args: &[String],
+    version: &str,
+    bin_root: &Path,
+    env: &BTreeMap<String, String>,
+    timeout: Duration,
 ) -> Result<String> {
     let binary = bin_root.join(binary);
     if !binary.exists() {
@@ -55,14 +71,20 @@ pub fn check(
     }
     let probe = format!("{} {}", binary.display(), args.join(" "));
     // Retries a transient ETXTBSY before surfacing a launch failure; see
-    // [`run_version_check`] for why exec-after-write can race under
-    // parallelism (issue #518).
-    let output =
-        run_version_check(&binary, args, env).map_err(|e| LuggageError::ValidationFailed {
+    // [`run_version_check_within`] for why exec-after-write can race under
+    // parallelism (issue #518), and for the timeout kill (#1344).
+    let output = run_version_check_within(&binary, args, env, timeout).map_err(|e| {
+        let message = if e.kind() == io::ErrorKind::TimedOut {
+            format!("`{probe}` timed out after {timeout:?} (killed)")
+        } else {
+            format!("failed to launch `{probe}`: {e}")
+        };
+        LuggageError::ValidationFailed {
             tool: tool.to_owned(),
             version: version.to_owned(),
-            message: format!("failed to launch `{probe}`: {e}"),
-        })?;
+            message,
+        }
+    })?;
     if !output.status.success() {
         return Err(LuggageError::ValidationFailed {
             tool: tool.to_owned(),
@@ -268,6 +290,42 @@ mod tests {
                     message.contains("failed to launch"),
                     "exhaustion must surface via the launch-failure branch, got: {message}",
                 );
+            }
+            other => panic!("expected ValidationFailed, got {other:?}"),
+        }
+    }
+
+    /// A probe still running at the deadline is killed and reported as a
+    /// `ValidationFailed` naming the argv and the deadline (#1344), so a
+    /// misdeclared `version_args` is diagnosable from the log instead of
+    /// hanging the install.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn hung_probe_times_out_as_validation_failed() {
+        use crate::installer::idempotency::write_sleeping_shim;
+        use std::time::Instant;
+
+        let dir = tempdir().unwrap();
+        write_sleeping_shim(dir.path(), "tool");
+        let args = vec!["serve".to_owned()];
+        let timeout = Duration::from_millis(300);
+
+        let start = Instant::now();
+        let err =
+            check_within("tool", "tool", &args, "1.0.0", dir.path(), &BTreeMap::new(), timeout)
+                .unwrap_err();
+        assert!(start.elapsed() < Duration::from_secs(5), "the hung child must be killed");
+        match err {
+            LuggageError::ValidationFailed { tool, version, message } => {
+                assert_eq!(tool, "tool");
+                assert_eq!(version, "1.0.0");
+                assert!(message.contains("timed out after 300ms"), "got: {message}");
+                assert!(
+                    message.contains("tool serve`"),
+                    "must name the probe argv, got: {message}"
+                );
+                assert!(!message.contains("failed to launch"), "got: {message}");
             }
             other => panic!("expected ValidationFailed, got {other:?}"),
         }
