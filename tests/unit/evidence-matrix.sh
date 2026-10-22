@@ -452,6 +452,36 @@ test_offset_range_boundaries() {
         "+14:00 and -12:00 parse; +14:01, -12:01, +05:60 and +15:00 are stale"
 }
 
+test_offset_minutes_and_calendar_validity() {
+    # #1349: an in-range non-zero-minute offset is applied to the minute. Each
+    # row sits just past the cooldown edge (2026-10-14T00:00:00Z) only when
+    # its minutes count: +05:30 is 2026-10-13T23:50Z, -09:30 is
+    # 2026-10-13T23:45Z. Dropping the minute term moves both inside the
+    # window. A calendar-impossible base reads as stale, not as the date libc
+    # normalizes it to: 23:59:60 would roll into a recent 2026-10-20.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    command mkdir -p "$db/tools/rust/versions"
+    command jq -n '{schemaVersion: 1, tool: "rust", version: "1.90.0", tested: [
+        {os: "debian", os_version: "13", arch: "amd64", result: "fail", tested_at: "2026-10-14T05:20:00+05:30"},
+        {os: "debian", os_version: "13", arch: "arm64", result: "fail", tested_at: "2026-10-13T14:15:00-09:30"},
+        {os: "alpine", os_version: "3.24", arch: "amd64", result: "fail", tested_at: "2026-10-19T23:59:60Z"}]}' \
+        >"$db/tools/rust/versions/1.90.0.json"
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'1.90.0 alpine-3.24-amd64\n1.90.0 debian-13-amd64\n1.90.0 debian-13-arm64' "$(_cells "$out")" \
+        "minute offsets land just outside the window; an impossible date is stale"
+
+    command jq -n '{schemaVersion: 1, tool: "rust", version: "1.90.0", tested: [
+        {os: "debian", os_version: "13", arch: "amd64", result: "fail", tested_at: "2026-10-14T05:40:00+05:30"},
+        {os: "alpine", os_version: "3.24", arch: "amd64", result: "fail", tested_at: "2026-10-19T00:00:00Z"}]}' \
+        >"$db/tools/rust/versions/1.90.0.json"
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-arm64" "$(_cells "$out")" \
+        "ten minutes later +05:30 is inside the window, and a real date still waits"
+}
+
 test_pass_beats_recent_fail() {
     local r db out
     r="$(_fixture 1.0.0)"
@@ -565,6 +595,7 @@ run_test test_newest_fail_row_decides_cooldown "the newest fail row decides the 
 run_test test_offset_tested_at_decides_cooldown "a numeric-offset tested_at is converted to UTC for the cooldown"
 run_test test_near_miss_tested_at_is_stale "near-miss tested_at forms read as stale failures"
 run_test test_offset_range_boundaries "offsets parse only within -12:00..+14:00"
+run_test test_offset_minutes_and_calendar_validity "minute offsets apply exactly; impossible dates are stale"
 run_test test_pass_beats_recent_fail "a pass row beats a recent fail row"
 run_test test_fail_cooldown_override "EVIDENCE_FAIL_COOLDOWN_DAYS overrides the cooldown"
 run_test test_vendored_recent_fail_is_not_pending "the cooldown applies to vendored tested[]"

@@ -193,11 +193,12 @@ newest patch of each minor, minimum_recommended floor and up
     persistent failure costs one runner per window, not one per push.
   - A passing row always wins. A fail row with a missing or unparsable
     `tested_at` counts as stale, so it is retried last but is never hidden.
-    Parsable means `YYYY-MM-DDTHH:MM:SS`, optional fractional seconds, then
-    `Z` or a `+HH:MM`/`-HH:MM` offset from `-12:00` to `+14:00` (converted
-    to UTC). `record-evidence` always writes `Z` with nanoseconds.
-    Lowercase `z`, `+HHMM`, an out-of-range offset such as `+99:99`, and bare
-    dates are unparsable. The same parse decides "newer" at ingest.
+    Parsable means a real calendar `YYYY-MM-DDTHH:MM:SS`, optional fractional
+    seconds, then `Z` or a `+HH:MM`/`-HH:MM` offset from `-12:00` to `+14:00`
+    (converted to UTC). `record-evidence` always writes `Z` with nanoseconds.
+    Lowercase `z`, `+HHMM`, an out-of-range offset such as `+99:99`, an
+    impossible date or time such as Feb 30 or `24:00:00`, and bare dates are
+    unparsable. The same parse decides "newer" at ingest.
   - The cooldown is keyed by tuple, not by image digest. A base-image rebuild
     (new digest) still re-evidences its tuple right away through
     `dispatch-evidence-for-tuple.sh`, which dispatches whenever the newest

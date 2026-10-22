@@ -502,6 +502,28 @@ test_repeated_fail_offset_tested_at() {
         assert_equals "$at" "$(jq -r '.tested[0].tested_at' "$f")" \
             "a boundary $at repeat parses and, being newer, refreshes the row"
     done
+
+    # Minute offsets apply exactly. The stored row is now
+    # 2026-10-02T02:00:00Z (the -12:00 boundary above). +05:30 at 07:20 is
+    # 01:50Z, older, so a no-op; dropping the minute term would read 02:20Z,
+    # newer. Then 07:40 is 02:10Z, newer, so it refreshes.
+    row=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-02T07:20:00+05:30"}' "$SAMPLE_ROW")
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$row"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a +05:30 repeat thirty minutes behind in UTC is a no-op"
+    row=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-02T07:40:00+05:30"}' "$SAMPLE_ROW")
+    merge_evidence_row "$f" "$row"
+    assert_equals "2026-10-02T07:40:00+05:30" "$(jq -r '.tested[0].tested_at' "$f")" \
+        "a +05:30 repeat ten minutes ahead in UTC refreshes the row"
+
+    # A calendar-impossible base is unparsable, not normalized: 2026-10-31
+    # 23:59:60 would roll to a far-newer 2026-11-01 and pin "newest".
+    row=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-31T23:59:60Z"}' "$SAMPLE_ROW")
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$row"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a 23:59:60 repeat is unparsable, so it never counts as newer"
     command rm -f "$f"
 }
 
