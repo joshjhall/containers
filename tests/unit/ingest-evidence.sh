@@ -344,21 +344,33 @@ test_repeated_fail_refreshes_tested_at() {
     jq '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-09T00:00:00.5Z", "ci_run": "https://example.com/runs/99"}' \
         "$SAMPLE_ROW" >"$refail_row"
 
+    local rc=0
     GITHUB_RUN_ID=1 "$INGEST" \
         --row "$fail_row" --db-path "$RESULT_DB" \
-        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1
-    local head1 rc=0
+        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "first fail ingest exits 0"
+    # A later row for another digest, so an append-at-end would reorder.
+    local other tmp
+    other=$(jq -c '. + {"image_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"}' "$SAMPLE_ROW")
+    tmp=$(command mktemp)
+    jq --argjson row "$other" '.tested += [$row]' "$RESULT_FILE" >"$tmp"
+    command mv "$tmp" "$RESULT_FILE"
+    git -C "$RESULT_DB" -c user.email=test@example.com -c user.name=test \
+        commit -q -am "seed a later row"
+    assert_equals "fail 2026-10-01T00:00:00Z|pass" \
+        "$(jq -r '[(.tested[0] | "\(.result) \(.tested_at)"), .tested[1].result] | join("|")' "$RESULT_FILE")" \
+        "precondition: the first failure is recorded ahead of another row"
+    local head1
     head1=$(git -C "$RESULT_DB" rev-parse HEAD)
+    rc=0
     GITHUB_RUN_ID=2 "$INGEST" \
         --row "$refail_row" --db-path "$RESULT_DB" \
         --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1 || rc=$?
     assert_equals "0" "$rc" "repeated-fail re-ingest exits 0"
 
-    assert_equals "1" "$(jq '.tested | length' "$RESULT_FILE")" \
-        "a repeated failure replaces its row, not appends"
-    assert_equals "fail 2026-10-09T00:00:00.5Z" \
-        "$(jq -r '.tested[0] | "\(.result) \(.tested_at)"' "$RESULT_FILE")" \
-        "the row carries the latest attempt's tested_at"
+    assert_equals "fail 2026-10-09T00:00:00.5Z|pass" \
+        "$(jq -r '[(.tested[0] | "\(.result) \(.tested_at)"), .tested[1].result] | join("|")' "$RESULT_FILE")" \
+        "the row is refreshed in place with the latest attempt's tested_at"
     local head2
     head2=$(git -C "$RESULT_DB" rev-parse HEAD)
     if [ "$head1" != "$head2" ]; then
@@ -366,6 +378,17 @@ test_repeated_fail_refreshes_tested_at() {
     else
         assert_true false "a repeated failure produced no commit"
     fi
+
+    # The byte-identical fail row again (a re-run of the same job) is a no-op.
+    local head3
+    head3=$(git -C "$RESULT_DB" rev-parse HEAD)
+    rc=0
+    GITHUB_RUN_ID=3 "$INGEST" \
+        --row "$refail_row" --db-path "$RESULT_DB" \
+        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "identical fail re-ingest exits 0"
+    assert_equals "$head3" "$(git -C "$RESULT_DB" rev-parse HEAD)" \
+        "an identical fail row creates no new commit"
     command rm -f "$fail_row" "$refail_row"
     cleanup_db
 }

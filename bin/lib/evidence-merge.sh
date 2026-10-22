@@ -15,7 +15,8 @@
 # Except for a `fail` row (#1326): its tested_at is the last attempt, which the
 # evidence matrix's fail cooldown reads. A no-op there would freeze the first
 # failure's timestamp, so after one cooldown a persistent failure would be
-# retried on every push. A repeated failure therefore replaces the row.
+# retried on every push. A repeated failure therefore refreshes the row in
+# place (row order kept); a byte-identical fail row is still a no-op.
 #
 # Requires jq.
 
@@ -57,10 +58,17 @@ merge_evidence_row() {
         def strip_volatile: del(.tested_at, .ci_run, .duration_seconds);
         ($new | strip_volatile) as $new_core
         | (.tested // []) as $rows
-        | if $new.result != "fail"
-             and ($rows | map(select(dedup_match)) | any(strip_volatile == $new_core))
-          then .
-          else .tested = (($rows | map(select(dedup_match | not))) + [$new])
+        | ($rows | map(select(dedup_match))) as $matches
+        | if ($matches | any(strip_volatile == $new_core)) | not then
+              .tested = (($rows | map(select(dedup_match | not))) + [$new])
+          elif $new.result != "fail" then .
+          # a repeated failure refreshes its row in place, keeping row order,
+          # so only tested_at/ci_run/duration_seconds show up in the diff and
+          # a byte-identical re-ingest stays a no-op
+          else .tested = (reduce $rows[] as $r ({out: [], done: false};
+                   if ($r | dedup_match) then
+                       (if .done then . else .out += [$new] | .done = true end)
+                   else .out += [$r] end) | .out)
           end
         ' "$file" >"$tmp"; then
         command rm -f "$tmp"

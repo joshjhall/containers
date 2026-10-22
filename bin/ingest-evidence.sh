@@ -18,7 +18,9 @@
 # the merge leaves the file untouched and the script exits 0 before
 # committing, pushing, or opening a (duplicate) PR. Only a meaningful change
 # (new digest, flipped result, changed error_class/version_output, new
-# version) produces a commit + PR. See docs/operations/evidence-runs.md
+# version) produces a commit + PR. The one exception is a repeated `fail`
+# row (#1326): it refreshes tested_at and commits, because the evidence
+# matrix's fail cooldown keys on it. See docs/operations/evidence-runs.md
 # (Merge policy) for the rationale.
 #
 # One open PR per (tool, version, tuple): the branch is stable

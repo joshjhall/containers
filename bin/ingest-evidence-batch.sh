@@ -129,7 +129,8 @@ done < <(command find "$ROWS_DIR" -type f -name '*.json' -print0 | command sort 
 
 command echo "$SCRIPT_NAME: merged $merged row(s), skipped $skipped" >&2
 
-# Rows already recorded (modulo volatile fields) leave files untouched.
+# Rows already recorded (modulo volatile fields) leave files untouched,
+# except a repeated fail row, which refreshes tested_at (#1326).
 if git -C "$DB_PATH" diff --quiet -- tools; then
     command echo "$SCRIPT_NAME: nothing new to ingest" >&2
     exit 0

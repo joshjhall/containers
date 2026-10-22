@@ -410,6 +410,9 @@ test_fail_cooldown_override() {
     out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_FAIL_COOLDOWN_DAYS=3 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
     assert_equals "1.90.0 debian-13-amd64" "$(_cells "$out")" \
         "a failure exactly one cooldown old is retried"
+    rc=0
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_FAIL_COOLDOWN_DAYS=08 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "3" "$rc" "a leading-zero cooldown (08) is decimal, not an octal error"
 
     rc=0
     out="$(EVIDENCE_FAIL_COOLDOWN_DAYS=7d EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
