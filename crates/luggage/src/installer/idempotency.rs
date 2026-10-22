@@ -97,20 +97,24 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
 
     let deadline = Instant::now() + timeout;
     let status = loop {
-        if let Some(status) = child.try_wait()? {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            // `kill` fails only if the child already exited; either way the
-            // `wait` reaps it.
+        let polled = child.try_wait();
+        let timed_out = matches!(polled, Ok(None)) && Instant::now() >= deadline;
+        if timed_out || polled.is_err() {
+            // Never leave the child running or unreaped on an early return.
+            // `kill` fails only if it already exited; `wait` reaps it.
             let _ = child.kill();
-            child.wait()?;
-            return Err(io::Error::new(
-                io::ErrorKind::TimedOut,
-                format!("timed out after {timeout:?}"),
-            ));
+            let _ = child.wait();
         }
-        thread::sleep(VERSION_PROBE_POLL);
+        match polled? {
+            Some(status) => break status,
+            None if timed_out => {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!("timed out after {timeout:?}"),
+                ));
+            }
+            None => thread::sleep(VERSION_PROBE_POLL),
+        }
     };
 
     Ok(Output { status, stdout: read_back(&mut stdout)?, stderr: read_back(&mut stderr)? })
@@ -423,9 +427,10 @@ mod tests {
         assert!(elapsed < Duration::from_secs(5), "the hung child must be killed ({elapsed:?})");
     }
 
-    /// Counterpart to the timeout test: under the same short deadline, a
-    /// probe that exits promptly is captured in full, so the timeout path is
-    /// not simply firing for every probe.
+    /// Counterpart to the timeout test: a probe that exits promptly is
+    /// captured in full, so the timeout path is not simply firing for every
+    /// probe. It runs at the production deadline — a short one would flake
+    /// on a loaded runner where `sh` alone can take longer to start.
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
@@ -438,7 +443,7 @@ mod tests {
             &dir.path().join("out"),
             VERSION_ARGS,
             &BTreeMap::new(),
-            TEST_TIMEOUT,
+            VERSION_PROBE_TIMEOUT,
         )
         .expect("a prompt probe must succeed");
         assert!(out.status.success());
@@ -449,11 +454,38 @@ mod tests {
             &dir.path().join("err"),
             VERSION_ARGS,
             &BTreeMap::new(),
-            TEST_TIMEOUT,
+            VERSION_PROBE_TIMEOUT,
         )
         .expect("a prompt probe must succeed");
         assert_eq!(String::from_utf8_lossy(&err.stdout), "");
         assert_eq!(String::from_utf8_lossy(&err.stderr), "tool 2.0.0 stderr\n");
+    }
+
+    /// Output past a pipe buffer (~64KiB) is captured whole. With piped
+    /// stdio and a `try_wait` poll the child would block on a full pipe and
+    /// this would time out instead — the deadlock the tempfile capture
+    /// exists to avoid.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn run_version_check_captures_output_larger_than_a_pipe_buffer() {
+        const BYTES: usize = 256 * 1024;
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("chatty");
+        fs::write(
+            &path,
+            format!("#!/bin/sh\nhead -c {BYTES} /dev/zero\nhead -c {BYTES} /dev/zero >&2\n"),
+        )
+        .unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let out =
+            run_version_check_within(&path, VERSION_ARGS, &BTreeMap::new(), Duration::from_secs(5))
+                .expect("a large-output probe must not deadlock");
+        assert!(out.status.success());
+        assert_eq!(out.stdout.len(), BYTES);
+        assert_eq!(out.stderr.len(), BYTES);
     }
 
     /// `already_installed` folds a timeout into "can't confirm → false", even
