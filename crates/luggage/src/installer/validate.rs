@@ -303,13 +303,14 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn hung_probe_times_out_as_validation_failed() {
-        use crate::installer::idempotency::{assert_probe_child_gone, write_sleeping_shim};
+        use crate::installer::idempotency::{
+            TEST_TIMEOUT as timeout, assert_probe_child_gone, write_sleeping_shim,
+        };
         use std::time::Instant;
 
         let dir = tempdir().unwrap();
         write_sleeping_shim(dir.path(), "tool");
         let args = vec!["serve".to_owned()];
-        let timeout = Duration::from_millis(300);
 
         let start = Instant::now();
         let err =
@@ -321,7 +322,7 @@ mod tests {
             LuggageError::ValidationFailed { tool, version, message } => {
                 assert_eq!(tool, "tool");
                 assert_eq!(version, "1.0.0");
-                assert!(message.contains("timed out after 300ms"), "got: {message}");
+                assert!(message.contains("timed out after 1s"), "got: {message}");
                 assert!(
                     message.contains("tool serve`"),
                     "must name the probe argv, got: {message}"

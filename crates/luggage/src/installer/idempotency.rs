@@ -216,6 +216,12 @@ pub(crate) fn write_sleeping_shim(dir: &Path, name: &str) {
     std::fs::set_permissions(&path, perms).unwrap();
 }
 
+/// Deadline for the [`write_sleeping_shim`] timeout tests; the shim runs 30s.
+/// Long enough that a loaded runner has started `sh` and recorded the pid
+/// before the kill, short enough to keep the suite fast.
+#[cfg(all(test, unix))]
+pub(crate) const TEST_TIMEOUT: Duration = Duration::from_secs(1);
+
 /// Assert the probe child recorded by [`write_sleeping_shim`] no longer
 /// exists — killed **and** reaped. A merely-dropped `Child` keeps running,
 /// and a killed-but-unwaited one lingers as a zombie; `kill -0` succeeds on
@@ -223,7 +229,14 @@ pub(crate) fn write_sleeping_shim(dir: &Path, name: &str) {
 /// pass (the timeout returns early whether or not the child is ended).
 #[cfg(all(test, unix))]
 pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
-    let pid = std::fs::read_to_string(dir.join(format!("{name}.pid"))).unwrap();
+    let pid_file = dir.join(format!("{name}.pid"));
+    let pid = std::fs::read_to_string(&pid_file).unwrap_or_else(|e| {
+        panic!(
+            "the shim never recorded its pid at {} ({e}) — it was killed before `sh` \
+             started, so the test deadline is too short for this runner",
+            pid_file.display(),
+        )
+    });
     let pid = pid.trim();
     assert!(!pid.is_empty(), "the shim must have recorded its pid");
     let alive =
@@ -414,10 +427,6 @@ mod tests {
             "a joined argv must not satisfy a shim that checks $1 and $2 separately",
         );
     }
-
-    /// Short deadline for the timeout tests; the sleeping shim runs 30s.
-    #[cfg(unix)]
-    const TEST_TIMEOUT: Duration = Duration::from_millis(300);
 
     /// A probe still running at the deadline is killed and surfaces as
     /// `TimedOut` (#1344). The elapsed bound proves the call did not wait the
