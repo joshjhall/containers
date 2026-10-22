@@ -193,8 +193,12 @@ newest patch of each minor, minimum_recommended floor and up
     persistent failure costs one runner per window, not one per push.
   - A passing row always wins. A fail row with a missing or unparsable
     `tested_at` counts as stale, so it is retried last but is never hidden.
-  - A base-image rebuild still re-evidences its tuple right away through
-    `dispatch-evidence-for-tuple.sh`. That path does not use this matrix.
+  - The cooldown is keyed by tuple, not by image digest. A base-image rebuild
+    (new digest) still re-evidences its tuple right away through
+    `dispatch-evidence-for-tuple.sh`, which dispatches whenever the newest
+    *passing* digest differs and does not read this matrix or its cooldown.
+    So a failing cell on a rebuilt image is retried at rebuild time, not
+    after the window.
 
   `EVIDENCE_FAIL_COOLDOWN_DAYS=0` retries every failure on the next push (still
   ordered last). Tests pin the clock with `EVIDENCE_NOW` (epoch seconds). The

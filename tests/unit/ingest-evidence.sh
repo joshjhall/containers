@@ -427,6 +427,21 @@ test_repeated_fail_merge_edge_cases() {
     assert_equals "pass|fail install 2026-10-10T00:00:00Z" \
         "$(jq -r '[.tested[0].result, (.tested[1] | "\(.result) \(.error_class) \(.tested_at)")] | join("|")' "$f")" \
         "a fail with a different error_class replaces the row"
+
+    # Missing tested_at reads as epoch 0: a stamped repeat refreshes an
+    # unstamped (legacy) row, and an unstamped repeat never overwrites a
+    # stamped one.
+    local bare
+    bare=$(jq -c 'del(.tested_at)' <<<"$newclass")
+    jq --argjson r "$bare" '.tested[1] = $r' "$f" >"$f.tmp"
+    command mv "$f.tmp" "$f"
+    merge_evidence_row "$f" "$newclass"
+    assert_equals "2026-10-10T00:00:00Z" "$(jq -r '.tested[1].tested_at' "$f")" \
+        "a stamped repeat refreshes an unstamped fail row"
+    before=$(command cat "$f")
+    merge_evidence_row "$f" "$bare"
+    assert_equals "$before" "$(command cat "$f")" \
+        "an unstamped repeat leaves a stamped fail row untouched"
     command rm -f "$f"
 }
 
