@@ -225,6 +225,16 @@ test_trigger_paths_parser_fixtures() {
     _expect_trigger_paths "a sibling trigger with - and digits ends the block" \
         push "$dir/sibling.yml" 'p'
 
+    printf '%s\n' 'on:' '  push:' '    paths:' '      - "p"' '  workflow_run: # note' \
+        '    paths:' '      - "leak"' 'jobs:' >"$dir/sibling-tail.yml"
+    _expect_trigger_paths "a sibling trigger with text after its colon ends the block" \
+        push "$dir/sibling-tail.yml" 'p'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' '      - "a"' '    branches:' \
+        '      - "main"' 'jobs:' >"$dir/dedent.yml"
+    _expect_trigger_paths "the paths list ends at the next key under the trigger" \
+        push "$dir/dedent.yml" 'a'
+
     command rm -rf "$dir"
 }
 
