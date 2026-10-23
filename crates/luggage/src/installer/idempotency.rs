@@ -303,8 +303,8 @@ pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
 /// a bare `docker run` reaps nothing), which is not what the test pins. Linux
 /// reads the state field of `/proc/<pid>/stat`; other unixes fall back to
 /// `kill -0`, which cannot tell a zombie apart. Only a missing stat file means
-/// gone — any other read error (no `/proc`, `hidepid`) panics, so an
-/// unobservable pid can never pass as a dead one.
+/// gone — any other read error (no `/proc`, `hidepid`) or an unparsable stat
+/// line panics, so an unobservable pid can never pass as a dead one.
 #[cfg(all(test, unix))]
 fn pid_is_running(pid: &str) -> bool {
     #[cfg(target_os = "linux")]
@@ -316,9 +316,11 @@ fn pid_is_running(pid: &str) -> bool {
             Err(e) if e.kind() == io::ErrorKind::NotFound => return false,
             Err(e) => panic!("cannot observe pid {pid} via /proc ({e})"),
         };
-        stat.rsplit_once(')')
+        let state = stat
+            .rsplit_once(')')
             .and_then(|(_, rest)| rest.split_whitespace().next())
-            .is_some_and(|state| state != "Z" && state != "X")
+            .unwrap_or_else(|| panic!("unparsable /proc/{pid}/stat: {stat:?}"));
+        state != "Z" && state != "X"
     }
     #[cfg(not(target_os = "linux"))]
     {
