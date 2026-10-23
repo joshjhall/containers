@@ -99,13 +99,21 @@ test_setup_sparse_checkout_carries_matrix_deps() {
     # checkout, so every sibling it sources must be listed there too, or the
     # matrix step dies on a missing file that the unit tests (full checkout)
     # never notice. Siblings are read from the lib's own source lines, so a
-    # future dependency is covered without editing this test.
-    local wf="$PROJECT_ROOT/.github/workflows/evidence-run.yml" listed deps dep missing=""
-    listed=$(command awk '
-        /sparse-checkout: \|/ { if (!seen) { inlist = 1; seen = 1 }; next }
-        inlist && /^ *[A-Za-z0-9_.\/-]+ *$/ { gsub(/ /, ""); print; next }
-        inlist { inlist = 0 }
+    # future dependency is covered without editing this test. The list checked
+    # is the block that names evidence-matrix.sh (the one the matrix step
+    # reads), not whichever block comes first, and there must be exactly one.
+    local wf="$PROJECT_ROOT/.github/workflows/evidence-run.yml" blocks listed deps dep missing=""
+    # One line per sparse-checkout block: its entries, space-separated.
+    blocks=$(command awk '
+        /sparse-checkout: \|/ { if (inlist) print line; inlist = 1; line = ""; next }
+        inlist && /^ *[A-Za-z0-9_.\/-]+ *$/ { gsub(/ /, ""); line = line " " $0; next }
+        inlist { print line; inlist = 0 }
+        END { if (inlist) print line }
     ' "$wf")
+    listed=$(command grep -E '(^| )bin/lib/evidence-matrix\.sh( |$)' <<<"$blocks" || true)
+    assert_equals "1" "$(command grep -c . <<<"$listed" || true)" \
+        "exactly one sparse-checkout block carries evidence-matrix.sh"
+    listed=$(command tr ' ' '\n' <<<"$listed")
     deps=$(command sed -n 's|^source "$(dirname "${BASH_SOURCE\[0\]}")/\([^"]*\)"$|bin/lib/\1|p' \
         "$PROJECT_ROOT/bin/lib/evidence-matrix.sh")
     assert_equals "bin/lib/evidence-epoch.sh" "$deps" \
