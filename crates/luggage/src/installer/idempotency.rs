@@ -55,10 +55,16 @@ pub(crate) fn run_version_check<S: AsRef<OsStr>>(
 ///
 /// A child still running at `timeout` is killed and reaped, and the call
 /// returns an [`io::ErrorKind::TimedOut`] error. On unix the child leads its
-/// own process group, and the whole group is killed, so a non-exec wrapper
-/// (shell script, JVM launcher) cannot leave forked descendants running
-/// (#1352); elsewhere only the direct child is killed. A descendant that
-/// moved itself to another group or session escapes, as with any `killpg`.
+/// own process group, and on that timeout path the whole group is killed, so
+/// a non-exec wrapper (shell script, JVM launcher) that hangs cannot leave
+/// forked descendants running (#1352); elsewhere only the direct child is
+/// killed. Two gaps remain. A probe that exits on its own is not group-killed,
+/// so a descendant it backgrounded outlives it. And because the group is not
+/// luggage's, a terminal Ctrl-C reaches luggage but not the probe: luggage
+/// installs no signal handler, so an interactive interrupt mid-probe leaves the
+/// probe running unbounded. Under `docker build` (no TTY; cancelling tears down
+/// the whole container) neither applies. A descendant that moved itself to
+/// another group or session escapes, as with any `killpg`.
 /// Its stdout/stderr go to anonymous tempfiles rather than pipes, so
 /// polling never deadlocks on a full pipe buffer, and a grandchild that
 /// inherited the write end cannot block us after the kill. stdin is null,
@@ -239,10 +245,12 @@ pub(crate) fn write_sleeping_shim(dir: &Path, name: &str) {
     std::fs::set_permissions(&path, perms).unwrap();
 }
 
-/// Write an executable shim at `dir/name` that forks a background `sleep 30`,
-/// records the sleep's pid in `dir/name.bgpid`, prints a version line, then
-/// `wait`s — a non-exec wrapper whose descendant outlives a direct-child-only
-/// kill (#1352). [`assert_forked_descendant_gone`] checks the recorded pid.
+/// Write an executable shim at `dir/name` that records its own pid in
+/// `dir/name.pid`, forks a background `sleep 30`, records the sleep's pid in
+/// `dir/name.bgpid`, prints a version line, then `wait`s — a non-exec wrapper
+/// whose descendant outlives a direct-child-only kill (#1352).
+/// [`assert_probe_child_gone`] checks the direct child and
+/// [`assert_forked_descendant_gone`] the descendant.
 #[cfg(all(test, unix))]
 pub(crate) fn write_forking_shim(dir: &Path, name: &str) {
     use std::os::unix::fs::PermissionsExt as _;
@@ -250,7 +258,7 @@ pub(crate) fn write_forking_shim(dir: &Path, name: &str) {
     let path = dir.join(name);
     std::fs::write(
         &path,
-        "#!/bin/sh\nsleep 30 &\necho $! > \"$0.bgpid\"\necho 'tool 1.0.0'\nwait\n",
+        "#!/bin/sh\necho $$ > \"$0.pid\"\nsleep 30 &\necho $! > \"$0.bgpid\"\necho 'tool 1.0.0'\nwait\n",
     )
     .unwrap();
     let mut perms = std::fs::metadata(&path).unwrap().permissions();
@@ -294,15 +302,19 @@ pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
 /// and whether it is reaped depends on the reparenting ancestor (no init in
 /// a bare `docker run` reaps nothing), which is not what the test pins. Linux
 /// reads the state field of `/proc/<pid>/stat`; other unixes fall back to
-/// `kill -0`, which cannot tell a zombie apart.
+/// `kill -0`, which cannot tell a zombie apart. Only a missing stat file means
+/// gone — any other read error (no `/proc`, `hidepid`) panics, so an
+/// unobservable pid can never pass as a dead one.
 #[cfg(all(test, unix))]
 fn pid_is_running(pid: &str) -> bool {
     #[cfg(target_os = "linux")]
     {
         // `comm` (field 2) is parenthesised and may contain spaces, so the
         // state is the first field after the last `)`.
-        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
-            return false;
+        let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+            Ok(stat) => stat,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return false,
+            Err(e) => panic!("cannot observe pid {pid} via /proc ({e})"),
         };
         stat.rsplit_once(')')
             .and_then(|(_, rest)| rest.split_whitespace().next())
@@ -327,7 +339,11 @@ fn pid_is_running(pid: &str) -> bool {
 pub(crate) fn assert_forked_descendant_gone(dir: &Path, name: &str) {
     let pid_file = dir.join(format!("{name}.bgpid"));
     let pid = std::fs::read_to_string(&pid_file).unwrap_or_else(|e| {
-        panic!("the shim never recorded its background pid at {} ({e})", pid_file.display())
+        panic!(
+            "the shim never recorded its background pid at {} ({e}) — it was killed \
+             before `sh` forked, so the test deadline is too short for this runner",
+            pid_file.display(),
+        )
     });
     let pid = pid.trim();
     assert!(!pid.is_empty(), "the shim must have recorded its background pid");
@@ -573,6 +589,7 @@ mod tests {
 
         let err = result.expect_err("a probe past its deadline must fail");
         assert_eq!(err.kind(), io::ErrorKind::TimedOut, "got: {err}");
+        assert_probe_child_gone(dir.path(), "tool");
         assert_forked_descendant_gone(dir.path(), "tool");
     }
 
