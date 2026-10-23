@@ -174,6 +174,9 @@ _allowed_max() {
 # script_installer.rs most of all (engine 617, here 45). The engine is wrong
 # there, not this port; the upstream fix is joshjhall/librarian#1221 — once it
 # lands, this divergence (and this paragraph) goes away.
+# Two accepted limits, both erring toward OVER-counting (never hiding code): a
+# sibling conjunct nested two levels deep (`all(test, any(unix, not(x)))`) and
+# an attribute rustfmt has wrapped across lines are scored as production.
 # The synthetic-fixture test at the bottom of this file pins each rule above with
 # values taken from the engine, so a future edit cannot silently regress them.
 _production_loc() {
@@ -354,27 +357,72 @@ test_no_ungrandfathered_file_over_ceiling() {
     fi
 }
 
-# A grandfathered file may shrink but never grow. This is the ratchet itself.
-test_grandfathered_files_do_not_grow() {
-    local violations=0 entry path allowed lines
-    for entry in ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"}; do
+# The ratchet's verdicts, as pure functions of (root, ceiling, entries) so they
+# can be driven against fixtures. With GRANDFATHERED empty (#874) the arms below
+# loop over nothing and pass vacuously, so these helpers are the only place the
+# grow / retire / stale / duplicate logic is actually exercised — see
+# test_ratchet_helpers_on_fixtures. Each prints one line per violation.
+
+# _ratchet_grown ROOT ENTRY... — "missing:PATH" or "grew:PATH:LINES:ALLOWED".
+_ratchet_grown() {
+    local root="$1" entry path allowed lines
+    shift
+    for entry in "$@"; do
         path="${entry%%:*}"
         allowed="${entry##*:}"
-
-        if [ ! -f "$PROJECT_ROOT/$path" ]; then
-            assert_true false \
-                "GRANDFATHERED lists $path, which does not exist. Remove the stale entry."
-            violations=$((violations + 1))
+        if [ ! -f "$root/$path" ]; then
+            command printf 'missing:%s\n' "$path"
             continue
         fi
-
-        lines=$(_production_loc "$PROJECT_ROOT/$path")
+        lines=$(_production_loc "$root/$path")
         if [ "$lines" -gt "$allowed" ]; then
-            assert_true false \
-                "$path grew to $lines production LOC, past its grandfathered maximum of $allowed. Split it rather than raising the number."
-            violations=$((violations + 1))
+            command printf 'grew:%s:%s:%s\n' "$path" "$lines" "$allowed"
         fi
     done
+}
+
+# _ratchet_retired ROOT CEILING ENTRY... — "PATH:LINES:ALLOWED" per entry that
+# has come back under the ceiling. A missing file is _ratchet_grown's verdict.
+_ratchet_retired() {
+    local root="$1" ceiling="$2" entry path allowed lines
+    shift 2
+    for entry in "$@"; do
+        path="${entry%%:*}"
+        allowed="${entry##*:}"
+        [ -f "$root/$path" ] || continue
+        lines=$(_production_loc "$root/$path")
+        if [ "$lines" -le "$ceiling" ]; then
+            command printf '%s:%s:%s\n' "$path" "$lines" "$allowed"
+        fi
+    done
+}
+
+# _ratchet_duplicates ENTRY... — each path listed more than once.
+_ratchet_duplicates() {
+    [ "$#" -eq 0 ] && return 0
+    command printf '%s\n' "$@" | command cut -d: -f1 | command sort | command uniq -d
+}
+
+# A grandfathered file may shrink but never grow. This is the ratchet itself.
+test_grandfathered_files_do_not_grow() {
+    local violations=0 row kind path lines allowed
+    while IFS= read -r row; do
+        [ -n "$row" ] || continue
+        kind="${row%%:*}"
+        row="${row#*:}"
+        path="${row%%:*}"
+        if [ "$kind" = "missing" ]; then
+            assert_true false \
+                "GRANDFATHERED lists $path, which does not exist. Remove the stale entry."
+        else
+            row="${row#*:}"
+            lines="${row%%:*}"
+            allowed="${row##*:}"
+            assert_true false \
+                "$path grew to $lines production LOC, past its grandfathered maximum of $allowed. Split it rather than raising the number."
+        fi
+        violations=$((violations + 1))
+    done <<<"$(_ratchet_grown "$PROJECT_ROOT" ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"})"
 
     if [ "$violations" -eq 0 ]; then
         assert_true true "no grandfathered file has grown past its recorded maximum"
@@ -384,19 +432,17 @@ test_grandfathered_files_do_not_grow() {
 # A file that has come back under the ceiling must leave the allowlist, so the
 # list cannot outlive the debt it records.
 test_grandfathered_entries_retire_when_fixed() {
-    local violations=0 entry path allowed lines
-    for entry in ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"}; do
-        path="${entry%%:*}"
-        allowed="${entry##*:}"
-        [ -f "$PROJECT_ROOT/$path" ] || continue
-
-        lines=$(_production_loc "$PROJECT_ROOT/$path")
-        if [ "$lines" -le "$CEILING_LINES" ]; then
-            assert_true false \
-                "$path is now $lines production LOC, under the $CEILING_LINES ceiling. Remove it from GRANDFATHERED (recorded max was $allowed)."
-            violations=$((violations + 1))
-        fi
-    done
+    local violations=0 row path lines allowed
+    while IFS= read -r row; do
+        [ -n "$row" ] || continue
+        path="${row%%:*}"
+        row="${row#*:}"
+        lines="${row%%:*}"
+        allowed="${row##*:}"
+        assert_true false \
+            "$path is now $lines production LOC, under the $CEILING_LINES ceiling. Remove it from GRANDFATHERED (recorded max was $allowed)."
+        violations=$((violations + 1))
+    done <<<"$(_ratchet_retired "$PROJECT_ROOT" "$CEILING_LINES" ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"})"
 
     if [ "$violations" -eq 0 ]; then
         assert_true true "every grandfathered entry still exceeds the ceiling"
@@ -406,11 +452,51 @@ test_grandfathered_entries_retire_when_fixed() {
 # The allowlist is a debt register, so a duplicate entry (two maxima for one
 # file) would make the ratchet's verdict depend on iteration order.
 test_grandfathered_list_has_no_duplicates() {
-    local paths dupes
-    paths=$(command printf '%s\n' ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"} | command cut -d: -f1 | command sort)
-    dupes=$(command printf '%s\n' "$paths" | command uniq -d)
+    assert_empty "$(_ratchet_duplicates ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"})" \
+        "GRANDFATHERED must list each path at most once"
+}
 
-    assert_empty "$dupes" "GRANDFATHERED must list each path at most once"
+# The ratchet helpers on a fixture tree. GRANDFATHERED is empty, so without this
+# the three arms above assert nothing about their own logic: an inverted
+# comparison or a broken `path:max` split would stay green. Each case is built
+# to land on exactly one side of its boundary.
+test_ratchet_helpers_on_fixtures() {
+    local tmp
+    tmp=$(command mktemp -d)
+    # shellcheck disable=SC2064  # expand $tmp now, not at trap time
+    trap "command rm -rf '$tmp'" RETURN
+
+    # 6 production LOC each (two 3-line fns), in a path with a space so a
+    # word-splitting expansion of the entries would be caught.
+    command mkdir -p "$tmp/a dir"
+    command printf '%s\n' 'fn a() {' '    let x = 1;' '}' 'fn b() {' '    let y = 2;' '}' \
+        >"$tmp/a dir/six.rs"
+    command cp "$tmp/a dir/six.rs" "$tmp/other.rs"
+
+    # grow: at the recorded max is fine; one over it is a violation.
+    assert_empty "$(_ratchet_grown "$tmp" "a dir/six.rs:6")" \
+        "a file exactly at its recorded max has not grown"
+    assert_equals "grew:a dir/six.rs:6:5" "$(_ratchet_grown "$tmp" "a dir/six.rs:5")" \
+        "a file one line past its recorded max is reported as grown"
+    assert_equals "missing:gone.rs" "$(_ratchet_grown "$tmp" "gone.rs:9")" \
+        "a grandfathered path that does not exist is reported as stale"
+
+    # retire: at or under the ceiling must retire; one over it stays.
+    assert_equals "a dir/six.rs:6:9" "$(_ratchet_retired "$tmp" 6 "a dir/six.rs:9")" \
+        "a file exactly at the ceiling must leave the allowlist"
+    assert_empty "$(_ratchet_retired "$tmp" 5 "a dir/six.rs:9")" \
+        "a file still over the ceiling stays grandfathered"
+    assert_empty "$(_ratchet_retired "$tmp" 6 "gone.rs:9")" \
+        "a missing file is the grow arm's verdict, not the retire arm's"
+
+    # duplicates: same path twice (different maxima) is flagged; distinct
+    # paths and the empty list are not.
+    assert_equals "a dir/six.rs" "$(_ratchet_duplicates "a dir/six.rs:6" "other.rs:6" "a dir/six.rs:9")" \
+        "a path listed twice is a duplicate"
+    assert_empty "$(_ratchet_duplicates "a dir/six.rs:6" "other.rs:6")" \
+        "distinct paths are not duplicates"
+    assert_empty "$(_ratchet_duplicates)" \
+        "an empty allowlist has no duplicates"
 }
 
 # The measurement engine itself, on synthetic fixtures.
@@ -530,6 +616,13 @@ test_production_loc_edge_cases() {
     assert_equals "3" "$(_production_loc "$tmp/all_cfgfn.rs")" \
         "a #[cfg(all(test, unix))] helper fn is excluded per-unit"
 
+    # `test` must be a WHOLE conjunct: an identifier merely starting with it is
+    # a production gate, so every line counts.
+    command printf '%s\n' \
+        '#[cfg(all(test_utils, unix))]' 'mod m {' '    fn f() {}' '}' >"$tmp/all_prefix.rs"
+    assert_equals "4" "$(_production_loc "$tmp/all_prefix.rs")" \
+        "all(test_utils, ...) is production: test must be a whole conjunct"
+
     # sh: a `test_*()` function is excluded; the next column-zero function ends
     # it. Missing this scored tests/unit/bin/update-versions.sh 1151 vs 38.
     command printf '%s\n' \
@@ -551,5 +644,6 @@ run_test test_no_ungrandfathered_file_over_ceiling "no un-grandfathered file exc
 run_test test_grandfathered_files_do_not_grow "grandfathered files do not grow past their recorded maximum"
 run_test test_grandfathered_entries_retire_when_fixed "grandfathered entries retire once under the ceiling"
 run_test test_grandfathered_list_has_no_duplicates "GRANDFATHERED lists each path at most once"
+run_test test_ratchet_helpers_on_fixtures "the ratchet's grow/retire/stale/duplicate logic, on fixtures"
 
 generate_report
