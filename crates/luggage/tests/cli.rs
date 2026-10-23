@@ -377,6 +377,43 @@ fn install_refuses_malformed_tuning_env_vars() {
     }
 }
 
+/// A valid `LUGGAGE_VERSION_PROBE_TIMEOUT` actually reaches the installer, not
+/// just the validator (#1358): with a `rustc` that hangs in `--bin-root`, the
+/// dry-run's idempotency pre-check must give up at the configured 1s rather
+/// than the 10s default. Reading the variable but passing the default into
+/// `InstallerOptions` would pass every malformed-value test above; only the
+/// elapsed time tells the two apart.
+#[cfg(unix)]
+#[test]
+fn install_honors_a_valid_version_probe_timeout() {
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::time::{Duration, Instant};
+
+    let workdir = tempdir().expect("tempdir");
+    let dir = workdir.path().to_str().unwrap();
+    let rustc = workdir.path().join("rustc");
+    std::fs::write(&rustc, "#!/bin/sh\nexec sleep 30\n").expect("write shim");
+    std::fs::set_permissions(&rustc, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+
+    let started = Instant::now();
+    let out = Command::new(binary())
+        .args(["install", "rust@1.95.0", "--os", "debian", "--os-version", "13"])
+        .args(["--arch", "amd64", "--dry-run", "--log-dir", dir, "--bin-root", dir])
+        .args(["--cache-root", dir, "--tmp-root", dir])
+        .arg("--catalog")
+        .arg(catalog_dir())
+        .env("LUGGAGE_VERSION_PROBE_TIMEOUT", "1")
+        .output()
+        .expect("spawn luggage");
+    let elapsed = started.elapsed();
+
+    assert_exit(&out, 0);
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "the 1s override must bound the pre-check probe, took {elapsed:?}"
+    );
+}
+
 /// `--dry-run` must report the verification-guard refusal a real install
 /// would (#1042): a non-zero exit, no plan on stdout, and a `--json-report`
 /// that records the failure rather than a dry-run success.
