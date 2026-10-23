@@ -210,17 +210,20 @@ run_version_block() {
     bash "$PROJECT_ROOT/tests/integration/builds/luggage_golang/extract-version-block.sh" \
         "$golang_script" "$stub" >"$block"
 
-    (
+    # Its own bash process, so errexit holds: callers run this as
+    # `out=$(run_version_block …) || rc=$?`, and a subshell in that position
+    # runs with errexit suspended — an unhandled failure in the block would be
+    # stepped over instead of aborting it the way the real build does.
+    # shellcheck disable=SC2016  # expanded by the inner bash, not here
+    bash -c '
         set -euo pipefail
         log_error() { echo "ERR: $*"; }
         log_message() { :; }
-        # shellcheck disable=SC1091
-        source "$PROJECT_ROOT/lib/base/version-validation.sh"
-        GO_VERSION="$go_version"
-        # shellcheck disable=SC1090
-        source "$block"
+        source "$1"
+        GO_VERSION="$2"
+        source "$3"
         echo "RESULT: $GO_VERSION"
-    )
+    ' _ "$PROJECT_ROOT/lib/base/version-validation.sh" "$go_version" "$block"
 }
 
 # luggage resolve --json, as it really pretty-prints: two-space indent and the
