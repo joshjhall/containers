@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use containers_common::tooldb::InstalledDependency;
 use serde::{Deserialize, Serialize};
@@ -91,6 +91,12 @@ pub struct InstallerOptions {
     /// [`methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES`] (2 GiB); the CLI
     /// reads `LUGGAGE_MAX_EXTRACT_BYTES` to override it.
     pub max_extract_bytes: u64,
+    /// Deadline for each version probe — the idempotency pre-check and the
+    /// post-install validation. Defaults to
+    /// [`idempotency::VERSION_PROBE_TIMEOUT`] (10s); the CLI reads
+    /// `LUGGAGE_VERSION_PROBE_TIMEOUT` (seconds) to override it, for hosts
+    /// where a correct probe is just slow (qemu emulation, a cold cache).
+    pub version_probe_timeout: Duration,
 }
 
 impl Default for InstallerOptions {
@@ -108,6 +114,7 @@ impl Default for InstallerOptions {
             fail_on_unknown_deps: true,
             require_verified_downloads: false,
             max_extract_bytes: methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            version_probe_timeout: idempotency::VERSION_PROBE_TIMEOUT,
         }
     }
 }
@@ -386,11 +393,12 @@ impl Installer {
         }
 
         if !self.options.force
-            && idempotency::already_installed(
+            && idempotency::already_installed_within(
                 &resolved.primary_binary,
                 &resolved.version_args,
                 &resolved.version,
                 &self.options.bin_root,
+                self.options.version_probe_timeout,
             )
         {
             return (
@@ -835,6 +843,40 @@ mod tests {
         resolved.version_args = vec!["--version".into()];
         let (report, _) = installer.run_with_report(&resolved);
         assert!(!report.already_installed, "`go --version` exits 2; it must not skip");
+    }
+
+    /// The idempotency pre-check honors
+    /// [`InstallerOptions::version_probe_timeout`] rather than the 10s default
+    /// (#1358). A hung shim with a 1s option must give up well inside the
+    /// default; `dry_run` stops the run right after the pre-check, so the
+    /// elapsed time is the probe's alone.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn idempotency_precheck_honors_the_version_probe_timeout_option() {
+        let dir = tempfile::tempdir().unwrap();
+        idempotency::write_sleeping_shim(dir.path(), "tool");
+        let installer = Installer::with_options(InstallerOptions {
+            dry_run: true,
+            install_system_packages: false,
+            bin_root: dir.path().to_owned(),
+            log_dir: dir.path().join("log"),
+            version_probe_timeout: Duration::from_secs(1),
+            ..InstallerOptions::default()
+        });
+        let mut resolved = sample_resolved_with_deps();
+        resolved.version = "1.0.0".into();
+        resolved.primary_binary = "tool".into();
+
+        let started = Instant::now();
+        let (report, _) = installer.run_with_report(&resolved);
+        let elapsed = started.elapsed();
+        assert!(!report.already_installed, "a timed-out probe must not skip");
+        assert!(
+            elapsed < idempotency::VERSION_PROBE_TIMEOUT / 2,
+            "the 1s option must bound the pre-check, took {elapsed:?}"
+        );
+        idempotency::assert_probe_child_gone(dir.path(), "tool");
     }
 
     /// `sample_resolved_with_deps` with a pinless tier-2 verification — an

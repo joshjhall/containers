@@ -28,13 +28,19 @@ const ETXTBSY: i32 = 26;
 const ETXTBSY_RETRIES: u32 = 3;
 const ETXTBSY_BACKOFF: Duration = Duration::from_millis(50);
 
-/// Deadline for one version-probe exec (#1344). A `--version` answers in
-/// milliseconds; the headroom is for JVM-style tools cold-starting under
-/// qemu emulation. Since #811 the argv is a catalog input, so a misdeclared
+/// Default deadline for one version-probe exec (#1344).
+///
+/// A `--version` answers in milliseconds; the headroom is for JVM-style tools
+/// cold-starting under qemu emulation. Since #811 the argv is a catalog input, so a misdeclared
 /// `version_args` that starts a long-running subcommand (`serve`, a daemon
 /// verb, a tool blocking on a lock) would otherwise hang the install forever.
-/// Hitting it means the argv is wrong, not that the machine is slow.
-pub(crate) const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+/// Hitting it means either that argv is wrong or the probe is genuinely slow
+/// on this host (qemu emulation, a cold cache) — the latter is what
+/// [`VERSION_PROBE_TIMEOUT_ENV`] is for (#1358).
+pub const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Environment variable overriding [`VERSION_PROBE_TIMEOUT`], in whole seconds.
+pub const VERSION_PROBE_TIMEOUT_ENV: &str = "LUGGAGE_VERSION_PROBE_TIMEOUT";
 
 /// Interval between `try_wait` polls while the probe runs.
 const VERSION_PROBE_POLL: Duration = Duration::from_millis(10);
@@ -47,6 +53,50 @@ const VERSION_PROBE_POLL: Duration = Duration::from_millis(10);
 /// size is bounded only by how much the probe writes before
 /// [`VERSION_PROBE_TIMEOUT`].
 pub(crate) const VERSION_PROBE_OUTPUT_CAP: u64 = 1024 * 1024;
+
+/// Resolve the version-probe deadline from the environment.
+///
+/// Returns [`VERSION_PROBE_TIMEOUT`] when `LUGGAGE_VERSION_PROBE_TIMEOUT` is
+/// unset or empty, and a hard error when it is malformed — the same contract,
+/// and the same reasons, as
+/// [`crate::installer::methods::archive_limit::max_extract_bytes_from_env`]:
+/// an operator who raised the deadline for a slow emulated build must not
+/// silently keep the default.
+///
+/// # Errors
+///
+/// [`crate::LuggageError::Catalog`] when the value is set but does not parse as
+/// a non-zero whole number of seconds.
+pub fn version_probe_timeout_from_env() -> crate::error::Result<Duration> {
+    parse_version_probe_timeout(std::env::var(VERSION_PROBE_TIMEOUT_ENV).ok().as_deref())
+}
+
+/// The value half of [`version_probe_timeout_from_env`], split out because
+/// `unsafe_code = "forbid"` rules out `std::env::set_var` in tests.
+///
+/// # Errors
+///
+/// [`crate::LuggageError::Catalog`] when the value is set but does not parse as
+/// a non-zero whole number of seconds.
+pub fn parse_version_probe_timeout(raw: Option<&str>) -> crate::error::Result<Duration> {
+    let Some(raw) = raw else { return Ok(VERSION_PROBE_TIMEOUT) };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(VERSION_PROBE_TIMEOUT);
+    }
+    match trimmed.parse::<u64>() {
+        Ok(0) => Err(crate::error::LuggageError::Catalog(format!(
+            "{VERSION_PROBE_TIMEOUT_ENV} is `0`, which would time out every version probe; \
+             unset it to use the default of {}s",
+            VERSION_PROBE_TIMEOUT.as_secs(),
+        ))),
+        Ok(n) => Ok(Duration::from_secs(n)),
+        Err(e) => Err(crate::error::LuggageError::Catalog(format!(
+            "{VERSION_PROBE_TIMEOUT_ENV} must be a positive whole number of seconds, \
+             got `{raw}`: {e}",
+        ))),
+    }
+}
 
 /// [`run_version_check_within`] at the production [`VERSION_PROBE_TIMEOUT`];
 /// the ETXTBSY tests exercise the retry loop through it.
@@ -226,8 +276,8 @@ fn read_back(file: &mut File, stream: &str) -> io::Result<Vec<u8>> {
 ///
 /// Returns `false` for any reason it can't confirm — missing binary,
 /// non-zero exit, output without the version literal, I/O error, or a probe
-/// still running past the 10s probe deadline. The caller must treat `false`
-/// as "go install"; only `true` should skip.
+/// still running past the default [`VERSION_PROBE_TIMEOUT`]. The caller must
+/// treat `false` as "go install"; only `true` should skip.
 #[must_use]
 pub fn already_installed<S: AsRef<OsStr>>(
     binary: &str,
@@ -238,7 +288,8 @@ pub fn already_installed<S: AsRef<OsStr>>(
     already_installed_within(binary, args, version, bin_root, VERSION_PROBE_TIMEOUT)
 }
 
-/// [`already_installed`] with an explicit probe deadline.
+/// [`already_installed`] with an explicit probe deadline — the installer's
+/// path, which passes [`crate::InstallerOptions::version_probe_timeout`].
 pub(crate) fn already_installed_within<S: AsRef<OsStr>>(
     binary: &str,
     args: &[S],
@@ -952,6 +1003,27 @@ mod tests {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
 
         assert!(already_installed("tool", VERSION_ARGS, "1.2.3", dir.path()));
+    }
+
+    /// Unset or empty means the default; a positive integer is seconds and is
+    /// trimmed; anything else — including `0` — is a hard error naming the
+    /// variable, never a silent fallback (#1358).
+    #[test]
+    fn parse_version_probe_timeout_cases() {
+        assert_eq!(parse_version_probe_timeout(None).unwrap(), VERSION_PROBE_TIMEOUT);
+        assert_eq!(parse_version_probe_timeout(Some("")).unwrap(), VERSION_PROBE_TIMEOUT);
+        assert_eq!(parse_version_probe_timeout(Some("  ")).unwrap(), VERSION_PROBE_TIMEOUT);
+        assert_eq!(parse_version_probe_timeout(Some("30")).unwrap(), Duration::from_secs(30));
+        assert_eq!(parse_version_probe_timeout(Some(" 45 ")).unwrap(), Duration::from_secs(45));
+        for bad in ["0", "abc", "-1", "1.5", "10s"] {
+            let err = parse_version_probe_timeout(Some(bad)).unwrap_err();
+            let msg = err.to_string();
+            assert!(
+                matches!(err, crate::error::LuggageError::Catalog(_)),
+                "`{bad}` must be a Catalog error, got {msg}"
+            );
+            assert!(msg.contains(VERSION_PROBE_TIMEOUT_ENV), "`{bad}`: {msg}");
+        }
     }
 
     /// `already_installed` folds a timeout into "can't confirm → false", even

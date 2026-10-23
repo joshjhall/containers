@@ -210,13 +210,14 @@ impl Installer {
         if let Some(l) = logger {
             l.step("validate");
         }
-        validate::check(
+        validate::check_within(
             &resolved.tool,
             &resolved.primary_binary,
             &resolved.version_args,
             &resolved.version,
             &self.options.bin_root,
             env_map,
+            self.options.version_probe_timeout,
         )
     }
 }
@@ -285,6 +286,43 @@ mod tests {
         let body = fs::read_to_string(logger.path()).unwrap();
         assert!(body.contains("WARNING:"), "{body}");
         assert!(body.contains("TOFU"), "{body}");
+    }
+
+    /// Post-install validation honors
+    /// [`InstallerOptions::version_probe_timeout`] rather than the 10s default
+    /// (#1358): the deadline the error reports is the configured one.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn stage_validate_honors_the_version_probe_timeout_option() {
+        use std::time::{Duration, Instant};
+
+        use crate::installer::idempotency::{assert_probe_child_gone, write_sleeping_shim};
+
+        let dir = tempfile::tempdir().unwrap();
+        write_sleeping_shim(dir.path(), "tool");
+        let timeout = Duration::from_secs(1);
+        let installer = Installer::with_options(InstallerOptions {
+            install_system_packages: false,
+            bin_root: dir.path().to_owned(),
+            version_probe_timeout: timeout,
+            ..InstallerOptions::default()
+        });
+        let mut resolved = sample_resolved_with_deps();
+        resolved.version = "1.0.0".into();
+        resolved.primary_binary = "tool".into();
+
+        let started = Instant::now();
+        let err = installer.stage_validate(&resolved, &BTreeMap::new(), None).unwrap_err();
+        assert!(started.elapsed() < Duration::from_secs(5), "took {:?}", started.elapsed());
+        assert_probe_child_gone(dir.path(), "tool");
+        match err {
+            LuggageError::ValidationFailed { message, .. } => assert!(
+                message.contains(&format!("timed out after {timeout:?}")),
+                "must report the configured deadline, got: {message}"
+            ),
+            other => panic!("expected ValidationFailed, got {other:?}"),
+        }
     }
 
     /// Tier 3 goes through the same `stage_verify` and must stay silent —
