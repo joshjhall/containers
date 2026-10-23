@@ -75,8 +75,8 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
     env: &BTreeMap<String, String>,
     timeout: Duration,
 ) -> io::Result<Output> {
-    let mut stdout = tempfile::tempfile()?;
-    let mut stderr = tempfile::tempfile()?;
+    let mut stdout = capture_file()?;
+    let mut stderr = capture_file()?;
     let mut attempt = 0;
     let mut child = loop {
         let spawned = Command::new(binary)
@@ -118,6 +118,14 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
     };
 
     Ok(Output { status, stdout: read_back(&mut stdout)?, stderr: read_back(&mut stderr)? })
+}
+
+/// Create an anonymous capture tempfile (in `TMPDIR`), with context on
+/// failure so a full or unwritable temp dir is not mistaken for the probe
+/// binary failing to launch.
+fn capture_file() -> io::Result<File> {
+    tempfile::tempfile()
+        .map_err(|e| io::Error::new(e.kind(), format!("creating probe capture file: {e}")))
 }
 
 /// Rewind a capture tempfile and read everything the child wrote to it.
@@ -540,11 +548,14 @@ mod tests {
 
     /// A non-`ETXTBSY` launch error must be returned on the *first* attempt,
     /// never retried. Pointing at a path with no file on disk makes `exec`
-    /// fail with `ENOENT`, which the `other => return other` arm must surface
+    /// fail with `ENOENT`, which the `other => break other?` arm must surface
     /// immediately — a near-zero elapsed time proves the retry loop's backoff
-    /// (which would add ≥`ETXTBSY_BACKOFF` per attempt) never ran.
+    /// (which would add ≥`ETXTBSY_BACKOFF` per attempt) never ran. Serialized
+    /// so the tight timing bound doesn't share the runner with shim-spawning
+    /// tests.
     #[cfg(unix)]
     #[test]
+    #[serial_test::serial]
     fn run_version_check_returns_non_etxtbsy_error_without_retrying() {
         use std::time::Instant;
 
@@ -612,7 +623,7 @@ mod tests {
     /// covers success-after-retry. Holding an open write fd to the binary makes
     /// every `exec` fail with `ETXTBSY`, so `run_version_check` burns the whole
     /// `ETXTBSY_RETRIES` budget and then propagates the error via `other =>
-    /// return other` instead of dropping it — the path that was previously
+    /// break other?` instead of dropping it — the path that was previously
     /// untested. The held fd guarantees the failure deterministically (no
     /// cross-thread fork race needed), and the `>= ETXTBSY_RETRIES` sleep floor
     /// proves the retry loop actually ran to exhaustion rather than returning
