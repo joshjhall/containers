@@ -10,7 +10,8 @@
 #
 # Usage: extract-version-block.sh <golang.sh> [luggage-path]
 #   luggage-path — replaces golang.sh's /usr/local/bin/luggage (optional;
-#                  sed-special characters in it are escaped)
+#                  `\`, `#` and `&` in it are escaped for sed; a newline
+#                  is not supported)
 #
 # The block runs from `validate_go_version` through the resolve block's
 # closing `fi` — the second top-level `fi`, since validation uses `|| { }`,
