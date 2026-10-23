@@ -239,8 +239,12 @@ pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
     });
     let pid = pid.trim();
     assert!(!pid.is_empty(), "the shim must have recorded its pid");
-    let alive =
-        Command::new("kill").args(["-0", pid]).stderr(Stdio::null()).status().unwrap().success();
+    let alive = Command::new("/bin/kill")
+        .args(["-0", pid])
+        .stderr(Stdio::null())
+        .status()
+        .unwrap()
+        .success();
     assert!(!alive, "the timed-out probe child (pid {pid}) must be killed and reaped");
 }
 

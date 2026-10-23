@@ -322,12 +322,48 @@ mod tests {
             LuggageError::ValidationFailed { tool, version, message } => {
                 assert_eq!(tool, "tool");
                 assert_eq!(version, "1.0.0");
-                assert!(message.contains("timed out after 1s"), "got: {message}");
+                assert!(
+                    message.contains(&format!("timed out after {timeout:?}")),
+                    "got: {message}"
+                );
                 assert!(
                     message.contains("tool serve`"),
                     "must name the probe argv, got: {message}"
                 );
                 assert!(!message.contains("failed to launch"), "got: {message}");
+            }
+            other => panic!("expected ValidationFailed, got {other:?}"),
+        }
+    }
+
+    /// A probe that cannot be spawned at all must still surface through the
+    /// launch-failure branch, not be misreported as a timeout — the deadline
+    /// only applies once a child exists (#1344).
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn unexecutable_probe_fails_to_launch_not_timeout() {
+        use crate::installer::idempotency::TEST_TIMEOUT as timeout;
+
+        let dir = tempdir().unwrap();
+        let tool = dir.path().join("tool");
+        fs::write(&tool, "#!/bin/sh\necho tool 1.0.0\n").unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let err = check_within(
+            "tool",
+            "tool",
+            &version_args(),
+            "1.0.0",
+            dir.path(),
+            &BTreeMap::new(),
+            timeout,
+        )
+        .unwrap_err();
+        match err {
+            LuggageError::ValidationFailed { message, .. } => {
+                assert!(message.contains("failed to launch"), "got: {message}");
+                assert!(!message.contains("timed out"), "got: {message}");
             }
             other => panic!("expected ValidationFailed, got {other:?}"),
         }
