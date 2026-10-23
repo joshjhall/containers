@@ -621,6 +621,44 @@ test_all_tools_retries_after_every_untested() {
         "sort keys are not emitted into the matrix"
 }
 
+test_all_tools_retries_interleave_too() {
+    # Ranks restart inside the retry group, so retries round-robin across tools
+    # like untested cells do. Ranked over each tool's whole list instead, go's
+    # retry would sit at rank 2 behind its own untested cells, and rust's
+    # retry (rank 0) would jump ahead of it.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.80.0 debian-13-amd64
+    _version "$r/catalog" 1.22.9 debian-13-amd64 "" go
+    _version "$r/catalog" 1.23.4 debian-13-amd64,debian-13-arm64 "" go
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.80.0 "" debian-13-amd64 2026-09-01T00:00:00Z
+    _db_version "$db" 1.22.9 "" debian-13-amd64 2026-09-01T00:00:00Z go
+    _db_version "$db" 1.23.4 "" "" "" go
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix_all "$r/catalog" "$r")"
+    assert_equals $'go 1.23.4 debian-13-amd64\ngo 1.23.4 debian-13-arm64\ngo 1.22.9 debian-13-amd64\nrust 1.80.0 debian-13-amd64' \
+        "$(_tool_cells "$out")" \
+        "each tool's first retry ranks 0 within the retry group"
+}
+
+test_all_tools_probe_publication_once() {
+    # The publish check runs once per tuple for the whole run, not once per
+    # tool: every tool must judge a tuple against the same answer.
+    local r out calls
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    _version "$r/catalog" 1.23.4 debian-13-amd64 "" go
+    calls="$(command mktemp "$TEST_TEMP_DIR/calls.XXXXXX")"
+    _count_published() { command echo "$1" >>"$calls"; }
+    out="$(EVIDENCE_PUBLISHED_CHECK=_count_published evidence_matrix_all "$r/catalog" "$r")"
+    assert_equals $'go 1.23.4 debian-13-amd64\nrust 1.90.0 debian-13-amd64' "$(_tool_cells "$out")" \
+        "both tools' legs are produced"
+    assert_equals $'alpine-3.24-amd64\ndebian-13-amd64\ndebian-13-arm64' "$(command sort "$calls")" \
+        "each of the fixture's three tuples is probed exactly once"
+}
+
 test_all_tools_exit_3_only_when_all_covered() {
     local r out rc=0
     r="$(_fixture 1.0.0)"
@@ -640,20 +678,31 @@ test_all_tools_exit_3_only_when_all_covered() {
 test_all_tools_one_failing_tool_is_an_error() {
     # A published source with no go evidence must fail the run, not quietly
     # drop go and ship a rust-only matrix.
-    local r db out rc=0
+    local r db out err rc=0
     r="$(_fixture 1.0.0)"
     _tool "$r/catalog" go 1.22.0
     _version "$r/catalog" 1.90.0 debian-13-amd64
     _version "$r/catalog" 1.23.4 debian-13-amd64 "" go
     db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
     _db_version "$db" 1.90.0 ""
-    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix_all "$r/catalog" "$r" 2>/dev/null)" || rc=$?
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix_all "$r/catalog" "$r" 2>"$err")" || rc=$?
     assert_equals "1" "$rc" "one tool's unreadable evidence is exit 1"
     assert_equals "" "$out" "and prints no partial matrix"
+    assert_equals "evidence_matrix: no published evidence for go at $db/tools/go/versions (EVIDENCE_TESTED_SOURCE)" \
+        "$(command cat "$err")" "and the failure is go's missing evidence, not some other exit 1"
 
+    # Tools exist, but only system_package-style ones (index.json, no
+    # versions/): nothing to evidence is an error, not "nothing pending".
+    local only
+    only="$(command mktemp -d "$TEST_TEMP_DIR/only.XXXXXX")"
+    command mkdir -p "$only/tools/gcc"
+    command echo '{"id":"gcc"}' >"$only/tools/gcc/index.json"
     rc=0
-    out="$(evidence_matrix_all "$TEST_TEMP_DIR/nope" "$r" 2>/dev/null)" || rc=$?
+    out="$(evidence_matrix_all "$only" "$r" 2>"$err")" || rc=$?
     assert_equals "1" "$rc" "a catalog with no versioned tools is exit 1, not exit 3"
+    assert_equals "evidence_matrix: no tools with a versions/ directory in $only" \
+        "$(command cat "$err")" "with a message saying no tool is versioned"
 }
 
 test_all_tools_empty_versions_dir_is_an_error() {
@@ -728,6 +777,8 @@ run_test test_missing_index_is_an_error "missing index is an error"
 run_test test_all_tools_covers_every_versioned_tool "every tool with versions/ gets legs; system_package does not"
 run_test test_all_tools_cap_interleaves_tools "the merged cap interleaves tools round-robin"
 run_test test_all_tools_retries_after_every_untested "failure retries wait behind every tool's untested cells"
+run_test test_all_tools_retries_interleave_too "failure retries also interleave across tools"
+run_test test_all_tools_probe_publication_once "base-image publication is probed once per run"
 run_test test_all_tools_exit_3_only_when_all_covered "exit 3 only when every tool is covered"
 run_test test_all_tools_one_failing_tool_is_an_error "one tool's error fails the merged matrix"
 run_test test_all_tools_empty_versions_dir_is_an_error "an empty versions/ dir fails with a named error"

@@ -72,6 +72,11 @@ _em_available_tuples() {
     done
 }
 
+# _em_available_tuples_json <project_root> — the same tuples as a JSON array.
+_em_available_tuples_json() {
+    _em_available_tuples "$1" | command jq -R . | command jq -cs .
+}
+
 # _EM_EVIDENCE_JQ — jq defs shared by the published and vendored paths, so the
 # fail policy is computed in one place. `em_evidence` reduces an array of
 # tested[] rows to {pass: ["os-osv-arch", ...], fail: {"os-osv-arch": <newest
@@ -171,12 +176,13 @@ evidence_open_prs() {
     done <<<"$rows"
 }
 
-# _em_tool_cells <catalog_dir> <tool> <project_root> <image_tag> — every
-# pending cell for one tool as a JSON array, uncapped, in run order (untested
-# before failure retries, oldest version first), each still carrying its
-# `retry` flag for the caller to order and strip. Exit 1 on error.
+# _em_tool_cells <catalog_dir> <tool> <project_root> <image_tag> [available]
+# — every pending cell for one tool as a JSON array, uncapped, in run order
+# (untested before failure retries, oldest version first), each still carrying
+# its `retry` flag for the caller to order and strip. Exit 1 on error.
+# available is the JSON array of usable tuples; computed when omitted.
 _em_tool_cells() {
-    local catalog="$1" tool="$2" root="$3" image_tag="$4"
+    local catalog="$1" tool="$2" root="$3" image_tag="$4" available="${5:-}"
     local index="$catalog/tools/$tool/index.json"
     [ -f "$index" ] || {
         command echo "evidence_matrix: no index for $tool at $index" >&2
@@ -200,8 +206,7 @@ _em_tool_cells() {
         return 1
     }
 
-    local available
-    available="$(_em_available_tuples "$root" | command jq -R . | command jq -cs .)"
+    [ -n "$available" ] || available="$(_em_available_tuples_json "$root")"
 
     local evidence
     evidence="$(command mktemp)" || return 1
@@ -313,12 +318,15 @@ evidence_matrix() {
 # Each tool keeps its own oldest-first order.
 evidence_matrix_all() {
     local catalog="$1" root="$2" image_tag="${3:-latest}" max_cells="${4:-200}"
-    local dir tool cells ranked="" tools=()
+    local dir tool cells ranked="" tools=() available
+    # Probe base-image publication once for the whole run, so every tool
+    # judges a tuple against the same answer (and the registry is asked once).
+    available="$(_em_available_tuples_json "$root")" || return 1
     for dir in "$catalog"/tools/*/versions; do
         [ -d "$dir" ] || continue
         tool="${dir%/versions}"
         tool="${tool##*/}"
-        cells="$(_em_tool_cells "$catalog" "$tool" "$root" "$image_tag")" || return 1
+        cells="$(_em_tool_cells "$catalog" "$tool" "$root" "$image_tag" "$available")" || return 1
         # rank = position within (tool, retry group), for the interleave.
         # Streamed through stdin, not --argjson: one argv string caps at 128 KiB.
         cells="$(command jq -c '
