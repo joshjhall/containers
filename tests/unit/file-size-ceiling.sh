@@ -83,24 +83,14 @@ CEILING_LINES=500
 # production LOC once its own tests and comments stopped counting against it, so
 # none was ever a real offender.
 #
-# The one entry below is the opposite case, and is why this list still exists:
-# the corrected metric FOUND a genuinely oversized file that the total-line
-# ceiling never caught (758 total, under the old 900 bar, but 617 production
-# LOC). The audit lens agrees exactly and rates it HIGH. That is the trade this
-# change makes — it stops flagging well-tested files and starts flagging large
-# ones.
+# The one entry #873 added — script_installer.rs at "617 production LOC" — was
+# also a measurement artifact, not an offender: its test module is gated
+# `#[cfg(all(test, unix))]`, which neither this port nor the engine recognised
+# as test code. Counted correctly it is 45 (#874), so the list is empty again.
 #
 # Add an entry only for a genuine offender with a tracked issue, in the form
 # "path:N" where N is its production LOC at the time of grandfathering.
-GRANDFATHERED=(
-    # 617 production LOC (>500). Not a pending split by default:
-    # check-decomposition/patterns.py reports "declined: single cohesive unit —
-    # no internal seam to cut (617 production LOC, 2 top-level units)", so a
-    # forced split here would be the metric-chasing #845 warned against.
-    # Tracked for assessment in #874; the entry holds it at its current size
-    # meanwhile — it may shrink freely, but it cannot grow.
-    "crates/luggage/src/installer/methods/script_installer.rs:617"
-)
+GRANDFATHERED=()
 
 # Directories swept, and the extensions swept within them.
 SCAN_DIRS=("tests" "lib" "bin" "crates")
@@ -176,6 +166,14 @@ _allowed_max() {
 # declaration, which cannot be reproduced line-at-a-time without reimplementing
 # that model; every approximation tried traded these two for a different pair.
 # Both files sit 400+ LOC under the ceiling, so neither gap can flip a verdict.
+#
+# ONE DELIBERATE DIVERGENCE (#874): wherever a rule above says `#[cfg(test)]`,
+# this port also accepts `#[cfg(all(…, test, …))]` (see `cfg_test` in the awk).
+# The engine matches only the literal `#[cfg(test)]`, so it scores the 4 files
+# that gate their tests `#[cfg(all(test, unix))]` higher than this port does —
+# script_installer.rs most of all (engine 617, here 45). The engine is wrong
+# there, not this port; the upstream fix is joshjhall/librarian#1221 — once it
+# lands, this divergence (and this paragraph) goes away.
 # The synthetic-fixture test at the bottom of this file pins each rule above with
 # values taken from the engine, so a future edit cannot silently regress them.
 _production_loc() {
@@ -188,6 +186,16 @@ _production_loc() {
     esac
 
     command awk -v lang="$lang" '
+        # A test-only cfg: `#[cfg(test)]`, or `#[cfg(all(…, test, …))]` with
+        # `test` as a top-level conjunct — `all` with `test` in it compiles only
+        # under test, so it is test code too (#874). A test module gated
+        # `#[cfg(all(test, unix))]` was counted as production in full: 617 LOC
+        # for a file whose production code is 45. `any(test, …)` and
+        # `not(test)` are deliberately NOT matched — both compile into non-test
+        # builds, so they stay production. Defined once, here, so the region
+        # arm and the per-unit arm below cannot drift apart.
+        BEGIN { cfg_test = "^#\\[cfg\\((test|all\\(([^()]*,[ \t]*)?test([ \t]*,[^()]*)?\\))\\)\\]" }
+
         # --- rs: trailing `#[cfg(test)] mod … {` region, to EOF -------------
         # Armed by a column-zero `#[cfg(test)]`, but only fires once the next
         # line proves it introduces a `mod … {` BLOCK — the conventional
@@ -205,7 +213,7 @@ _production_loc() {
             cfg_armed = 0
             if ($0 ~ /^mod[ \t]+[A-Za-z0-9_]+[ \t]*\{/) { in_tests = 1 }
         }
-        lang == "rs" && !in_tests && /^#\[cfg\(test\)\]/ { cfg_armed = 1 }
+        lang == "rs" && !in_tests && $0 ~ cfg_test { cfg_armed = 1 }
 
         # --- sh: `# --- tests ---` banner, to EOF ---------------------------
         lang == "sh" && !in_tests && /^#[ \t]*-+[ \t]*[Tt]ests?[ \t]*-+/ { in_tests = 1 }
@@ -232,9 +240,9 @@ _production_loc() {
         #                    whole-file region regex, whose span starts at the
         #                    MARKER, so the line is excluded.
         # Hence `#[cfg(test)]` skips its own line and `#[test]` does not.
-        lang == "rs" && /^#\[cfg\(test\)\]/ { pending_test = 1; next }
+        lang == "rs" && $0 ~ cfg_test { pending_test = 1; next }
         lang == "rs" && /^#\[test\]/ { pending_test = 1 }
-        lang == "rs" && pending_test && !/^#\[(test|cfg\(test\))/ {
+        lang == "rs" && pending_test && !/^#\[(test|cfg\(test\))/ && $0 !~ cfg_test {
             pending_test = 0; in_test_unit = 1; just_marked = 1
         }
         lang == "rs" && /^(pub[ \t]|pub\(|async[ \t]|unsafe[ \t]|extern[ \t]|fn[ \t]|mod[ \t]|struct[ \t]|enum[ \t]|impl[ \t<]|trait[ \t]|const[ \t]|static[ \t]|type[ \t]|use[ \t]|macro_rules!)/ {
@@ -454,6 +462,44 @@ test_production_loc_edge_cases() {
         'pub fn real() {' '    let y = 2;' '}' >"$tmp/cfgfn.rs"
     assert_equals "3" "$(_production_loc "$tmp/cfgfn.rs")" \
         "a cfg-gated test helper fn is excluded, attribute line included"
+
+    # A compound `#[cfg(all(test, …))]` is test-only too, in either conjunct
+    # order (#874). Missing this scored script_installer.rs 617 instead of 45.
+    command printf '%s\n' \
+        'pub fn real() {' '    let a = 1;' '}' \
+        '#[cfg(all(test, unix))]' 'mod tests {' '    fn t() {}' '}' >"$tmp/all_test.rs"
+    assert_equals "3" "$(_production_loc "$tmp/all_test.rs")" \
+        "a trailing #[cfg(all(test, unix))] mod block is excluded to EOF"
+    command printf '%s\n' \
+        'pub fn real() {' '    let a = 1;' '}' \
+        '#[cfg(all(unix, test))]' 'mod tests {' '    fn t() {}' '}' >"$tmp/all_test_rev.rs"
+    assert_equals "3" "$(_production_loc "$tmp/all_test_rev.rs")" \
+        "#[cfg(all(unix, test))] is excluded regardless of conjunct order"
+
+    # ...but a one-line compound DECLARATION is still not a trailing region.
+    command printf '%s\n' \
+        '#[cfg(all(test, unix))]' 'mod test_support;' 'mod wizard;' \
+        'fn main() {' '    let c = 3;' '}' >"$tmp/all_decl.rs"
+    assert_equals "4" "$(_production_loc "$tmp/all_decl.rs")" \
+        "a one-line #[cfg(all(test, unix))] mod declaration does not exclude to EOF"
+
+    # `any(test, …)` and `not(test)` compile into NON-test builds, so they are
+    # production: every line below counts, attribute lines included.
+    command printf '%s\n' \
+        '#[cfg(any(test, feature = "x"))]' 'mod m {' '    fn f() {}' '}' >"$tmp/any_test.rs"
+    assert_equals "4" "$(_production_loc "$tmp/any_test.rs")" \
+        "#[cfg(any(test, ...))] is production, not test code"
+    command printf '%s\n' \
+        '#[cfg(not(test))]' 'mod m {' '    fn f() {}' '}' >"$tmp/not_test.rs"
+    assert_equals "4" "$(_production_loc "$tmp/not_test.rs")" \
+        "#[cfg(not(test))] is production, not test code"
+
+    # `test` nested inside a further combinator is not a top-level conjunct:
+    # `all(unix, any(test, x))` compiles without test, so it counts.
+    command printf '%s\n' \
+        '#[cfg(all(unix, any(test, feature = "x")))]' 'mod m {' '    fn f() {}' '}' >"$tmp/nested_any.rs"
+    assert_equals "4" "$(_production_loc "$tmp/nested_any.rs")" \
+        "test nested under any() inside all() is production"
 
     # sh: a `test_*()` function is excluded; the next column-zero function ends
     # it. Missing this scored tests/unit/bin/update-versions.sh 1151 vs 38.
