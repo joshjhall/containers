@@ -449,6 +449,45 @@ test_extractor_refuses_missing_block() {
     assert_contains "$out" "no version block found in $fake" "extractor names the script it could not parse"
 }
 
+# Test: the shared extractor refuses a block that never reaches its second
+# top-level fi, rather than printing through EOF and handing the fixture and
+# unit suite unrelated install code to source as the version block (#1372)
+test_extractor_refuses_unterminated_block() {
+    local fake="$TEST_TEMP_DIR/one-fi.sh" out rc=0
+    printf '#!/bin/bash\nvalidate_go_version "$GO_VERSION" || exit 1\nif true; then\n    :\nfi\nINSTALL_CODE_MARKER=1\n' >"$fake"
+    out=$(bash "$PROJECT_ROOT/tests/integration/builds/luggage_golang/extract-version-block.sh" \
+        "$fake" 2>&1) || rc=$?
+    assert_equals "1" "$rc" "extractor exits 1 when the version block has only one top-level fi"
+    assert_contains "$out" "version block in $fake never reaches its closing fi" \
+        "extractor names the script whose block is unterminated"
+    assert_not_contains "$out" "INSTALL_CODE_MARKER" "extractor prints nothing past the partial block"
+}
+
+# Test: an unreadable script is reported as unreadable, not blamed on its
+# content as a missing or unterminated block — awk's own fatal-error exit
+# must stay distinct from the END sentinel
+test_extractor_reports_unreadable_script() {
+    local missing="$TEST_TEMP_DIR/does-not-exist.sh" out rc=0
+    out=$(bash "$PROJECT_ROOT/tests/integration/builds/luggage_golang/extract-version-block.sh" \
+        "$missing" 2>&1) || rc=$?
+    assert_equals "1" "$rc" "extractor exits 1 when golang.sh cannot be read"
+    assert_contains "$out" "could not read $missing" "extractor names the unreadable script"
+    assert_not_contains "$out" "no version block found" "an unreadable script is not reported as blockless"
+    assert_not_contains "$out" "never reaches its closing fi" "an unreadable script is not reported as unterminated"
+}
+
+# Test: a luggage path carrying sed-special characters is substituted
+# literally, not read as the s### delimiter or the matched-text reference
+test_extractor_escapes_luggage_path() {
+    local fake="$TEST_TEMP_DIR/two-fi.sh" luggage="$TEST_TEMP_DIR/a&b#c\\d" out rc=0
+    printf '#!/bin/bash\nvalidate_go_version "$GO_VERSION" || exit 1\nif true; then\n    :\nfi\nif true; then\n    /usr/local/bin/luggage resolve\nfi\nAFTER_BLOCK=1\n' >"$fake"
+    out=$(bash "$PROJECT_ROOT/tests/integration/builds/luggage_golang/extract-version-block.sh" \
+        "$fake" "$luggage" 2>&1) || rc=$?
+    assert_equals "0" "$rc" "extractor accepts a luggage path with sed-special characters"
+    assert_contains "$out" "    $luggage resolve" "luggage path is substituted verbatim"
+    assert_not_contains "$out" "AFTER_BLOCK" "extractor stops at the second top-level fi"
+}
+
 # Test: the inline download/verify/extract path is gone — luggage owns it.
 # A leftover would mean two installers racing over /usr/local/go.
 test_no_inline_go_install() {
@@ -503,6 +542,9 @@ run_test_with_setup test_pre_floor_versions_refused "Go below 1.22 is refused up
 run_test_with_setup test_bare_major_rejected_by_validation "Bare major GO_VERSION is rejected by validation"
 run_test_with_setup test_non_1x_major_reaches_resolve "Non-1.x partial reaches resolve"
 run_test_with_setup test_extractor_refuses_missing_block "Version-block extractor refuses a script without one"
+run_test_with_setup test_extractor_refuses_unterminated_block "Version-block extractor refuses a block missing its closing fi"
+run_test_with_setup test_extractor_reports_unreadable_script "Version-block extractor reports an unreadable script as unreadable"
+run_test_with_setup test_extractor_escapes_luggage_path "Version-block extractor substitutes a sed-special luggage path verbatim"
 run_test_with_setup test_no_inline_go_install "No inline Go download/verify/extract remains"
 run_test_with_setup test_no_upstream_version_resolution "No upstream resolve_go_version remains"
 
