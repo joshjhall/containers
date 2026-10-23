@@ -410,6 +410,17 @@ EOF
         "luggage install receives the exact argv (version, catalog default, user, cache root, log dir)"
 }
 
+# Test: the shared extractor refuses a script with no version block, rather
+# than emitting nothing for the fixture and unit suite to source as a no-op
+test_extractor_refuses_missing_block() {
+    local fake="$TEST_TEMP_DIR/no-block.sh" out rc=0
+    printf '#!/bin/bash\nGO_VERSION=1.26\n' >"$fake"
+    out=$(bash "$PROJECT_ROOT/tests/integration/builds/luggage_golang/extract-version-block.sh" \
+        "$fake" 2>&1) || rc=$?
+    assert_equals "1" "$rc" "extractor exits 1 when golang.sh has no version block"
+    assert_contains "$out" "no version block found in $fake" "extractor names the script it could not parse"
+}
+
 # Test: the inline download/verify/extract path is gone — luggage owns it.
 # A leftover would mean two installers racing over /usr/local/go.
 test_no_inline_go_install() {
@@ -451,6 +462,7 @@ run_test_with_setup test_resolve_without_version_fails_closed "Resolve output wi
 run_test_with_setup test_pre_floor_versions_refused "Go below 1.22 is refused up front"
 run_test_with_setup test_bare_major_rejected_by_validation "Bare major GO_VERSION is rejected by validation"
 run_test_with_setup test_non_1x_major_reaches_resolve "Non-1.x partial reaches resolve"
+run_test_with_setup test_extractor_refuses_missing_block "Version-block extractor refuses a script without one"
 run_test_with_setup test_no_inline_go_install "No inline Go download/verify/extract remains"
 
 # Generate test report
