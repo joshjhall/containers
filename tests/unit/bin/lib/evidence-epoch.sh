@@ -94,9 +94,32 @@ test_both_callers_use_the_shared_def() {
         "ingest orders repeated failures by evidence_epoch"
 }
 
+test_setup_sparse_checkout_carries_matrix_deps() {
+    # The evidence-run setup job sources evidence-matrix.sh from a sparse
+    # checkout, so every sibling it sources must be listed there too, or the
+    # matrix step dies on a missing file that the unit tests (full checkout)
+    # never notice. Siblings are read from the lib's own source lines, so a
+    # future dependency is covered without editing this test.
+    local wf="$PROJECT_ROOT/.github/workflows/evidence-run.yml" listed deps dep missing=""
+    listed=$(command awk '
+        /sparse-checkout: \|/ { if (!seen) { inlist = 1; seen = 1 }; next }
+        inlist && /^ *[A-Za-z0-9_.\/-]+ *$/ { gsub(/ /, ""); print; next }
+        inlist { inlist = 0 }
+    ' "$wf")
+    deps=$(command sed -n 's|^source "$(dirname "${BASH_SOURCE\[0\]}")/\([^"]*\)"$|bin/lib/\1|p' \
+        "$PROJECT_ROOT/bin/lib/evidence-matrix.sh")
+    assert_equals "bin/lib/evidence-epoch.sh" "$deps" \
+        "evidence-matrix.sh sources exactly the shared epoch lib"
+    for dep in bin/lib/evidence-matrix.sh $deps; do
+        command grep -qxF "$dep" <<<"$listed" || missing="$missing $dep"
+    done
+    assert_equals "" "$missing" "the setup job's sparse checkout lists the matrix lib and its deps"
+}
+
 run_test test_accepted_forms "accepted tested_at forms parse to the UTC instant"
 run_test test_rejected_forms_read_as_zero "near-miss and non-string tested_at read as epoch 0"
 run_test test_callers_have_no_copy_of_their_own "no other bin script defines its own epoch parse"
 run_test test_both_callers_use_the_shared_def "matrix and ingest both source the shared def"
+run_test test_setup_sparse_checkout_carries_matrix_deps "setup sparse checkout carries the matrix lib's sourced deps"
 
 generate_report
