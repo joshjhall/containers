@@ -167,7 +167,7 @@ fn capture_file() -> io::Result<File> {
 /// (with the `stream` name) when the rest is dropped.
 fn read_back(file: &mut File, stream: &str) -> io::Result<Vec<u8>> {
     let written = file.metadata()?.len();
-    if exceeds_output_cap(written) {
+    if written > VERSION_PROBE_OUTPUT_CAP {
         tracing::warn!(
             stream,
             written,
@@ -179,12 +179,6 @@ fn read_back(file: &mut File, stream: &str) -> io::Result<Vec<u8>> {
     file.seek(SeekFrom::Start(0))?;
     file.by_ref().take(VERSION_PROBE_OUTPUT_CAP).read_to_end(&mut buf)?;
     Ok(buf)
-}
-
-/// Whether a stream of `written` bytes loses anything to the cap — exactly
-/// [`VERSION_PROBE_OUTPUT_CAP`] fits whole, so it does not warn.
-const fn exceeds_output_cap(written: u64) -> bool {
-    written > VERSION_PROBE_OUTPUT_CAP
 }
 
 /// Check whether `<bin_root>/<binary> <args…>` reports `version`.
@@ -736,22 +730,50 @@ mod tests {
     }
 
     /// The cap boundary is exact: a stream of exactly the cap is read whole
-    /// and not reported as truncated, one byte more is cut back to the cap
-    /// and is.
+    /// with no warning, one byte more is cut back to the cap and `read_back`
+    /// itself logs the truncation, naming the stream. The warning is captured
+    /// from a thread-local subscriber, so parallel tests cannot leak into it.
     #[test]
     fn read_back_cap_boundary() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone, Default)]
+        struct Captured(Arc<Mutex<Vec<u8>>>);
+        impl io::Write for Captured {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
         let cap = usize::try_from(VERSION_PROBE_OUTPUT_CAP).unwrap();
         for (len, truncated) in [(cap - 1, false), (cap, false), (cap + 1, true)] {
             let mut file = tempfile::tempfile().unwrap();
             io::Write::write_all(&mut file, &vec![b'x'; len]).unwrap();
 
-            let buf = read_back(&mut file, "stdout").unwrap();
+            let log = Captured::default();
+            let writer = log.clone();
+            let subscriber = tracing_subscriber::fmt()
+                .with_writer(move || writer.clone())
+                .with_ansi(false)
+                .finish();
+            let buf = tracing::subscriber::with_default(subscriber, || {
+                read_back(&mut file, "stderr").unwrap()
+            });
+
             assert_eq!(buf.len(), len.min(cap), "read-back length for a {len}-byte stream");
+            let logged = String::from_utf8(log.0.lock().unwrap().clone()).unwrap();
             assert_eq!(
-                exceeds_output_cap(len as u64),
+                logged.contains("version probe output truncated"),
                 truncated,
-                "truncation verdict for a {len}-byte stream",
+                "truncation warning for a {len}-byte stream, got: {logged:?}",
             );
+            if truncated {
+                assert!(logged.contains("stream=\"stderr\""), "names the stream: {logged:?}");
+            }
         }
     }
 
