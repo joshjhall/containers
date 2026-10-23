@@ -192,8 +192,8 @@ test_trigger_paths_parser_fixtures() {
         return
     fi
 
-    printf '%s\n' 'on:' '  push:' '    paths:' '      - "a"' '      # note' '' \
-        '# column-0 note' '      - "b"' 'jobs:' >"$dir/comments.yml"
+    printf '%s\n' 'on:' '# column-0 note' '  push:' '    paths:' '      - "a"' \
+        '      # note' '' '# column-0 note' '      - "b"' 'jobs:' >"$dir/comments.yml"
     _expect_trigger_paths "comment and blank lines are skipped, neighbours kept" \
         push "$dir/comments.yml" 'a' 'b'
 
@@ -242,6 +242,11 @@ test_trigger_paths_parser_fixtures() {
         '      - "leak"' >"$dir/job-named-push.yml"
     _expect_trigger_paths "a job named like the trigger outside on: is not read" \
         push "$dir/job-named-push.yml"
+
+    printf '%s\n' 'on:' '  pull_request:' '    paths:' '      - "pr"' 'jobs:' '  push:' \
+        '    paths:' '      - "leak"' >"$dir/job-after-on.yml"
+    _expect_trigger_paths "the on: block ends at the next column-0 key" \
+        push "$dir/job-after-on.yml"
 
     command rm -rf "$dir"
 }
