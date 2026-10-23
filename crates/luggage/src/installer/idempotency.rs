@@ -14,7 +14,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, Read as _, Seek as _, SeekFrom};
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -119,24 +119,63 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
         }
     };
 
+    let status = wait_within(&mut child, timeout)?;
+
+    Ok(Output {
+        status,
+        stdout: read_back(&mut stdout, "stdout")?,
+        stderr: read_back(&mut stderr, "stderr")?,
+    })
+}
+
+/// The child-process operations [`wait_within`] needs, behind a seam so a
+/// test can inject a `try_wait` error a real [`Child`] almost never returns
+/// (#1354). Named apart from `Child`'s inherent methods so a call on a real
+/// child cannot silently resolve to the wrong one.
+trait ProbeChild {
+    /// Non-blocking exit check ([`Child::try_wait`]).
+    fn poll(&mut self) -> io::Result<Option<ExitStatus>>;
+    /// Best-effort kill of the child and, on unix, its process group.
+    fn kill_all(&mut self);
+    /// Best-effort blocking reap ([`Child::wait`]).
+    fn reap(&mut self);
+}
+
+impl ProbeChild for Child {
+    fn poll(&mut self) -> io::Result<Option<ExitStatus>> {
+        self.try_wait()
+    }
+
+    // The group kill fails only if every member already exited; `kill`
+    // likewise for the child.
+    fn kill_all(&mut self) {
+        #[cfg(unix)]
+        let _ = rustix::process::kill_process_group(
+            rustix::process::Pid::from_child(self),
+            rustix::process::Signal::KILL,
+        );
+        let _ = self.kill();
+    }
+
+    fn reap(&mut self) {
+        let _ = self.wait();
+    }
+}
+
+/// Poll `child` until it exits or `timeout` elapses. On timeout, or if a poll
+/// itself errors, the child is killed and reaped before returning, so an
+/// early return never leaves it running or a zombie.
+fn wait_within(child: &mut impl ProbeChild, timeout: Duration) -> io::Result<ExitStatus> {
     let deadline = Instant::now() + timeout;
-    let status = loop {
-        let polled = child.try_wait();
+    loop {
+        let polled = child.poll();
         let timed_out = matches!(polled, Ok(None)) && Instant::now() >= deadline;
         if timed_out || polled.is_err() {
-            // Never leave the child running or unreaped on an early return.
-            // The group kill fails only if every member already exited;
-            // `kill` likewise for the child, and `wait` reaps it.
-            #[cfg(unix)]
-            let _ = rustix::process::kill_process_group(
-                rustix::process::Pid::from_child(&child),
-                rustix::process::Signal::KILL,
-            );
-            let _ = child.kill();
-            let _ = child.wait();
+            child.kill_all();
+            child.reap();
         }
         match polled? {
-            Some(status) => break status,
+            Some(status) => return Ok(status),
             None if timed_out => {
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
@@ -145,13 +184,7 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
             }
             None => thread::sleep(VERSION_PROBE_POLL),
         }
-    };
-
-    Ok(Output {
-        status,
-        stdout: read_back(&mut stdout, "stdout")?,
-        stderr: read_back(&mut stderr, "stderr")?,
-    })
+    }
 }
 
 /// Create an anonymous capture tempfile (in `TMPDIR`), with context on
@@ -727,6 +760,64 @@ mod tests {
         let cap = usize::try_from(VERSION_PROBE_OUTPUT_CAP).unwrap();
         assert_eq!(out.stdout.len(), cap);
         assert_eq!(out.stderr.len(), cap);
+    }
+
+    /// A [`ProbeChild`] that answers every poll with a fixed result and
+    /// records each call, so the `try_wait`-error branch can be driven
+    /// without a real process (#1354).
+    struct FakeChild {
+        poll_result: fn() -> io::Result<Option<ExitStatus>>,
+        calls: Vec<&'static str>,
+    }
+
+    impl ProbeChild for FakeChild {
+        fn poll(&mut self) -> io::Result<Option<ExitStatus>> {
+            self.calls.push("poll");
+            (self.poll_result)()
+        }
+
+        fn kill_all(&mut self) {
+            self.calls.push("kill");
+        }
+
+        fn reap(&mut self) {
+            self.calls.push("reap");
+        }
+    }
+
+    /// A `try_wait` error must kill and reap the child before propagating —
+    /// a bare `child.try_wait()?` would return with it still running and
+    /// unreaped. The error surfaces unchanged, after a single poll.
+    #[test]
+    fn wait_within_kills_and_reaps_when_try_wait_errors() {
+        let mut child = FakeChild {
+            poll_result: || Err(io::Error::other("injected try_wait failure")),
+            calls: Vec::new(),
+        };
+
+        let err =
+            wait_within(&mut child, Duration::from_secs(1)).expect_err("poll error must propagate");
+
+        assert_eq!(err.kind(), io::ErrorKind::Other, "must not be remapped to TimedOut");
+        assert_eq!(err.to_string(), "injected try_wait failure");
+        assert_eq!(child.calls, ["poll", "kill", "reap"]);
+    }
+
+    /// The counterpart: a child that exits on its own is neither killed nor
+    /// reaped again, so the test above is not satisfied by an unconditional
+    /// kill.
+    #[cfg(unix)]
+    #[test]
+    fn wait_within_leaves_an_exited_child_alone() {
+        use std::os::unix::process::ExitStatusExt as _;
+
+        let mut child =
+            FakeChild { poll_result: || Ok(Some(ExitStatus::from_raw(0))), calls: Vec::new() };
+
+        let status = wait_within(&mut child, TEST_TIMEOUT).unwrap();
+
+        assert!(status.success());
+        assert_eq!(child.calls, ["poll"]);
     }
 
     /// The cap boundary is exact: a stream of exactly the cap is read whole
