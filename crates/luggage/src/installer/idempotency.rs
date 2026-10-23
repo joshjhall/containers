@@ -331,9 +331,10 @@ pub(crate) const TEST_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Assert the probe child recorded by [`write_sleeping_shim`] no longer
 /// exists — killed **and** reaped. A merely-dropped `Child` keeps running,
-/// and a killed-but-unwaited one lingers as a zombie; `kill -0` succeeds on
+/// and a killed-but-unwaited one lingers as a zombie; [`pid_exists`] reports
 /// both, so either leak fails here, where an elapsed-time bound alone would
-/// pass (the timeout returns early whether or not the child is ended).
+/// pass (the timeout returns early whether or not the child is ended). A pid
+/// recycled to another user's process also fails rather than passing (#1357).
 #[cfg(all(test, unix))]
 pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
     let pid_file = dir.join(format!("{name}.pid"));
@@ -346,13 +347,26 @@ pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
     });
     let pid = pid.trim();
     assert!(!pid.is_empty(), "the shim must have recorded its pid");
-    let alive = Command::new("/bin/kill")
-        .args(["-0", pid])
-        .stderr(Stdio::null())
-        .status()
-        .unwrap()
-        .success();
-    assert!(!alive, "the timed-out probe child (pid {pid}) must be killed and reaped");
+    assert!(!pid_exists(pid), "the timed-out probe child (pid {pid}) must be killed and reaped");
+}
+
+/// Whether `pid` exists per `kill(pid, 0)`. Only ESRCH means gone: EPERM
+/// means a process exists that we may not signal (a pid recycled to another
+/// user), and any other errno panics, so an unobservable pid can never pass
+/// as a dead one. Unlike `kill(1)`, whose exit status is 1 for both, this
+/// reads the errno directly (#1357).
+#[cfg(all(test, unix))]
+fn pid_exists(pid: &str) -> bool {
+    use rustix::io::Errno;
+    use rustix::process::{Pid, test_kill_process};
+
+    let raw: i32 = pid.parse().unwrap_or_else(|e| panic!("unparsable pid {pid:?} ({e})"));
+    let target = Pid::from_raw(raw).unwrap_or_else(|| panic!("pid {raw} is not positive"));
+    match test_kill_process(target) {
+        Ok(()) | Err(Errno::PERM) => true,
+        Err(Errno::SRCH) => false,
+        Err(e) => panic!("cannot probe pid {raw} ({e})"),
+    }
 }
 
 /// The state field of a `/proc/<pid>/stat` line, or `None` if it does not
@@ -367,7 +381,7 @@ fn proc_stat_state(stat: &str) -> Option<&str> {
 /// and whether it is reaped depends on the reparenting ancestor (no init in
 /// a bare `docker run` reaps nothing), which is not what the test pins. Linux
 /// reads the state field of `/proc/<pid>/stat`; other unixes fall back to
-/// `kill -0`, which cannot tell a zombie apart. Only a missing stat file means
+/// [`pid_exists`], which cannot tell a zombie apart. Only a missing stat file means
 /// gone — any other read error (no `/proc`, `hidepid`) or an unparsable stat
 /// line panics, so an unobservable pid can never pass as a dead one.
 #[cfg(all(test, unix))]
@@ -385,12 +399,7 @@ fn pid_is_running(pid: &str) -> bool {
     }
     #[cfg(not(target_os = "linux"))]
     {
-        Command::new("/bin/kill")
-            .args(["-0", pid])
-            .stderr(Stdio::null())
-            .status()
-            .unwrap()
-            .success()
+        pid_exists(pid)
     }
 }
 
@@ -670,6 +679,41 @@ mod tests {
         assert_eq!(proc_stat_state("4242 sleep S 1"), None, "no `)` at all");
         assert_eq!(proc_stat_state("4242 (sleep)"), None, "nothing after `)`");
         assert_eq!(proc_stat_state(""), None);
+    }
+
+    /// `pid_exists` sees a live child, then — once it is killed and reaped,
+    /// so the kernel answers ESRCH — reports it gone. The reaped pid is
+    /// checked immediately, before the kernel could plausibly recycle it.
+    #[cfg(unix)]
+    #[test]
+    fn pid_exists_tracks_a_child_through_kill_and_reap() {
+        let mut child = Command::new("sleep").arg("30").spawn().unwrap();
+        let pid = child.id().to_string();
+        assert!(pid_exists(&pid), "a running child must exist");
+        child.kill().unwrap();
+        child.wait().unwrap();
+        assert!(!pid_exists(&pid), "a killed and reaped child must be gone (ESRCH)");
+    }
+
+    /// EPERM is a process we may not signal, not an absent one — a pid
+    /// recycled to another user's process must not pass as gone (#1357).
+    /// pid 1 is normally root's init, which an unprivileged caller gets EPERM
+    /// for. Skip when that does not hold — running as root, or as the user
+    /// that owns pid 1 (`docker run --user N … cargo test`) — since there is
+    /// then no EPERM to observe. CI's hosted runners are unprivileged.
+    #[cfg(unix)]
+    #[test]
+    fn pid_exists_counts_eperm_as_alive() {
+        use rustix::process::{Pid, test_kill_process};
+
+        let probe = test_kill_process(Pid::INIT);
+        if probe != Err(rustix::io::Errno::PERM) {
+            eprintln!(
+                "skipping: kill(1, 0) returned {probe:?}, not EPERM, so there is none to observe"
+            );
+            return;
+        }
+        assert!(pid_exists("1"), "EPERM means the pid exists, so it must not count as gone");
     }
 
     /// Counterpart to the timeout test: a probe that exits promptly is
