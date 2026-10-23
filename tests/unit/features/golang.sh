@@ -58,6 +58,12 @@ run_config_section() {
         command sed -e "s#/tmp/build-scripts#$PROJECT_ROOT/lib#g" \
             -e "s#/etc/#$root/etc/#g" \
             -e "s#/usr/local/bin/test-go#$root/usr/local/bin/test-go#g" >"$section"
+    # A renamed section marker extracts nothing, and sourcing an empty file is
+    # a silent no-op: fail here, by name, not later on a missing output.
+    if [ ! -s "$section" ]; then
+        assert_true false "no '# Cache and Path Configuration' section found in $golang_script"
+        return 1
+    fi
 
     (
         set -euo pipefail
@@ -84,7 +90,7 @@ probe_bashrc() {
 
 # Test: GOPATH's workspace subdirectories are created under /cache/go
 test_cache_dirs_created() {
-    run_config_section
+    run_config_section || return 0
     assert_equals "/cache/go/bin
 /cache/go/src
 /cache/go/pkg" "$(command cat "$TEST_TEMP_DIR/cache-dirs.log" 2>/dev/null || echo '<no call>')" \
@@ -93,7 +99,7 @@ test_cache_dirs_created() {
 
 # Test: the shipped bashrc exports the layout golang.sh itself configures
 test_bashrc_env_matches_script() {
-    run_config_section
+    run_config_section || return 0
     local out
     out=$(probe_bashrc 'printf "%s|" "$GOROOT" "$GOPATH" "$GOCACHE" "$GOMODCACHE" "$GO111MODULE" "$GOPROXY" "$GOSUMDB"')
     assert_equals "/usr/local/go|/cache/go|/cache/go-build|/cache/go-mod|on|https://proxy.golang.org,direct|sum.golang.org|" \
@@ -107,7 +113,7 @@ test_bashrc_env_matches_script() {
 
 # Test: the shipped bashrc defines the aliases and helper functions
 test_bashrc_aliases_loaded() {
-    run_config_section
+    run_config_section || return 0
     local out
     out=$(probe_bashrc 'alias gob; alias gomt; type -t go-init; type -t go-cover')
     assert_contains "$out" "alias gob='go build'" "gob alias defined"
@@ -119,7 +125,7 @@ test_bashrc_aliases_loaded() {
 # Test: the startup and verification scripts are installed executable,
 # byte-identical to their lib/ sources
 test_startup_and_verify_scripts_installed() {
-    run_config_section
+    run_config_section || return 0
     local root="$TEST_TEMP_DIR/root" pair dest src
     for pair in "etc/container/first-startup/30-go-setup.sh:30-go-setup.sh" \
         "usr/local/bin/test-go:test-go.sh"; do
