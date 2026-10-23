@@ -88,6 +88,31 @@ _trigger_paths() {
     ' "$WF"
 }
 
+# _filter_glob_ere <glob> — a GitHub paths: glob as an anchored ERE. Unlike a
+# bash glob, a single `*` does not cross `/` there (only `**` does), so a bash
+# `[[ == ]]` match would accept `bin/*.sh` for bin/lib/evidence-x.sh even
+# though GitHub would not trigger on it. Other metacharacters are taken
+# literally: an unsupported pattern then fails to match, never over-matches.
+_filter_glob_ere() {
+    local g="$1" out="" c i
+    for ((i = 0; i < ${#g}; i++)); do
+        c="${g:i:1}"
+        case "$c" in
+            '*')
+                if [ "${g:i+1:1}" = '*' ]; then
+                    out+='.*'
+                    i=$((i + 1))
+                else
+                    out+='[^/]*'
+                fi
+                ;;
+            '.' | '?' | '+' | '^' | '$' | '(' | ')' | '|' | '{' | '}' | '[' | ']' | '\') out+="\\$c" ;;
+            *) out+="$c" ;;
+        esac
+    done
+    printf '^%s$' "$out"
+}
+
 test_trigger_paths_cover_evidence_scripts() {
     # Every evidence lib/script the jobs source or run must re-trigger the
     # workflow, or a change confined to it first runs on some unrelated push
@@ -106,8 +131,7 @@ test_trigger_paths_cover_evidence_scripts() {
             f="${f#"$PROJECT_ROOT"/}"
             covered=false
             for pattern in "${patterns[@]}"; do
-                # shellcheck disable=SC2053 # unquoted RHS: match as a glob
-                if [[ "$f" == $pattern ]]; then
+                if [[ "$f" =~ $(_filter_glob_ere "$pattern") ]]; then
                     covered=true
                     break
                 fi
