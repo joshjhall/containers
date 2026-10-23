@@ -239,12 +239,16 @@ test_trigger_paths_parser_fixtures() {
 }
 
 # _expect_trigger_paths <message> <event> <workflow> <entry>... — the parser
-# prints exactly <entry>... (nothing, if none are given), in order.
+# prints exactly <entry>... (nothing, if none are given), in order. A parser
+# that fails (e.g. an unwritten fixture) is a failure, never an empty match.
 _expect_trigger_paths() {
     local msg="$1" ev="$2" wf="$3" got want=""
     shift 3
     [ "$#" -gt 0 ] && want="$(printf '%s\n' "$@")"
-    got="$(_trigger_paths "$ev" "$wf")"
+    if ! got="$(_trigger_paths "$ev" "$wf")"; then
+        assert_true false "$msg (parser failed on $wf)"
+        return
+    fi
     assert_equals "$want" "$got" "$msg"
 }
 
