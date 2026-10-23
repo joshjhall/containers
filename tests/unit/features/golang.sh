@@ -154,42 +154,9 @@ test_startup_and_verify_scripts_installed() {
 # golang.sh delegates the Go install to `luggage install` (#811): arch
 # selection, download, tier-3 verification, extraction, and the go/gofmt
 # links all live in the luggage engine and the containers-db catalog now.
-# These pin the delegation shape; tests/integration/builds/
-# test_luggage_golang.sh is the behavioral check.
-
-# Test: golang.sh installs Go through luggage, against the default catalog
-test_luggage_invocation() {
-    local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
-
-    if command grep -qE '/usr/local/bin/luggage install "go@\$\{GO_VERSION\}"' "$golang_script"; then
-        assert_true true "golang.sh invokes /usr/local/bin/luggage install go@\${GO_VERSION}"
-    else
-        assert_true false "golang.sh does not invoke luggage install for go"
-    fi
-
-    if command grep -q 'CONTAINERS_DB:-/opt/containers-db' "$golang_script"; then
-        assert_true true "luggage call defaults to /opt/containers-db catalog"
-    else
-        assert_true false "luggage call missing /opt/containers-db default"
-    fi
-}
-
-# Test: partial versions resolve against the catalog, not upstream
-test_partial_version_resolves_via_catalog() {
-    local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
-
-    if command grep -q '/usr/local/bin/luggage resolve go' "$golang_script"; then
-        assert_true true "Partial GO_VERSION resolves via luggage resolve go"
-    else
-        assert_true false "Partial GO_VERSION not resolved via luggage resolve go"
-    fi
-
-    if command grep -q 'resolve_go_version' "$golang_script"; then
-        assert_true false "Still resolves versions upstream via resolve_go_version"
-    else
-        assert_true true "No upstream version resolution"
-    fi
-}
+# The tests below run golang.sh's real version block and install statement
+# against a stub luggage; tests/integration/builds/test_luggage_golang.sh runs
+# them against the real engine.
 
 # Run golang.sh's real version block — input validation, the pre-1.22 floor,
 # and the partial resolve — against a stub luggage, and print what it decided.
@@ -388,15 +355,17 @@ EOF
     assert_not_contains "$out" "REACHED-AFTER-INSTALL" "the script stops at the failed install"
 }
 
-# Test: the real install statement passes luggage exactly the arguments the
-# delegation depends on. golang.sh no longer creates or chowns the cache dirs
-# itself, so a dropped `--user` leaves them root-owned and a dropped
-# `--cache-root` puts them in luggage's default — both pass every grep pin.
-# The stub records "$*" and succeeds; the assertion is on the whole argv.
-test_luggage_install_argv() {
+# Run golang.sh's real install statement against a stub luggage that records
+# "$*" and succeeds. Usage: run_install_argv [CONTAINERS_DB] — with no
+# argument CONTAINERS_DB is unset, so the script's own default applies.
+# Prints "RC: <status>" then the recorded argv (or "<no call>").
+run_install_argv() {
     local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
     local stub="$TEST_TEMP_DIR/luggage-argv-stub" block="$TEST_TEMP_DIR/install-argv-block.sh"
     local argv_log="$TEST_TEMP_DIR/luggage-argv.log"
+    local db_line="unset CONTAINERS_DB"
+    [ "$#" -gt 0 ] && db_line="export CONTAINERS_DB=\"$1\""
+    command rm -f "$argv_log"
     printf '#!/bin/bash\nprintf "%%s\\n" "$*" >"%s"\n' "$argv_log" >"$stub"
     command chmod +x "$stub"
 
@@ -411,7 +380,7 @@ log_command() {
     shift
     "\$@"
 }
-unset CONTAINERS_DB
+$db_line
 GO_VERSION="1.27.2"
 USERNAME="vscode"
 # shellcheck disable=SC1091
@@ -422,11 +391,37 @@ EOF
     rc=$?
     set -e
 
-    assert_equals "0" "$rc" "install block runs against a succeeding stub"
+    echo "RC: $rc"
+    command cat "$argv_log" 2>/dev/null || echo '<no call>'
+}
+
+# Test: the real install statement passes luggage exactly the arguments the
+# delegation depends on. golang.sh no longer creates or chowns the cache dirs
+# itself, so a dropped `--user` leaves them root-owned and a dropped
+# `--cache-root` puts them in luggage's default — both pass every grep pin.
+# The assertion is on the whole argv.
+test_luggage_install_argv() {
+    local out
+    out=$(run_install_argv)
+
     assert_equals \
-        "install go@1.27.2 --catalog /opt/containers-db --user vscode --cache-root /cache --log-dir /var/log/luggage" \
-        "$(command cat "$argv_log" 2>/dev/null || echo '<no call>')" \
+        "RC: 0
+install go@1.27.2 --catalog /opt/containers-db --user vscode --cache-root /cache --log-dir /var/log/luggage" \
+        "$out" \
         "luggage install receives the exact argv (version, catalog default, user, cache root, log dir)"
+}
+
+# Test: a CONTAINERS_DB override reaches luggage's --catalog. Catches a catalog
+# path hard-coded to the default, which the unset case above cannot tell apart.
+test_luggage_install_honors_containers_db() {
+    local out
+    out=$(run_install_argv "/tmp/alt-containers-db")
+
+    assert_equals \
+        "RC: 0
+install go@1.27.2 --catalog /tmp/alt-containers-db --user vscode --cache-root /cache --log-dir /var/log/luggage" \
+        "$out" \
+        "CONTAINERS_DB override is passed as luggage's --catalog"
 }
 
 # Test: the shared extractor refuses a script with no version block, rather
@@ -454,6 +449,18 @@ test_no_inline_go_install() {
     fi
 }
 
+# Test: partial versions resolve against the catalog, not upstream — the old
+# upstream resolver must not linger beside the luggage resolve
+test_no_upstream_version_resolution() {
+    local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
+
+    if command grep -q 'resolve_go_version' "$golang_script"; then
+        assert_true false "Still resolves versions upstream via resolve_go_version"
+    else
+        assert_true true "No upstream version resolution"
+    fi
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -469,10 +476,9 @@ run_test_with_setup test_cache_dirs_created "GOPATH workspace dirs are created u
 run_test_with_setup test_bashrc_env_matches_script "Shipped bashrc exports golang.sh's cache layout"
 run_test_with_setup test_bashrc_aliases_loaded "Shipped bashrc defines Go aliases and helpers"
 run_test_with_setup test_startup_and_verify_scripts_installed "Startup and test-go scripts are installed"
-run_test_with_setup test_luggage_invocation "golang.sh delegates the Go install to luggage"
-run_test_with_setup test_partial_version_resolves_via_catalog "Partial GO_VERSION resolves via the luggage catalog"
 run_test_with_setup test_luggage_install_failure_aborts "luggage install failure is not swallowed"
 run_test_with_setup test_luggage_install_argv "luggage install receives the exact argv"
+run_test_with_setup test_luggage_install_honors_containers_db "CONTAINERS_DB override reaches luggage --catalog"
 run_test_with_setup test_partial_version_resolves_to_top_level_version "Partial pin resolves to the top-level version"
 run_test_with_setup test_resolve_parses_last_key_without_comma "Resolve parses a version with no trailing comma"
 run_test_with_setup test_exact_version_skips_resolve "Exact pin skips resolution"
@@ -483,6 +489,7 @@ run_test_with_setup test_bare_major_rejected_by_validation "Bare major GO_VERSIO
 run_test_with_setup test_non_1x_major_reaches_resolve "Non-1.x partial reaches resolve"
 run_test_with_setup test_extractor_refuses_missing_block "Version-block extractor refuses a script without one"
 run_test_with_setup test_no_inline_go_install "No inline Go download/verify/extract remains"
+run_test_with_setup test_no_upstream_version_resolution "No upstream resolve_go_version remains"
 
 # Generate test report
 generate_report
