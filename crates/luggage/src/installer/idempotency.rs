@@ -298,6 +298,14 @@ pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
     assert!(!alive, "the timed-out probe child (pid {pid}) must be killed and reaped");
 }
 
+/// The state field of a `/proc/<pid>/stat` line, or `None` if it does not
+/// parse. `comm` (field 2) is parenthesised and may itself contain spaces or
+/// `)`, so the state is the first field after the **last** `)`.
+#[cfg(all(test, target_os = "linux"))]
+fn proc_stat_state(stat: &str) -> Option<&str> {
+    stat.rsplit_once(')').and_then(|(_, rest)| rest.split_whitespace().next())
+}
+
 /// Whether `pid` is still running. A zombie counts as gone: it was killed,
 /// and whether it is reaped depends on the reparenting ancestor (no init in
 /// a bare `docker run` reaps nothing), which is not what the test pins. Linux
@@ -309,16 +317,12 @@ pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
 fn pid_is_running(pid: &str) -> bool {
     #[cfg(target_os = "linux")]
     {
-        // `comm` (field 2) is parenthesised and may contain spaces, so the
-        // state is the first field after the last `)`.
         let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
             Ok(stat) => stat,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return false,
             Err(e) => panic!("cannot observe pid {pid} via /proc ({e})"),
         };
-        let state = stat
-            .rsplit_once(')')
-            .and_then(|(_, rest)| rest.split_whitespace().next())
+        let state = proc_stat_state(&stat)
             .unwrap_or_else(|| panic!("unparsable /proc/{pid}/stat: {stat:?}"));
         state != "Z" && state != "X"
     }
@@ -593,6 +597,22 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::TimedOut, "got: {err}");
         assert_probe_child_gone(dir.path(), "tool");
         assert_forked_descendant_gone(dir.path(), "tool");
+    }
+
+    /// `proc_stat_state` takes the field after the LAST `)`, so a `comm` with
+    /// spaces or its own `)` cannot shift the state, and a line it cannot
+    /// parse is `None` — which `pid_is_running` turns into a panic, never into
+    /// "not running" (a pass the descendant check would not have earned).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn proc_stat_state_reads_the_field_after_the_last_paren() {
+        assert_eq!(proc_stat_state("4242 (sleep) S 1 4242 4242"), Some("S"));
+        assert_eq!(proc_stat_state("4242 (sleep) Z 1 4242 4242"), Some("Z"));
+        assert_eq!(proc_stat_state("4242 (my tool) R 1 4242"), Some("R"));
+        assert_eq!(proc_stat_state("4242 (a) b) X 1 4242"), Some("X"));
+        assert_eq!(proc_stat_state("4242 sleep S 1"), None, "no `)` at all");
+        assert_eq!(proc_stat_state("4242 (sleep)"), None, "nothing after `)`");
+        assert_eq!(proc_stat_state(""), None);
     }
 
     /// Counterpart to the timeout test: a probe that exits promptly is
