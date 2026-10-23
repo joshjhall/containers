@@ -31,6 +31,9 @@
 # versions first so the floor gets covered before the newest release (within
 # each group: never-tested cells, then stale-failure retries).
 #
+# evidence_matrix covers one tool; evidence_matrix_all (what the workflow runs)
+# merges every luggage tool in the catalog under one cap (#1341).
+#
 # Sourced by .github/workflows/evidence-run.yml and tests/unit/evidence-matrix.sh.
 # Requires jq.
 
@@ -69,6 +72,11 @@ _em_available_tuples() {
     done
 }
 
+# _em_available_tuples_json <project_root> — the same tuples as a JSON array.
+_em_available_tuples_json() {
+    _em_available_tuples "$1" | command jq -R . | command jq -cs .
+}
+
 # _EM_EVIDENCE_JQ — jq defs shared by the published and vendored paths, so the
 # fail policy is computed in one place. `em_evidence` reduces an array of
 # tested[] rows to {pass: ["os-osv-arch", ...], fail: {"os-osv-arch": <newest
@@ -104,6 +112,14 @@ def em_evidence:
 # vendored `tested[]` decides, as before. When a listed directory holds no
 # version files or unparsable JSON, it fails: an unreadable source must not
 # turn into "every cell pending", which is the silent re-test loop #1319 fixed.
+#
+# One exception (#1341): a LATER source (an open ingest PR's head) that has a
+# readable tools/ tree but no tools/<tool>/ was branched before that tool
+# reached containers-db. It has no rows for the tool, which is not the same as
+# being unreadable. It contributes nothing for that tool instead of failing
+# every tool's matrix until the PR merges or ages out. The first source
+# (containers-db main) stays strict, as does any source with no tools/ at all.
+#
 # A file, not a jq argument: the map grows with containers-db and one argv
 # string is capped at 128 KiB.
 _em_published_evidence() {
@@ -112,12 +128,17 @@ _em_published_evidence() {
         command echo null >"$out"
         return 0
     fi
-    local src dir files=() found srcs
+    local src dir files=() found srcs i
     IFS=: read -r -a srcs <<<"$EVIDENCE_TESTED_SOURCE"
-    for src in "${srcs[@]}"; do
+    for i in "${!srcs[@]}"; do
+        src="${srcs[$i]}"
         dir="$src/tools/$tool/versions"
         found=("$dir"/*.json)
         if [ ! -e "${found[0]}" ]; then
+            if [ "$i" -gt 0 ] && [ -d "$src/tools" ] && [ ! -e "$src/tools/$tool" ]; then
+                command echo "evidence_matrix: $src predates $tool (no tools/$tool); it adds no $tool evidence" >&2
+                continue
+            fi
             command echo "evidence_matrix: no published evidence for $tool at $dir (EVIDENCE_TESTED_SOURCE)" >&2
             return 1
         fi
@@ -168,25 +189,23 @@ evidence_open_prs() {
     done <<<"$rows"
 }
 
-# evidence_matrix <catalog_dir> <tool> <project_root> [image_tag] [max_cells]
-#
-# Prints the matrix JSON on stdout (max_cells defaults to 200, under GitHub's
-# 256 cap). Exit status:
-#   0  a non-empty matrix was printed
-#   1  error (no index, bad catalog, unreadable EVIDENCE_TESTED_SOURCE, or a
-#      non-integer EVIDENCE_FAIL_COOLDOWN_DAYS / EVIDENCE_NOW) — nothing printed
-#   3  nothing pending — every cell has passing or recently failed evidence;
-#      nothing printed. Callers skip the evidence job rather than run an empty
-#      matrix.
-#
-# EVIDENCE_FAIL_COOLDOWN_DAYS (default 7) is how long a failing row keeps its
-# cell out of the matrix; 0 retries every failure on the next push.
-# EVIDENCE_NOW (epoch seconds, default the current time) pins the clock for tests.
-evidence_matrix() {
-    local catalog="$1" tool="$2" root="$3" image_tag="${4:-latest}" max_cells="${5:-200}"
+# _em_tool_cells <catalog_dir> <tool> <project_root> <image_tag> [available]
+# — every pending cell for one tool as a JSON array, uncapped, in run order
+# (untested before failure retries, oldest version first), each still carrying
+# its `retry` flag for the caller to order and strip. Exit 1 on error.
+# available is the JSON array of usable tuples; computed when omitted.
+_em_tool_cells() {
+    local catalog="$1" tool="$2" root="$3" image_tag="$4" available="${5:-}"
     local index="$catalog/tools/$tool/index.json"
     [ -f "$index" ] || {
         command echo "evidence_matrix: no index for $tool at $index" >&2
+        return 1
+    }
+    # A versions/ dir with no version files is a half-vendored tool: fail with
+    # a message that says so, not jq choking on the unmatched glob.
+    local versions=("$catalog/tools/$tool/versions/"*.json)
+    [ -e "${versions[0]}" ] || {
+        command echo "evidence_matrix: no version files for $tool in $catalog/tools/$tool/versions" >&2
         return 1
     }
 
@@ -200,8 +219,7 @@ evidence_matrix() {
         return 1
     }
 
-    local available
-    available="$(_em_available_tuples "$root" | command jq -R . | command jq -cs .)"
+    [ -n "$available" ] || available="$(_em_available_tuples_json "$root")"
 
     local evidence
     evidence="$(command mktemp)" || return 1
@@ -256,20 +274,94 @@ evidence_matrix() {
         # never-tested cells first, stale-failure retries last; oldest
         # version first within each
         | sort_by([.retry, (.version | vkey), .tuple])
-        | map(del(.retry))
-        | {include: .[0:'"$max_cells"'], pending_total: length}
-    ' "$catalog/tools/$tool/versions/"*.json)" || rc=1
+    ' "${versions[@]}")" || rc=1
     command rm -f "$evidence"
     [ "$rc" -eq 0 ] || return 1
+    command echo "$out"
+}
 
-    local total
-    total="$(command jq '.pending_total' <<<"$out")"
+# _em_cap <label> <max_cells> — reads an ordered cell array on stdin and prints
+# the first max_cells as the matrix, or returns 3 when the array is empty.
+_em_cap() {
+    local label="$1" max_cells="$2" cells total
+    cells="$(command cat)"
+    total="$(command jq 'length' <<<"$cells")" || return 1
     if [ "$total" -eq 0 ]; then
-        command echo "evidence_matrix: $tool has no pending evidence cells" >&2
+        command echo "evidence_matrix: $label has no pending evidence cells" >&2
         return 3
     fi
     if [ "$total" -gt "$max_cells" ]; then
-        command echo "evidence_matrix: $total pending cells for $tool; running the first $max_cells this time (untested before failure retries, oldest first)" >&2
+        command echo "evidence_matrix: $total pending cells for $label; running the first $max_cells this time (untested before failure retries, oldest first)" >&2
     fi
-    command jq -c 'del(.pending_total)' <<<"$out"
+    command jq -c --argjson max "$max_cells" '{include: (map(del(.retry)) | .[0:$max])}' <<<"$cells"
+}
+
+# evidence_matrix <catalog_dir> <tool> <project_root> [image_tag] [max_cells]
+#
+# Prints the matrix JSON on stdout (max_cells defaults to 200, under GitHub's
+# 256 cap). Exit status:
+#   0  a non-empty matrix was printed
+#   1  error (no index, bad catalog, unreadable EVIDENCE_TESTED_SOURCE, or a
+#      non-integer EVIDENCE_FAIL_COOLDOWN_DAYS / EVIDENCE_NOW) — nothing printed
+#   3  nothing pending — every cell has passing or recently failed evidence;
+#      nothing printed. Callers skip the evidence job rather than run an empty
+#      matrix.
+#
+# EVIDENCE_FAIL_COOLDOWN_DAYS (default 7) is how long a failing row keeps its
+# cell out of the matrix; 0 retries every failure on the next push.
+# EVIDENCE_NOW (epoch seconds, default the current time) pins the clock for tests.
+evidence_matrix() {
+    local catalog="$1" tool="$2" root="$3" image_tag="${4:-latest}" max_cells="${5:-200}"
+    local cells
+    cells="$(_em_tool_cells "$catalog" "$tool" "$root" "$image_tag")" || return 1
+    _em_cap "$tool" "$max_cells" <<<"$cells"
+}
+
+# evidence_pr_legs — reads a matrix on stdin and prints the PR dry-run subset:
+# the first (highest-priority) cell of EACH tool. Not the first cell overall:
+# the merged order breaks ties by tool name, so that would always be go and a
+# rust-only install change would get no PR coverage (#1341).
+evidence_pr_legs() {
+    command jq -c '{include: (.include | group_by(.tool) | map(.[0]))}'
+}
+
+# evidence_matrix_all <catalog_dir> <project_root> [image_tag] [max_cells]
+#
+# evidence_matrix for every luggage-managed tool in the catalog — each
+# tools/<tool>/ with a versions/ directory (system_package entries have none) —
+# merged into one matrix under one max_cells cap (#1341). Same exit statuses:
+# 1 if ANY tool errors (a tool must not silently drop out of evidence), 3 only
+# when no tool has a pending cell.
+#
+# Never-tested cells still precede failure retries across the whole set; within
+# each group tools are interleaved round-robin (each tool's 1st cell, then each
+# 2nd, ...) so one tool's backlog cannot take the whole cap from the others.
+# Each tool keeps its own oldest-first order.
+evidence_matrix_all() {
+    local catalog="$1" root="$2" image_tag="${3:-latest}" max_cells="${4:-200}"
+    local dir tool cells ranked="" tools=() available
+    # Probe base-image publication once for the whole run, so every tool
+    # judges a tuple against the same answer (and the registry is asked once).
+    available="$(_em_available_tuples_json "$root")" || return 1
+    for dir in "$catalog"/tools/*/versions; do
+        [ -d "$dir" ] || continue
+        tool="${dir%/versions}"
+        tool="${tool##*/}"
+        cells="$(_em_tool_cells "$catalog" "$tool" "$root" "$image_tag" "$available")" || return 1
+        # rank = position within (tool, retry group), for the interleave.
+        # Streamed through stdin, not --argjson: one argv string caps at 128 KiB.
+        cells="$(command jq -c '
+            group_by(.retry) | map(to_entries | map(.value + {rank: .key})) | add // []
+        ' <<<"$cells")" || return 1
+        ranked="$ranked$cells"$'\n'
+        tools+=("$tool")
+    done
+    if [ "${#tools[@]}" -eq 0 ]; then
+        command echo "evidence_matrix: no tools with a versions/ directory in $catalog" >&2
+        return 1
+    fi
+    # Captured, not piped: without pipefail a jq failure would reach _em_cap
+    # as empty input.
+    cells="$(command jq -cs 'add | sort_by([.retry, .rank, .tool]) | map(del(.rank))' <<<"$ranked")" || return 1
+    _em_cap "${tools[*]}" "$max_cells" <<<"$cells"
 }

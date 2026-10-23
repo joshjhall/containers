@@ -20,17 +20,23 @@ source "$PROJECT_ROOT/bin/lib/evidence-matrix.sh"
 # Tests that rely on the vendored tested[] path must not inherit a source.
 unset EVIDENCE_TESTED_SOURCE EVIDENCE_PUBLISHED_CHECK
 
-# _version <dir> <version> <tuples-csv> [passing-tuple]
+# _version <dir> <version> <tuples-csv> [passing-tuple] [tool]
 # One version file claiming each `os-osv-arch` in tuples-csv supported, with an
-# optional passing evidence row for passing-tuple.
+# optional passing evidence row for passing-tuple. tool defaults to rust.
 _version() {
-    local dir="$1" v="$2" tuples="$3" pass="${4:-}"
-    command jq -n --arg v "$v" --arg t "$tuples" --arg p "$pass" '
+    local dir="$1" v="$2" tuples="$3" pass="${4:-}" tool="${5:-rust}"
+    command jq -n --arg v "$v" --arg t "$tuples" --arg p "$pass" --arg tool "$tool" '
         def cell: split("-") as $x | {os: $x[0], os_version: $x[1], arch: $x[2]};
-        {schemaVersion: 1, tool: "rust", version: $v,
+        {schemaVersion: 1, tool: $tool, version: $v,
          support_matrix: [ $t | split(",")[] | cell + {status: "supported"} ],
          tested: (if $p == "" then [] else [ ($p | cell) + {tested_at: "2026-10-01T00:00:00Z", result: "pass"} ] end)}
-    ' >"$dir/tools/rust/versions/$v.json"
+    ' >"$dir/tools/$tool/versions/$v.json"
+}
+
+# _tool <catalog> <tool> <floor> — add another luggage tool to a fixture.
+_tool() {
+    command mkdir -p "$1/tools/$2/versions"
+    command printf '{"id":"%s","minimum_recommended":"%s"}\n' "$2" "$3" >"$1/tools/$2/index.json"
 }
 
 # _fixture <floor> — fresh catalog + base-images root; echoes its path.
@@ -151,15 +157,15 @@ test_unpublished_images_are_skipped() {
 # failing row per fail-csv tuple. failed-at (ISO 8601) stamps the fail rows'
 # tested_at; without it they carry none, which reads as a stale failure.
 _db_version() {
-    local db="$1" v="$2" pass="$3" fail="${4:-}" at="${5:-}"
-    command mkdir -p "$db/tools/rust/versions"
-    command jq -n --arg v "$v" --arg p "$pass" --arg f "$fail" --arg at "$at" '
+    local db="$1" v="$2" pass="$3" fail="${4:-}" at="${5:-}" tool="${6:-rust}"
+    command mkdir -p "$db/tools/$tool/versions"
+    command jq -n --arg v "$v" --arg p "$pass" --arg f "$fail" --arg at "$at" --arg tool "$tool" '
         def cell: split("-") as $x | {os: $x[0], os_version: $x[1], arch: $x[2]};
         def rows($csv; $r): $csv | select(. != "") | split(",")[] | cell + {result: $r};
         def stamp: if $at == "" then . else . + {tested_at: $at} end;
-        {schemaVersion: 1, tool: "rust", version: $v,
+        {schemaVersion: 1, tool: $tool, version: $v,
          tested: [ rows($p; "pass"), (rows($f; "fail") | stamp) ]}
-    ' >"$db/tools/rust/versions/$v.json"
+    ' >"$db/tools/$tool/versions/$v.json"
 }
 
 # Fixed clock for the fail-cooldown tests: 2026-10-21T00:00:00Z.
@@ -554,22 +560,257 @@ test_missing_index_is_an_error() {
     assert_equals "1" "$rc" "a missing index is exit 1, not an empty matrix"
 }
 
+# _tool_cells <matrix-json> — "tool version tuple" per cell, in matrix order.
+_tool_cells() {
+    command jq -r '.include[] | "\(.tool) \(.version) \(.tuple)"' <<<"$1"
+}
+
+test_all_tools_covers_every_versioned_tool() {
+    # #1341: go legs alongside rust legs; a system_package entry (index, no
+    # versions/) is not a luggage tool and contributes nothing.
+    local r out
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    command mkdir -p "$r/catalog/tools/gcc"
+    command echo '{"id":"gcc"}' >"$r/catalog/tools/gcc/index.json"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    _version "$r/catalog" 1.23.4 debian-13-arm64 "" go
+    out="$(evidence_matrix_all "$r/catalog" "$r" v9)"
+    assert_equals $'go 1.23.4 debian-13-arm64\nrust 1.90.0 debian-13-amd64' "$(_tool_cells "$out")" \
+        "one leg per pending cell of each tool with a versions/ dir"
+    assert_equals \
+        '{"tool":"go","version":"1.23.4","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-24.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl"}' \
+        "$(command jq -c '.include[0]' <<<"$out")" \
+        "a go leg carries the same arch plumbing (rust_target builds luggage itself)"
+}
+
+test_all_tools_cap_interleaves_tools() {
+    # The cap covers the merged set, and no tool's backlog takes all of it:
+    # grouping by tool would give go both of its cells before any rust, and
+    # grouping by version would put every go cell (1.x < 1.80) first too.
+    local r out
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.80.0 debian-13-amd64,debian-13-arm64
+    _version "$r/catalog" 1.81.0 debian-13-amd64,debian-13-arm64
+    _version "$r/catalog" 1.23.4 debian-13-amd64,debian-13-arm64 "" go
+    out="$(evidence_matrix_all "$r/catalog" "$r" latest 3 2>/dev/null)"
+    assert_equals $'go 1.23.4 debian-13-amd64\nrust 1.80.0 debian-13-amd64\ngo 1.23.4 debian-13-arm64' \
+        "$(_tool_cells "$out")" \
+        "round-robin across tools, each tool oldest first, capped at max_cells"
+}
+
+test_all_tools_retries_after_every_untested() {
+    # A stale failure in one tool still waits behind never-tested cells of
+    # every tool, however deep the other tool's untested queue.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.80.0 debian-13-amd64
+    _version "$r/catalog" 1.81.0 debian-13-amd64
+    _version "$r/catalog" 1.23.4 debian-13-amd64,debian-13-arm64 "" go
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.80.0 "" debian-13-amd64 2026-09-01T00:00:00Z
+    _db_version "$db" 1.81.0 ""
+    _db_version "$db" 1.23.4 "" "" "" go
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix_all "$r/catalog" "$r")"
+    assert_equals $'go 1.23.4 debian-13-amd64\nrust 1.81.0 debian-13-amd64\ngo 1.23.4 debian-13-arm64\nrust 1.80.0 debian-13-amd64' \
+        "$(_tool_cells "$out")" \
+        "untested cells of all tools first, the retry last"
+    assert_equals "0" "$(command jq '[.include[] | select(has("retry") or has("rank"))] | length' <<<"$out")" \
+        "sort keys are not emitted into the matrix"
+}
+
+test_all_tools_retries_interleave_too() {
+    # Ranks restart inside the retry group, so retries round-robin across tools
+    # like untested cells do. Ranked over each tool's whole list instead, go's
+    # retry would sit at rank 2 behind its own untested cells, and rust's
+    # retry (rank 0) would jump ahead of it.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.80.0 debian-13-amd64
+    _version "$r/catalog" 1.22.9 debian-13-amd64 "" go
+    _version "$r/catalog" 1.23.4 debian-13-amd64,debian-13-arm64 "" go
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.80.0 "" debian-13-amd64 2026-09-01T00:00:00Z
+    _db_version "$db" 1.22.9 "" debian-13-amd64 2026-09-01T00:00:00Z go
+    _db_version "$db" 1.23.4 "" "" "" go
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix_all "$r/catalog" "$r")"
+    assert_equals $'go 1.23.4 debian-13-amd64\ngo 1.23.4 debian-13-arm64\ngo 1.22.9 debian-13-amd64\nrust 1.80.0 debian-13-amd64' \
+        "$(_tool_cells "$out")" \
+        "each tool's first retry ranks 0 within the retry group"
+}
+
+test_all_tools_probe_publication_once() {
+    # The publish check runs once per tuple for the whole run, not once per
+    # tool: every tool must judge a tuple against the same answer.
+    local r out calls
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    _version "$r/catalog" 1.23.4 debian-13-amd64 "" go
+    calls="$(command mktemp "$TEST_TEMP_DIR/calls.XXXXXX")"
+    _count_published() { command echo "$1" >>"$calls"; }
+    out="$(EVIDENCE_PUBLISHED_CHECK=_count_published evidence_matrix_all "$r/catalog" "$r")"
+    assert_equals $'go 1.23.4 debian-13-amd64\nrust 1.90.0 debian-13-amd64' "$(_tool_cells "$out")" \
+        "both tools' legs are produced"
+    assert_equals $'alpine-3.24-amd64\ndebian-13-amd64\ndebian-13-arm64' "$(command sort "$calls")" \
+        "each of the fixture's three tuples is probed exactly once"
+}
+
+test_pr_legs_one_per_tool() {
+    # The PR dry-run keeps each tool's first cell. The real merged order puts
+    # go first on a rank tie, so the first-cell-overall shape would be go only.
+    local r out
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.80.0 debian-13-amd64,debian-13-arm64
+    _version "$r/catalog" 1.23.4 debian-13-amd64,debian-13-arm64 "" go
+    out="$(evidence_matrix_all "$r/catalog" "$r" | evidence_pr_legs)"
+    assert_equals $'go 1.23.4 debian-13-amd64\nrust 1.80.0 debian-13-amd64' "$(_tool_cells "$out")" \
+        "exactly one leg per tool, each that tool's first pending cell"
+    assert_equals '{"include":[]}' "$(evidence_pr_legs <<<'{"include":[]}')" \
+        "an empty matrix stays empty"
+}
+
+test_all_tools_exit_3_only_when_all_covered() {
+    local r out rc=0
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64 debian-13-amd64
+    _version "$r/catalog" 1.23.4 debian-13-amd64 "" go
+    out="$(evidence_matrix_all "$r/catalog" "$r")"
+    assert_equals "go 1.23.4 debian-13-amd64" "$(_tool_cells "$out")" \
+        "a fully covered tool does not stop another tool's legs"
+
+    _version "$r/catalog" 1.23.4 debian-13-amd64 debian-13-amd64 go
+    out="$(evidence_matrix_all "$r/catalog" "$r" 2>/dev/null)" || rc=$?
+    assert_equals "3" "$rc" "every tool covered is exit 3"
+    assert_equals "" "$out" "and prints no matrix"
+}
+
+test_all_tools_one_failing_tool_is_an_error() {
+    # A published source with no go evidence must fail the run, not quietly
+    # drop go and ship a rust-only matrix.
+    local r db out err rc=0
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    _version "$r/catalog" 1.23.4 debian-13-amd64 "" go
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 ""
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix_all "$r/catalog" "$r" 2>"$err")" || rc=$?
+    assert_equals "1" "$rc" "one tool's unreadable evidence is exit 1"
+    assert_equals "" "$out" "and prints no partial matrix"
+    assert_equals "evidence_matrix: no published evidence for go at $db/tools/go/versions (EVIDENCE_TESTED_SOURCE)" \
+        "$(command cat "$err")" "and the failure is go's missing evidence, not some other exit 1"
+
+    # Tools exist, but only system_package-style ones (index.json, no
+    # versions/): nothing to evidence is an error, not "nothing pending".
+    local only
+    only="$(command mktemp -d "$TEST_TEMP_DIR/only.XXXXXX")"
+    command mkdir -p "$only/tools/gcc"
+    command echo '{"id":"gcc"}' >"$only/tools/gcc/index.json"
+    rc=0
+    out="$(evidence_matrix_all "$only" "$r" 2>"$err")" || rc=$?
+    assert_equals "1" "$rc" "a catalog with no versioned tools is exit 1, not exit 3"
+    assert_equals "evidence_matrix: no tools with a versions/ directory in $only" \
+        "$(command cat "$err")" "with a message saying no tool is versioned"
+}
+
+test_pr_source_predating_a_tool_adds_nothing() {
+    # An ingest PR branched before go reached containers-db has a tools/ tree
+    # with rust but no go. It must not fail the run; its rust rows still count.
+    local r main pr out err rc=0
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64
+    _version "$r/catalog" 1.23.4 debian-13-amd64 "" go
+    main="$(command mktemp -d "$TEST_TEMP_DIR/main.XXXXXX")"
+    pr="$(command mktemp -d "$TEST_TEMP_DIR/pr.XXXXXX")"
+    _db_version "$main" 1.90.0 ""
+    _db_version "$main" 1.23.4 "" "" "" go
+    _db_version "$pr" 1.90.0 debian-13-amd64
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix_all "$r/catalog" "$r" 2>"$err")" || rc=$?
+    assert_equals "0" "$rc" "a PR source without the tool is not an error"
+    assert_equals $'go 1.23.4 debian-13-amd64\nrust 1.90.0 debian-13-arm64' "$(_tool_cells "$out")" \
+        "go comes from main; the PR's rust pass still covers its cell"
+    assert_equals "evidence_matrix: $pr predates go (no tools/go); it adds no go evidence" \
+        "$(command cat "$err")" "and the skip is said, not silent"
+}
+
+test_missing_tool_stays_strict_where_it_must() {
+    # The leniency is only for a later source with a readable tools/ tree and
+    # no trace of the tool. Main, a tree with no tools/, or a tool dir with no
+    # version files are still errors (#1319).
+    local r main pr rc
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    _version "$r/catalog" 1.23.4 debian-13-amd64 "" go
+    main="$(command mktemp -d "$TEST_TEMP_DIR/main.XXXXXX")"
+    pr="$(command mktemp -d "$TEST_TEMP_DIR/pr.XXXXXX")"
+    _db_version "$main" 1.90.0 ""
+    _db_version "$pr" 1.90.0 ""
+    _db_version "$pr" 1.23.4 "" "" "" go
+
+    rc=0
+    EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "main (the first source) missing a tool is still exit 1"
+
+    _db_version "$main" 1.23.4 "" "" "" go
+    rc=0
+    EVIDENCE_TESTED_SOURCE="$main:$TEST_TEMP_DIR/no-such-pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a later source with no tools/ tree at all is still exit 1"
+
+    command rm -f "$pr"/tools/go/versions/*.json
+    rc=0
+    EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a later source with tools/go but no version files is still exit 1"
+}
+
+test_all_tools_empty_versions_dir_is_an_error() {
+    # A tool with a versions/ dir but no version files is half-vendored: fail
+    # loudly and say why, rather than drop the tool or crash inside jq.
+    local r out err rc=0
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(evidence_matrix_all "$r/catalog" "$r" 2>"$err")" || rc=$?
+    assert_equals "1" "$rc" "an empty versions/ dir is exit 1"
+    assert_equals "" "$out" "and prints no partial matrix"
+    assert_equals "evidence_matrix: no version files for go in $r/catalog/tools/go/versions" \
+        "$(command cat "$err")" "with a message naming the tool, not a jq glob error"
+}
+
 test_real_catalog_respects_github_cap() {
     # The shipped catalog against the real base-images tree: whatever is
-    # pending, one run never exceeds GitHub's 256-job matrix limit.
-    local out rc=0 n=0
-    out="$(evidence_matrix "$PROJECT_ROOT/crates/luggage/testdata/catalog" rust "$PROJECT_ROOT" 2>/dev/null)" || rc=$?
-    if [ "$rc" -eq 3 ]; then
-        assert_true true "nothing pending in the shipped catalog"
-        return
-    fi
-    assert_equals "0" "$rc" "the shipped catalog yields a matrix"
-    n="$(command jq '.include | length' <<<"$out")"
-    if [ "$n" -gt 0 ] && [ "$n" -le 256 ]; then
-        assert_true true "$n cells, within GitHub's 256 cap"
-    else
-        assert_true false "matrix has $n cells; must be 1..256"
-    fi
+    # pending, one run never exceeds GitHub's 256-job matrix limit — per tool
+    # and for the merged every-tool matrix the workflow actually runs.
+    local out rc n label
+    for label in rust all; do
+        rc=0
+        if [ "$label" = all ]; then
+            out="$(evidence_matrix_all "$PROJECT_ROOT/crates/luggage/testdata/catalog" "$PROJECT_ROOT" 2>/dev/null)" || rc=$?
+        else
+            out="$(evidence_matrix "$PROJECT_ROOT/crates/luggage/testdata/catalog" rust "$PROJECT_ROOT" 2>/dev/null)" || rc=$?
+        fi
+        if [ "$rc" -eq 3 ]; then
+            assert_true true "$label: nothing pending in the shipped catalog"
+            continue
+        fi
+        assert_equals "0" "$rc" "$label: the shipped catalog yields a matrix"
+        n="$(command jq '.include | length' <<<"$out")"
+        if [ "$n" -gt 0 ] && [ "$n" -le 256 ]; then
+            assert_true true "$label: $n cells, within GitHub's 256 cap"
+        else
+            assert_true false "$label: matrix has $n cells; must be 1..256"
+        fi
+    done
 }
 
 run_test test_newest_patch_per_minor_from_floor "newest patch per minor from the floor (numeric)"
@@ -600,6 +841,17 @@ run_test test_pass_beats_recent_fail "a pass row beats a recent fail row"
 run_test test_fail_cooldown_override "EVIDENCE_FAIL_COOLDOWN_DAYS overrides the cooldown"
 run_test test_vendored_recent_fail_is_not_pending "the cooldown applies to vendored tested[]"
 run_test test_missing_index_is_an_error "missing index is an error"
+run_test test_all_tools_covers_every_versioned_tool "every tool with versions/ gets legs; system_package does not"
+run_test test_all_tools_cap_interleaves_tools "the merged cap interleaves tools round-robin"
+run_test test_all_tools_retries_after_every_untested "failure retries wait behind every tool's untested cells"
+run_test test_all_tools_retries_interleave_too "failure retries also interleave across tools"
+run_test test_all_tools_probe_publication_once "base-image publication is probed once per run"
+run_test test_pr_legs_one_per_tool "PR dry-run keeps one leg per tool"
+run_test test_all_tools_exit_3_only_when_all_covered "exit 3 only when every tool is covered"
+run_test test_all_tools_one_failing_tool_is_an_error "one tool's error fails the merged matrix"
+run_test test_pr_source_predating_a_tool_adds_nothing "an ingest PR that predates a tool adds no rows for it, not an error"
+run_test test_missing_tool_stays_strict_where_it_must "main, tree-less, or file-less sources still fail"
+run_test test_all_tools_empty_versions_dir_is_an_error "an empty versions/ dir fails with a named error"
 run_test test_real_catalog_respects_github_cap "shipped catalog stays within GitHub's 256 cap"
 
 generate_report
