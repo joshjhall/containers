@@ -77,20 +77,27 @@ test_cells_install_from_the_vendored_catalog() {
     fi
 }
 
-# _trigger_paths <event> — the `paths:` entries of one `on:` trigger, unquoted.
-# Comment and blank lines inside the list are skipped; any other line before
-# the list dedents prints `UNPARSED: <line>`, which the caller fails on, so an
-# entry (in particular a `!` exclusion) can never be dropped silently.
+# _trigger_paths <event> [workflow] — the `paths:` entries of one `on:` trigger
+# (in $WF by default), unquoted. The trigger key is matched only inside the
+# column-0 `on:` block, so a same-named job id is never read as one. The
+# trigger ends at its next sibling trigger or at any column-0 key, so the last
+# trigger never reads on into `permissions:`/`env:`/`jobs:`. Comment and blank
+# lines inside the list are skipped; any other line before the list dedents
+# prints `UNPARSED: <line>`, which the caller fails on, so an entry (in
+# particular a `!` exclusion) can never be dropped silently.
 _trigger_paths() {
     /usr/bin/awk -v ev="$1" '
-        $0 ~ "^  " ev ":$" { on = 1; next }
-        on && /^  [a-z_]+:$/ { exit }
+        /^on:$/ { inon = 1; next }
+        !on && /^[^[:space:]#]/ { inon = 0 }
+        inon && $0 ~ "^  " ev ":$" { on = 1; next }
+        on && /^[^[:space:]#]/ { exit }
+        on && /^  [A-Za-z0-9_-]+:/ { exit }
         on && /^    paths:$/ { inpaths = 1; next }
         on && inpaths && /^[[:space:]]*(#.*)?$/ { next }
         on && inpaths && /^      - "[^"]*"$/ { sub(/^      - "/, ""); sub(/"$/, ""); print; next }
         on && inpaths && /^      / { print "UNPARSED: " $0; next }
         on && inpaths { inpaths = 0 }
-    ' "$WF"
+    ' "${2:-$WF}"
 }
 
 # _filter_glob_ere <glob> — a GitHub paths: glob as an anchored ERE. Unlike a
@@ -175,6 +182,89 @@ test_trigger_paths_cover_evidence_scripts() {
     done
 }
 
+test_trigger_paths_parser_fixtures() {
+    # The real workflow is well-formed, so none of _trigger_paths' fail-closed
+    # branches fire against it (#1392). Each fixture pins one branch by the
+    # parser's full output, so dropping a rule changes what it prints.
+    local dir
+    if ! dir=$(command mktemp -d "${TMPDIR:-/tmp}/evidence-run-shape.XXXXXX"); then
+        assert_true false "mktemp failed under ${TMPDIR:-/tmp}"
+        return
+    fi
+
+    printf '%s\n' 'on:' '# column-0 note' '  push:' '    paths:' '      - "a"' \
+        '      # note' '' '# column-0 note' '      - "b"' 'jobs:' >"$dir/comments.yml"
+    _expect_trigger_paths "comment and blank lines are skipped, neighbours kept" \
+        push "$dir/comments.yml" 'a' 'b'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' '      - "a"' '      # exclude:' \
+        '      - "!b"' 'jobs:' >"$dir/bang.yml"
+    _expect_trigger_paths "a ! entry after a comment is read" \
+        push "$dir/bang.yml" 'a' '!b'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' "      - 'single'" \
+        '      - "trailing" # why' '      - unquoted' '      - "z"' 'jobs:' >"$dir/unparsed.yml"
+    _expect_trigger_paths "single-quoted, trailing-comment, unquoted entries are UNPARSED" \
+        push "$dir/unparsed.yml" \
+        "UNPARSED:       - 'single'" \
+        'UNPARSED:       - "trailing" # why' \
+        'UNPARSED:       - unquoted' \
+        'z'
+
+    printf '%s\n' 'on:' '  push:' '    branches: [main]' 'jobs:' >"$dir/nopaths.yml"
+    _expect_trigger_paths "a trigger with no paths: yields nothing" \
+        push "$dir/nopaths.yml"
+
+    # push is the last trigger: before the column-0 exit its scan ran on into
+    # the top-level keys, and an indented paths: there was read as its own.
+    printf '%s\n' 'on:' '  pull_request:' '    paths:' '      - "pr"' '  push:' \
+        '    paths:' '      - "p"' 'permissions:' '    paths:' '      - "leak"' \
+        >"$dir/col0.yml"
+    _expect_trigger_paths "the last trigger stops at the first column-0 key" \
+        push "$dir/col0.yml" 'p'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' '      - "p"' '  merge-group2:' \
+        '    paths:' '      - "leak"' 'jobs:' >"$dir/sibling.yml"
+    _expect_trigger_paths "a sibling trigger with - and digits ends the block" \
+        push "$dir/sibling.yml" 'p'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' '      - "p"' '  workflow_run: # note' \
+        '    paths:' '      - "leak"' 'jobs:' >"$dir/sibling-tail.yml"
+    _expect_trigger_paths "a sibling trigger with text after its colon ends the block" \
+        push "$dir/sibling-tail.yml" 'p'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' '      - "a"' '    branches:' \
+        '      - "main"' 'jobs:' >"$dir/dedent.yml"
+    _expect_trigger_paths "the paths list ends at the next key under the trigger" \
+        push "$dir/dedent.yml" 'a'
+
+    printf '%s\n' 'on: [workflow_dispatch]' 'jobs:' '  push:' '    paths:' \
+        '      - "leak"' >"$dir/job-named-push.yml"
+    _expect_trigger_paths "a job named like the trigger outside on: is not read" \
+        push "$dir/job-named-push.yml"
+
+    printf '%s\n' 'on:' '  pull_request:' '    paths:' '      - "pr"' 'jobs:' '  push:' \
+        '    paths:' '      - "leak"' >"$dir/job-after-on.yml"
+    _expect_trigger_paths "the on: block ends at the next column-0 key" \
+        push "$dir/job-after-on.yml"
+
+    command rm -rf "$dir"
+}
+
+# _expect_trigger_paths <message> <event> <workflow> <entry>... — the parser
+# prints exactly <entry>... (nothing, if none are given), in order. A parser
+# that fails (e.g. an unwritten fixture) is a failure, never an empty match.
+_expect_trigger_paths() {
+    local msg="$1" ev="$2" wf="$3" got want=""
+    shift 3
+    [ "$#" -gt 0 ] && want="$(printf '%s\n' "$@")"
+    if ! got="$(_trigger_paths "$ev" "$wf")"; then
+        assert_true false "$msg (parser failed on $wf)"
+        return
+    fi
+    assert_equals "$want" "$got" "$msg"
+}
+
 test_filter_glob_semantics() {
     # Pins the two GitHub rules the coverage test depends on, so a translator
     # regression (e.g. `*` -> `.*`) cannot pass silently through the real
@@ -206,6 +296,7 @@ run_test test_collect_job_batches_into_one_pr "collect job batches into one PR a
 run_test test_artifact_name_is_per_cell "artifact name is per cell"
 run_test test_cells_install_from_the_vendored_catalog "cells install from the vendored catalog"
 run_test test_trigger_paths_cover_evidence_scripts "trigger paths cover every evidence lib and script"
+run_test test_trigger_paths_parser_fixtures "paths: parser fails closed on fixture workflows"
 run_test test_filter_glob_semantics "paths: glob matching follows GitHub semantics"
 
 generate_report
