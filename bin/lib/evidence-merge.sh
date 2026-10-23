@@ -22,6 +22,11 @@
 #
 # Requires jq.
 
+# Repeated-failure ordering uses the same tested_at parse as the evidence
+# matrix's fail cooldown.
+# shellcheck source=bin/lib/evidence-epoch.sh
+source "$(dirname "${BASH_SOURCE[0]}")/evidence-epoch.sh"
+
 # merge_evidence_row <version-file> <row-json>
 #
 # Rewrites <version-file> in place (trailing newline kept). Byte-stable for
@@ -51,19 +56,13 @@ merge_evidence_row() {
         --arg ov "$ov" \
         --arg arch "$arch" \
         --arg digest "$digest" \
-        '
+        "$_EVIDENCE_EPOCH_JQ"'
         def dedup_match:
             (.os // "") == $os
             and (.os_version // "") == $ov
             and (.arch // "") == $arch
             and (.image_digest // "") == $digest;
         def strip_volatile: del(.tested_at, .ci_run, .duration_seconds);
-        # same parse as evidence-matrix.sh em_epoch: calendar-valid base,
-        # optional fraction, Z or +-HH:MM offset; unreadable -> 0
-        def epoch: ((.tested_at // "" | capture("^(?<b>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\\.[0-9]+)?(?<z>Z|(?<s>[+-])(?<h>[0-9]{2}):(?<m>[0-9]{2}))$")
-            | select(.z == "Z" or ((.m | tonumber) < 60 and (.h | tonumber) * 60 + (.m | tonumber) <= (if .s == "+" then 840 else 720 end)))
-            | ((.b + "Z") as $u | $u | fromdateiso8601 | select(todate == $u))
-              - (if .z == "Z" then 0 else (if .s == "-" then -1 else 1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60) end))? // 0);
         ($new | strip_volatile) as $new_core
         | (.tested // []) as $rows
         | ($rows | map(select(dedup_match))) as $matches
@@ -72,7 +71,7 @@ merge_evidence_row() {
           elif $new.result != "fail" then .
           # an older repeated failure (a saved row re-ingested late) must not
           # move tested_at backwards and cut the cooldown short
-          elif ($new | epoch) <= ([ $matches[] | select(strip_volatile == $new_core) | epoch ] | max)
+          elif ($new | evidence_epoch) <= ([ $matches[] | select(strip_volatile == $new_core) | evidence_epoch ] | max)
           then .
           # a newer repeated failure refreshes its row in place, keeping row
           # order, so only tested_at/ci_run/duration_seconds show up in the diff
