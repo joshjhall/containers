@@ -73,8 +73,12 @@ _em_available_tuples() {
 }
 
 # _em_available_tuples_json <project_root> — the same tuples as a JSON array.
+# Captured, not piped: without pipefail a first-stage failure would read as
+# "no tuples" (#1365).
 _em_available_tuples_json() {
-    _em_available_tuples "$1" | command jq -R . | command jq -cs .
+    local tuples
+    tuples="$(_em_available_tuples "$1")" || return 1
+    command jq -cnR '[inputs | select(. != "")]' <<<"$tuples"
 }
 
 # _EM_EVIDENCE_JQ — jq defs shared by the published and vendored paths, so the
@@ -120,6 +124,12 @@ def em_evidence:
 # every tool's matrix until the PR merges or ages out. The first source
 # (containers-db main) stays strict, as does any source with no tools/ at all.
 #
+# Main missing tools/<tool> means the tool was vendored before its
+# containers-db PR merged. The drift gate (#815, check-catalog-drift.sh) only
+# reports and skips a vendored-only tool, so nothing upstream blocks that
+# order. That failure gets its own message naming the tool and the fix
+# (#1365), because it fails every tool's matrix, not just that tool's.
+#
 # A file, not a jq argument: the map grows with containers-db and one argv
 # string is capped at 128 KiB.
 _em_published_evidence() {
@@ -138,6 +148,10 @@ _em_published_evidence() {
             if [ "$i" -gt 0 ] && [ -d "$src/tools" ] && [ ! -e "$src/tools/$tool" ]; then
                 command echo "evidence_matrix: $src predates $tool (no tools/$tool); it adds no $tool evidence" >&2
                 continue
+            fi
+            if [ "$i" -eq 0 ] && [ -d "$src/tools" ] && [ ! -e "$src/tools/$tool" ]; then
+                command echo "evidence_matrix: $src has no tools/$tool; $tool was vendored before containers-db main has it — merge its containers-db PR first" >&2
+                return 1
             fi
             command echo "evidence_matrix: no published evidence for $tool at $dir (EVIDENCE_TESTED_SOURCE)" >&2
             return 1
