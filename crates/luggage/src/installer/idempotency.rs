@@ -290,10 +290,39 @@ pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
     assert!(!alive, "the timed-out probe child (pid {pid}) must be killed and reaped");
 }
 
+/// Whether `pid` is still running. A zombie counts as gone: it was killed,
+/// and whether it is reaped depends on the reparenting ancestor (no init in
+/// a bare `docker run` reaps nothing), which is not what the test pins. Linux
+/// reads the state field of `/proc/<pid>/stat`; other unixes fall back to
+/// `kill -0`, which cannot tell a zombie apart.
+#[cfg(all(test, unix))]
+fn pid_is_running(pid: &str) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        // `comm` (field 2) is parenthesised and may contain spaces, so the
+        // state is the first field after the last `)`.
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            return false;
+        };
+        stat.rsplit_once(')')
+            .and_then(|(_, rest)| rest.split_whitespace().next())
+            .is_some_and(|state| state != "Z" && state != "X")
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Command::new("/bin/kill")
+            .args(["-0", pid])
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    }
+}
+
 /// Assert the background `sleep` forked by [`write_forking_shim`] is gone.
-/// Once its parent dies it is reparented and reaped by an ancestor we do not
-/// control, so poll briefly rather than check once: a killed orphan clears
-/// within milliseconds, while a survivor is still alive at the bound.
+/// Once its parent dies it is reparented to an ancestor we do not control,
+/// so poll briefly rather than check once: a killed orphan clears within
+/// milliseconds, while a survivor is still running at the bound.
 #[cfg(all(test, unix))]
 pub(crate) fn assert_forked_descendant_gone(dir: &Path, name: &str) {
     let pid_file = dir.join(format!("{name}.bgpid"));
@@ -304,13 +333,7 @@ pub(crate) fn assert_forked_descendant_gone(dir: &Path, name: &str) {
     assert!(!pid.is_empty(), "the shim must have recorded its background pid");
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
-        let alive = Command::new("/bin/kill")
-            .args(["-0", pid])
-            .stderr(Stdio::null())
-            .status()
-            .unwrap()
-            .success();
-        if !alive {
+        if !pid_is_running(pid) {
             return;
         }
         assert!(
