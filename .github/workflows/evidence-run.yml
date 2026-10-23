@@ -85,6 +85,8 @@ on:
       - "crates/containers-common/**"
       - "base-images/**"
       - "bin/ingest-evidence.sh"
+      - "bin/ingest-evidence-batch.sh"
+      - "bin/lib/evidence-*.sh"
       - ".github/workflows/evidence-run.yml"
   push:
     branches: [main]
@@ -94,6 +96,8 @@ on:
       - "crates/containers-common/**"
       - "base-images/**"
       - "bin/ingest-evidence.sh"
+      - "bin/ingest-evidence-batch.sh"
+      - "bin/lib/evidence-*.sh"
       - ".github/workflows/evidence-run.yml"
 
 permissions:

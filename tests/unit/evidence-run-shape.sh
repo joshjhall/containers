@@ -77,10 +77,51 @@ test_cells_install_from_the_vendored_catalog() {
     fi
 }
 
+# _trigger_paths <event> — the `paths:` entries of one `on:` trigger, unquoted.
+_trigger_paths() {
+    /usr/bin/awk -v ev="$1" '
+        $0 ~ "^  " ev ":$" { on = 1; next }
+        on && /^  [a-z_]+:$/ { exit }
+        on && /^    paths:$/ { inpaths = 1; next }
+        on && inpaths && /^      - / { sub(/^      - /, ""); gsub(/"/, ""); print; next }
+        on && inpaths { inpaths = 0 }
+    ' "$WF"
+}
+
+test_trigger_paths_cover_evidence_scripts() {
+    # Every evidence lib/script the jobs source or run must re-trigger the
+    # workflow, or a change confined to it first runs on some unrelated push
+    # to main (#1388). The file set comes from disk so a new lib is checked
+    # without editing this test.
+    local ev f pattern covered
+    local -a scripts patterns
+    scripts=("$PROJECT_ROOT"/bin/lib/evidence-*.sh "$PROJECT_ROOT"/bin/ingest-evidence*.sh)
+    for ev in pull_request push; do
+        mapfile -t patterns < <(_trigger_paths "$ev")
+        if [ "${#patterns[@]}" -eq 0 ]; then
+            assert_true false "$ev has no paths: entries to check"
+            continue
+        fi
+        for f in "${scripts[@]}"; do
+            f="${f#"$PROJECT_ROOT"/}"
+            covered=false
+            for pattern in "${patterns[@]}"; do
+                # shellcheck disable=SC2053 # unquoted RHS: match as a glob
+                if [[ "$f" == $pattern ]]; then
+                    covered=true
+                    break
+                fi
+            done
+            assert_true "$covered" "$ev paths: cover $f"
+        done
+    done
+}
+
 run_test test_cells_install_as_the_container_user "cells install as the container user (--user runner)"
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
 run_test test_artifact_name_is_per_cell "artifact name is per cell"
 run_test test_cells_install_from_the_vendored_catalog "cells install from the vendored catalog"
+run_test test_trigger_paths_cover_evidence_scripts "trigger paths cover every evidence lib and script"
 
 generate_report
