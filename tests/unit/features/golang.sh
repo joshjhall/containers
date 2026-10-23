@@ -27,12 +27,6 @@ setup() {
     export USER_UID="1000"
     export USER_GID="1000"
     export HOME="/home/testuser"
-
-    # Create mock directories
-    mkdir -p "$TEST_TEMP_DIR/usr/local"
-    mkdir -p "$TEST_TEMP_DIR/home/testuser"
-    mkdir -p "$TEST_TEMP_DIR/cache/go"
-    mkdir -p "$TEST_TEMP_DIR/etc/bashrc.d"
 }
 
 # Teardown function - runs after each test
@@ -46,183 +40,99 @@ teardown() {
     unset GO_VERSION USERNAME USER_UID USER_GID HOME 2>/dev/null || true
 }
 
-# Test: Go version parsing
-test_go_version_parsing() {
-    # Test version extraction
-    local version="1.24.5"
-    local major
-    major=$(echo $version | command cut -d. -f1)
-    local minor
-    minor=$(echo $version | command cut -d. -f2)
-    local patch
-    patch=$(echo $version | command cut -d. -f3)
+# Run golang.sh's real post-install section — cache dirs, the bashrc.d
+# writes, the startup script, and test-go — with its build-time and absolute
+# targets redirected under TEST_TEMP_DIR (#1346). The section is extracted
+# from the script, not copied, and reads the real lib/ content files, so these
+# tests break when golang.sh changes what it configures. luggage's own install
+# end-state is asserted in a real image by test_luggage_golang.sh.
+# Usage: run_config_section [golang.sh path]
+# Leaves the installed tree under $TEST_TEMP_DIR/root and the
+# create_cache_directories argv in $TEST_TEMP_DIR/cache-dirs.log.
+run_config_section() {
+    local golang_script="${1:-$PROJECT_ROOT/lib/features/golang.sh}"
+    local root="$TEST_TEMP_DIR/root" section="$TEST_TEMP_DIR/config-section.sh"
 
-    assert_equals "1" "$major" "Major version extracted correctly"
-    assert_equals "24" "$minor" "Minor version extracted correctly"
-    assert_equals "5" "$patch" "Patch version extracted correctly"
+    command mkdir -p "$root/usr/local/bin"
+    command awk '/^# Cache and Path Configuration/{f=1} /^# Final Verification/{exit} f{print}' "$golang_script" |
+        command sed -e "s#/tmp/build-scripts#$PROJECT_ROOT/lib#g" \
+            -e "s#/etc/#$root/etc/#g" \
+            -e "s#/usr/local/bin/test-go#$root/usr/local/bin/test-go#g" >"$section"
 
-    # Test version comparison logic
-    if [ "$major" -ge 1 ] && [ "$minor" -ge 11 ]; then
-        assert_true true "Version supports modules (>= 1.11)"
-    else
-        assert_true false "Version too old for modules"
-    fi
+    (
+        set -euo pipefail
+        log_message() { :; }
+        log_command() {
+            shift
+            "$@" >/dev/null
+        }
+        create_cache_directories() { printf '%s\n' "$@" >"$TEST_TEMP_DIR/cache-dirs.log"; }
+        # shellcheck disable=SC1091
+        source "$PROJECT_ROOT/lib/base/bashrc-helpers.sh"
+        # shellcheck disable=SC1090
+        source "$section"
+    ) >/dev/null
 }
 
-# Test: Go installation directory structure
-test_go_installation_structure() {
-    local go_root="$TEST_TEMP_DIR/usr/local/go"
-
-    # Create mock Go installation
-    mkdir -p "$go_root/bin"
-    mkdir -p "$go_root/src"
-    mkdir -p "$go_root/pkg"
-
-    # Create mock Go binaries
-    touch "$go_root/bin/go"
-    touch "$go_root/bin/gofmt"
-    chmod +x "$go_root/bin/go" "$go_root/bin/gofmt"
-
-    # Check structure
-    assert_dir_exists "$go_root"
-    assert_dir_exists "$go_root/bin"
-    assert_file_exists "$go_root/bin/go"
-    assert_file_exists "$go_root/bin/gofmt"
-
-    # Check executables
-    if [ -x "$go_root/bin/go" ]; then
-        assert_true true "go binary is executable"
-    else
-        assert_true false "go binary is not executable"
-    fi
+# Source the generated 50-golang.sh in a clean interactive shell (its env
+# block returns early when non-interactive) and run a probe command there.
+# Usage: probe_bashrc <command>
+probe_bashrc() {
+    env -i HOME="$TEST_TEMP_DIR" PATH=/usr/bin:/bin \
+        bash --norc -i -c "source '$TEST_TEMP_DIR/root/etc/bashrc.d/50-golang.sh'; $1" 2>/dev/null
 }
 
-# Test: GOPATH configuration
-test_gopath_configuration() {
-    # Test with cache directory
-    local cache_dir="$TEST_TEMP_DIR/cache"
-    if [ -d "$cache_dir" ]; then
-        local expected_gopath="$cache_dir/go"
-        assert_not_empty "$expected_gopath" "GOPATH uses cache directory when available"
-    fi
-
-    # Test fallback to home directory
-    local home_gopath="$TEST_TEMP_DIR/home/testuser/go"
-    mkdir -p "$home_gopath"
-    assert_dir_exists "$home_gopath"
-
-    # Check GOPATH subdirectories
-    mkdir -p "$home_gopath/bin"
-    mkdir -p "$home_gopath/src"
-    mkdir -p "$home_gopath/pkg"
-
-    assert_dir_exists "$home_gopath/bin"
-    assert_dir_exists "$home_gopath/src"
-    assert_dir_exists "$home_gopath/pkg"
+# Test: GOPATH's workspace subdirectories are created under /cache/go
+test_cache_dirs_created() {
+    run_config_section
+    assert_equals "/cache/go/bin
+/cache/go/src
+/cache/go/pkg" "$(command cat "$TEST_TEMP_DIR/cache-dirs.log" 2>/dev/null || echo '<no call>')" \
+        "create_cache_directories receives /cache/go/{bin,src,pkg}"
 }
 
-# Test: Go environment variables
-test_go_environment_variables() {
-    local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/25-golang.sh"
+# Test: the shipped bashrc exports the layout golang.sh itself configures
+test_bashrc_env_matches_script() {
+    run_config_section
+    local out
+    out=$(probe_bashrc 'printf "%s|" "$GOROOT" "$GOPATH" "$GOCACHE" "$GOMODCACHE" "$GO111MODULE" "$GOPROXY" "$GOSUMDB"')
+    assert_equals "/usr/local/go|/cache/go|/cache/go-build|/cache/go-mod|on|https://proxy.golang.org,direct|sum.golang.org|" \
+        "$out" "50-golang.sh exports GOROOT/GOPATH/GOCACHE/GOMODCACHE/GO111MODULE/GOPROXY/GOSUMDB"
 
-    # Create mock bashrc content
-    command cat >"$bashrc_file" <<'EOF'
-export GOROOT="/usr/local/go"
-export GOPATH="${GOPATH:-/cache/go}"
-export GOCACHE="${GOCACHE:-$GOPATH/cache}"
-export GOMODCACHE="${GOMODCACHE:-$GOPATH/pkg/mod}"
-export PATH="$GOROOT/bin:$GOPATH/bin:$PATH"
-export GO111MODULE=on
-EOF
-
-    # Check environment variables
-    if command grep -q "export GOROOT=" "$bashrc_file"; then
-        assert_true true "GOROOT is exported"
-    else
-        assert_true false "GOROOT is not exported"
-    fi
-
-    if command grep -q "export GOPATH=" "$bashrc_file"; then
-        assert_true true "GOPATH is exported"
-    else
-        assert_true false "GOPATH is not exported"
-    fi
-
-    if command grep -q "export GO111MODULE=on" "$bashrc_file"; then
-        assert_true true "GO111MODULE is enabled"
-    else
-        assert_true false "GO111MODULE is not enabled"
-    fi
-
-    # Check PATH includes Go directories
-    if command grep -q 'PATH.*GOROOT/bin.*GOPATH/bin' "$bashrc_file"; then
-        assert_true true "PATH includes Go binary directories"
-    else
-        assert_true false "PATH doesn't include Go directories"
-    fi
+    local path
+    path=$(probe_bashrc 'echo ":$PATH:"')
+    assert_contains "$path" ":/usr/local/go/bin:" "PATH gains GOROOT/bin"
+    assert_contains "$path" ":/cache/go/bin:" "PATH gains GOPATH/bin"
 }
 
-# Test: Go cache configuration
-test_go_cache_configuration() {
-    local cache_base="$TEST_TEMP_DIR/cache/go"
-
-    # Create cache directories
-    mkdir -p "$cache_base/cache"
-    mkdir -p "$cache_base/pkg/mod"
-
-    assert_dir_exists "$cache_base/cache"
-    assert_dir_exists "$cache_base/pkg/mod"
-
-    # Check cache environment would be set
-    local gocache="$cache_base/cache"
-    local gomodcache="$cache_base/pkg/mod"
-
-    assert_not_empty "$gocache" "GOCACHE path is set"
-    assert_not_empty "$gomodcache" "GOMODCACHE path is set"
+# Test: the shipped bashrc defines the aliases and helper functions
+test_bashrc_aliases_loaded() {
+    run_config_section
+    local out
+    out=$(probe_bashrc 'alias gob; alias gomt; type -t go-init; type -t go-cover')
+    assert_contains "$out" "alias gob='go build'" "gob alias defined"
+    assert_contains "$out" "alias gomt='go mod tidy'" "gomt alias defined"
+    assert_equals "2" "$(printf '%s\n' "$out" | command grep -cx 'function')" \
+        "go-init and go-cover are defined as functions"
 }
 
-# Test: Go workspace permissions
-test_go_workspace_permissions() {
-    local gopath="$TEST_TEMP_DIR/home/testuser/go"
-    mkdir -p "$gopath"
-
-    # Simulate setting ownership
-    # In real script: chown -R ${USER_UID}:${USER_GID} "$gopath"
-
-    # Check directory exists and is accessible
-    if [ -d "$gopath" ] && [ -w "$gopath" ]; then
-        assert_true true "Go workspace is writable"
-    else
-        assert_true false "Go workspace is not writable"
-    fi
-}
-
-# Test: Go aliases and helpers
-test_go_aliases_helpers() {
-    local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/25-golang.sh"
-
-    # Add aliases section
-    command cat >>"$bashrc_file" <<'EOF'
-
-# Go aliases
-alias gotest='go test -v ./...'
-alias gomod='go mod'
-alias gofmtall='gofmt -s -w .'
-alias govet='go vet ./...'
-EOF
-
-    # Check aliases
-    if command grep -q "alias gotest=" "$bashrc_file"; then
-        assert_true true "gotest alias defined"
-    else
-        assert_true false "gotest alias not defined"
-    fi
-
-    if command grep -q "alias gomod=" "$bashrc_file"; then
-        assert_true true "gomod alias defined"
-    else
-        assert_true false "gomod alias not defined"
-    fi
+# Test: the startup and verification scripts are installed executable,
+# byte-identical to their lib/ sources
+test_startup_and_verify_scripts_installed() {
+    run_config_section
+    local root="$TEST_TEMP_DIR/root" pair dest src
+    for pair in "etc/container/first-startup/30-go-setup.sh:30-go-setup.sh" \
+        "usr/local/bin/test-go:test-go.sh"; do
+        dest="$root/${pair%%:*}"
+        src="$PROJECT_ROOT/lib/features/lib/golang/${pair##*:}"
+        assert_equals "755" "$(command stat -c %a "$dest" 2>/dev/null || echo missing)" \
+            "${pair%%:*} installed mode 755"
+        if command cmp -s "$src" "$dest"; then
+            assert_true true "${pair%%:*} matches lib/features/lib/golang/${pair##*:}"
+        else
+            assert_true false "${pair%%:*} differs from (or is missing vs) its lib/ source"
+        fi
+    done
 }
 
 # golang.sh delegates the Go install to `luggage install` (#811): arch
@@ -279,11 +189,10 @@ run_version_block() {
 
     printf '#!/bin/bash\n%s\n' "$stub_body" >"$stub"
     command chmod +x "$stub"
-    # From input validation through the resolve block's closing `fi` (the
-    # second top-level `fi`; validation uses `|| { }`, not if/fi), with
-    # luggage's absolute path redirected.
-    command awk '/^validate_go_version /{f=1} f{print} f && /^fi$/ && ++n==2{exit}' "$golang_script" |
-        command sed "s#/usr/local/bin/luggage#$stub#g" >"$block"
+    # The same extractor the luggage_golang fixture runs against real luggage
+    # output, here with luggage's absolute path redirected to the stub.
+    bash "$PROJECT_ROOT/tests/integration/builds/luggage_golang/extract-version-block.sh" \
+        "$golang_script" "$stub" >"$block"
 
     (
         set -euo pipefail
@@ -501,58 +410,6 @@ EOF
         "luggage install receives the exact argv (version, catalog default, user, cache root, log dir)"
 }
 
-# Test: Go module proxy configuration
-test_go_module_proxy() {
-    local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/25-golang.sh"
-
-    # Add proxy configuration
-    command cat >>"$bashrc_file" <<'EOF'
-
-# Go module proxy (optional, improves download speed)
-export GOPROXY="${GOPROXY:-https://proxy.golang.org,direct}"
-export GOSUMDB="${GOSUMDB:-sum.golang.org}"
-EOF
-
-    # Check proxy settings
-    if command grep -q "export GOPROXY=" "$bashrc_file"; then
-        assert_true true "GOPROXY is configured"
-    else
-        assert_true false "GOPROXY is not configured"
-    fi
-
-    if command grep -q "export GOSUMDB=" "$bashrc_file"; then
-        assert_true true "GOSUMDB is configured"
-    else
-        assert_true false "GOSUMDB is not configured"
-    fi
-}
-
-# Test: Go verification
-test_go_verification() {
-    local test_script="$TEST_TEMP_DIR/test-go.sh"
-
-    # Create verification script
-    command cat >"$test_script" <<'EOF'
-#!/bin/bash
-echo "Go version:"
-go version 2>/dev/null || echo "Go not installed"
-echo "GOPATH: ${GOPATH:-not set}"
-echo "GOROOT: ${GOROOT:-not set}"
-echo "Go env:"
-go env GOPATH GOROOT GOCACHE 2>/dev/null || echo "Unable to get Go env"
-EOF
-    chmod +x "$test_script"
-
-    assert_file_exists "$test_script"
-
-    # Check script is executable
-    if [ -x "$test_script" ]; then
-        assert_true true "Verification script is executable"
-    else
-        assert_true false "Verification script is not executable"
-    fi
-}
-
 # Test: the inline download/verify/extract path is gone — luggage owns it.
 # A leftover would mean two installers racing over /usr/local/go.
 test_no_inline_go_install() {
@@ -578,13 +435,10 @@ run_test_with_setup() {
 }
 
 # Run all tests
-run_test_with_setup test_go_version_parsing "Go version parsing works correctly"
-run_test_with_setup test_go_installation_structure "Go installation structure is correct"
-run_test_with_setup test_gopath_configuration "GOPATH configuration is proper"
-run_test_with_setup test_go_environment_variables "Go environment variables are set"
-run_test_with_setup test_go_cache_configuration "Go cache is configured correctly"
-run_test_with_setup test_go_workspace_permissions "Go workspace has correct permissions"
-run_test_with_setup test_go_aliases_helpers "Go aliases and helpers are defined"
+run_test_with_setup test_cache_dirs_created "GOPATH workspace dirs are created under /cache/go"
+run_test_with_setup test_bashrc_env_matches_script "Shipped bashrc exports golang.sh's cache layout"
+run_test_with_setup test_bashrc_aliases_loaded "Shipped bashrc defines Go aliases and helpers"
+run_test_with_setup test_startup_and_verify_scripts_installed "Startup and test-go scripts are installed"
 run_test_with_setup test_luggage_invocation "golang.sh delegates the Go install to luggage"
 run_test_with_setup test_partial_version_resolves_via_catalog "Partial GO_VERSION resolves via the luggage catalog"
 run_test_with_setup test_luggage_install_failure_aborts "luggage install failure is not swallowed"
@@ -597,8 +451,6 @@ run_test_with_setup test_resolve_without_version_fails_closed "Resolve output wi
 run_test_with_setup test_pre_floor_versions_refused "Go below 1.22 is refused up front"
 run_test_with_setup test_bare_major_rejected_by_validation "Bare major GO_VERSION is rejected by validation"
 run_test_with_setup test_non_1x_major_reaches_resolve "Non-1.x partial reaches resolve"
-run_test_with_setup test_go_module_proxy "Go module proxy is configured"
-run_test_with_setup test_go_verification "Go verification script works"
 run_test_with_setup test_no_inline_go_install "No inline Go download/verify/extract remains"
 
 # Generate test report

@@ -50,21 +50,27 @@ ENV USERNAME=vscode
 COPY --from=builder /tmp/luggage /usr/local/bin/luggage
 COPY crates/luggage/testdata/catalog /opt/containers-db
 
-# Resolve a partial GO_VERSION ("1.26") the way golang.sh does, so the
-# fixture can be built with either an exact or a partial pin, then install
-# with the same flags golang.sh passes (--cache-root / --log-dir included, so
-# the cache-dir assertions do not lean on luggage's defaults). bash with
-# pipefail, not dash: a failed `luggage resolve` must fail this step, not
-# be masked by the pipe and resurface as `luggage install go@` (empty).
+# Resolve GO_VERSION by running golang.sh's OWN version block — validation,
+# the pre-1.22 floor, and its sed over `luggage resolve --json` — extracted by
+# the same script the unit suite uses (#1346). Real luggage output through the
+# real sed: a drift in luggage's pretty-print indentation fails this step
+# instead of passing a re-implemented copy. Only the block is copied, under
+# its production path for version-validation.sh's own `source` guard.
+COPY lib/base/version-validation.sh /tmp/build-scripts/base/version-validation.sh
+COPY lib/features/golang.sh /tmp/golang.sh
+COPY tests/integration/builds/luggage_golang/extract-version-block.sh /tmp/extract-version-block.sh
+
+# Then install with the same flags golang.sh passes (--cache-root / --log-dir
+# included, so the cache-dir assertions do not lean on luggage's defaults).
+# bash with errexit + pipefail: the sourced block exits non-zero on a failed
+# resolve or an empty parse, and that must fail this step.
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
-RUN v="${GO_VERSION}"; \
-    case "$v" in \
-        *.*.*) ;; \
-        *) v=$(/usr/local/bin/luggage resolve go --version "$v" \
-               --catalog /opt/containers-db --json \
-               | sed -n 's/^  "version": "\([^"]*\)",\{0,1\}$/\1/p') ;; \
-    esac; \
-    [ -n "$v" ] || { echo "resolve of GO_VERSION=${GO_VERSION} yielded no version" >&2; exit 1; }; \
+RUN log_error() { echo "ERROR: $*" >&2; }; \
+    log_message() { echo "$*"; }; \
+    source /tmp/build-scripts/base/version-validation.sh; \
+    bash /tmp/extract-version-block.sh /tmp/golang.sh > /tmp/version-block.sh; \
+    source /tmp/version-block.sh; \
+    v="${GO_VERSION}"; \
     echo "$v" > /etc/go-resolved-version; \
     /usr/local/bin/luggage install "go@${v}" \
         --catalog /opt/containers-db \
