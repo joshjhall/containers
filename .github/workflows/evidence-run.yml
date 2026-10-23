@@ -216,7 +216,9 @@ jobs:
           # single source of truth for arch (the row's recorded arch comes
           # from the in-job tuple split); runner/runtime/rust_target are its
           # build-plumbing companions, set together here so `runs-on:` and the
-          # toolchain `targets:` can read them at job-eval time.
+          # toolchain `targets:` can read them at job-eval time. rust_target is
+          # the triple luggage/record-evidence are BUILT for, whatever tool the
+          # leg installs — go legs carry it too (#1341).
           #   native   → arch-matched runner, no docker --platform.
           #   emulated → ubuntu-latest + QEMU + docker run --platform.
           arch_plumbing() {
@@ -248,13 +250,15 @@ jobs:
               '{include: [{tool: $tool, version: $version, tuple: $tuple, image_tag: $image_tag, arch: $arch, runtime: $runtime, runner: $runner, rust_target: $rust_target}]}')
             DRY="$INPUT_DRY_RUN"
           else
-            # Every pending evidence cell, from the catalog (#1111): the newest
-            # patch of each minor from the floor up, x each tuple it claims
-            # that has a base image, minus cells that already have passing
-            # evidence in published containers-db (#1319) or a failure inside
-            # the cooldown (#1326). Capped under GitHub's 256-job limit; the
-            # backlog drains over successive pushes, oldest versions first,
-            # never-tested cells before failure retries.
+            # Every pending evidence cell, from the catalog (#1111), for every
+            # luggage tool in it (#1341; each tools/<tool>/versions/, so
+            # system_package entries are skipped): the newest patch of each
+            # minor from the floor up, x each tuple it claims that has a base
+            # image, minus cells that already have passing evidence in
+            # published containers-db (#1319) or a failure inside the cooldown
+            # (#1326). One cap across all tools, under GitHub's 256-job limit;
+            # the backlog drains over successive pushes, never-tested cells
+            # before failure retries, tools interleaved, oldest versions first.
             # shellcheck source=bin/lib/evidence-matrix.sh
             source bin/lib/evidence-matrix.sh
             rc=0
@@ -273,7 +277,7 @@ jobs:
             # Never empty here: an empty value would read the vendored rows.
             [ -n "$DB_SOURCES" ] || { echo "No published evidence source resolved" >&2; exit 1; }
             export EVIDENCE_TESTED_SOURCE="$DB_SOURCES"
-            MATRIX=$(evidence_matrix crates/luggage/testdata/catalog rust "$AVAILABLE_ROOT" latest 200) || rc=$?
+            MATRIX=$(evidence_matrix_all crates/luggage/testdata/catalog "$AVAILABLE_ROOT" latest 200) || rc=$?
             case "$rc" in
               0) ;;
               3)
