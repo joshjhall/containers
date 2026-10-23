@@ -357,15 +357,23 @@ pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
 /// reads the errno directly (#1357).
 #[cfg(all(test, unix))]
 fn pid_exists(pid: &str) -> bool {
-    use rustix::io::Errno;
     use rustix::process::{Pid, test_kill_process};
 
     let raw: i32 = pid.parse().unwrap_or_else(|e| panic!("unparsable pid {pid:?} ({e})"));
     let target = Pid::from_raw(raw).unwrap_or_else(|| panic!("pid {raw} is not positive"));
-    match test_kill_process(target) {
+    kill_probe_says_exists(raw, test_kill_process(target))
+}
+
+/// The ESRCH-only classification behind [`pid_exists`], split out so each
+/// errno is testable without arranging a process the kernel answers it for.
+#[cfg(all(test, unix))]
+fn kill_probe_says_exists(pid: i32, probe: rustix::io::Result<()>) -> bool {
+    use rustix::io::Errno;
+
+    match probe {
         Ok(()) | Err(Errno::PERM) => true,
         Err(Errno::SRCH) => false,
-        Err(e) => panic!("cannot probe pid {raw} ({e})"),
+        Err(e) => panic!("cannot probe pid {pid} ({e})"),
     }
 }
 
@@ -697,23 +705,40 @@ mod tests {
 
     /// EPERM is a process we may not signal, not an absent one — a pid
     /// recycled to another user's process must not pass as gone (#1357).
-    /// pid 1 is normally root's init, which an unprivileged caller gets EPERM
-    /// for. Skip when that does not hold — running as root, or as the user
-    /// that owns pid 1 (`docker run --user N … cargo test`) — since there is
-    /// then no EPERM to observe. CI's hosted runners are unprivileged.
+    /// Driven through the pure classifier so it runs under any euid; a live
+    /// EPERM depends on who owns pid 1, and a skip there would read as a pass.
     #[cfg(unix)]
     #[test]
-    fn pid_exists_counts_eperm_as_alive() {
-        use rustix::process::{Pid, test_kill_process};
+    fn kill_probe_classifies_only_esrch_as_gone() {
+        use rustix::io::Errno;
 
-        let probe = test_kill_process(Pid::INIT);
-        if probe != Err(rustix::io::Errno::PERM) {
-            eprintln!(
-                "skipping: kill(1, 0) returned {probe:?}, not EPERM, so there is none to observe"
-            );
-            return;
-        }
-        assert!(pid_exists("1"), "EPERM means the pid exists, so it must not count as gone");
+        assert!(kill_probe_says_exists(4242, Ok(())), "signalable means present");
+        assert!(kill_probe_says_exists(4242, Err(Errno::PERM)), "EPERM must count as present");
+        assert!(!kill_probe_says_exists(4242, Err(Errno::SRCH)), "ESRCH is the only gone");
+    }
+
+    /// Any errno besides EPERM/ESRCH is unobservable, never gone.
+    #[cfg(unix)]
+    #[test]
+    #[should_panic(expected = "cannot probe pid 4242")]
+    fn kill_probe_panics_on_an_unexpected_errno() {
+        kill_probe_says_exists(4242, Err(rustix::io::Errno::INVAL));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[should_panic(expected = "unparsable pid")]
+    fn pid_exists_panics_on_an_unparsable_pid() {
+        pid_exists("abc");
+    }
+
+    /// `kill(0, 0)` would probe our own process group and always succeed, so
+    /// a zero pid must panic rather than reach the syscall.
+    #[cfg(unix)]
+    #[test]
+    #[should_panic(expected = "is not positive")]
+    fn pid_exists_panics_on_a_non_positive_pid() {
+        pid_exists("0");
     }
 
     /// Counterpart to the timeout test: a probe that exits promptly is
