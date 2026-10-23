@@ -307,15 +307,27 @@ test_fully_published_coverage_exits_3() {
 
 test_unreadable_published_source_is_an_error() {
     # An unreachable source must not become "everything pending" (#1319).
-    local r db out rc=0
+    local r db out err rc=0
     r="$(_fixture 1.0.0)"
     _version "$r/catalog" 1.90.0 debian-13-amd64
-    out="$(EVIDENCE_TESTED_SOURCE="$TEST_TEMP_DIR/no-such-db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(EVIDENCE_TESTED_SOURCE="$TEST_TEMP_DIR/no-such-db" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
     assert_equals "1" "$rc" "a missing source is exit 1"
     assert_equals "" "$out" "and prints no matrix"
+    # A wrong path is not a tool vendored ahead of containers-db (#1365).
+    assert_equals "evidence_matrix: no published evidence for rust at $TEST_TEMP_DIR/no-such-db/tools/rust/versions (EVIDENCE_TESTED_SOURCE)" \
+        "$(command cat "$err")" "a tools/-less first source gets the generic message"
 
+    # Main has tools/rust/ but no version files: half-published, not vendored
+    # ahead, so the generic message too.
     db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
     command mkdir -p "$db/tools/rust/versions"
+    rc=0
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
+    assert_equals "1" "$rc" "a first source with an empty tools/rust/versions is exit 1"
+    assert_equals "evidence_matrix: no published evidence for rust at $db/tools/rust/versions (EVIDENCE_TESTED_SOURCE)" \
+        "$(command cat "$err")" "and gets the generic message, not the vendored-ahead one"
+
     command echo '{not json' >"$db/tools/rust/versions/1.90.0.json"
     rc=0
     out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
@@ -588,16 +600,19 @@ test_all_tools_cap_interleaves_tools() {
     # The cap covers the merged set, and no tool's backlog takes all of it:
     # grouping by tool would give go both of its cells before any rust, and
     # grouping by version would put every go cell (1.x < 1.80) first too.
-    local r out
+    local r out err
     r="$(_fixture 1.0.0)"
     _tool "$r/catalog" go 1.22.0
     _version "$r/catalog" 1.80.0 debian-13-amd64,debian-13-arm64
     _version "$r/catalog" 1.81.0 debian-13-amd64,debian-13-arm64
     _version "$r/catalog" 1.23.4 debian-13-amd64,debian-13-arm64 "" go
-    out="$(evidence_matrix_all "$r/catalog" "$r" latest 3 2>/dev/null)"
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(evidence_matrix_all "$r/catalog" "$r" latest 3 2>"$err")"
     assert_equals $'go 1.23.4 debian-13-amd64\nrust 1.80.0 debian-13-amd64\ngo 1.23.4 debian-13-arm64' \
         "$(_tool_cells "$out")" \
         "round-robin across tools, each tool oldest first, capped at max_cells"
+    assert_equals "evidence_matrix: 6 pending cells for go rust; running the first 3 this time (untested before failure retries, oldest first)" \
+        "$(command cat "$err")" "the cap line counts the merged set and names every tool"
 }
 
 test_all_tools_retries_after_every_untested() {
@@ -674,8 +689,68 @@ test_pr_legs_one_per_tool() {
         "an empty matrix stays empty"
 }
 
+test_pr_legs_take_first_cell_not_min() {
+    # The first pending cell is not always the lexical minimum: a stale-failure
+    # retry of an older version sorts after a never-tested newer one. A leg
+    # picked by min_by would be go 1.22.9; the first cell is go 1.23.4.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.80.0 debian-13-amd64
+    _version "$r/catalog" 1.22.9 debian-13-amd64 "" go
+    _version "$r/catalog" 1.23.4 debian-13-arm64 "" go
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.80.0 ""
+    _db_version "$db" 1.22.9 "" debian-13-amd64 2026-09-01T00:00:00Z go
+    _db_version "$db" 1.23.4 "" "" "" go
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix_all "$r/catalog" "$r")"
+    assert_equals $'go 1.23.4 debian-13-arm64\nrust 1.80.0 debian-13-amd64\ngo 1.22.9 debian-13-amd64' \
+        "$(_tool_cells "$out")" "precondition: go's retry sorts after its untested cell"
+    assert_equals $'go 1.23.4 debian-13-arm64\nrust 1.80.0 debian-13-amd64' \
+        "$(_tool_cells "$(evidence_pr_legs <<<"$out")")" \
+        "the go PR leg is go's first pending cell, not its lexical minimum"
+}
+
+test_available_tuples_json_propagates_failure() {
+    # A first-stage failure must not read as "no tuples available". Defensive:
+    # today's _em_available_tuples cannot exit non-zero (an unpublished tuple
+    # is skipped, not failed), so the stub pins the contract for a future one.
+    local r rc=0 out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    out="$(
+        _em_available_tuples() { return 1; }
+        _em_available_tuples_json "$r"
+    )" || rc=$?
+    assert_equals "1" "$rc" "a failing tuple scan fails the JSON wrapper"
+    assert_equals "" "$out" "and prints no array"
+
+    # Both callers stop on it, rather than leaning on jq rejecting an empty
+    # --argjson further down (that path would print jq's own error here).
+    rc=0
+    out="$(
+        _em_available_tuples() { return 1; }
+        evidence_matrix "$r/catalog" rust "$r" 2>&1
+    )" || rc=$?
+    assert_equals "1" "$rc" "evidence_matrix fails on a failing tuple scan"
+    assert_equals "" "$out" "before reaching the matrix jq, and prints nothing"
+    rc=0
+    out="$(
+        _em_available_tuples() { return 1; }
+        evidence_matrix_all "$r/catalog" "$r" 2>&1
+    )" || rc=$?
+    assert_equals "1" "$rc" "evidence_matrix_all fails on a failing tuple scan"
+    assert_equals "" "$out" "and prints nothing"
+
+    assert_equals '["alpine-3.24-amd64","debian-13-amd64","debian-13-arm64"]' \
+        "$(_em_available_tuples_json "$r")" "the fixture's tuples, as before"
+    local empty
+    empty="$(command mktemp -d "$TEST_TEMP_DIR/empty.XXXXXX")"
+    assert_equals "[]" "$(_em_available_tuples_json "$empty")" "no base images is an empty array"
+}
+
 test_all_tools_exit_3_only_when_all_covered() {
-    local r out rc=0
+    local r out err rc=0
     r="$(_fixture 1.0.0)"
     _tool "$r/catalog" go 1.22.0
     _version "$r/catalog" 1.90.0 debian-13-amd64 debian-13-amd64
@@ -685,9 +760,12 @@ test_all_tools_exit_3_only_when_all_covered() {
         "a fully covered tool does not stop another tool's legs"
 
     _version "$r/catalog" 1.23.4 debian-13-amd64 debian-13-amd64 go
-    out="$(evidence_matrix_all "$r/catalog" "$r" 2>/dev/null)" || rc=$?
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(evidence_matrix_all "$r/catalog" "$r" 2>"$err")" || rc=$?
     assert_equals "3" "$rc" "every tool covered is exit 3"
     assert_equals "" "$out" "and prints no matrix"
+    assert_equals "evidence_matrix: go rust has no pending evidence cells" \
+        "$(command cat "$err")" "and says so for the merged set of tools"
 }
 
 test_all_tools_one_failing_tool_is_an_error() {
@@ -704,8 +782,8 @@ test_all_tools_one_failing_tool_is_an_error() {
     out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix_all "$r/catalog" "$r" 2>"$err")" || rc=$?
     assert_equals "1" "$rc" "one tool's unreadable evidence is exit 1"
     assert_equals "" "$out" "and prints no partial matrix"
-    assert_equals "evidence_matrix: no published evidence for go at $db/tools/go/versions (EVIDENCE_TESTED_SOURCE)" \
-        "$(command cat "$err")" "and the failure is go's missing evidence, not some other exit 1"
+    assert_equals "evidence_matrix: $db has no tools/go; go was vendored before containers-db main has it — merge its containers-db PR first" \
+        "$(command cat "$err")" "and the failure names go and the fix, not some other exit 1"
 
     # Tools exist, but only system_package-style ones (index.json, no
     # versions/): nothing to evidence is an error, not "nothing pending".
@@ -746,7 +824,7 @@ test_missing_tool_stays_strict_where_it_must() {
     # The leniency is only for a later source with a readable tools/ tree and
     # no trace of the tool. Main, a tree with no tools/, or a tool dir with no
     # version files are still errors (#1319).
-    local r main pr rc
+    local r main pr err rc
     r="$(_fixture 1.0.0)"
     _tool "$r/catalog" go 1.22.0
     _version "$r/catalog" 1.90.0 debian-13-amd64
@@ -756,20 +834,27 @@ test_missing_tool_stays_strict_where_it_must() {
     _db_version "$main" 1.90.0 ""
     _db_version "$pr" 1.90.0 ""
     _db_version "$pr" 1.23.4 "" "" "" go
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
 
     rc=0
-    EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>&1 || rc=$?
+    EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>"$err" || rc=$?
     assert_equals "1" "$rc" "main (the first source) missing a tool is still exit 1"
+    assert_equals "evidence_matrix: $main has no tools/go; go was vendored before containers-db main has it — merge its containers-db PR first" \
+        "$(command cat "$err")" "main's guard fired, naming the tool and the fix"
 
     _db_version "$main" 1.23.4 "" "" "" go
     rc=0
-    EVIDENCE_TESTED_SOURCE="$main:$TEST_TEMP_DIR/no-such-pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>&1 || rc=$?
+    EVIDENCE_TESTED_SOURCE="$main:$TEST_TEMP_DIR/no-such-pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>"$err" || rc=$?
     assert_equals "1" "$rc" "a later source with no tools/ tree at all is still exit 1"
+    assert_equals "evidence_matrix: no published evidence for go at $TEST_TEMP_DIR/no-such-pr/tools/go/versions (EVIDENCE_TESTED_SOURCE)" \
+        "$(command cat "$err")" "the tree-less later source's guard fired, not main's"
 
     command rm -f "$pr"/tools/go/versions/*.json
     rc=0
-    EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>&1 || rc=$?
+    EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>"$err" || rc=$?
     assert_equals "1" "$rc" "a later source with tools/go but no version files is still exit 1"
+    assert_equals "evidence_matrix: no published evidence for go at $pr/tools/go/versions (EVIDENCE_TESTED_SOURCE)" \
+        "$(command cat "$err")" "the file-less later source's guard fired, not main's"
 }
 
 test_all_tools_empty_versions_dir_is_an_error() {
@@ -847,6 +932,8 @@ run_test test_all_tools_retries_after_every_untested "failure retries wait behin
 run_test test_all_tools_retries_interleave_too "failure retries also interleave across tools"
 run_test test_all_tools_probe_publication_once "base-image publication is probed once per run"
 run_test test_pr_legs_one_per_tool "PR dry-run keeps one leg per tool"
+run_test test_pr_legs_take_first_cell_not_min "PR dry-run keeps each tool's first cell, not its minimum"
+run_test test_available_tuples_json_propagates_failure "a failing tuple scan is not an empty tuple list"
 run_test test_all_tools_exit_3_only_when_all_covered "exit 3 only when every tool is covered"
 run_test test_all_tools_one_failing_tool_is_an_error "one tool's error fails the merged matrix"
 run_test test_pr_source_predating_a_tool_adds_nothing "an ingest PR that predates a tool adds no rows for it, not an error"
