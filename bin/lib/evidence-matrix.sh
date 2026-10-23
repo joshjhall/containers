@@ -304,6 +304,14 @@ evidence_matrix() {
     _em_cap "$tool" "$max_cells" <<<"$cells"
 }
 
+# evidence_pr_legs — reads a matrix on stdin and prints the PR dry-run subset:
+# the first (highest-priority) cell of EACH tool. Not the first cell overall:
+# the merged order breaks ties by tool name, so that would always be go and a
+# rust-only install change would get no PR coverage (#1341).
+evidence_pr_legs() {
+    command jq -c '{include: (.include | group_by(.tool) | map(.[0]))}'
+}
+
 # evidence_matrix_all <catalog_dir> <project_root> [image_tag] [max_cells]
 #
 # evidence_matrix for every luggage-managed tool in the catalog — each

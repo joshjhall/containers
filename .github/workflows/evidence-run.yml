@@ -290,11 +290,9 @@ jobs:
               DRY="true"
               # A PR only needs to prove the pipeline still works, not
               # re-evidence the backlog: the first pending cell of EACH tool
-              # keeps a PR to one runner per tool instead of up to 200. Per
-              # tool, not the first overall: the merged order breaks ties by
-              # tool name, so `.[0:1]` would always be go and a rust-only
-              # install change would get no PR coverage (#1341).
-              MATRIX=$(jq -c '{include: (.include | group_by(.tool) | map(.[0]))}' <<<"$MATRIX")
+              # keeps a PR to one runner per tool instead of up to 200 (see
+              # evidence_pr_legs for why per tool, #1341).
+              MATRIX=$(evidence_pr_legs <<<"$MATRIX")
             else
               DRY="false"
             fi

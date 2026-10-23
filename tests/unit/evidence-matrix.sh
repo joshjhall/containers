@@ -659,6 +659,21 @@ test_all_tools_probe_publication_once() {
         "each of the fixture's three tuples is probed exactly once"
 }
 
+test_pr_legs_one_per_tool() {
+    # The PR dry-run keeps each tool's first cell. The real merged order puts
+    # go first on a rank tie, so the first-cell-overall shape would be go only.
+    local r out
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.80.0 debian-13-amd64,debian-13-arm64
+    _version "$r/catalog" 1.23.4 debian-13-amd64,debian-13-arm64 "" go
+    out="$(evidence_matrix_all "$r/catalog" "$r" | evidence_pr_legs)"
+    assert_equals $'go 1.23.4 debian-13-amd64\nrust 1.80.0 debian-13-amd64' "$(_tool_cells "$out")" \
+        "exactly one leg per tool, each that tool's first pending cell"
+    assert_equals '{"include":[]}' "$(evidence_pr_legs <<<'{"include":[]}')" \
+        "an empty matrix stays empty"
+}
+
 test_all_tools_exit_3_only_when_all_covered() {
     local r out rc=0
     r="$(_fixture 1.0.0)"
@@ -779,6 +794,7 @@ run_test test_all_tools_cap_interleaves_tools "the merged cap interleaves tools 
 run_test test_all_tools_retries_after_every_untested "failure retries wait behind every tool's untested cells"
 run_test test_all_tools_retries_interleave_too "failure retries also interleave across tools"
 run_test test_all_tools_probe_publication_once "base-image publication is probed once per run"
+run_test test_pr_legs_one_per_tool "PR dry-run keeps one leg per tool"
 run_test test_all_tools_exit_3_only_when_all_covered "exit 3 only when every tool is covered"
 run_test test_all_tools_one_failing_tool_is_an_error "one tool's error fails the merged matrix"
 run_test test_all_tools_empty_versions_dir_is_an_error "an empty versions/ dir fails with a named error"
