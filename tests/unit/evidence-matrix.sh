@@ -656,6 +656,21 @@ test_all_tools_one_failing_tool_is_an_error() {
     assert_equals "1" "$rc" "a catalog with no versioned tools is exit 1, not exit 3"
 }
 
+test_all_tools_empty_versions_dir_is_an_error() {
+    # A tool with a versions/ dir but no version files is half-vendored: fail
+    # loudly and say why, rather than drop the tool or crash inside jq.
+    local r out err rc=0
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(evidence_matrix_all "$r/catalog" "$r" 2>"$err")" || rc=$?
+    assert_equals "1" "$rc" "an empty versions/ dir is exit 1"
+    assert_equals "" "$out" "and prints no partial matrix"
+    assert_equals "evidence_matrix: no version files for go in $r/catalog/tools/go/versions" \
+        "$(command cat "$err")" "with a message naming the tool, not a jq glob error"
+}
+
 test_real_catalog_respects_github_cap() {
     # The shipped catalog against the real base-images tree: whatever is
     # pending, one run never exceeds GitHub's 256-job matrix limit — per tool
@@ -715,6 +730,7 @@ run_test test_all_tools_cap_interleaves_tools "the merged cap interleaves tools 
 run_test test_all_tools_retries_after_every_untested "failure retries wait behind every tool's untested cells"
 run_test test_all_tools_exit_3_only_when_all_covered "exit 3 only when every tool is covered"
 run_test test_all_tools_one_failing_tool_is_an_error "one tool's error fails the merged matrix"
+run_test test_all_tools_empty_versions_dir_is_an_error "an empty versions/ dir fails with a named error"
 run_test test_real_catalog_respects_github_cap "shipped catalog stays within GitHub's 256 cap"
 
 generate_report

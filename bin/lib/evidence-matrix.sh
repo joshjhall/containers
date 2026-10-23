@@ -182,6 +182,13 @@ _em_tool_cells() {
         command echo "evidence_matrix: no index for $tool at $index" >&2
         return 1
     }
+    # A versions/ dir with no version files is a half-vendored tool: fail with
+    # a message that says so, not jq choking on the unmatched glob.
+    local versions=("$catalog/tools/$tool/versions/"*.json)
+    [ -e "${versions[0]}" ] || {
+        command echo "evidence_matrix: no version files for $tool in $catalog/tools/$tool/versions" >&2
+        return 1
+    }
 
     local cooldown_days="${EVIDENCE_FAIL_COOLDOWN_DAYS:-7}" now="${EVIDENCE_NOW:-}"
     [ -n "$now" ] || now="$(command date +%s)"
@@ -249,7 +256,7 @@ _em_tool_cells() {
         # never-tested cells first, stale-failure retries last; oldest
         # version first within each
         | sort_by([.retry, (.version | vkey), .tuple])
-    ' "$catalog/tools/$tool/versions/"*.json)" || rc=1
+    ' "${versions[@]}")" || rc=1
     command rm -f "$evidence"
     [ "$rc" -eq 0 ] || return 1
     command echo "$out"
