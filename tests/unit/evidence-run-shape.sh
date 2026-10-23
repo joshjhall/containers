@@ -77,10 +77,135 @@ test_cells_install_from_the_vendored_catalog() {
     fi
 }
 
+# _trigger_paths <event> — the `paths:` entries of one `on:` trigger, unquoted.
+# Comment and blank lines inside the list are skipped; any other line before
+# the list dedents prints `UNPARSED: <line>`, which the caller fails on, so an
+# entry (in particular a `!` exclusion) can never be dropped silently.
+_trigger_paths() {
+    /usr/bin/awk -v ev="$1" '
+        $0 ~ "^  " ev ":$" { on = 1; next }
+        on && /^  [a-z_]+:$/ { exit }
+        on && /^    paths:$/ { inpaths = 1; next }
+        on && inpaths && /^[[:space:]]*(#.*)?$/ { next }
+        on && inpaths && /^      - "[^"]*"$/ { sub(/^      - "/, ""); sub(/"$/, ""); print; next }
+        on && inpaths && /^      / { print "UNPARSED: " $0; next }
+        on && inpaths { inpaths = 0 }
+    ' "$WF"
+}
+
+# _filter_glob_ere <glob> — a GitHub paths: glob as an anchored ERE. Unlike a
+# bash glob, a single `*` does not cross `/` there (only `**` does), so a bash
+# `[[ == ]]` match would accept `bin/*.sh` for bin/lib/evidence-x.sh even
+# though GitHub would not trigger on it. Other metacharacters are taken
+# literally: an unsupported pattern then fails to match, never over-matches.
+_filter_glob_ere() {
+    local g="$1" out="" c i
+    for ((i = 0; i < ${#g}; i++)); do
+        c="${g:i:1}"
+        case "$c" in
+            '*')
+                if [ "${g:i+1:1}" = '*' ]; then
+                    out+='.*'
+                    i=$((i + 1))
+                else
+                    out+='[^/]*'
+                fi
+                ;;
+            '.' | '?' | '+' | '^' | '$' | '(' | ')' | '|' | '{' | '}' | '[' | ']' | '\') out+="\\$c" ;;
+            *) out+="$c" ;;
+        esac
+    done
+    printf '^%s$' "$out"
+}
+
+# _covered <file> <pattern>... — whether GitHub's paths: filter matches <file>.
+# Entries apply in order and the last match wins, so a `!` entry excludes
+# what an earlier entry included.
+_covered() {
+    local f="$1" p hit=1
+    shift
+    for p in "$@"; do
+        if [ "${p:0:1}" = '!' ]; then
+            [[ "$f" =~ $(_filter_glob_ere "${p:1}") ]] && hit=1
+        else
+            [[ "$f" =~ $(_filter_glob_ere "$p") ]] && hit=0
+        fi
+    done
+    return "$hit"
+}
+
+test_trigger_paths_cover_evidence_scripts() {
+    # Every bin/lib/evidence-*.sh lib and bin/ingest-evidence*.sh script must
+    # re-trigger the workflow, or a change confined to it first runs on some
+    # unrelated push to main (#1388). The set comes from disk, so a new file
+    # under those names is checked without editing this test; a helper the
+    # jobs source under some OTHER name is not.
+    local ev f p unparsed
+    local -a scripts=() patterns
+    # An unmatched glob stays literal and would match its own trigger entry,
+    # so keep only real files and fail on an empty set.
+    for f in "$PROJECT_ROOT"/bin/lib/evidence-*.sh "$PROJECT_ROOT"/bin/ingest-evidence*.sh; do
+        [ -f "$f" ] && scripts+=("${f#"$PROJECT_ROOT"/}")
+    done
+    if [ "${#scripts[@]}" -eq 0 ]; then
+        assert_true false "no evidence libs or ingest scripts found to check"
+        return
+    fi
+    for ev in pull_request push; do
+        mapfile -t patterns < <(_trigger_paths "$ev")
+        if [ "${#patterns[@]}" -eq 0 ]; then
+            assert_true false "$ev has no paths: entries to check"
+            continue
+        fi
+        unparsed=""
+        for p in "${patterns[@]}"; do
+            [ "${p#UNPARSED: }" != "$p" ] && unparsed="$p"
+        done
+        if [ -n "$unparsed" ]; then
+            assert_true false "$ev paths: entry not of the form - \"glob\": ${unparsed#UNPARSED: }"
+            continue
+        fi
+        for f in "${scripts[@]}"; do
+            if _covered "$f" "${patterns[@]}"; then
+                assert_true true "$ev paths: cover $f"
+            else
+                assert_true false "$ev paths: cover $f"
+            fi
+        done
+    done
+}
+
+test_filter_glob_semantics() {
+    # Pins the two GitHub rules the coverage test depends on, so a translator
+    # regression (e.g. `*` -> `.*`) cannot pass silently through the real
+    # workflow's patterns.
+    _expect_covered no "single * stays within a path segment" bin/lib/evidence-x.sh 'bin/*.sh'
+    _expect_covered yes "** crosses directories" bin/lib/evidence-x.sh 'bin/**'
+    _expect_covered no ". is literal" bin/ingest-evidenceXsh 'bin/ingest-evidence.sh'
+    _expect_covered no "a later ! entry excludes" \
+        bin/lib/evidence-x.sh 'bin/lib/evidence-*.sh' '!bin/lib/evidence-x.sh'
+    _expect_covered yes "a later positive entry re-includes" \
+        bin/lib/evidence-x.sh '!bin/lib/evidence-x.sh' 'bin/lib/*'
+}
+
+# _expect_covered <yes|no> <message> <file> <pattern>...
+_expect_covered() {
+    local want="$1" msg="$2" got=no
+    shift 2
+    _covered "$@" && got=yes
+    if [ "$got" = "$want" ]; then
+        assert_true true "$msg"
+    else
+        assert_true false "$msg (expected covered=$want, got $got)"
+    fi
+}
+
 run_test test_cells_install_as_the_container_user "cells install as the container user (--user runner)"
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
 run_test test_artifact_name_is_per_cell "artifact name is per cell"
 run_test test_cells_install_from_the_vendored_catalog "cells install from the vendored catalog"
+run_test test_trigger_paths_cover_evidence_scripts "trigger paths cover every evidence lib and script"
+run_test test_filter_glob_semantics "paths: glob matching follows GitHub semantics"
 
 generate_report
