@@ -78,15 +78,18 @@ test_cells_install_from_the_vendored_catalog() {
 }
 
 # _trigger_paths <event> [workflow] — the `paths:` entries of one `on:` trigger
-# (in $WF by default), unquoted. The trigger ends at its next sibling trigger
-# or at any column-0 key, so the last trigger never reads on into
-# `permissions:`/`env:`/`jobs:`. Comment and blank lines inside the list are
-# skipped; any other line before the list dedents prints `UNPARSED: <line>`,
-# which the caller fails on, so an entry (in particular a `!` exclusion) can
-# never be dropped silently.
+# (in $WF by default), unquoted. The trigger key is matched only inside the
+# column-0 `on:` block, so a same-named job id is never read as one. The
+# trigger ends at its next sibling trigger or at any column-0 key, so the last
+# trigger never reads on into `permissions:`/`env:`/`jobs:`. Comment and blank
+# lines inside the list are skipped; any other line before the list dedents
+# prints `UNPARSED: <line>`, which the caller fails on, so an entry (in
+# particular a `!` exclusion) can never be dropped silently.
 _trigger_paths() {
     /usr/bin/awk -v ev="$1" '
-        $0 ~ "^  " ev ":$" { on = 1; next }
+        /^on:$/ { inon = 1; next }
+        !on && /^[^[:space:]#]/ { inon = 0 }
+        inon && $0 ~ "^  " ev ":$" { on = 1; next }
         on && /^[^[:space:]#]/ { exit }
         on && /^  [A-Za-z0-9_-]+:/ { exit }
         on && /^    paths:$/ { inpaths = 1; next }
@@ -234,6 +237,11 @@ test_trigger_paths_parser_fixtures() {
         '      - "main"' 'jobs:' >"$dir/dedent.yml"
     _expect_trigger_paths "the paths list ends at the next key under the trigger" \
         push "$dir/dedent.yml" 'a'
+
+    printf '%s\n' 'on: [workflow_dispatch]' 'jobs:' '  push:' '    paths:' \
+        '      - "leak"' >"$dir/job-named-push.yml"
+    _expect_trigger_paths "a job named like the trigger outside on: is not read" \
+        push "$dir/job-named-push.yml"
 
     command rm -rf "$dir"
 }
