@@ -500,6 +500,24 @@ test_offset_minutes_and_calendar_validity() {
         "ten minutes later +05:30 is inside the window, and a real date still waits"
 }
 
+test_future_fail_is_retried() {
+    # #1356: a fail stamped past now + 300 s skew reads as stale, so it is
+    # retried (last), not held until the date arrives. Two minutes ahead is
+    # skew, and still inside the cooldown.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    command mkdir -p "$db/tools/rust/versions"
+    command jq -n '{schemaVersion: 1, tool: "rust", version: "1.90.0", tested: [
+        {os: "debian", os_version: "13", arch: "amd64", result: "fail", tested_at: "2030-01-01T00:00:00Z"},
+        {os: "debian", os_version: "13", arch: "arm64", result: "fail", tested_at: "2026-10-21T00:02:00Z"}]}' \
+        >"$db/tools/rust/versions/1.90.0.json"
+    out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "alpine-3.24-amd64|debian-13-amd64" "$(command jq -r '[.include[].tuple] | join("|")' <<<"$out")" \
+        "the future fail is retried after the untested cell; the skewed one waits"
+}
+
 test_pass_beats_recent_fail() {
     local r db out
     r="$(_fixture 1.0.0)"
@@ -918,6 +936,7 @@ run_test test_recent_fail_is_not_pending "a recently failed cell is not pending"
 run_test test_only_recent_failures_exits_3 "only recent failures exits 3"
 run_test test_stale_fail_sorts_after_untested "stale failures retry after never-tested cells"
 run_test test_newest_fail_row_decides_cooldown "the newest fail row decides the cooldown"
+run_test test_future_fail_is_retried "a future-dated fail is retried, not held"
 run_test test_offset_tested_at_decides_cooldown "a numeric-offset tested_at is converted to UTC for the cooldown"
 run_test test_near_miss_tested_at_is_stale "near-miss tested_at forms read as stale failures"
 run_test test_offset_range_boundaries "offsets parse only within -12:00..+14:00"

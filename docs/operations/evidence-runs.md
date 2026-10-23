@@ -198,7 +198,10 @@ newest patch of each minor, minimum_recommended floor and up
     (converted to UTC). `record-evidence` always writes `Z` with nanoseconds.
     Lowercase `z`, `+HHMM`, an out-of-range offset such as `+99:99`, an
     impossible date or time such as Feb 30 or `24:00:00`, and bare dates are
-    unparsable. The same parse decides "newer" at ingest.
+    unparsable. A parsable stamp more than 5 minutes in the future (a
+    hand-edited or clock-skewed row) also counts as stale (#1356), so it is
+    retried instead of holding the cell until that date. The same parse decides
+    "newer" at ingest.
   - The cooldown is keyed by tuple, not by image digest. A base-image rebuild
     (new digest) still re-evidences its tuple right away through
     `dispatch-evidence-for-tuple.sh`, which dispatches whenever the newest
@@ -406,9 +409,12 @@ anything *meaningful* changed:
   freeze the first failure's timestamp, so after one cooldown the cell would
   retry on every push. The refresh happens only when the new `tested_at` is
   newer; an identical or older fail row (a saved row re-ingested late) is
-  still a no-op, so the timestamp never moves backwards. The row is updated in
-  place, keeping `tested[]` order. The cost is at most one row update per
-  failing cell per cooldown window, carried in the run's batched ingest PR.
+  still a no-op, so the timestamp never moves backwards. A `tested_at` more
+  than 5 minutes past the ingest clock reads as stale on either side (#1356):
+  stored, the next genuine failure replaces it; incoming, it never counts as
+  newer. The row is updated in place, keeping `tested[]` order. The cost is
+  at most one row update per failing cell per cooldown window, carried in the
+  run's batched ingest PR.
 
 Rationale:
 

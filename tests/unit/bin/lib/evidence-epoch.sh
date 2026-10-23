@@ -45,6 +45,26 @@ test_rejected_forms_read_as_zero() {
     done
 }
 
+# _epoch_at <tested_at> <now> — evidence_epoch_at($now) of a row stamped so.
+_epoch_at() {
+    command jq -n --arg t "$1" --argjson now "$2" \
+        "$_EVIDENCE_EPOCH_JQ"'{tested_at: $t} | evidence_epoch_at($now)'
+}
+
+test_future_reads_as_zero() {
+    # #1356: now is 2026-10-01T00:00:00Z; the skew allowance is 300 s.
+    local now=1790812800
+    assert_equals "1790726400" "$(_epoch_at 2026-09-30T00:00:00Z "$now")" "a past stamp is unchanged"
+    assert_equals "1790813100" "$(_epoch_at 2026-10-01T00:05:00Z "$now")" "now + 300 s is inside the skew"
+    assert_equals "0" "$(_epoch_at 2026-10-01T00:05:01Z "$now")" "now + 301 s reads as 0"
+    assert_equals "0" "$(_epoch_at 2030-01-01T00:00:00Z "$now")" "a far-future stamp reads as 0"
+    assert_equals "1790813040" "$(_epoch_at 2026-10-01T01:04:00+01:00 "$now")" \
+        "an offset stamp is judged by its UTC instant (00:04Z, inside the skew)"
+    assert_equals "0" "$(_epoch_at 2026-10-01T03:00:00+02:00 "$now")" \
+        "an offset stamp whose UTC instant is an hour ahead reads as 0"
+    assert_equals "0" "$(_epoch_at 2026-02-30T00:00:00Z "$now")" "an unparsable stamp is still 0"
+}
+
 test_callers_have_no_copy_of_their_own() {
     # The drift #1355 closes: a second def that only its own caller exercises.
     # Any bin script defining its own *epoch jq def, or carrying the parse's
@@ -67,13 +87,14 @@ test_both_callers_use_the_shared_def() {
         unset _EVIDENCE_EPOCH_JQ
         # shellcheck source=bin/lib/evidence-matrix.sh
         source "$PROJECT_ROOT/bin/lib/evidence-matrix.sh"
-        command jq -cn "$_EM_EVIDENCE_JQ"'[
+        command jq -cn --argjson now 1790812800 "$_EM_EVIDENCE_JQ"'[
             {os: "debian", os_version: "13", arch: "amd64", result: "fail", tested_at: "2026-10-01T01:00:00+02:00"},
-            {os: "debian", os_version: "13", arch: "arm64", result: "fail", tested_at: "2026-02-30T00:00:00Z"}
-        ] | em_evidence | .fail'
+            {os: "debian", os_version: "13", arch: "arm64", result: "fail", tested_at: "2026-02-30T00:00:00Z"},
+            {os: "alpine", os_version: "3.24", arch: "amd64", result: "fail", tested_at: "2030-01-01T00:00:00Z"}
+        ] | em_evidence($now) | .fail'
     )
-    assert_equals '{"debian-13-amd64":1790809200,"debian-13-arm64":0}' "$matrix" \
-        "the matrix fail map uses evidence_epoch"
+    assert_equals '{"debian-13-amd64":1790809200,"debian-13-arm64":0,"alpine-3.24-amd64":0}' "$matrix" \
+        "the matrix fail map uses evidence_epoch_at"
 
     # merge: a stored fail at 2026-09-30T23:30:00Z, then a repeat whose
     # wall clock is earlier but whose instant (00:30-01:00 = 01:30Z) is later.
@@ -87,7 +108,7 @@ test_both_callers_use_the_shared_def() {
         unset _EVIDENCE_EPOCH_JQ
         # shellcheck source=bin/lib/evidence-merge.sh
         source "$PROJECT_ROOT/bin/lib/evidence-merge.sh"
-        merge_evidence_row "$f" "$newer" && command jq -r '.tested[0].tested_at' "$f"
+        EVIDENCE_NOW=1792540800 merge_evidence_row "$f" "$newer" && command jq -r '.tested[0].tested_at' "$f"
     )
     command rm -f "$f"
     assert_equals "2026-10-01T00:30:00-01:00" "$merge" \
@@ -126,6 +147,7 @@ test_setup_sparse_checkout_carries_matrix_deps() {
 
 run_test test_accepted_forms "accepted tested_at forms parse to the UTC instant"
 run_test test_rejected_forms_read_as_zero "near-miss and non-string tested_at read as epoch 0"
+run_test test_future_reads_as_zero "a stamp past now + the skew allowance reads as epoch 0"
 run_test test_callers_have_no_copy_of_their_own "no other bin script defines its own epoch parse"
 run_test test_both_callers_use_the_shared_def "matrix and ingest both source the shared def"
 run_test test_setup_sparse_checkout_carries_matrix_deps "setup sparse checkout carries the matrix lib's sourced deps"

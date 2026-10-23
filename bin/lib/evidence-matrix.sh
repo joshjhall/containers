@@ -87,19 +87,21 @@ source "$(dirname "${BASH_SOURCE[0]}")/evidence-epoch.sh"
 # _EM_EVIDENCE_JQ — jq defs shared by the published and vendored paths, so the
 # fail policy is computed in one place. `em_evidence` reduces an array of
 # tested[] rows to {pass: ["os-osv-arch", ...], fail: {"os-osv-arch": <newest
-# fail epoch>}}. Fail ages come from evidence_epoch (bin/lib/evidence-epoch.sh),
-# the same parse ingest uses to order repeated failures: a missing or
-# unparsable tested_at reads as epoch 0, a stale failure (retried last).
+# fail epoch>}}. Fail ages come from evidence_epoch_at($now)
+# (bin/lib/evidence-epoch.sh), the same parse ingest uses to order repeated
+# failures: a missing, unparsable, or future (#1356) tested_at reads as epoch
+# 0, a stale failure (retried last).
 _EM_EVIDENCE_JQ="$_EVIDENCE_EPOCH_JQ"'
 def em_cell: "\(.os)-\(.os_version // "")-\(.arch)";
-def em_evidence:
+def em_evidence($now):
     { pass: ([ .[] | select(.result == "pass") | em_cell ] | unique),
       fail: (reduce (.[] | select(.result == "fail")) as $r ({};
-                ($r | em_cell) as $c | .[$c] = ([.[$c] // 0, ($r | evidence_epoch)] | max))) };
+                ($r | em_cell) as $c | .[$c] = ([.[$c] // 0, ($r | evidence_epoch_at($now))] | max))) };
 '
 
-# _em_published_evidence <tool> <out_file> — writes the evidence per version
+# _em_published_evidence <tool> <out_file> <now> — writes the evidence per version
 # from EVIDENCE_TESTED_SOURCE to out_file, as {"<version>": <em_evidence>}.
+# now (epoch seconds) is the clock that decides a future tested_at (#1356).
 # The source is a colon-separated list of
 # directories laid out like containers-db (tools/<tool>/versions/*.json); rows
 # from all of them are unioned. evidence-run.yml passes containers-db main plus
@@ -127,7 +129,7 @@ def em_evidence:
 # A file, not a jq argument: the map grows with containers-db and one argv
 # string is capped at 128 KiB.
 _em_published_evidence() {
-    local tool="$1" out="$2"
+    local tool="$1" out="$2" now="$3"
     if [ -z "${EVIDENCE_TESTED_SOURCE:-}" ]; then
         command echo null >"$out"
         return 0
@@ -152,9 +154,9 @@ _em_published_evidence() {
         fi
         files+=("${found[@]}")
     done
-    command jq -cs "$_EM_EVIDENCE_JQ"'
+    command jq -cs --argjson now "$now" "$_EM_EVIDENCE_JQ"'
         group_by(.version)
-        | map({key: .[0].version, value: ([ .[].tested[]? ] | em_evidence)})
+        | map({key: .[0].version, value: ([ .[].tested[]? ] | em_evidence($now))})
         | from_entries
     ' "${files[@]}" >"$out" || {
         command echo "evidence_matrix: unreadable published evidence for $tool in $EVIDENCE_TESTED_SOURCE" >&2
@@ -233,7 +235,7 @@ _em_tool_cells() {
 
     local evidence
     evidence="$(command mktemp)" || return 1
-    _em_published_evidence "$tool" "$evidence" || {
+    _em_published_evidence "$tool" "$evidence" "$((10#$now))" || {
         command rm -f "$evidence"
         return 1
     }
@@ -265,7 +267,7 @@ _em_tool_cells() {
         | [ .[] as $v
             # evidence for this version — from the published source when
             # given, else the vendored tested[]
-            | (if $evidence == null then [ $v.tested[]? ] | em_evidence
+            | (if $evidence == null then [ $v.tested[]? ] | em_evidence($now)
                else ($evidence[$v.version] // {pass: [], fail: {}}) end) as $ev
             | $v.support_matrix[]?
             | select(.status == "supported" and (.os_version // null) != null)

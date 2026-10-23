@@ -20,6 +20,12 @@
 # byte-identical re-run, or an older saved row) is still a no-op, so tested_at
 # never moves backwards.
 #
+# "Newer" is judged by evidence_epoch_at against EVIDENCE_NOW (epoch seconds,
+# default the current time; tests pin it). A tested_at more than the skew
+# allowance in the future reads as stale (#1356): stored, it would make every
+# genuine repeat failure a no-op; incoming, it would pin the row. Either way the
+# next real attempt replaces it.
+#
 # Requires jq.
 
 # Repeated-failure ordering uses the same tested_at parse as the evidence
@@ -31,9 +37,15 @@ source "$(dirname "${BASH_SOURCE[0]}")/evidence-epoch.sh"
 #
 # Rewrites <version-file> in place (trailing newline kept). Byte-stable for
 # identical inputs, so callers detect a no-op with `git diff --quiet`.
-# Returns 2 when the row is not valid JSON or lacks os/arch/result.
+# Returns 2 when the row is not valid JSON or lacks os/arch/result, or when
+# EVIDENCE_NOW is set but not 1-12 digits.
 merge_evidence_row() {
-    local file="$1" row="$2" tmp
+    local file="$1" row="$2" tmp now="${EVIDENCE_NOW:-}"
+    [ -n "$now" ] || now="$(command date +%s)"
+    [[ "$now" =~ ^[0-9]{1,12}$ ]] || {
+        command echo "merge_evidence_row: EVIDENCE_NOW must be 1-12 digits" >&2
+        return 2
+    }
     command jq -e . >/dev/null 2>&1 <<<"$row" || {
         command echo "merge_evidence_row: row is not valid JSON" >&2
         return 2
@@ -56,6 +68,7 @@ merge_evidence_row() {
         --arg ov "$ov" \
         --arg arch "$arch" \
         --arg digest "$digest" \
+        --argjson now "$((10#$now))" \
         "$_EVIDENCE_EPOCH_JQ"'
         def dedup_match:
             (.os // "") == $os
@@ -70,8 +83,9 @@ merge_evidence_row() {
               .tested = (($rows | map(select(dedup_match | not))) + [$new])
           elif $new.result != "fail" then .
           # an older repeated failure (a saved row re-ingested late) must not
-          # move tested_at backwards and cut the cooldown short
-          elif ($new | evidence_epoch) <= ([ $matches[] | select(strip_volatile == $new_core) | evidence_epoch ] | max)
+          # move tested_at backwards and cut the cooldown short; a future
+          # stamp on either side reads as 0 (#1356)
+          elif ($new | evidence_epoch_at($now)) <= ([ $matches[] | select(strip_volatile == $new_core) | evidence_epoch_at($now) ] | max)
           then .
           # a newer repeated failure refreshes its row in place, keeping row
           # order, so only tested_at/ci_run/duration_seconds show up in the diff
