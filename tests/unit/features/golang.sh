@@ -221,7 +221,7 @@ test_partial_version_resolves_to_top_level_version() {
 $LUGGAGE_RESOLVE_JSON
 JSON") || rc=$?
     assert_equals "0" "$rc" "partial 1.26 resolves (exit 0)"
-    assert_contains "$out" "RESULT: 1.26.10" "resolves to the top-level version, not the nested version_args element"
+    assert_contains "$out" "RESULT: 1.26.10" "resolves to the top-level version, not the nested dependency's 9.9.9"
 }
 
 # Test: the top-level version is found whether or not a trailing comma follows
