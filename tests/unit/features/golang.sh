@@ -46,11 +46,11 @@ teardown() {
 # from the script, not copied, and reads the real lib/ content files, so these
 # tests break when golang.sh changes what it configures. luggage's own install
 # end-state is asserted in a real image by test_luggage_golang.sh.
-# Usage: run_config_section [golang.sh path]
+# Usage: run_config_section
 # Leaves the installed tree under $TEST_TEMP_DIR/root and the
 # create_cache_directories argv in $TEST_TEMP_DIR/cache-dirs.log.
 run_config_section() {
-    local golang_script="${1:-$PROJECT_ROOT/lib/features/golang.sh}"
+    local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
     local root="$TEST_TEMP_DIR/root" section="$TEST_TEMP_DIR/config-section.sh"
 
     command mkdir -p "$root/usr/local/bin"
@@ -65,19 +65,29 @@ run_config_section() {
         return 1
     fi
 
-    (
+    # A command in the section failing must FAIL the test, not return quietly:
+    # a test that exits 0 with no assertion counts as a pass. Run it as its own
+    # bash process — a `( set -e; … )` subshell on the left of `||` runs with
+    # errexit suspended, so a failing command would never stop it.
+    local err="$TEST_TEMP_DIR/config-section.err" rc=0
+    # shellcheck disable=SC2016  # expanded by the inner bash, not here
+    bash -c '
         set -euo pipefail
         log_message() { :; }
         log_command() {
             shift
             "$@" >/dev/null
         }
-        create_cache_directories() { printf '%s\n' "$@" >"$TEST_TEMP_DIR/cache-dirs.log"; }
-        # shellcheck disable=SC1091
-        source "$PROJECT_ROOT/lib/base/bashrc-helpers.sh"
-        # shellcheck disable=SC1090
-        source "$section"
-    ) >/dev/null
+        cache_log="$3"
+        create_cache_directories() { printf "%s\n" "$@" >"$cache_log"; }
+        source "$1"
+        source "$2"
+    ' _ "$PROJECT_ROOT/lib/base/bashrc-helpers.sh" "$section" "$TEST_TEMP_DIR/cache-dirs.log" \
+        >/dev/null 2>"$err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        assert_true false "golang.sh config section failed (rc=$rc): $(command cat "$err")"
+        return 1
+    fi
 }
 
 # Source the generated 50-golang.sh in a clean interactive shell (its env
