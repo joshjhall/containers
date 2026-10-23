@@ -16,6 +16,13 @@
 # the offset subtracted. libc normalizes a date like Feb 30 into March, so the
 # base must also round-trip through todate unchanged.
 #
+# Callers order rows with `evidence_epoch_at($now)` instead (#1356): the same
+# parse, but a stamp more than 300 s (clock-skew allowance) after $now also
+# reads as 0. A future tested_at would otherwise win every `max` / "is it
+# newer" comparison: it would hold a failing cell out of the matrix until the
+# date passes, and make every genuine repeat failure an ingest no-op. Reading
+# it as stale (not clamping to $now) lets the next real attempt replace it.
+#
 # Prepend it to a jq program: command jq "$_EVIDENCE_EPOCH_JQ"'...'
 #
 # Requires jq.
@@ -25,4 +32,5 @@ def evidence_epoch: ((.tested_at // "" | capture("^(?<b>[0-9]{4}-[0-9]{2}-[0-9]{
     | select(.z == "Z" or ((.m | tonumber) < 60 and (.h | tonumber) * 60 + (.m | tonumber) <= (if .s == "+" then 840 else 720 end)))
     | ((.b + "Z") as $u | $u | fromdateiso8601 | select(todate == $u))
       - (if .z == "Z" then 0 else (if .s == "-" then -1 else 1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60) end))? // 0);
+def evidence_epoch_at($now): evidence_epoch | if . > $now + 300 then 0 else . end;
 '

@@ -529,6 +529,39 @@ test_repeated_fail_offset_tested_at() {
     command rm -f "$f"
 }
 
+test_repeated_fail_future_tested_at() {
+    # #1356: a tested_at past EVIDENCE_NOW + 300 s skew reads as stale. Stored,
+    # it must not turn every genuine repeat into a no-op; incoming, it must
+    # never count as newer. Clock: 2026-10-21T00:00:00Z.
+    # shellcheck source=bin/lib/evidence-merge.sh
+    source "$PROJECT_ROOT/bin/lib/evidence-merge.sh"
+    local f future real skew before rc=0
+    f=$(command mktemp)
+    future=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2030-01-01T00:00:00Z"}' "$SAMPLE_ROW")
+    real=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-20T00:00:00Z"}' "$SAMPLE_ROW")
+    skew=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-21T00:04:00Z"}' "$SAMPLE_ROW")
+    jq -n --argjson a "$future" '{schemaVersion: 1, tool: "rust", version: "1.95.0", tested: [$a]}' >"$f"
+
+    EVIDENCE_NOW=1792540800 merge_evidence_row "$f" "$real"
+    assert_equals "2026-10-20T00:00:00Z" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
+        "a genuine repeat replaces a stored future-dated fail row"
+
+    before=$(command cat "$f")
+    EVIDENCE_NOW=1792540800 merge_evidence_row "$f" "$future"
+    assert_equals "$before" "$(command cat "$f")" \
+        "a future-dated repeat never counts as newer"
+
+    EVIDENCE_NOW=1792540800 merge_evidence_row "$f" "$skew"
+    assert_equals "2026-10-21T00:04:00Z" "$(jq -r '.tested[0].tested_at' "$f")" \
+        "a repeat within the skew allowance is still newer"
+
+    before=$(command cat "$f")
+    EVIDENCE_NOW=soon merge_evidence_row "$f" "$real" 2>/dev/null || rc=$?
+    assert_equals "2" "$rc" "a non-integer EVIDENCE_NOW is rejected"
+    assert_equals "$before" "$(command cat "$f")" "and the file is untouched"
+    command rm -f "$f"
+}
+
 test_stdin_row_via_dash() {
     local db
     db=$(command mktemp -d)
@@ -608,6 +641,7 @@ run_test test_noop_on_volatile_only_reingest "volatile-only re-ingest is a clean
 run_test test_repeated_fail_refreshes_tested_at "a repeated failure refreshes tested_at for the fail cooldown"
 run_test test_repeated_fail_merge_edge_cases "repeated-fail merge: duplicate matches collapse, a new error_class replaces"
 run_test test_repeated_fail_offset_tested_at "repeated-fail merge compares numeric-offset tested_at as UTC"
+run_test test_repeated_fail_future_tested_at "repeated-fail merge treats a future tested_at as stale"
 run_test test_stdin_row_via_dash "--row - reads JSON from stdin"
 run_test test_rejects_missing_required_flag "missing --db-path is exit 2"
 run_test test_rejects_unknown_argument "unknown flag is exit 2"
