@@ -24,20 +24,26 @@ script="$1"
 luggage="${2:-/usr/local/bin/luggage}"
 
 # `exit` in a rule still runs END, so `done` is what tells "stopped at the
-# second fi" apart from "ran out of input".
+# second fi" apart from "ran out of input". END exits 3, not 2: awk itself
+# exits 2 on a fatal error such as an unreadable file, and that must not be
+# reported as a problem with the script's content.
 rc=0
 block=$(command awk '
     /^validate_go_version /{f=1}
     f{print}
     f && /^fi$/ && ++n==2{done=1; exit}
-    END{if (f && !done) exit 2}
+    END{if (f && !done) exit 3}
 ' "$script") || rc=$?
-if [ -z "$block" ]; then
-    echo "extract-version-block: no version block found in $script" >&2
+if [ "$rc" -eq 3 ]; then
+    echo "extract-version-block: version block in $script never reaches its closing fi" >&2
     exit 1
 fi
 if [ "$rc" -ne 0 ]; then
-    echo "extract-version-block: version block in $script never reaches its closing fi" >&2
+    echo "extract-version-block: could not read $script (awk exit $rc)" >&2
+    exit 1
+fi
+if [ -z "$block" ]; then
+    echo "extract-version-block: no version block found in $script" >&2
     exit 1
 fi
 luggage_esc=$(printf '%s' "$luggage" | command sed 's/[\\#&]/\\&/g')

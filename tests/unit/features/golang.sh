@@ -463,6 +463,19 @@ test_extractor_refuses_unterminated_block() {
     assert_not_contains "$out" "INSTALL_CODE_MARKER" "extractor prints nothing past the partial block"
 }
 
+# Test: an unreadable script is reported as unreadable, not blamed on its
+# content as a missing or unterminated block — awk's own fatal-error exit
+# must stay distinct from the END sentinel
+test_extractor_reports_unreadable_script() {
+    local missing="$TEST_TEMP_DIR/does-not-exist.sh" out rc=0
+    out=$(bash "$PROJECT_ROOT/tests/integration/builds/luggage_golang/extract-version-block.sh" \
+        "$missing" 2>&1) || rc=$?
+    assert_equals "1" "$rc" "extractor exits 1 when golang.sh cannot be read"
+    assert_contains "$out" "could not read $missing" "extractor names the unreadable script"
+    assert_not_contains "$out" "no version block found" "an unreadable script is not reported as blockless"
+    assert_not_contains "$out" "never reaches its closing fi" "an unreadable script is not reported as unterminated"
+}
+
 # Test: a luggage path carrying sed-special characters is substituted
 # literally, not read as the s### delimiter or the matched-text reference
 test_extractor_escapes_luggage_path() {
@@ -530,6 +543,7 @@ run_test_with_setup test_bare_major_rejected_by_validation "Bare major GO_VERSIO
 run_test_with_setup test_non_1x_major_reaches_resolve "Non-1.x partial reaches resolve"
 run_test_with_setup test_extractor_refuses_missing_block "Version-block extractor refuses a script without one"
 run_test_with_setup test_extractor_refuses_unterminated_block "Version-block extractor refuses a block missing its closing fi"
+run_test_with_setup test_extractor_reports_unreadable_script "Version-block extractor reports an unreadable script as unreadable"
 run_test_with_setup test_extractor_escapes_luggage_path "Version-block extractor substitutes a sed-special luggage path verbatim"
 run_test_with_setup test_no_inline_go_install "No inline Go download/verify/extract remains"
 run_test_with_setup test_no_upstream_version_resolution "No upstream resolve_go_version remains"
