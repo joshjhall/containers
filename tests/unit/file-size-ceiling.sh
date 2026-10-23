@@ -46,13 +46,13 @@
 #     entries would outlive the problem and quietly re-authorise regrowth up to
 #     a stale number. With it, the list is self-emptying.
 #
-# THE ALLOWLIST TURNED OVER COMPLETELY. All eight total-line entries are gone —
-# none was ever a real offender. One new entry took their place: the corrected
-# metric found a file the old ceiling never caught (758 total lines, under the
-# old 900 bar, but 617 production LOC). That swap is the whole point of #873: the
-# check stops penalizing well-tested, well-commented files and starts catching
-# genuinely large ones. An entry here is now a real debt with a tracked issue,
-# and should stay rare.
+# THE ALLOWLIST IS EMPTY. All eight total-line entries are gone (#873) — none
+# was ever a real offender. The one entry #873 added in their place (617
+# production LOC) turned out to be a counting artifact too: a test module gated
+# `#[cfg(all(test, unix))]` that the metric did not recognise as tests (#874).
+# The check stops penalizing well-tested, well-commented files and catches
+# genuinely large ones; an entry here is a real debt with a tracked issue, and
+# should stay rare.
 
 set -euo pipefail
 
@@ -99,7 +99,7 @@ SCAN_DIRS=("tests" "lib" "bin" "crates")
 # empty when the path is not grandfathered.
 _allowed_max() {
     local path="$1" entry
-    for entry in "${GRANDFATHERED[@]}"; do
+    for entry in ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"}; do
         if [ "${entry%%:*}" = "$path" ]; then
             command printf '%s\n' "${entry##*:}"
             return 0
@@ -194,7 +194,13 @@ _production_loc() {
         # `not(test)` are deliberately NOT matched — both compile into non-test
         # builds, so they stay production. Defined once, here, so the region
         # arm and the per-unit arm below cannot drift apart.
-        BEGIN { cfg_test = "^#\\[cfg\\((test|all\\(([^()]*,[ \t]*)?test([ \t]*,[^()]*)?\\))\\)\\]" }
+        # A sibling conjunct (`sib`) may hold one level of parens, so
+        # `all(test, not(windows))` matches; `test` must be a WHOLE conjunct,
+        # so `all(unix, not(test))` and `all(unix, any(test, x))` do not.
+        BEGIN {
+            sib = "([^(),]|\\([^()]*\\))*"
+            cfg_test = "^#\\[cfg\\((test|all\\((" sib ",)*[ \t]*test[ \t]*(," sib ")*\\))\\)\\]"
+        }
 
         # --- rs: trailing `#[cfg(test)] mod … {` region, to EOF -------------
         # Armed by a column-zero `#[cfg(test)]`, but only fires once the next
@@ -351,7 +357,7 @@ test_no_ungrandfathered_file_over_ceiling() {
 # A grandfathered file may shrink but never grow. This is the ratchet itself.
 test_grandfathered_files_do_not_grow() {
     local violations=0 entry path allowed lines
-    for entry in "${GRANDFATHERED[@]}"; do
+    for entry in ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"}; do
         path="${entry%%:*}"
         allowed="${entry##*:}"
 
@@ -379,7 +385,7 @@ test_grandfathered_files_do_not_grow() {
 # list cannot outlive the debt it records.
 test_grandfathered_entries_retire_when_fixed() {
     local violations=0 entry path allowed lines
-    for entry in "${GRANDFATHERED[@]}"; do
+    for entry in ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"}; do
         path="${entry%%:*}"
         allowed="${entry##*:}"
         [ -f "$PROJECT_ROOT/$path" ] || continue
@@ -401,7 +407,7 @@ test_grandfathered_entries_retire_when_fixed() {
 # file) would make the ratchet's verdict depend on iteration order.
 test_grandfathered_list_has_no_duplicates() {
     local paths dupes
-    paths=$(command printf '%s\n' "${GRANDFATHERED[@]}" | command cut -d: -f1 | command sort)
+    paths=$(command printf '%s\n' ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"} | command cut -d: -f1 | command sort)
     dupes=$(command printf '%s\n' "$paths" | command uniq -d)
 
     assert_empty "$dupes" "GRANDFATHERED must list each path at most once"
@@ -500,6 +506,29 @@ test_production_loc_edge_cases() {
         '#[cfg(all(unix, any(test, feature = "x")))]' 'mod m {' '    fn f() {}' '}' >"$tmp/nested_any.rs"
     assert_equals "4" "$(_production_loc "$tmp/nested_any.rs")" \
         "test nested under any() inside all() is production"
+    command printf '%s\n' \
+        '#[cfg(all(unix, not(test)))]' 'mod m {' '    fn f() {}' '}' >"$tmp/all_not_test.rs"
+    assert_equals "4" "$(_production_loc "$tmp/all_not_test.rs")" \
+        "test negated by not() inside all() is production"
+
+    # A sibling conjunct may itself hold parens, and `test` may sit mid-list:
+    # both are still test-only, so both mod blocks exclude (0 LOC).
+    command printf '%s\n' \
+        '#[cfg(all(test, not(windows)))]' 'mod m {' '    fn f() {}' '}' >"$tmp/all_nested_sib.rs"
+    assert_equals "0" "$(_production_loc "$tmp/all_nested_sib.rs")" \
+        "#[cfg(all(test, not(windows)))] is excluded despite the nested sibling"
+    command printf '%s\n' \
+        '#[cfg(all(unix, test, feature = "x"))]' 'mod m {' '    fn f() {}' '}' >"$tmp/all_mid.rs"
+    assert_equals "0" "$(_production_loc "$tmp/all_mid.rs")" \
+        "test as a middle conjunct of all() is excluded"
+
+    # The per-unit arm takes the compound form too: a cfg-gated helper fn is
+    # excluded exactly like the plain #[cfg(test)] case above.
+    command printf '%s\n' \
+        '#[cfg(all(test, unix))]' 'fn helper() {' '    let x = 1;' '}' \
+        'pub fn real() {' '    let y = 2;' '}' >"$tmp/all_cfgfn.rs"
+    assert_equals "3" "$(_production_loc "$tmp/all_cfgfn.rs")" \
+        "a #[cfg(all(test, unix))] helper fn is excluded per-unit"
 
     # sh: a `test_*()` function is excluded; the next column-zero function ends
     # it. Missing this scored tests/unit/bin/update-versions.sh 1151 vs 38.
