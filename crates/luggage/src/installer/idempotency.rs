@@ -167,7 +167,7 @@ fn capture_file() -> io::Result<File> {
 /// (with the `stream` name) when the rest is dropped.
 fn read_back(file: &mut File, stream: &str) -> io::Result<Vec<u8>> {
     let written = file.metadata()?.len();
-    if written > VERSION_PROBE_OUTPUT_CAP {
+    if exceeds_output_cap(written) {
         tracing::warn!(
             stream,
             written,
@@ -179,6 +179,12 @@ fn read_back(file: &mut File, stream: &str) -> io::Result<Vec<u8>> {
     file.seek(SeekFrom::Start(0))?;
     file.by_ref().take(VERSION_PROBE_OUTPUT_CAP).read_to_end(&mut buf)?;
     Ok(buf)
+}
+
+/// Whether a stream of `written` bytes loses anything to the cap — exactly
+/// [`VERSION_PROBE_OUTPUT_CAP`] fits whole, so it does not warn.
+const fn exceeds_output_cap(written: u64) -> bool {
+    written > VERSION_PROBE_OUTPUT_CAP
 }
 
 /// Check whether `<bin_root>/<binary> <args…>` reports `version`.
@@ -727,6 +733,26 @@ mod tests {
         let cap = usize::try_from(VERSION_PROBE_OUTPUT_CAP).unwrap();
         assert_eq!(out.stdout.len(), cap);
         assert_eq!(out.stderr.len(), cap);
+    }
+
+    /// The cap boundary is exact: a stream of exactly the cap is read whole
+    /// and not reported as truncated, one byte more is cut back to the cap
+    /// and is.
+    #[test]
+    fn read_back_cap_boundary() {
+        let cap = usize::try_from(VERSION_PROBE_OUTPUT_CAP).unwrap();
+        for (len, truncated) in [(cap - 1, false), (cap, false), (cap + 1, true)] {
+            let mut file = tempfile::tempfile().unwrap();
+            io::Write::write_all(&mut file, &vec![b'x'; len]).unwrap();
+
+            let buf = read_back(&mut file, "stdout").unwrap();
+            assert_eq!(buf.len(), len.min(cap), "read-back length for a {len}-byte stream");
+            assert_eq!(
+                exceeds_output_cap(len as u64),
+                truncated,
+                "truncation verdict for a {len}-byte stream",
+            );
+        }
     }
 
     /// The cap keeps the head of the stream, so a version line printed before
