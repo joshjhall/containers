@@ -113,14 +113,38 @@ _filter_glob_ere() {
     printf '^%s$' "$out"
 }
 
+# _covered <file> <pattern>... — whether GitHub's paths: filter matches <file>.
+# Entries apply in order and the last match wins, so a `!` entry excludes
+# what an earlier entry included.
+_covered() {
+    local f="$1" p hit=1
+    shift
+    for p in "$@"; do
+        if [ "${p:0:1}" = '!' ]; then
+            [[ "$f" =~ $(_filter_glob_ere "${p:1}") ]] && hit=1
+        else
+            [[ "$f" =~ $(_filter_glob_ere "$p") ]] && hit=0
+        fi
+    done
+    return "$hit"
+}
+
 test_trigger_paths_cover_evidence_scripts() {
     # Every evidence lib/script the jobs source or run must re-trigger the
     # workflow, or a change confined to it first runs on some unrelated push
     # to main (#1388). The file set comes from disk so a new lib is checked
     # without editing this test.
-    local ev f pattern covered
-    local -a scripts patterns
-    scripts=("$PROJECT_ROOT"/bin/lib/evidence-*.sh "$PROJECT_ROOT"/bin/ingest-evidence*.sh)
+    local ev f
+    local -a scripts=() patterns
+    # An unmatched glob stays literal and would match its own trigger entry,
+    # so keep only real files and fail on an empty set.
+    for f in "$PROJECT_ROOT"/bin/lib/evidence-*.sh "$PROJECT_ROOT"/bin/ingest-evidence*.sh; do
+        [ -f "$f" ] && scripts+=("${f#"$PROJECT_ROOT"/}")
+    done
+    if [ "${#scripts[@]}" -eq 0 ]; then
+        assert_true false "no evidence libs or ingest scripts found to check"
+        return
+    fi
     for ev in pull_request push; do
         mapfile -t patterns < <(_trigger_paths "$ev")
         if [ "${#patterns[@]}" -eq 0 ]; then
@@ -128,17 +152,38 @@ test_trigger_paths_cover_evidence_scripts() {
             continue
         fi
         for f in "${scripts[@]}"; do
-            f="${f#"$PROJECT_ROOT"/}"
-            covered=false
-            for pattern in "${patterns[@]}"; do
-                if [[ "$f" =~ $(_filter_glob_ere "$pattern") ]]; then
-                    covered=true
-                    break
-                fi
-            done
-            assert_true "$covered" "$ev paths: cover $f"
+            if _covered "$f" "${patterns[@]}"; then
+                assert_true true "$ev paths: cover $f"
+            else
+                assert_true false "$ev paths: cover $f"
+            fi
         done
     done
+}
+
+test_filter_glob_semantics() {
+    # Pins the two GitHub rules the coverage test depends on, so a translator
+    # regression (e.g. `*` -> `.*`) cannot pass silently through the real
+    # workflow's patterns.
+    _expect_covered no "single * stays within a path segment" bin/lib/evidence-x.sh 'bin/*.sh'
+    _expect_covered yes "** crosses directories" bin/lib/evidence-x.sh 'bin/**'
+    _expect_covered no ". is literal" bin/ingest-evidenceXsh 'bin/ingest-evidence.sh'
+    _expect_covered no "a later ! entry excludes" \
+        bin/lib/evidence-x.sh 'bin/lib/evidence-*.sh' '!bin/lib/evidence-x.sh'
+    _expect_covered yes "a later positive entry re-includes" \
+        bin/lib/evidence-x.sh '!bin/lib/evidence-x.sh' 'bin/lib/*'
+}
+
+# _expect_covered <yes|no> <message> <file> <pattern>...
+_expect_covered() {
+    local want="$1" msg="$2" got=no
+    shift 2
+    _covered "$@" && got=yes
+    if [ "$got" = "$want" ]; then
+        assert_true true "$msg"
+    else
+        assert_true false "$msg (expected covered=$want, got $got)"
+    fi
 }
 
 run_test test_cells_install_as_the_container_user "cells install as the container user (--user runner)"
@@ -147,5 +192,6 @@ run_test test_collect_job_batches_into_one_pr "collect job batches into one PR a
 run_test test_artifact_name_is_per_cell "artifact name is per cell"
 run_test test_cells_install_from_the_vendored_catalog "cells install from the vendored catalog"
 run_test test_trigger_paths_cover_evidence_scripts "trigger paths cover every evidence lib and script"
+run_test test_filter_glob_semantics "paths: glob matching follows GitHub semantics"
 
 generate_report
