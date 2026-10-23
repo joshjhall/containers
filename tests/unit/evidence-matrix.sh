@@ -307,15 +307,27 @@ test_fully_published_coverage_exits_3() {
 
 test_unreadable_published_source_is_an_error() {
     # An unreachable source must not become "everything pending" (#1319).
-    local r db out rc=0
+    local r db out err rc=0
     r="$(_fixture 1.0.0)"
     _version "$r/catalog" 1.90.0 debian-13-amd64
-    out="$(EVIDENCE_TESTED_SOURCE="$TEST_TEMP_DIR/no-such-db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(EVIDENCE_TESTED_SOURCE="$TEST_TEMP_DIR/no-such-db" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
     assert_equals "1" "$rc" "a missing source is exit 1"
     assert_equals "" "$out" "and prints no matrix"
+    # A wrong path is not a tool vendored ahead of containers-db (#1365).
+    assert_equals "evidence_matrix: no published evidence for rust at $TEST_TEMP_DIR/no-such-db/tools/rust/versions (EVIDENCE_TESTED_SOURCE)" \
+        "$(command cat "$err")" "a tools/-less first source gets the generic message"
 
+    # Main has tools/rust/ but no version files: half-published, not vendored
+    # ahead, so the generic message too.
     db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
     command mkdir -p "$db/tools/rust/versions"
+    rc=0
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
+    assert_equals "1" "$rc" "a first source with an empty tools/rust/versions is exit 1"
+    assert_equals "evidence_matrix: no published evidence for rust at $db/tools/rust/versions (EVIDENCE_TESTED_SOURCE)" \
+        "$(command cat "$err")" "and gets the generic message, not the vendored-ahead one"
+
     command echo '{not json' >"$db/tools/rust/versions/1.90.0.json"
     rc=0
     out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
@@ -700,15 +712,35 @@ test_pr_legs_take_first_cell_not_min() {
 }
 
 test_available_tuples_json_propagates_failure() {
-    # A first-stage failure must not read as "no tuples available".
+    # A first-stage failure must not read as "no tuples available". Defensive:
+    # today's _em_available_tuples cannot exit non-zero (an unpublished tuple
+    # is skipped, not failed), so the stub pins the contract for a future one.
     local r rc=0 out
     r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
     out="$(
         _em_available_tuples() { return 1; }
         _em_available_tuples_json "$r"
     )" || rc=$?
     assert_equals "1" "$rc" "a failing tuple scan fails the JSON wrapper"
     assert_equals "" "$out" "and prints no array"
+
+    # Both callers stop on it, rather than leaning on jq rejecting an empty
+    # --argjson further down (that path would print jq's own error here).
+    rc=0
+    out="$(
+        _em_available_tuples() { return 1; }
+        evidence_matrix "$r/catalog" rust "$r" 2>&1
+    )" || rc=$?
+    assert_equals "1" "$rc" "evidence_matrix fails on a failing tuple scan"
+    assert_equals "" "$out" "before reaching the matrix jq, and prints nothing"
+    rc=0
+    out="$(
+        _em_available_tuples() { return 1; }
+        evidence_matrix_all "$r/catalog" "$r" 2>&1
+    )" || rc=$?
+    assert_equals "1" "$rc" "evidence_matrix_all fails on a failing tuple scan"
+    assert_equals "" "$out" "and prints nothing"
 
     assert_equals '["alpine-3.24-amd64","debian-13-amd64","debian-13-arm64"]' \
         "$(_em_available_tuples_json "$r")" "the fixture's tuples, as before"

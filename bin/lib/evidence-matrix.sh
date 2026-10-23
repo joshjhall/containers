@@ -233,7 +233,9 @@ _em_tool_cells() {
         return 1
     }
 
-    [ -n "$available" ] || available="$(_em_available_tuples_json "$root")"
+    if [ -z "$available" ]; then
+        available="$(_em_available_tuples_json "$root")" || return 1
+    fi
 
     local evidence
     evidence="$(command mktemp)" || return 1
