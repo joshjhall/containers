@@ -39,6 +39,15 @@ pub(crate) const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Interval between `try_wait` polls while the probe runs.
 const VERSION_PROBE_POLL: Duration = Duration::from_millis(10);
 
+/// Most bytes of each probe stream (stdout, stderr) read back into memory
+/// (#1353). A real `--version` prints a few hundred bytes; a misdeclared argv
+/// that floods output would otherwise be loaded whole. Only the *first* bytes
+/// are kept, so a version line printed before a flood still matches, and a
+/// truncation is logged. The on-disk capture file itself is not capped — its
+/// size is bounded only by how much the probe writes before
+/// [`VERSION_PROBE_TIMEOUT`].
+pub(crate) const VERSION_PROBE_OUTPUT_CAP: u64 = 1024 * 1024;
+
 /// [`run_version_check_within`] at the production [`VERSION_PROBE_TIMEOUT`];
 /// the ETXTBSY tests exercise the retry loop through it.
 #[cfg(test)]
@@ -138,7 +147,11 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
         }
     };
 
-    Ok(Output { status, stdout: read_back(&mut stdout)?, stderr: read_back(&mut stderr)? })
+    Ok(Output {
+        status,
+        stdout: read_back(&mut stdout, "stdout")?,
+        stderr: read_back(&mut stderr, "stderr")?,
+    })
 }
 
 /// Create an anonymous capture tempfile (in `TMPDIR`), with context on
@@ -149,11 +162,22 @@ fn capture_file() -> io::Result<File> {
         .map_err(|e| io::Error::new(e.kind(), format!("creating probe capture file: {e}")))
 }
 
-/// Rewind a capture tempfile and read everything the child wrote to it.
-fn read_back(file: &mut File) -> io::Result<Vec<u8>> {
+/// Rewind a capture tempfile and read back at most
+/// [`VERSION_PROBE_OUTPUT_CAP`] bytes of what the child wrote to it, warning
+/// (with the `stream` name) when the rest is dropped.
+fn read_back(file: &mut File, stream: &str) -> io::Result<Vec<u8>> {
+    let written = file.metadata()?.len();
+    if written > VERSION_PROBE_OUTPUT_CAP {
+        tracing::warn!(
+            stream,
+            written,
+            cap = VERSION_PROBE_OUTPUT_CAP,
+            "version probe output truncated to the cap",
+        );
+    }
     let mut buf = Vec::new();
     file.seek(SeekFrom::Start(0))?;
-    file.read_to_end(&mut buf)?;
+    file.by_ref().take(VERSION_PROBE_OUTPUT_CAP).read_to_end(&mut buf)?;
     Ok(buf)
 }
 
@@ -675,6 +699,99 @@ mod tests {
         assert!(out.status.success());
         assert_eq!(out.stdout.len(), BYTES);
         assert_eq!(out.stderr.len(), BYTES);
+    }
+
+    /// A probe that floods both streams far past the cap and then exits 0
+    /// comes back with exactly [`VERSION_PROBE_OUTPUT_CAP`] bytes of each —
+    /// the cap bounds what is read into memory, without turning the
+    /// successful exit into a failure (#1353).
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn run_version_check_caps_captured_output() {
+        let flood = VERSION_PROBE_OUTPUT_CAP * 4;
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("flood");
+        fs::write(
+            &path,
+            format!("#!/bin/sh\nhead -c {flood} /dev/zero\nhead -c {flood} /dev/zero >&2\n"),
+        )
+        .unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let out =
+            run_version_check_within(&path, VERSION_ARGS, &BTreeMap::new(), Duration::from_secs(5))
+                .expect("a flooding probe that exits must not error");
+        assert!(out.status.success());
+        let cap = usize::try_from(VERSION_PROBE_OUTPUT_CAP).unwrap();
+        assert_eq!(out.stdout.len(), cap);
+        assert_eq!(out.stderr.len(), cap);
+    }
+
+    /// The cap boundary is exact: a stream of exactly the cap is read whole
+    /// with no warning, one byte more is cut back to the cap and `read_back`
+    /// itself logs the truncation, naming the stream. The warning is captured
+    /// from a thread-local subscriber, so parallel tests cannot leak into it.
+    #[test]
+    fn read_back_cap_boundary() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone, Default)]
+        struct Captured(Arc<Mutex<Vec<u8>>>);
+        impl io::Write for Captured {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let cap = usize::try_from(VERSION_PROBE_OUTPUT_CAP).unwrap();
+        for (len, truncated) in [(cap - 1, false), (cap, false), (cap + 1, true)] {
+            let mut file = tempfile::tempfile().unwrap();
+            io::Write::write_all(&mut file, &vec![b'x'; len]).unwrap();
+
+            let log = Captured::default();
+            let writer = log.clone();
+            let subscriber = tracing_subscriber::fmt()
+                .with_writer(move || writer.clone())
+                .with_ansi(false)
+                .finish();
+            let buf = tracing::subscriber::with_default(subscriber, || {
+                read_back(&mut file, "stderr").unwrap()
+            });
+
+            assert_eq!(buf.len(), len.min(cap), "read-back length for a {len}-byte stream");
+            let logged = String::from_utf8(log.0.lock().unwrap().clone()).unwrap();
+            assert_eq!(
+                logged.contains("version probe output truncated"),
+                truncated,
+                "truncation warning for a {len}-byte stream, got: {logged:?}",
+            );
+            if truncated {
+                assert!(logged.contains("stream=\"stderr\""), "names the stream: {logged:?}");
+            }
+        }
+    }
+
+    /// The cap keeps the head of the stream, so a version line printed before
+    /// a flood still matches.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn already_installed_matches_a_version_printed_before_a_flood() {
+        let flood = VERSION_PROBE_OUTPUT_CAP * 2;
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("tool");
+        fs::write(&path, format!("#!/bin/sh\necho 'tool 1.2.3'\nhead -c {flood} /dev/zero\n"))
+            .unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+
+        assert!(already_installed("tool", VERSION_ARGS, "1.2.3", dir.path()));
     }
 
     /// `already_installed` folds a timeout into "can't confirm → false", even
