@@ -75,7 +75,9 @@ pub(crate) const VERSION_PROBE_OUTPUT_CAP: u64 = 1024 * 1024;
 /// [`crate::LuggageError::Catalog`] when the value is set but is not a whole
 /// number of seconds between 1 and one day.
 pub fn version_probe_timeout_from_env() -> crate::error::Result<Duration> {
-    parse_version_probe_timeout(std::env::var(VERSION_PROBE_TIMEOUT_ENV).ok().as_deref())
+    parse_version_probe_timeout(
+        crate::installer::tuning_env_var(VERSION_PROBE_TIMEOUT_ENV)?.as_deref(),
+    )
 }
 
 /// The value half of [`version_probe_timeout_from_env`], split out because

@@ -43,6 +43,32 @@ use rustup_target::rustup_target_for;
 use syspackages::PackageManager;
 use template::{Substitutions, substitute_url};
 
+/// Read an operator-tuning env var for a fail-closed parser.
+///
+/// Unset is `Ok(None)`; a value that is set but not valid UTF-8 is a hard
+/// [`LuggageError::Catalog`] naming `name`. The obvious
+/// `std::env::var(name).ok()` folds that second case into "unset", so a
+/// corrupted value silently became the default — exactly the fallback the
+/// `*_from_env` readers promise never happens (#1358).
+pub(crate) fn tuning_env_var(name: &str) -> Result<Option<String>> {
+    tuning_env_value(name, std::env::var(name))
+}
+
+/// The value half of [`tuning_env_var`], taking the lookup result so the
+/// `NotUnicode` arm is testable without `std::env::set_var` (forbidden here).
+fn tuning_env_value(
+    name: &str,
+    looked_up: std::result::Result<String, std::env::VarError>,
+) -> Result<Option<String>> {
+    match looked_up {
+        Ok(v) => Ok(Some(v)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(raw)) => {
+            Err(LuggageError::Catalog(format!("{name} is not valid UTF-8: `{}`", raw.display())))
+        }
+    }
+}
+
 /// Installer configuration.
 ///
 /// The flags are independent install toggles, not a state machine, so the
@@ -602,6 +628,25 @@ mod tests {
     use super::*;
     use crate::Platform;
     use containers_common::tooldb::{Dependency, InstallMethodKind, Verification};
+
+    /// A set-but-non-UTF-8 tuning variable is a hard error naming it, never
+    /// the "unset → default" fallback `env::var(..).ok()` used to give it;
+    /// set and unset pass through unchanged (#1358).
+    #[cfg(unix)]
+    #[test]
+    fn tuning_env_value_refuses_non_utf8_instead_of_defaulting() {
+        use std::env::VarError;
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt as _;
+
+        assert_eq!(tuning_env_value("X", Err(VarError::NotPresent)).unwrap(), None);
+        assert_eq!(tuning_env_value("X", Ok("30".into())).unwrap().as_deref(), Some("30"));
+
+        let corrupt = OsString::from_vec(vec![b'3', 0xff, b'0']);
+        let err = tuning_env_value("LUGGAGE_X", Err(VarError::NotUnicode(corrupt))).unwrap_err();
+        assert!(matches!(err, LuggageError::Catalog(_)), "got {err:?}");
+        assert!(err.to_string().contains("LUGGAGE_X"), "{err}");
+    }
 
     /// A minimal debian/amd64 [`ResolvedInstall`] carrying one dependency,
     /// for exercising [`Installer::captured_dependency_versions`]'s gating
