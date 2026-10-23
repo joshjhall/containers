@@ -356,15 +356,16 @@ EOF
 }
 
 # Run golang.sh's real install statement against a stub luggage that records
-# "$*" and succeeds. Usage: run_install_argv [CONTAINERS_DB] — with no
-# argument CONTAINERS_DB is unset, so the script's own default applies.
+# "$*" and succeeds. Usage: run_install_argv [CONTAINERS_DB] [USERNAME] — an
+# empty or missing CONTAINERS_DB leaves it unset, so the script's own default
+# applies; USERNAME defaults to vscode.
 # Prints "RC: <status>" then the recorded argv (or "<no call>").
 run_install_argv() {
     local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
     local stub="$TEST_TEMP_DIR/luggage-argv-stub" block="$TEST_TEMP_DIR/install-argv-block.sh"
     local argv_log="$TEST_TEMP_DIR/luggage-argv.log"
-    local db_line="unset CONTAINERS_DB"
-    [ "$#" -gt 0 ] && db_line="export CONTAINERS_DB=\"$1\""
+    local db_line="unset CONTAINERS_DB" user="${2:-vscode}"
+    [ -n "${1:-}" ] && db_line="export CONTAINERS_DB=\"$1\""
     command rm -f "$argv_log"
     printf '#!/bin/bash\nprintf "%%s\\n" "$*" >"%s"\n' "$argv_log" >"$stub"
     command chmod +x "$stub"
@@ -382,7 +383,7 @@ log_command() {
 }
 $db_line
 GO_VERSION="1.27.2"
-USERNAME="vscode"
+USERNAME="$user"
 # shellcheck disable=SC1091
 source "$block"
 EOF
@@ -422,6 +423,19 @@ test_luggage_install_honors_containers_db() {
 install go@1.27.2 --catalog /tmp/alt-containers-db --user vscode --cache-root /cache --log-dir /var/log/luggage" \
         "$out" \
         "CONTAINERS_DB override is passed as luggage's --catalog"
+}
+
+# Test: a non-default USERNAME reaches luggage's --user. Catches a user
+# hard-coded to vscode, which the default case above cannot tell apart.
+test_luggage_install_honors_username() {
+    local out
+    out=$(run_install_argv "" "builder")
+
+    assert_equals \
+        "RC: 0
+install go@1.27.2 --catalog /opt/containers-db --user builder --cache-root /cache --log-dir /var/log/luggage" \
+        "$out" \
+        "USERNAME is passed as luggage's --user"
 }
 
 # Test: the shared extractor refuses a script with no version block, rather
@@ -479,6 +493,7 @@ run_test_with_setup test_startup_and_verify_scripts_installed "Startup and test-
 run_test_with_setup test_luggage_install_failure_aborts "luggage install failure is not swallowed"
 run_test_with_setup test_luggage_install_argv "luggage install receives the exact argv"
 run_test_with_setup test_luggage_install_honors_containers_db "CONTAINERS_DB override reaches luggage --catalog"
+run_test_with_setup test_luggage_install_honors_username "USERNAME override reaches luggage --user"
 run_test_with_setup test_partial_version_resolves_to_top_level_version "Partial pin resolves to the top-level version"
 run_test_with_setup test_resolve_parses_last_key_without_comma "Resolve parses a version with no trailing comma"
 run_test_with_setup test_exact_version_skips_resolve "Exact pin skips resolution"
