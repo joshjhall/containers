@@ -78,12 +78,17 @@ test_cells_install_from_the_vendored_catalog() {
 }
 
 # _trigger_paths <event> — the `paths:` entries of one `on:` trigger, unquoted.
+# Comment and blank lines inside the list are skipped; any other line before
+# the list dedents prints `UNPARSED: <line>`, which the caller fails on, so an
+# entry (in particular a `!` exclusion) can never be dropped silently.
 _trigger_paths() {
     /usr/bin/awk -v ev="$1" '
         $0 ~ "^  " ev ":$" { on = 1; next }
         on && /^  [a-z_]+:$/ { exit }
         on && /^    paths:$/ { inpaths = 1; next }
-        on && inpaths && /^      - / { sub(/^      - /, ""); gsub(/"/, ""); print; next }
+        on && inpaths && /^[[:space:]]*(#.*)?$/ { next }
+        on && inpaths && /^      - "[^"]*"$/ { sub(/^      - "/, ""); sub(/"$/, ""); print; next }
+        on && inpaths && /^      / { print "UNPARSED: " $0; next }
         on && inpaths { inpaths = 0 }
     ' "$WF"
 }
@@ -130,11 +135,12 @@ _covered() {
 }
 
 test_trigger_paths_cover_evidence_scripts() {
-    # Every evidence lib/script the jobs source or run must re-trigger the
-    # workflow, or a change confined to it first runs on some unrelated push
-    # to main (#1388). The file set comes from disk so a new lib is checked
-    # without editing this test.
-    local ev f
+    # Every bin/lib/evidence-*.sh lib and bin/ingest-evidence*.sh script must
+    # re-trigger the workflow, or a change confined to it first runs on some
+    # unrelated push to main (#1388). The set comes from disk, so a new file
+    # under those names is checked without editing this test; a helper the
+    # jobs source under some OTHER name is not.
+    local ev f p unparsed
     local -a scripts=() patterns
     # An unmatched glob stays literal and would match its own trigger entry,
     # so keep only real files and fail on an empty set.
@@ -149,6 +155,14 @@ test_trigger_paths_cover_evidence_scripts() {
         mapfile -t patterns < <(_trigger_paths "$ev")
         if [ "${#patterns[@]}" -eq 0 ]; then
             assert_true false "$ev has no paths: entries to check"
+            continue
+        fi
+        unparsed=""
+        for p in "${patterns[@]}"; do
+            [ "${p#UNPARSED: }" != "$p" ] && unparsed="$p"
+        done
+        if [ -n "$unparsed" ]; then
+            assert_true false "$ev paths: entry not of the form - \"glob\": ${unparsed#UNPARSED: }"
             continue
         fi
         for f in "${scripts[@]}"; do
