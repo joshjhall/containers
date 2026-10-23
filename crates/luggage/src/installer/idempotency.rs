@@ -42,6 +42,13 @@ pub const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Environment variable overriding [`VERSION_PROBE_TIMEOUT`], in whole seconds.
 pub const VERSION_PROBE_TIMEOUT_ENV: &str = "LUGGAGE_VERSION_PROBE_TIMEOUT";
 
+/// Largest accepted [`VERSION_PROBE_TIMEOUT_ENV`]: one day.
+///
+/// Far beyond any real probe, but bounded — the deadline is computed as
+/// `Instant::now() + timeout`, which panics on overflow, so an absurd value
+/// must be refused here as a clean error rather than crash the first probe.
+const MAX_VERSION_PROBE_TIMEOUT_SECS: u64 = 24 * 60 * 60;
+
 /// Interval between `try_wait` polls while the probe runs.
 const VERSION_PROBE_POLL: Duration = Duration::from_millis(10);
 
@@ -65,8 +72,8 @@ pub(crate) const VERSION_PROBE_OUTPUT_CAP: u64 = 1024 * 1024;
 ///
 /// # Errors
 ///
-/// [`crate::LuggageError::Catalog`] when the value is set but does not parse as
-/// a non-zero whole number of seconds.
+/// [`crate::LuggageError::Catalog`] when the value is set but is not a whole
+/// number of seconds between 1 and one day.
 pub fn version_probe_timeout_from_env() -> crate::error::Result<Duration> {
     parse_version_probe_timeout(std::env::var(VERSION_PROBE_TIMEOUT_ENV).ok().as_deref())
 }
@@ -76,8 +83,8 @@ pub fn version_probe_timeout_from_env() -> crate::error::Result<Duration> {
 ///
 /// # Errors
 ///
-/// [`crate::LuggageError::Catalog`] when the value is set but does not parse as
-/// a non-zero whole number of seconds.
+/// [`crate::LuggageError::Catalog`] when the value is set but is not a whole
+/// number of seconds between 1 and one day.
 pub fn parse_version_probe_timeout(raw: Option<&str>) -> crate::error::Result<Duration> {
     let Some(raw) = raw else { return Ok(VERSION_PROBE_TIMEOUT) };
     let trimmed = raw.trim();
@@ -90,6 +97,12 @@ pub fn parse_version_probe_timeout(raw: Option<&str>) -> crate::error::Result<Du
              unset it to use the default of {}s",
             VERSION_PROBE_TIMEOUT.as_secs(),
         ))),
+        Ok(n) if n > MAX_VERSION_PROBE_TIMEOUT_SECS => {
+            Err(crate::error::LuggageError::Catalog(format!(
+                "{VERSION_PROBE_TIMEOUT_ENV} is `{trimmed}`, above the {MAX_VERSION_PROBE_TIMEOUT_SECS}s \
+                 (one day) maximum",
+            )))
+        }
         Ok(n) => Ok(Duration::from_secs(n)),
         Err(e) => Err(crate::error::LuggageError::Catalog(format!(
             "{VERSION_PROBE_TIMEOUT_ENV} must be a positive whole number of seconds, \
@@ -1015,7 +1028,14 @@ mod tests {
         assert_eq!(parse_version_probe_timeout(Some("  ")).unwrap(), VERSION_PROBE_TIMEOUT);
         assert_eq!(parse_version_probe_timeout(Some("30")).unwrap(), Duration::from_secs(30));
         assert_eq!(parse_version_probe_timeout(Some(" 45 ")).unwrap(), Duration::from_secs(45));
-        for bad in ["0", "abc", "-1", "1.5", "10s"] {
+        assert_eq!(
+            parse_version_probe_timeout(Some("86400")).unwrap(),
+            Duration::from_secs(MAX_VERSION_PROBE_TIMEOUT_SECS),
+            "the cap itself is accepted"
+        );
+        // Values that parse as u64 but would overflow `Instant + Duration` in
+        // the probe's deadline must be refused here, not panic later.
+        for bad in ["0", "abc", "-1", "1.5", "10s", "86401", "18446744073709551615"] {
             let err = parse_version_probe_timeout(Some(bad)).unwrap_err();
             let msg = err.to_string();
             assert!(

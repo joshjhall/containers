@@ -331,6 +331,39 @@ fn install_dry_run_writes_json_report() {
     assert_eq!(plan["method_name"], "rustup-init");
 }
 
+/// `luggage install` reads `LUGGAGE_VERSION_PROBE_TIMEOUT` (#1358): a
+/// malformed value aborts before any work and names the variable, while a
+/// valid one runs the same dry-run to success. The valid run is the control —
+/// without it the failure could come from anything but the variable.
+#[test]
+fn install_reads_the_version_probe_timeout_env() {
+    let workdir = tempdir().expect("tempdir");
+    let dir = workdir.path().to_str().unwrap();
+    let install = |value: &str| {
+        Command::new(binary())
+            .args(["install", "rust@1.95.0", "--os", "debian", "--os-version", "13"])
+            .args(["--arch", "amd64", "--dry-run", "--log-dir", dir, "--bin-root", dir])
+            .args(["--cache-root", dir, "--tmp-root", dir])
+            .arg("--catalog")
+            .arg(catalog_dir())
+            .env("LUGGAGE_VERSION_PROBE_TIMEOUT", value)
+            .output()
+            .expect("spawn luggage")
+    };
+
+    assert_exit(&install("30"), 0);
+
+    let out = install("ten");
+    assert_ne!(out.status.code(), Some(0), "a malformed timeout must abort the install");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("LUGGAGE_VERSION_PROBE_TIMEOUT"), "stderr: {stderr}");
+    assert!(
+        out.stdout.is_empty(),
+        "no plan may be printed: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
 /// `--dry-run` must report the verification-guard refusal a real install
 /// would (#1042): a non-zero exit, no plan on stdout, and a `--json-report`
 /// that records the failure rather than a dry-run success.
