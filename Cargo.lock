@@ -1833,6 +1833,7 @@ dependencies = [
  "containers-common",
  "flate2",
  "lzma-rs",
+ "rustix",
  "serde",
  "serde_json",
  "serial_test",

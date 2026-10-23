@@ -54,8 +54,18 @@ pub(crate) fn run_version_check<S: AsRef<OsStr>>(
 /// bounded by `timeout` and retrying on a transient `ETXTBSY`.
 ///
 /// A child still running at `timeout` is killed and reaped, and the call
-/// returns an [`io::ErrorKind::TimedOut`] error. Only the direct child is
-/// killed. Its stdout/stderr go to anonymous tempfiles rather than pipes, so
+/// returns an [`io::ErrorKind::TimedOut`] error. On unix the child leads its
+/// own process group, and on that timeout path the whole group is killed, so
+/// a non-exec wrapper (shell script, JVM launcher) that hangs cannot leave
+/// forked descendants running (#1352); elsewhere only the direct child is
+/// killed. Two gaps remain. A probe that exits on its own is not group-killed,
+/// so a descendant it backgrounded outlives it. And because the group is not
+/// luggage's, a terminal Ctrl-C reaches luggage but not the probe: luggage
+/// installs no signal handler, so an interactive interrupt mid-probe leaves the
+/// probe running unbounded. Under `docker build` (no TTY; cancelling tears down
+/// the whole container) neither applies. A descendant that moved itself to
+/// another group or session escapes, as with any `killpg`.
+/// Its stdout/stderr go to anonymous tempfiles rather than pipes, so
 /// polling never deadlocks on a full pipe buffer, and a grandchild that
 /// inherited the write end cannot block us after the kill. stdin is null,
 /// as with [`Command::output`].
@@ -79,13 +89,18 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
     let mut stderr = capture_file()?;
     let mut attempt = 0;
     let mut child = loop {
-        let spawned = Command::new(binary)
+        let mut command = Command::new(binary);
+        command
             .args(args)
             .envs(env)
             .stdin(Stdio::null())
             .stdout(stdout.try_clone()?)
-            .stderr(stderr.try_clone()?)
-            .spawn();
+            .stderr(stderr.try_clone()?);
+        // pgid 0 = a new group led by the child, so the timeout can kill it
+        // and everything it forked in one signal.
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(&mut command, 0);
+        let spawned = command.spawn();
         match spawned {
             Err(e) if e.raw_os_error() == Some(ETXTBSY) && attempt < ETXTBSY_RETRIES => {
                 attempt += 1;
@@ -101,7 +116,13 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
         let timed_out = matches!(polled, Ok(None)) && Instant::now() >= deadline;
         if timed_out || polled.is_err() {
             // Never leave the child running or unreaped on an early return.
-            // `kill` fails only if it already exited; `wait` reaps it.
+            // The group kill fails only if every member already exited;
+            // `kill` likewise for the child, and `wait` reaps it.
+            #[cfg(unix)]
+            let _ = rustix::process::kill_process_group(
+                rustix::process::Pid::from_child(&child),
+                rustix::process::Signal::KILL,
+            );
             let _ = child.kill();
             let _ = child.wait();
         }
@@ -224,6 +245,27 @@ pub(crate) fn write_sleeping_shim(dir: &Path, name: &str) {
     std::fs::set_permissions(&path, perms).unwrap();
 }
 
+/// Write an executable shim at `dir/name` that records its own pid in
+/// `dir/name.pid`, forks a background `sleep 30`, records the sleep's pid in
+/// `dir/name.bgpid`, prints a version line, then `wait`s — a non-exec wrapper
+/// whose descendant outlives a direct-child-only kill (#1352).
+/// [`assert_probe_child_gone`] checks the direct child and
+/// [`assert_forked_descendant_gone`] the descendant.
+#[cfg(all(test, unix))]
+pub(crate) fn write_forking_shim(dir: &Path, name: &str) {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let path = dir.join(name);
+    std::fs::write(
+        &path,
+        "#!/bin/sh\necho $$ > \"$0.pid\"\nsleep 30 &\necho $! > \"$0.bgpid\"\necho 'tool 1.0.0'\nwait\n",
+    )
+    .unwrap();
+    let mut perms = std::fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&path, perms).unwrap();
+}
+
 /// Deadline for the [`write_sleeping_shim`] timeout tests; the shim runs 30s.
 /// Long enough that a loaded runner has started `sh` and recorded the pid
 /// before the kill, short enough to keep the suite fast.
@@ -254,6 +296,74 @@ pub(crate) fn assert_probe_child_gone(dir: &Path, name: &str) {
         .unwrap()
         .success();
     assert!(!alive, "the timed-out probe child (pid {pid}) must be killed and reaped");
+}
+
+/// The state field of a `/proc/<pid>/stat` line, or `None` if it does not
+/// parse. `comm` (field 2) is parenthesised and may itself contain spaces or
+/// `)`, so the state is the first field after the **last** `)`.
+#[cfg(all(test, target_os = "linux"))]
+fn proc_stat_state(stat: &str) -> Option<&str> {
+    stat.rsplit_once(')').and_then(|(_, rest)| rest.split_whitespace().next())
+}
+
+/// Whether `pid` is still running. A zombie counts as gone: it was killed,
+/// and whether it is reaped depends on the reparenting ancestor (no init in
+/// a bare `docker run` reaps nothing), which is not what the test pins. Linux
+/// reads the state field of `/proc/<pid>/stat`; other unixes fall back to
+/// `kill -0`, which cannot tell a zombie apart. Only a missing stat file means
+/// gone — any other read error (no `/proc`, `hidepid`) or an unparsable stat
+/// line panics, so an unobservable pid can never pass as a dead one.
+#[cfg(all(test, unix))]
+fn pid_is_running(pid: &str) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+            Ok(stat) => stat,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return false,
+            Err(e) => panic!("cannot observe pid {pid} via /proc ({e})"),
+        };
+        let state = proc_stat_state(&stat)
+            .unwrap_or_else(|| panic!("unparsable /proc/{pid}/stat: {stat:?}"));
+        state != "Z" && state != "X"
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Command::new("/bin/kill")
+            .args(["-0", pid])
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    }
+}
+
+/// Assert the background `sleep` forked by [`write_forking_shim`] is gone.
+/// Once its parent dies it is reparented to an ancestor we do not control,
+/// so poll briefly rather than check once: a killed orphan clears within
+/// milliseconds, while a survivor is still running at the bound.
+#[cfg(all(test, unix))]
+pub(crate) fn assert_forked_descendant_gone(dir: &Path, name: &str) {
+    let pid_file = dir.join(format!("{name}.bgpid"));
+    let pid = std::fs::read_to_string(&pid_file).unwrap_or_else(|e| {
+        panic!(
+            "the shim never recorded its background pid at {} ({e}) — it was killed \
+             before `sh` forked, so the test deadline is too short for this runner",
+            pid_file.display(),
+        )
+    });
+    let pid = pid.trim();
+    assert!(!pid.is_empty(), "the shim must have recorded its background pid");
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if !pid_is_running(pid) {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the probe's forked descendant (pid {pid}) must die with its process group",
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
 }
 
 #[cfg(test)]
@@ -464,6 +574,45 @@ mod tests {
         assert!(elapsed >= TEST_TIMEOUT, "must wait out the deadline first ({elapsed:?})");
         assert!(elapsed < Duration::from_secs(5), "the hung child must be killed ({elapsed:?})");
         assert_probe_child_gone(dir.path(), "tool");
+    }
+
+    /// The timeout kills the probe's whole process group, not just the direct
+    /// child (#1352). The shim forks a `sleep` and `wait`s on it, so killing
+    /// only `sh` would orphan the sleep for its full 30s.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn run_version_check_timeout_kills_forked_descendants() {
+        let dir = tempdir().unwrap();
+        write_forking_shim(dir.path(), "tool");
+
+        let result = run_version_check_within(
+            &dir.path().join("tool"),
+            VERSION_ARGS,
+            &BTreeMap::new(),
+            TEST_TIMEOUT,
+        );
+
+        let err = result.expect_err("a probe past its deadline must fail");
+        assert_eq!(err.kind(), io::ErrorKind::TimedOut, "got: {err}");
+        assert_probe_child_gone(dir.path(), "tool");
+        assert_forked_descendant_gone(dir.path(), "tool");
+    }
+
+    /// `proc_stat_state` takes the field after the LAST `)`, so a `comm` with
+    /// spaces or its own `)` cannot shift the state, and a line it cannot
+    /// parse is `None` — which `pid_is_running` turns into a panic, never into
+    /// "not running" (a pass the descendant check would not have earned).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn proc_stat_state_reads_the_field_after_the_last_paren() {
+        assert_eq!(proc_stat_state("4242 (sleep) S 1 4242 4242"), Some("S"));
+        assert_eq!(proc_stat_state("4242 (sleep) Z 1 4242 4242"), Some("Z"));
+        assert_eq!(proc_stat_state("4242 (my tool) R 1 4242"), Some("R"));
+        assert_eq!(proc_stat_state("4242 (a) b) X 1 4242"), Some("X"));
+        assert_eq!(proc_stat_state("4242 sleep S 1"), None, "no `)` at all");
+        assert_eq!(proc_stat_state("4242 (sleep)"), None, "nothing after `)`");
+        assert_eq!(proc_stat_state(""), None);
     }
 
     /// Counterpart to the timeout test: a probe that exits promptly is
