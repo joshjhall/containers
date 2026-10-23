@@ -403,24 +403,47 @@ _ratchet_duplicates() {
     command printf '%s\n' "$@" | command cut -d: -f1 | command sort | command uniq -d
 }
 
+# The arms' failure messages, as pure functions of one helper row. With
+# GRANDFATHERED empty the arms never format a message, so a wrong field order
+# or `kind` comparison here would stay green without
+# test_ratchet_helpers_on_fixtures driving these directly (#1363).
+
+# _ratchet_grown_message ROW — the failure text for one _ratchet_grown row.
+_ratchet_grown_message() {
+    local row="$1" kind path lines allowed
+    kind="${row%%:*}"
+    row="${row#*:}"
+    path="${row%%:*}"
+    if [ "$kind" = "missing" ]; then
+        command printf '%s\n' \
+            "GRANDFATHERED lists $path, which does not exist. Remove the stale entry."
+        return 0
+    fi
+    row="${row#*:}"
+    lines="${row%%:*}"
+    allowed="${row##*:}"
+    command printf '%s\n' \
+        "$path grew to $lines production LOC, past its grandfathered maximum of $allowed. Split it rather than raising the number."
+}
+
+# _ratchet_retired_message CEILING ROW — the failure text for one
+# _ratchet_retired row.
+_ratchet_retired_message() {
+    local ceiling="$1" row="$2" path lines allowed
+    path="${row%%:*}"
+    row="${row#*:}"
+    lines="${row%%:*}"
+    allowed="${row##*:}"
+    command printf '%s\n' \
+        "$path is now $lines production LOC, under the $ceiling ceiling. Remove it from GRANDFATHERED (recorded max was $allowed)."
+}
+
 # A grandfathered file may shrink but never grow. This is the ratchet itself.
 test_grandfathered_files_do_not_grow() {
-    local violations=0 row kind path lines allowed
+    local violations=0 row
     while IFS= read -r row; do
         [ -n "$row" ] || continue
-        kind="${row%%:*}"
-        row="${row#*:}"
-        path="${row%%:*}"
-        if [ "$kind" = "missing" ]; then
-            assert_true false \
-                "GRANDFATHERED lists $path, which does not exist. Remove the stale entry."
-        else
-            row="${row#*:}"
-            lines="${row%%:*}"
-            allowed="${row##*:}"
-            assert_true false \
-                "$path grew to $lines production LOC, past its grandfathered maximum of $allowed. Split it rather than raising the number."
-        fi
+        assert_true false "$(_ratchet_grown_message "$row")"
         violations=$((violations + 1))
     done <<<"$(_ratchet_grown "$PROJECT_ROOT" ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"})"
 
@@ -432,15 +455,10 @@ test_grandfathered_files_do_not_grow() {
 # A file that has come back under the ceiling must leave the allowlist, so the
 # list cannot outlive the debt it records.
 test_grandfathered_entries_retire_when_fixed() {
-    local violations=0 row path lines allowed
+    local violations=0 row
     while IFS= read -r row; do
         [ -n "$row" ] || continue
-        path="${row%%:*}"
-        row="${row#*:}"
-        lines="${row%%:*}"
-        allowed="${row##*:}"
-        assert_true false \
-            "$path is now $lines production LOC, under the $CEILING_LINES ceiling. Remove it from GRANDFATHERED (recorded max was $allowed)."
+        assert_true false "$(_ratchet_retired_message "$CEILING_LINES" "$row")"
         violations=$((violations + 1))
     done <<<"$(_ratchet_retired "$PROJECT_ROOT" "$CEILING_LINES" ${GRANDFATHERED[@]+"${GRANDFATHERED[@]}"})"
 
@@ -497,6 +515,22 @@ test_ratchet_helpers_on_fixtures() {
         "distinct paths are not duplicates"
     assert_empty "$(_ratchet_duplicates)" \
         "an empty allowlist has no duplicates"
+
+    # The arms' messages, fed the rows the helpers above really emit. Distinct
+    # LINES and ALLOWED values, so a swapped field order changes the text; a
+    # stale row that took the grew branch would print neither sentence.
+    assert_equals \
+        "a dir/six.rs grew to 6 production LOC, past its grandfathered maximum of 5. Split it rather than raising the number." \
+        "$(_ratchet_grown_message "$(_ratchet_grown "$tmp" "a dir/six.rs:5")")" \
+        "a grew row names the path, its current LOC, then its recorded max"
+    assert_equals \
+        "GRANDFATHERED lists gone.rs, which does not exist. Remove the stale entry." \
+        "$(_ratchet_grown_message "$(_ratchet_grown "$tmp" "gone.rs:9")")" \
+        "a missing row is reported as a stale entry, not as growth"
+    assert_equals \
+        "a dir/six.rs is now 6 production LOC, under the 7 ceiling. Remove it from GRANDFATHERED (recorded max was 9)." \
+        "$(_ratchet_retired_message 7 "$(_ratchet_retired "$tmp" 7 "a dir/six.rs:9")")" \
+        "a retired row names the path, its LOC, the ceiling, then its recorded max"
 }
 
 # The measurement engine itself, on synthetic fixtures.
@@ -622,6 +656,41 @@ test_production_loc_edge_cases() {
         '#[cfg(all(test_utils, unix))]' 'mod m {' '    fn f() {}' '}' >"$tmp/all_prefix.rs"
     assert_equals "4" "$(_production_loc "$tmp/all_prefix.rs")" \
         "all(test_utils, ...) is production: test must be a whole conjunct"
+    command printf '%s\n' \
+        '#[cfg(all(unix, tested))]' 'mod m {' '    fn f() {}' '}' >"$tmp/all_tested.rs"
+    assert_equals "4" "$(_production_loc "$tmp/all_tested.rs")" \
+        "all(unix, tested) is production: tested is not test"
+    command printf '%s\n' \
+        '#[cfg(testing)]' 'mod m {' '    fn f() {}' '}' >"$tmp/testing.rs"
+    assert_equals "4" "$(_production_loc "$tmp/testing.rs")" \
+        "#[cfg(testing)] is production: only the bare test predicate is test-only"
+
+    # Degenerate and loosely spaced forms are still test-only: `all(test)` has
+    # one conjunct, and spaces around `test` do not change what it gates.
+    command printf '%s\n' \
+        '#[cfg(all(test))]' 'mod m {' '    fn f() {}' '}' >"$tmp/all_single.rs"
+    assert_equals "0" "$(_production_loc "$tmp/all_single.rs")" \
+        "#[cfg(all(test))] is excluded"
+    command printf '%s\n' \
+        '#[cfg(all( test , unix ))]' 'mod m {' '    fn f() {}' '}' >"$tmp/all_spaced.rs"
+    assert_equals "0" "$(_production_loc "$tmp/all_spaced.rs")" \
+        "#[cfg(all( test , unix ))] is excluded despite the spacing"
+
+    # ACCEPTED LIMITS — these pin today's OVER-count, not the right answer.
+    # Both blocks are test-only, but the cfg_test regex does not see it, so
+    # every line scores as production (see the divergence note above
+    # _production_loc). Erring this way never hides code. If a change makes
+    # either one exclude, update the expected value and that note together.
+    # Limit 1: a sibling conjunct nested two levels deep.
+    command printf '%s\n' \
+        '#[cfg(all(test, any(unix, not(x))))]' 'mod m {' '    fn f() {}' '}' >"$tmp/limit_deep_sib.rs"
+    assert_equals "4" "$(_production_loc "$tmp/limit_deep_sib.rs")" \
+        "ACCEPTED LIMIT: a two-level nested sibling over-counts as production"
+    # Limit 2: an attribute rustfmt has wrapped across lines.
+    command printf '%s\n' \
+        '#[cfg(all(' '    test,' '    unix' '))]' 'mod m {' '    fn f() {}' '}' >"$tmp/limit_wrapped.rs"
+    assert_equals "7" "$(_production_loc "$tmp/limit_wrapped.rs")" \
+        "ACCEPTED LIMIT: a cfg attribute wrapped across lines over-counts as production"
 
     # sh: a `test_*()` function is excluded; the next column-zero function ends
     # it. Missing this scored tests/unit/bin/update-versions.sh 1151 vs 38.
