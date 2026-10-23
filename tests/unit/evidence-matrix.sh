@@ -720,6 +720,58 @@ test_all_tools_one_failing_tool_is_an_error() {
         "$(command cat "$err")" "with a message saying no tool is versioned"
 }
 
+test_pr_source_predating_a_tool_adds_nothing() {
+    # An ingest PR branched before go reached containers-db has a tools/ tree
+    # with rust but no go. It must not fail the run; its rust rows still count.
+    local r main pr out err rc=0
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64
+    _version "$r/catalog" 1.23.4 debian-13-amd64 "" go
+    main="$(command mktemp -d "$TEST_TEMP_DIR/main.XXXXXX")"
+    pr="$(command mktemp -d "$TEST_TEMP_DIR/pr.XXXXXX")"
+    _db_version "$main" 1.90.0 ""
+    _db_version "$main" 1.23.4 "" "" "" go
+    _db_version "$pr" 1.90.0 debian-13-amd64
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix_all "$r/catalog" "$r" 2>"$err")" || rc=$?
+    assert_equals "0" "$rc" "a PR source without the tool is not an error"
+    assert_equals $'go 1.23.4 debian-13-amd64\nrust 1.90.0 debian-13-arm64' "$(_tool_cells "$out")" \
+        "go comes from main; the PR's rust pass still covers its cell"
+    assert_equals "evidence_matrix: $pr predates go (no tools/go); it adds no go evidence" \
+        "$(command cat "$err")" "and the skip is said, not silent"
+}
+
+test_missing_tool_stays_strict_where_it_must() {
+    # The leniency is only for a later source with a readable tools/ tree and
+    # no trace of the tool. Main, a tree with no tools/, or a tool dir with no
+    # version files are still errors (#1319).
+    local r main pr rc
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    _version "$r/catalog" 1.23.4 debian-13-amd64 "" go
+    main="$(command mktemp -d "$TEST_TEMP_DIR/main.XXXXXX")"
+    pr="$(command mktemp -d "$TEST_TEMP_DIR/pr.XXXXXX")"
+    _db_version "$main" 1.90.0 ""
+    _db_version "$pr" 1.90.0 ""
+    _db_version "$pr" 1.23.4 "" "" "" go
+
+    rc=0
+    EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "main (the first source) missing a tool is still exit 1"
+
+    _db_version "$main" 1.23.4 "" "" "" go
+    rc=0
+    EVIDENCE_TESTED_SOURCE="$main:$TEST_TEMP_DIR/no-such-pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a later source with no tools/ tree at all is still exit 1"
+
+    command rm -f "$pr"/tools/go/versions/*.json
+    rc=0
+    EVIDENCE_TESTED_SOURCE="$main:$pr" evidence_matrix_all "$r/catalog" "$r" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a later source with tools/go but no version files is still exit 1"
+}
+
 test_all_tools_empty_versions_dir_is_an_error() {
     # A tool with a versions/ dir but no version files is half-vendored: fail
     # loudly and say why, rather than drop the tool or crash inside jq.
@@ -797,6 +849,8 @@ run_test test_all_tools_probe_publication_once "base-image publication is probed
 run_test test_pr_legs_one_per_tool "PR dry-run keeps one leg per tool"
 run_test test_all_tools_exit_3_only_when_all_covered "exit 3 only when every tool is covered"
 run_test test_all_tools_one_failing_tool_is_an_error "one tool's error fails the merged matrix"
+run_test test_pr_source_predating_a_tool_adds_nothing "an ingest PR that predates a tool adds no rows for it, not an error"
+run_test test_missing_tool_stays_strict_where_it_must "main, tree-less, or file-less sources still fail"
 run_test test_all_tools_empty_versions_dir_is_an_error "an empty versions/ dir fails with a named error"
 run_test test_real_catalog_respects_github_cap "shipped catalog stays within GitHub's 256 cap"
 

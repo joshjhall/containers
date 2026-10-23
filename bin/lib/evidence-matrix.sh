@@ -112,6 +112,14 @@ def em_evidence:
 # vendored `tested[]` decides, as before. When a listed directory holds no
 # version files or unparsable JSON, it fails: an unreadable source must not
 # turn into "every cell pending", which is the silent re-test loop #1319 fixed.
+#
+# One exception (#1341): a LATER source (an open ingest PR's head) that has a
+# readable tools/ tree but no tools/<tool>/ was branched before that tool
+# reached containers-db. It has no rows for the tool, which is not the same as
+# being unreadable. It contributes nothing for that tool instead of failing
+# every tool's matrix until the PR merges or ages out. The first source
+# (containers-db main) stays strict, as does any source with no tools/ at all.
+#
 # A file, not a jq argument: the map grows with containers-db and one argv
 # string is capped at 128 KiB.
 _em_published_evidence() {
@@ -120,12 +128,17 @@ _em_published_evidence() {
         command echo null >"$out"
         return 0
     fi
-    local src dir files=() found srcs
+    local src dir files=() found srcs i
     IFS=: read -r -a srcs <<<"$EVIDENCE_TESTED_SOURCE"
-    for src in "${srcs[@]}"; do
+    for i in "${!srcs[@]}"; do
+        src="${srcs[$i]}"
         dir="$src/tools/$tool/versions"
         found=("$dir"/*.json)
         if [ ! -e "${found[0]}" ]; then
+            if [ "$i" -gt 0 ] && [ -d "$src/tools" ] && [ ! -e "$src/tools/$tool" ]; then
+                command echo "evidence_matrix: $src predates $tool (no tools/$tool); it adds no $tool evidence" >&2
+                continue
+            fi
             command echo "evidence_matrix: no published evidence for $tool at $dir (EVIDENCE_TESTED_SOURCE)" >&2
             return 1
         fi
