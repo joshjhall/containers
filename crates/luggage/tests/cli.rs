@@ -408,9 +408,13 @@ fn install_honors_a_valid_version_probe_timeout() {
     let elapsed = started.elapsed();
 
     assert_exit(&out, 0);
+    // Both bounds are load-bearing: the upper one fails if the 10s default
+    // ran instead of the override; the lower one fails if the hung `rustc`
+    // was never probed at all (a resolve or catalog change sending the
+    // pre-check elsewhere), which would otherwise pass in milliseconds.
     assert!(
-        elapsed < Duration::from_secs(5),
-        "the 1s override must bound the pre-check probe, took {elapsed:?}"
+        (Duration::from_millis(900)..Duration::from_secs(5)).contains(&elapsed),
+        "the pre-check must probe the hung shim and give up at the 1s override, took {elapsed:?}"
     );
 }
 
