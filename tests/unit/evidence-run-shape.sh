@@ -276,6 +276,15 @@ test_trigger_paths_parser_fixtures() {
     _expect_trigger_paths "compact same-indent entries are UNPARSED" \
         push "$dir/compact.yml" 'UNPARSED:     - "a"' 'UNPARSED:     - "b"'
 
+    printf '%s\n' 'on:' '  push:' '    paths:' '    -' '    - "b"' 'jobs:' >"$dir/compact-bare.yml"
+    _expect_trigger_paths "a bare compact dash is UNPARSED" \
+        push "$dir/compact-bare.yml" 'UNPARSED:     -' 'UNPARSED:     - "b"'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' '      - "a"' '  push:' '    paths:' \
+        '      - "leak"' 'jobs:' >"$dir/dup-trigger.yml"
+    _expect_trigger_paths "a repeated trigger key ends the block, not re-opens it" \
+        push "$dir/dup-trigger.yml" 'a'
+
     printf '%s\n' 'on:' '  push:' '    paths:' '      - "a"' '      - ""' 'jobs:' >"$dir/empty-entry.yml"
     _expect_trigger_paths "a trailing empty entry is kept" \
         push "$dir/empty-entry.yml" 'a' ''
