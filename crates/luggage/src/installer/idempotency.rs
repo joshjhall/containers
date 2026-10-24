@@ -265,7 +265,14 @@ fn wait_within(child: &mut impl ProbeChild, timeout: Duration) -> io::Result<Exi
 /// failure so a full or unwritable temp dir is not mistaken for the probe
 /// binary failing to launch.
 fn capture_file() -> io::Result<File> {
-    tempfile::tempfile()
+    capture_file_in(&std::env::temp_dir())
+}
+
+/// [`capture_file`] against an explicit directory — the seam that makes the
+/// failure path testable without pointing `TMPDIR` elsewhere, which needs
+/// `std::env::set_var` (ruled out by `unsafe_code = "forbid"`).
+fn capture_file_in(dir: &Path) -> io::Result<File> {
+    tempfile::tempfile_in(dir)
         .map_err(|e| io::Error::new(e.kind(), format!("creating probe capture file: {e}")))
 }
 
@@ -1008,6 +1015,25 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::Other, "must not be remapped to TimedOut");
         assert_eq!(err.to_string(), "injected try_wait failure");
         assert_eq!(child.calls, ["poll", "kill", "reap"]);
+    }
+
+    /// A capture tempfile that cannot be created must say so, with its kind
+    /// intact (#1360) — otherwise `validate::check` reports a full or
+    /// unwritable temp dir as nothing more than the probe failing to launch.
+    /// The `Ok` control proves the failure is the missing dir, not the host.
+    #[test]
+    fn capture_file_in_a_missing_dir_keeps_kind_and_adds_context() {
+        const CONTEXT: &str = "creating probe capture file: ";
+        let dir = tempdir().unwrap();
+        capture_file_in(dir.path()).expect("a capture file in an existing dir must succeed");
+
+        let err = capture_file_in(&dir.path().join("missing"))
+            .expect_err("a capture file in a missing dir must fail");
+
+        assert_eq!(err.kind(), io::ErrorKind::NotFound, "kind must survive the wrap: {err}");
+        let message = err.to_string();
+        assert!(message.starts_with(CONTEXT), "missing capture-file context: {message:?}");
+        assert!(message.len() > CONTEXT.len(), "the underlying error was dropped: {message:?}");
     }
 
     /// `Duration::MAX` — reachable through the public
