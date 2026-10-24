@@ -84,18 +84,25 @@ test_cells_install_from_the_vendored_catalog() {
 # trigger never reads on into `permissions:`/`env:`/`jobs:`. Comment and blank
 # lines inside the list are skipped; any other line before the list dedents
 # prints `UNPARSED: <line>`, which the caller fails on, so an entry (in
-# particular a `!` exclusion) can never be dropped silently.
+# particular a `!` exclusion) can never be dropped silently. The `on:`,
+# trigger, and `paths:` keys may carry trailing blanks or a comment. Any other
+# text after the trigger or `paths:` key (flow style) is UNPARSED too, as is a
+# compact `    - ` entry. Shapes outside that (an inline `on:` value, another
+# indent width) yield no entries, which the caller also fails on.
 _trigger_paths() {
     /usr/bin/awk -v ev="$1" '
-        /^on:$/ { inon = 1; next }
+        /^on:[[:space:]]*(#.*)?$/ { inon = 1; next }
         !on && /^[^[:space:]#]/ { inon = 0 }
-        inon && $0 ~ "^  " ev ":$" { on = 1; next }
+        inon && !on && $0 ~ ("^  " ev ":[[:space:]]*(#.*)?$") { on = 1; next }
+        inon && !on && $0 ~ ("^  " ev ":") { print "UNPARSED: " $0; exit }
         on && /^[^[:space:]#]/ { exit }
         on && /^  [A-Za-z0-9_-]+:/ { exit }
-        on && /^    paths:$/ { inpaths = 1; next }
+        on && /^    paths:[[:space:]]*(#.*)?$/ { inpaths = 1; next }
+        on && /^    paths:/ { print "UNPARSED: " $0; next }
         on && inpaths && /^[[:space:]]*(#.*)?$/ { next }
         on && inpaths && /^      - "[^"]*"$/ { sub(/^      - "/, ""); sub(/"$/, ""); print; next }
         on && inpaths && /^      / { print "UNPARSED: " $0; next }
+        on && inpaths && /^    -( |$)/ { print "UNPARSED: " $0; next }
         on && inpaths { inpaths = 0 }
     ' "${2:-$WF}"
 }
@@ -248,17 +255,53 @@ test_trigger_paths_parser_fixtures() {
     _expect_trigger_paths "the on: block ends at the next column-0 key" \
         push "$dir/job-after-on.yml"
 
+    printf '%s\n' 'on: # c' '  push: # note' '    paths: # why' '      - "a"' 'jobs:' \
+        >"$dir/key-comments.yml"
+    _expect_trigger_paths "start keys may carry a trailing comment" \
+        push "$dir/key-comments.yml" 'a'
+
+    printf '%s\n' 'on:  ' '  push:   ' '    paths: ' '      - "a"' 'jobs:' >"$dir/key-blanks.yml"
+    _expect_trigger_paths "start keys may carry trailing blanks" \
+        push "$dir/key-blanks.yml" 'a'
+
+    printf '%s\n' 'on:' '  push: {paths: ["a"]}' 'jobs:' >"$dir/flow-trigger.yml"
+    _expect_trigger_paths "a flow-style trigger is UNPARSED" \
+        push "$dir/flow-trigger.yml" 'UNPARSED:   push: {paths: ["a"]}'
+
+    printf '%s\n' 'on:' '  push:' '    paths: ["a"]' 'jobs:' >"$dir/flow-paths.yml"
+    _expect_trigger_paths "a flow-style paths: list is UNPARSED" \
+        push "$dir/flow-paths.yml" 'UNPARSED:     paths: ["a"]'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' '    - "a"' '    - "b"' 'jobs:' >"$dir/compact.yml"
+    _expect_trigger_paths "compact same-indent entries are UNPARSED" \
+        push "$dir/compact.yml" 'UNPARSED:     - "a"' 'UNPARSED:     - "b"'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' '    -' '    - "b"' 'jobs:' >"$dir/compact-bare.yml"
+    _expect_trigger_paths "a bare compact dash is UNPARSED" \
+        push "$dir/compact-bare.yml" 'UNPARSED:     -' 'UNPARSED:     - "b"'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' '      - "a"' '  push:' '    paths:' \
+        '      - "leak"' 'jobs:' >"$dir/dup-trigger.yml"
+    _expect_trigger_paths "a repeated trigger key ends the block, not re-opens it" \
+        push "$dir/dup-trigger.yml" 'a'
+
+    printf '%s\n' 'on:' '  push:' '    paths:' '      - "a"' '      - ""' 'jobs:' >"$dir/empty-entry.yml"
+    _expect_trigger_paths "a trailing empty entry is kept" \
+        push "$dir/empty-entry.yml" 'a' ''
+
     command rm -rf "$dir"
 }
 
 # _expect_trigger_paths <message> <event> <workflow> <entry>... — the parser
 # prints exactly <entry>... (nothing, if none are given), in order. A parser
 # that fails (e.g. an unwritten fixture) is a failure, never an empty match.
+# Both sides end in a sentinel, since $(...) would strip a trailing empty
+# entry and make its presence invisible to the comparison.
 _expect_trigger_paths() {
-    local msg="$1" ev="$2" wf="$3" got want=""
+    local msg="$1" ev="$2" wf="$3" got want=x
     shift 3
-    [ "$#" -gt 0 ] && want="$(printf '%s\n' "$@")"
-    if ! got="$(_trigger_paths "$ev" "$wf")"; then
+    [ "$#" -gt 0 ] && want="$(printf '%s\n' "$@" && printf x)"
+    if ! got="$(_trigger_paths "$ev" "$wf" && printf x)"; then
         assert_true false "$msg (parser failed on $wf)"
         return
     fi
