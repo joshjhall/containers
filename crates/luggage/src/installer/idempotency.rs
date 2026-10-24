@@ -44,9 +44,13 @@ pub const VERSION_PROBE_TIMEOUT_ENV: &str = "LUGGAGE_VERSION_PROBE_TIMEOUT";
 
 /// Largest accepted [`VERSION_PROBE_TIMEOUT_ENV`]: one day.
 ///
-/// Far beyond any real probe, but bounded — the deadline is computed as
-/// `Instant::now() + timeout`, which panics on overflow, so an absurd value
-/// must be refused here as a clean error rather than crash the first probe.
+/// Far beyond any real probe, but bounded, so an operator typo (an extra
+/// digit, a value in the wrong unit) is a clean error instead of a probe that
+/// can effectively never time out. This is input validation only — panic
+/// safety for an unrepresentable deadline lives in `wait_within`'s
+/// `checked_add`, which must stay because
+/// [`crate::InstallerOptions::version_probe_timeout`] is a public field that
+/// never passes through this parser.
 const MAX_VERSION_PROBE_TIMEOUT_SECS: u64 = 24 * 60 * 60;
 
 /// Interval between `try_wait` polls while the probe runs.
@@ -1058,8 +1062,8 @@ mod tests {
             Duration::from_secs(MAX_VERSION_PROBE_TIMEOUT_SECS),
             "the cap itself is accepted"
         );
-        // Values that parse as u64 but would overflow `Instant + Duration` in
-        // the probe's deadline must be refused here, not panic later.
+        // Values that parse as u64 but exceed the one-day cap — up to u64-max —
+        // are operator errors and must be refused here, naming the variable.
         for bad in ["0", "abc", "-1", "1.5", "10s", "86401", "18446744073709551615"] {
             let err = parse_version_probe_timeout(Some(bad)).unwrap_err();
             let msg = err.to_string();
