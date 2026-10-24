@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use containers_common::tooldb::InstalledDependency;
 use serde::{Deserialize, Serialize};
@@ -42,6 +42,32 @@ use methods::{CommandRunner, ProcessRunner};
 use rustup_target::rustup_target_for;
 use syspackages::PackageManager;
 use template::{Substitutions, substitute_url};
+
+/// Read an operator-tuning env var for a fail-closed parser.
+///
+/// Unset is `Ok(None)`; a value that is set but not valid UTF-8 is a hard
+/// [`LuggageError::Catalog`] naming `name`. The obvious
+/// `std::env::var(name).ok()` folds that second case into "unset", so a
+/// corrupted value silently became the default — exactly the fallback the
+/// `*_from_env` readers promise never happens (#1358).
+pub(crate) fn tuning_env_var(name: &str) -> Result<Option<String>> {
+    tuning_env_value(name, std::env::var(name))
+}
+
+/// The value half of [`tuning_env_var`], taking the lookup result so the
+/// `NotUnicode` arm is testable without `std::env::set_var` (forbidden here).
+fn tuning_env_value(
+    name: &str,
+    looked_up: std::result::Result<String, std::env::VarError>,
+) -> Result<Option<String>> {
+    match looked_up {
+        Ok(v) => Ok(Some(v)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(raw)) => {
+            Err(LuggageError::Catalog(format!("{name} is not valid UTF-8: `{}`", raw.display())))
+        }
+    }
+}
 
 /// Installer configuration.
 ///
@@ -91,6 +117,12 @@ pub struct InstallerOptions {
     /// [`methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES`] (2 GiB); the CLI
     /// reads `LUGGAGE_MAX_EXTRACT_BYTES` to override it.
     pub max_extract_bytes: u64,
+    /// Deadline for each version probe — the idempotency pre-check and the
+    /// post-install validation. Defaults to
+    /// [`idempotency::VERSION_PROBE_TIMEOUT`] (10s); the CLI reads
+    /// `LUGGAGE_VERSION_PROBE_TIMEOUT` (seconds) to override it, for hosts
+    /// where a correct probe is just slow (qemu emulation, a cold cache).
+    pub version_probe_timeout: Duration,
 }
 
 impl Default for InstallerOptions {
@@ -108,6 +140,7 @@ impl Default for InstallerOptions {
             fail_on_unknown_deps: true,
             require_verified_downloads: false,
             max_extract_bytes: methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            version_probe_timeout: idempotency::VERSION_PROBE_TIMEOUT,
         }
     }
 }
@@ -386,11 +419,12 @@ impl Installer {
         }
 
         if !self.options.force
-            && idempotency::already_installed(
+            && idempotency::already_installed_within(
                 &resolved.primary_binary,
                 &resolved.version_args,
                 &resolved.version,
                 &self.options.bin_root,
+                self.options.version_probe_timeout,
             )
         {
             return (
@@ -594,6 +628,25 @@ mod tests {
     use super::*;
     use crate::Platform;
     use containers_common::tooldb::{Dependency, InstallMethodKind, Verification};
+
+    /// A set-but-non-UTF-8 tuning variable is a hard error naming it, never
+    /// the "unset → default" fallback `env::var(..).ok()` used to give it;
+    /// set and unset pass through unchanged (#1358).
+    #[cfg(unix)]
+    #[test]
+    fn tuning_env_value_refuses_non_utf8_instead_of_defaulting() {
+        use std::env::VarError;
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt as _;
+
+        assert_eq!(tuning_env_value("X", Err(VarError::NotPresent)).unwrap(), None);
+        assert_eq!(tuning_env_value("X", Ok("30".into())).unwrap().as_deref(), Some("30"));
+
+        let corrupt = OsString::from_vec(vec![b'3', 0xff, b'0']);
+        let err = tuning_env_value("LUGGAGE_X", Err(VarError::NotUnicode(corrupt))).unwrap_err();
+        assert!(matches!(err, LuggageError::Catalog(_)), "got {err:?}");
+        assert!(err.to_string().contains("LUGGAGE_X"), "{err}");
+    }
 
     /// A minimal debian/amd64 [`ResolvedInstall`] carrying one dependency,
     /// for exercising [`Installer::captured_dependency_versions`]'s gating
@@ -835,6 +888,40 @@ mod tests {
         resolved.version_args = vec!["--version".into()];
         let (report, _) = installer.run_with_report(&resolved);
         assert!(!report.already_installed, "`go --version` exits 2; it must not skip");
+    }
+
+    /// The idempotency pre-check honors
+    /// [`InstallerOptions::version_probe_timeout`] rather than the 10s default
+    /// (#1358). A hung shim with a 1s option must give up well inside the
+    /// default; `dry_run` stops the run right after the pre-check, so the
+    /// elapsed time is the probe's alone.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn idempotency_precheck_honors_the_version_probe_timeout_option() {
+        let dir = tempfile::tempdir().unwrap();
+        idempotency::write_sleeping_shim(dir.path(), "tool");
+        let installer = Installer::with_options(InstallerOptions {
+            dry_run: true,
+            install_system_packages: false,
+            bin_root: dir.path().to_owned(),
+            log_dir: dir.path().join("log"),
+            version_probe_timeout: Duration::from_secs(1),
+            ..InstallerOptions::default()
+        });
+        let mut resolved = sample_resolved_with_deps();
+        resolved.version = "1.0.0".into();
+        resolved.primary_binary = "tool".into();
+
+        let started = Instant::now();
+        let (report, _) = installer.run_with_report(&resolved);
+        let elapsed = started.elapsed();
+        assert!(!report.already_installed, "a timed-out probe must not skip");
+        assert!(
+            elapsed < idempotency::VERSION_PROBE_TIMEOUT / 2,
+            "the 1s option must bound the pre-check, took {elapsed:?}"
+        );
+        idempotency::assert_probe_child_gone(dir.path(), "tool");
     }
 
     /// `sample_resolved_with_deps` with a pinless tier-2 verification — an

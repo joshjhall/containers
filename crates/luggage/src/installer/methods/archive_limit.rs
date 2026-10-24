@@ -166,7 +166,7 @@ impl<W: Write> Write for LimitedWriter<W> {
 /// [`crate::LuggageError::Catalog`] when the value is set but does not parse as
 /// a non-zero `u64`.
 pub fn max_extract_bytes_from_env() -> crate::error::Result<u64> {
-    parse_max_extract_bytes(std::env::var(MAX_EXTRACT_BYTES_ENV).ok().as_deref())
+    parse_max_extract_bytes(crate::installer::tuning_env_var(MAX_EXTRACT_BYTES_ENV)?.as_deref())
 }
 
 /// The value half of [`max_extract_bytes_from_env`], split out so it can be

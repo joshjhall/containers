@@ -331,6 +331,93 @@ fn install_dry_run_writes_json_report() {
     assert_eq!(plan["method_name"], "rustup-init");
 }
 
+/// `luggage install` reads its fail-closed tuning variables through the real
+/// process environment (#1358): for each, a valid value runs the dry-run to
+/// success, while a malformed one — or one that is not UTF-8, which
+/// `env::var(..).ok()` used to fold into "unset" — aborts before any work and
+/// names the variable. The valid run is the control; without it a failure
+/// could come from anything but the variable.
+#[cfg(unix)]
+#[test]
+fn install_refuses_malformed_tuning_env_vars() {
+    use std::ffi::{OsStr, OsString};
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let workdir = tempdir().expect("tempdir");
+    let dir = workdir.path().to_str().unwrap();
+    let install = |name: &str, value: &OsStr| {
+        Command::new(binary())
+            .args(["install", "rust@1.95.0", "--os", "debian", "--os-version", "13"])
+            .args(["--arch", "amd64", "--dry-run", "--log-dir", dir, "--bin-root", dir])
+            .args(["--cache-root", dir, "--tmp-root", dir])
+            .arg("--catalog")
+            .arg(catalog_dir())
+            .env(name, value)
+            .output()
+            .expect("spawn luggage")
+    };
+
+    for (name, valid) in
+        [("LUGGAGE_VERSION_PROBE_TIMEOUT", "30"), ("LUGGAGE_MAX_EXTRACT_BYTES", "1073741824")]
+    {
+        assert_exit(&install(name, OsStr::new(valid)), 0);
+
+        let non_utf8 = OsString::from_vec(vec![b'3', 0xff, b'0']);
+        for bad in [OsString::from("ten"), non_utf8] {
+            let out = install(name, &bad);
+            assert_ne!(out.status.code(), Some(0), "{name}={bad:?} must abort the install");
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            assert!(stderr.contains(name), "{name}={bad:?}: stderr: {stderr}");
+            assert!(
+                out.stdout.is_empty(),
+                "{name}={bad:?}: no plan may be printed: {}",
+                String::from_utf8_lossy(&out.stdout)
+            );
+        }
+    }
+}
+
+/// A valid `LUGGAGE_VERSION_PROBE_TIMEOUT` actually reaches the installer, not
+/// just the validator (#1358): with a `rustc` that hangs in `--bin-root`, the
+/// dry-run's idempotency pre-check must give up at the configured 1s rather
+/// than the 10s default. Reading the variable but passing the default into
+/// `InstallerOptions` would pass every malformed-value test above; only the
+/// elapsed time tells the two apart.
+#[cfg(unix)]
+#[test]
+fn install_honors_a_valid_version_probe_timeout() {
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::time::{Duration, Instant};
+
+    let workdir = tempdir().expect("tempdir");
+    let dir = workdir.path().to_str().unwrap();
+    let rustc = workdir.path().join("rustc");
+    std::fs::write(&rustc, "#!/bin/sh\nexec sleep 30\n").expect("write shim");
+    std::fs::set_permissions(&rustc, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+
+    let started = Instant::now();
+    let out = Command::new(binary())
+        .args(["install", "rust@1.95.0", "--os", "debian", "--os-version", "13"])
+        .args(["--arch", "amd64", "--dry-run", "--log-dir", dir, "--bin-root", dir])
+        .args(["--cache-root", dir, "--tmp-root", dir])
+        .arg("--catalog")
+        .arg(catalog_dir())
+        .env("LUGGAGE_VERSION_PROBE_TIMEOUT", "1")
+        .output()
+        .expect("spawn luggage");
+    let elapsed = started.elapsed();
+
+    assert_exit(&out, 0);
+    // Both bounds are load-bearing: the upper one fails if the 10s default
+    // ran instead of the override; the lower one fails if the hung `rustc`
+    // was never probed at all (a resolve or catalog change sending the
+    // pre-check elsewhere), which would otherwise pass in milliseconds.
+    assert!(
+        (Duration::from_millis(900)..Duration::from_secs(5)).contains(&elapsed),
+        "the pre-check must probe the hung shim and give up at the 1s override, took {elapsed:?}"
+    );
+}
+
 /// `--dry-run` must report the verification-guard refusal a real install
 /// would (#1042): a non-zero exit, no plan on stdout, and a `--json-report`
 /// that records the failure rather than a dry-run success.

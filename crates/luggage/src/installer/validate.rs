@@ -12,7 +12,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::error::{LuggageError, Result};
-use crate::installer::idempotency::{VERSION_PROBE_TIMEOUT, run_version_check_within};
+use crate::installer::idempotency::{
+    VERSION_PROBE_TIMEOUT, VERSION_PROBE_TIMEOUT_ENV, run_version_check_within,
+};
 
 /// Confirm that `tool` reports `version` from
 /// `<bin_root>/<binary> <args…>`.
@@ -38,7 +40,7 @@ use crate::installer::idempotency::{VERSION_PROBE_TIMEOUT, run_version_check_wit
 ///
 /// - [`LuggageError::ValidationFailed`] when the binary is missing, the
 ///   command fails to launch, it is still running at
-///   the 10s probe deadline (it is killed), the exit status is non-zero,
+///   the default [`VERSION_PROBE_TIMEOUT`] (it is killed), the exit status is non-zero,
 ///   or the output doesn't mention the target version.
 pub fn check(
     tool: &str,
@@ -51,7 +53,8 @@ pub fn check(
     check_within(tool, binary, args, version, bin_root, env, VERSION_PROBE_TIMEOUT)
 }
 
-/// [`check`] with an explicit probe deadline.
+/// [`check`] with an explicit probe deadline — the installer's path, which
+/// passes [`crate::InstallerOptions::version_probe_timeout`].
 pub(crate) fn check_within(
     tool: &str,
     binary: &str,
@@ -75,7 +78,13 @@ pub(crate) fn check_within(
     // parallelism (issue #518), and for the timeout kill (#1344).
     let output = run_version_check_within(&binary, args, env, timeout).map_err(|e| {
         let message = if e.kind() == io::ErrorKind::TimedOut {
-            format!("`{probe}` timed out after {timeout:?} (killed)")
+            // Two causes look identical from here (#1358): an argv that starts
+            // a long-running command, or a correct argv on a slow host.
+            format!(
+                "`{probe}` timed out after {timeout:?} (killed): either `version_args` \
+                 starts a long-running command, or the probe is slow on this host \
+                 (e.g. under emulation) — if so, raise {VERSION_PROBE_TIMEOUT_ENV} (seconds)"
+            )
         } else {
             format!("failed to launch `{probe}`: {e}")
         };
@@ -330,6 +339,10 @@ mod tests {
                     message.contains("tool serve`"),
                     "must name the probe argv, got: {message}"
                 );
+                // Both causes, and the escape hatch for the slow one (#1358).
+                assert!(message.contains("`version_args`"), "got: {message}");
+                assert!(message.contains("slow on this host"), "got: {message}");
+                assert!(message.contains(VERSION_PROBE_TIMEOUT_ENV), "got: {message}");
                 assert!(!message.contains("failed to launch"), "got: {message}");
             }
             other => panic!("expected ValidationFailed, got {other:?}"),

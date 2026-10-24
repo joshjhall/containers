@@ -21,6 +21,7 @@ use crate::{
     clone_common, require_verified_downloads_from_env, resolve_for, split_tool_version,
     write_json_report,
 };
+use luggage::installer::idempotency::version_probe_timeout_from_env;
 use luggage::installer::methods::archive_limit::max_extract_bytes_from_env;
 
 /// `luggage catalog add-version <tool>@<version>` — clone the latest existing
@@ -113,6 +114,8 @@ pub fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         // the default: an operator who set it wrong should hear about it, not
         // silently get a limit they did not choose.
         max_extract_bytes: max_extract_bytes_from_env()?,
+        // Same malformed-is-fatal contract as the extract ceiling above.
+        version_probe_timeout: version_probe_timeout_from_env()?,
     };
     let installer = Installer::with_options(opts);
 

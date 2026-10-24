@@ -28,13 +28,30 @@ const ETXTBSY: i32 = 26;
 const ETXTBSY_RETRIES: u32 = 3;
 const ETXTBSY_BACKOFF: Duration = Duration::from_millis(50);
 
-/// Deadline for one version-probe exec (#1344). A `--version` answers in
-/// milliseconds; the headroom is for JVM-style tools cold-starting under
-/// qemu emulation. Since #811 the argv is a catalog input, so a misdeclared
+/// Default deadline for one version-probe exec (#1344).
+///
+/// A `--version` answers in milliseconds; the headroom is for JVM-style tools
+/// cold-starting under qemu emulation. Since #811 the argv is a catalog input, so a misdeclared
 /// `version_args` that starts a long-running subcommand (`serve`, a daemon
 /// verb, a tool blocking on a lock) would otherwise hang the install forever.
-/// Hitting it means the argv is wrong, not that the machine is slow.
-pub(crate) const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+/// Hitting it means either that argv is wrong or the probe is genuinely slow
+/// on this host (qemu emulation, a cold cache) — the latter is what
+/// [`VERSION_PROBE_TIMEOUT_ENV`] is for (#1358).
+pub const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Environment variable overriding [`VERSION_PROBE_TIMEOUT`], in whole seconds.
+pub const VERSION_PROBE_TIMEOUT_ENV: &str = "LUGGAGE_VERSION_PROBE_TIMEOUT";
+
+/// Largest accepted [`VERSION_PROBE_TIMEOUT_ENV`]: one day.
+///
+/// Far beyond any real probe, but bounded, so an operator typo (an extra
+/// digit, a value in the wrong unit) is a clean error instead of a probe that
+/// can effectively never time out. This is input validation only — panic
+/// safety for an unrepresentable deadline lives in `wait_within`'s
+/// `checked_add`, which must stay because
+/// [`crate::InstallerOptions::version_probe_timeout`] is a public field that
+/// never passes through this parser.
+const MAX_VERSION_PROBE_TIMEOUT_SECS: u64 = 24 * 60 * 60;
 
 /// Interval between `try_wait` polls while the probe runs.
 const VERSION_PROBE_POLL: Duration = Duration::from_millis(10);
@@ -47,6 +64,58 @@ const VERSION_PROBE_POLL: Duration = Duration::from_millis(10);
 /// size is bounded only by how much the probe writes before
 /// [`VERSION_PROBE_TIMEOUT`].
 pub(crate) const VERSION_PROBE_OUTPUT_CAP: u64 = 1024 * 1024;
+
+/// Resolve the version-probe deadline from the environment.
+///
+/// Returns [`VERSION_PROBE_TIMEOUT`] when `LUGGAGE_VERSION_PROBE_TIMEOUT` is
+/// unset or empty, and a hard error when it is malformed — the same contract,
+/// and the same reasons, as
+/// [`crate::installer::methods::archive_limit::max_extract_bytes_from_env`]:
+/// an operator who raised the deadline for a slow emulated build must not
+/// silently keep the default.
+///
+/// # Errors
+///
+/// [`crate::LuggageError::Catalog`] when the value is set but is not a whole
+/// number of seconds between 1 and one day.
+pub fn version_probe_timeout_from_env() -> crate::error::Result<Duration> {
+    parse_version_probe_timeout(
+        crate::installer::tuning_env_var(VERSION_PROBE_TIMEOUT_ENV)?.as_deref(),
+    )
+}
+
+/// The value half of [`version_probe_timeout_from_env`], split out because
+/// `unsafe_code = "forbid"` rules out `std::env::set_var` in tests.
+///
+/// # Errors
+///
+/// [`crate::LuggageError::Catalog`] when the value is set but is not a whole
+/// number of seconds between 1 and one day.
+pub fn parse_version_probe_timeout(raw: Option<&str>) -> crate::error::Result<Duration> {
+    let Some(raw) = raw else { return Ok(VERSION_PROBE_TIMEOUT) };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(VERSION_PROBE_TIMEOUT);
+    }
+    match trimmed.parse::<u64>() {
+        Ok(0) => Err(crate::error::LuggageError::Catalog(format!(
+            "{VERSION_PROBE_TIMEOUT_ENV} is `0`, which would time out every version probe; \
+             unset it to use the default of {}s",
+            VERSION_PROBE_TIMEOUT.as_secs(),
+        ))),
+        Ok(n) if n > MAX_VERSION_PROBE_TIMEOUT_SECS => {
+            Err(crate::error::LuggageError::Catalog(format!(
+                "{VERSION_PROBE_TIMEOUT_ENV} is `{trimmed}`, above the {MAX_VERSION_PROBE_TIMEOUT_SECS}s \
+                 (one day) maximum",
+            )))
+        }
+        Ok(n) => Ok(Duration::from_secs(n)),
+        Err(e) => Err(crate::error::LuggageError::Catalog(format!(
+            "{VERSION_PROBE_TIMEOUT_ENV} must be a positive whole number of seconds, \
+             got `{raw}`: {e}",
+        ))),
+    }
+}
 
 /// [`run_version_check_within`] at the production [`VERSION_PROBE_TIMEOUT`];
 /// the ETXTBSY tests exercise the retry loop through it.
@@ -165,11 +234,16 @@ impl ProbeChild for Child {
 /// Poll `child` until it exits or `timeout` elapses. On timeout, or if a poll
 /// itself errors, the child is killed and reaped before returning, so an
 /// early return never leaves it running or a zombie.
+///
+/// A `timeout` too large to add to `Instant::now()` means no deadline rather
+/// than a panic (#1358): the env reader caps its value, but
+/// [`crate::InstallerOptions::version_probe_timeout`] is a public field a
+/// library caller can set to anything, `Duration::MAX` included.
 fn wait_within(child: &mut impl ProbeChild, timeout: Duration) -> io::Result<ExitStatus> {
-    let deadline = Instant::now() + timeout;
+    let deadline = Instant::now().checked_add(timeout);
     loop {
         let polled = child.poll();
-        let timed_out = matches!(polled, Ok(None)) && Instant::now() >= deadline;
+        let timed_out = matches!(polled, Ok(None)) && deadline.is_some_and(|d| Instant::now() >= d);
         if timed_out || polled.is_err() {
             child.kill_all();
             child.reap();
@@ -226,8 +300,8 @@ fn read_back(file: &mut File, stream: &str) -> io::Result<Vec<u8>> {
 ///
 /// Returns `false` for any reason it can't confirm — missing binary,
 /// non-zero exit, output without the version literal, I/O error, or a probe
-/// still running past the 10s probe deadline. The caller must treat `false`
-/// as "go install"; only `true` should skip.
+/// still running past the default [`VERSION_PROBE_TIMEOUT`]. The caller must
+/// treat `false` as "go install"; only `true` should skip.
 #[must_use]
 pub fn already_installed<S: AsRef<OsStr>>(
     binary: &str,
@@ -238,7 +312,8 @@ pub fn already_installed<S: AsRef<OsStr>>(
     already_installed_within(binary, args, version, bin_root, VERSION_PROBE_TIMEOUT)
 }
 
-/// [`already_installed`] with an explicit probe deadline.
+/// [`already_installed`] with an explicit probe deadline — the installer's
+/// path, which passes [`crate::InstallerOptions::version_probe_timeout`].
 pub(crate) fn already_installed_within<S: AsRef<OsStr>>(
     binary: &str,
     args: &[S],
@@ -872,6 +947,60 @@ mod tests {
         assert_eq!(child.calls, ["poll", "kill", "reap"]);
     }
 
+    /// `Duration::MAX` — reachable through the public
+    /// `InstallerOptions::version_probe_timeout`, which the env cap does not
+    /// guard — must wait for the child, not panic computing the deadline
+    /// (#1358). Before `checked_add` this panicked on `Instant + Duration`.
+    #[cfg(unix)]
+    #[test]
+    fn wait_within_does_not_panic_on_an_unrepresentable_timeout() {
+        use std::os::unix::process::ExitStatusExt as _;
+
+        let mut child =
+            FakeChild { poll_result: || Ok(Some(ExitStatus::from_raw(0))), calls: Vec::new() };
+
+        let status = wait_within(&mut child, Duration::MAX).unwrap();
+
+        assert!(status.success());
+        assert_eq!(child.calls, ["poll"]);
+    }
+
+    /// The test above only proves the deadline computes: its child exits on
+    /// the first poll, so the deadline is never consulted. This one keeps the
+    /// child running for two polls, which pins what an unrepresentable
+    /// deadline MEANS — wait, not "already expired". Reading it as expired
+    /// would kill every still-running probe on its first poll, turning a
+    /// slow-but-valid probe into a spurious timeout (#1358).
+    #[cfg(unix)]
+    #[test]
+    fn wait_within_waits_on_a_running_child_under_an_unrepresentable_timeout() {
+        use std::os::unix::process::ExitStatusExt as _;
+
+        /// Running for the first two polls, then exited.
+        struct ExitsOnThirdPoll {
+            calls: Vec<&'static str>,
+        }
+        impl ProbeChild for ExitsOnThirdPoll {
+            fn poll(&mut self) -> io::Result<Option<ExitStatus>> {
+                self.calls.push("poll");
+                Ok((self.calls.len() >= 3).then(|| ExitStatus::from_raw(0)))
+            }
+            fn kill_all(&mut self) {
+                self.calls.push("kill");
+            }
+            fn reap(&mut self) {
+                self.calls.push("reap");
+            }
+        }
+
+        let mut child = ExitsOnThirdPoll { calls: Vec::new() };
+
+        let status = wait_within(&mut child, Duration::MAX).unwrap();
+
+        assert!(status.success());
+        assert_eq!(child.calls, ["poll", "poll", "poll"], "must wait, never kill");
+    }
+
     /// The counterpart: a child that exits on its own is neither killed nor
     /// reaped again, so the test above is not satisfied by an unconditional
     /// kill.
@@ -952,6 +1081,34 @@ mod tests {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
 
         assert!(already_installed("tool", VERSION_ARGS, "1.2.3", dir.path()));
+    }
+
+    /// Unset or empty means the default; a positive integer is seconds and is
+    /// trimmed; anything else — including `0` — is a hard error naming the
+    /// variable, never a silent fallback (#1358).
+    #[test]
+    fn parse_version_probe_timeout_cases() {
+        assert_eq!(parse_version_probe_timeout(None).unwrap(), VERSION_PROBE_TIMEOUT);
+        assert_eq!(parse_version_probe_timeout(Some("")).unwrap(), VERSION_PROBE_TIMEOUT);
+        assert_eq!(parse_version_probe_timeout(Some("  ")).unwrap(), VERSION_PROBE_TIMEOUT);
+        assert_eq!(parse_version_probe_timeout(Some("30")).unwrap(), Duration::from_secs(30));
+        assert_eq!(parse_version_probe_timeout(Some(" 45 ")).unwrap(), Duration::from_secs(45));
+        assert_eq!(
+            parse_version_probe_timeout(Some("86400")).unwrap(),
+            Duration::from_secs(MAX_VERSION_PROBE_TIMEOUT_SECS),
+            "the cap itself is accepted"
+        );
+        // Values that parse as u64 but exceed the one-day cap — up to u64-max —
+        // are operator errors and must be refused here, naming the variable.
+        for bad in ["0", "abc", "-1", "1.5", "10s", "86401", "18446744073709551615"] {
+            let err = parse_version_probe_timeout(Some(bad)).unwrap_err();
+            let msg = err.to_string();
+            assert!(
+                matches!(err, crate::error::LuggageError::Catalog(_)),
+                "`{bad}` must be a Catalog error, got {msg}"
+            );
+            assert!(msg.contains(VERSION_PROBE_TIMEOUT_ENV), "`{bad}`: {msg}");
+        }
     }
 
     /// `already_installed` folds a timeout into "can't confirm → false", even
