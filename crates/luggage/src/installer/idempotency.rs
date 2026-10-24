@@ -230,11 +230,16 @@ impl ProbeChild for Child {
 /// Poll `child` until it exits or `timeout` elapses. On timeout, or if a poll
 /// itself errors, the child is killed and reaped before returning, so an
 /// early return never leaves it running or a zombie.
+///
+/// A `timeout` too large to add to `Instant::now()` means no deadline rather
+/// than a panic (#1358): the env reader caps its value, but
+/// [`crate::InstallerOptions::version_probe_timeout`] is a public field a
+/// library caller can set to anything, `Duration::MAX` included.
 fn wait_within(child: &mut impl ProbeChild, timeout: Duration) -> io::Result<ExitStatus> {
-    let deadline = Instant::now() + timeout;
+    let deadline = Instant::now().checked_add(timeout);
     loop {
         let polled = child.poll();
-        let timed_out = matches!(polled, Ok(None)) && Instant::now() >= deadline;
+        let timed_out = matches!(polled, Ok(None)) && deadline.is_some_and(|d| Instant::now() >= d);
         if timed_out || polled.is_err() {
             child.kill_all();
             child.reap();
@@ -936,6 +941,24 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::Other, "must not be remapped to TimedOut");
         assert_eq!(err.to_string(), "injected try_wait failure");
         assert_eq!(child.calls, ["poll", "kill", "reap"]);
+    }
+
+    /// `Duration::MAX` — reachable through the public
+    /// `InstallerOptions::version_probe_timeout`, which the env cap does not
+    /// guard — must wait for the child, not panic computing the deadline
+    /// (#1358). Before `checked_add` this panicked on `Instant + Duration`.
+    #[cfg(unix)]
+    #[test]
+    fn wait_within_does_not_panic_on_an_unrepresentable_timeout() {
+        use std::os::unix::process::ExitStatusExt as _;
+
+        let mut child =
+            FakeChild { poll_result: || Ok(Some(ExitStatus::from_raw(0))), calls: Vec::new() };
+
+        let status = wait_within(&mut child, Duration::MAX).unwrap();
+
+        assert!(status.success());
+        assert_eq!(child.calls, ["poll"]);
     }
 
     /// The counterpart: a child that exits on its own is neither killed nor
