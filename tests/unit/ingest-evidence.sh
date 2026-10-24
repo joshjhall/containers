@@ -599,6 +599,18 @@ test_merge_evidence_now_edge_cases() {
     assert_equals "0" "$rc" "an unset EVIDENCE_NOW takes the date +%s default"
     assert_equals "2026-10-20T00:00:00Z" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
         "and the stored 2999 fail reads as stale against the real clock"
+
+    # 2999 only proves the default is before 2999. A fail stored ten minutes
+    # ahead (past the 300 s skew) is stale, and a day-old repeat replaces it,
+    # only when the default is the real clock: one stuck in the past reads
+    # both rows as future, one stuck ahead reads the stored row as newer.
+    future=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": (now + 600 | todate)}' "$SAMPLE_ROW")
+    _seed
+    local yesterday
+    yesterday=$(jq -nr 'now - 86400 | todate')
+    (unset EVIDENCE_NOW && merge_evidence_row "$f" "$(jq -c --arg t "$yesterday" '.tested_at = $t' <<<"$real")")
+    assert_equals "$yesterday" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
+        "and that default is the current time, not merely some earlier epoch"
     unset -f _seed
     command rm -f "$f"
 }
