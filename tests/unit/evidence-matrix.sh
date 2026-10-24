@@ -584,6 +584,22 @@ test_vendored_recent_fail_is_not_pending() {
         "a recent vendored fail row keeps its cell out"
 }
 
+test_vendored_future_fail_is_retried() {
+    # #1391: the #1356 future-dated fail retry, read from the vendored tested[]
+    # (no source set) rather than published evidence — same expected order.
+    local r out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    command jq '.tested = [
+        {os: "debian", os_version: "13", arch: "amd64", result: "fail", tested_at: "2030-01-01T00:00:00Z"},
+        {os: "debian", os_version: "13", arch: "arm64", result: "fail", tested_at: "2026-10-21T00:02:00Z"}]' \
+        "$r/catalog/tools/rust/versions/1.90.0.json" >"$r/v.json"
+    command mv "$r/v.json" "$r/catalog/tools/rust/versions/1.90.0.json"
+    out="$(EVIDENCE_NOW="$_NOW" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "alpine-3.24-amd64|debian-13-amd64" "$(command jq -r '[.include[].tuple] | join("|")' <<<"$out")" \
+        "a future vendored fail is retried after the untested cell; the skewed one waits"
+}
+
 test_missing_index_is_an_error() {
     local rc=0
     evidence_matrix "$TEST_TEMP_DIR/nope" rust "$TEST_TEMP_DIR" >/dev/null 2>&1 || rc=$?
@@ -944,6 +960,7 @@ run_test test_offset_minutes_and_calendar_validity "minute offsets apply exactly
 run_test test_pass_beats_recent_fail "a pass row beats a recent fail row"
 run_test test_fail_cooldown_override "EVIDENCE_FAIL_COOLDOWN_DAYS overrides the cooldown"
 run_test test_vendored_recent_fail_is_not_pending "the cooldown applies to vendored tested[]"
+run_test test_vendored_future_fail_is_retried "a future-dated vendored fail is retried, not held"
 run_test test_missing_index_is_an_error "missing index is an error"
 run_test test_all_tools_covers_every_versioned_tool "every tool with versions/ gets legs; system_package does not"
 run_test test_all_tools_cap_interleaves_tools "the merged cap interleaves tools round-robin"

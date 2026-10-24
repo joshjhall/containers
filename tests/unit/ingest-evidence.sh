@@ -562,6 +562,61 @@ test_repeated_fail_future_tested_at() {
     command rm -f "$f"
 }
 
+test_merge_evidence_now_edge_cases() {
+    # #1391: EVIDENCE_NOW past 12 digits, zero-padded, and unset. Every case
+    # starts from a stored future-dated fail, which only reads as stale (and is
+    # replaced) when "now" resolves to an earlier decimal epoch.
+    # shellcheck source=bin/lib/evidence-merge.sh
+    source "$PROJECT_ROOT/bin/lib/evidence-merge.sh"
+    local f future real skew before rc=0
+    f=$(command mktemp)
+    future=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2030-01-01T00:00:00Z"}' "$SAMPLE_ROW")
+    real=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-20T00:00:00Z"}' "$SAMPLE_ROW")
+    skew=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2026-10-21T00:04:00Z"}' "$SAMPLE_ROW")
+    _seed() { jq -n --argjson a "$future" '{schemaVersion: 1, tool: "rust", version: "1.95.0", tested: [$a]}' >"$f"; }
+
+    _seed
+    before=$(command cat "$f")
+    EVIDENCE_NOW=1792540800000 merge_evidence_row "$f" "$real" 2>/dev/null || rc=$?
+    assert_equals "2" "$rc" "a 13-digit EVIDENCE_NOW is rejected"
+    assert_equals "$before" "$(command cat "$f")" "and the file is untouched"
+
+    # 001792540800 fits the 12-digit guard; read as octal it is an arithmetic
+    # error (digit 9), so the subshell keeps a mis-parse from unwinding the test.
+    _seed
+    rc=0
+    (EVIDENCE_NOW=001792540800 merge_evidence_row "$f" "$skew") 2>/dev/null || rc=$?
+    assert_equals "0" "$rc" "a zero-padded EVIDENCE_NOW is accepted"
+    assert_equals "2026-10-21T00:04:00Z" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
+        "and parsed as decimal: the same row EVIDENCE_NOW=1792540800 produces"
+
+    # The real clock decides this one, so the stored fail is dated far enough
+    # out (2999) that it stays future-dated for the life of the suite.
+    future=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2999-01-01T00:00:00Z"}' "$SAMPLE_ROW")
+    _seed
+    rc=0
+    (unset EVIDENCE_NOW && merge_evidence_row "$f" "$real") || rc=$?
+    assert_equals "0" "$rc" "an unset EVIDENCE_NOW takes the date +%s default"
+    assert_equals "2026-10-20T00:00:00Z" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
+        "and the stored 2999 fail reads as stale against the real clock"
+
+    # 2999 only proves the default is before 2999. A fail stored ten minutes
+    # ahead (past the 300 s skew) is stale, and a day-old repeat replaces it,
+    # only when the default is the real clock: one stuck in the past reads
+    # both rows as future, one stuck ahead reads the stored row as newer.
+    future=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": (now + 600 | todate)}' "$SAMPLE_ROW")
+    _seed
+    local yesterday
+    yesterday=$(jq -nr 'now - 86400 | todate')
+    rc=0
+    (unset EVIDENCE_NOW && merge_evidence_row "$f" "$(jq -c --arg t "$yesterday" '.tested_at = $t' <<<"$real")") || rc=$?
+    assert_equals "0" "$rc" "a day-old repeat merges cleanly against the default clock"
+    assert_equals "$yesterday" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
+        "and that default is the current time, not merely some earlier epoch"
+    unset -f _seed
+    command rm -f "$f"
+}
+
 test_stdin_row_via_dash() {
     local db
     db=$(command mktemp -d)
@@ -642,6 +697,7 @@ run_test test_repeated_fail_refreshes_tested_at "a repeated failure refreshes te
 run_test test_repeated_fail_merge_edge_cases "repeated-fail merge: duplicate matches collapse, a new error_class replaces"
 run_test test_repeated_fail_offset_tested_at "repeated-fail merge compares numeric-offset tested_at as UTC"
 run_test test_repeated_fail_future_tested_at "repeated-fail merge treats a future tested_at as stale"
+run_test test_merge_evidence_now_edge_cases "EVIDENCE_NOW: 13 digits rejected, zero-padded decimal, unset defaults to now"
 run_test test_stdin_row_via_dash "--row - reads JSON from stdin"
 run_test test_rejects_missing_required_flag "missing --db-path is exit 2"
 run_test test_rejects_unknown_argument "unknown flag is exit 2"
