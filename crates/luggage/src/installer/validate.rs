@@ -143,7 +143,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn runs_the_declared_version_args() {
-        use crate::installer::idempotency::write_subcommand_shim;
+        use crate::installer::idempotency::tests::write_subcommand_shim;
 
         let dir = tempdir().unwrap();
         write_subcommand_shim(dir.path(), "go", "go version go1.27.2 linux/arm64");
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn hung_probe_times_out_as_validation_failed() {
-        use crate::installer::idempotency::{
+        use crate::installer::idempotency::tests::{
             TEST_TIMEOUT as timeout, assert_probe_child_gone, write_sleeping_shim,
         };
         use std::time::Instant;
@@ -356,7 +356,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn unexecutable_probe_fails_to_launch_not_timeout() {
-        use crate::installer::idempotency::TEST_TIMEOUT as timeout;
+        use crate::installer::idempotency::tests::TEST_TIMEOUT as timeout;
 
         let dir = tempdir().unwrap();
         let tool = dir.path().join("tool");
