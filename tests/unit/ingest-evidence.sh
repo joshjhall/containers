@@ -564,8 +564,8 @@ test_repeated_fail_future_tested_at() {
 
 test_merge_evidence_now_edge_cases() {
     # #1391: EVIDENCE_NOW past 12 digits, zero-padded, and unset. Every case
-    # starts from a stored fail dated 2030, which only reads as stale (and is
-    # replaced) when "now" resolves to a pre-2030 decimal epoch.
+    # starts from a stored future-dated fail, which only reads as stale (and is
+    # replaced) when "now" resolves to an earlier decimal epoch.
     # shellcheck source=bin/lib/evidence-merge.sh
     source "$PROJECT_ROOT/bin/lib/evidence-merge.sh"
     local f future real skew before rc=0
@@ -590,12 +590,15 @@ test_merge_evidence_now_edge_cases() {
     assert_equals "2026-10-21T00:04:00Z" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
         "and parsed as decimal: the same row EVIDENCE_NOW=1792540800 produces"
 
+    # The real clock decides this one, so the stored fail is dated far enough
+    # out (2999) that it stays future-dated for the life of the suite.
+    future=$(jq -c '. + {"result": "fail", "error_class": "verify", "tested_at": "2999-01-01T00:00:00Z"}' "$SAMPLE_ROW")
     _seed
     rc=0
     (unset EVIDENCE_NOW && merge_evidence_row "$f" "$real") || rc=$?
     assert_equals "0" "$rc" "an unset EVIDENCE_NOW takes the date +%s default"
     assert_equals "2026-10-20T00:00:00Z" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
-        "and the stored 2030 fail reads as stale against the real clock"
+        "and the stored 2999 fail reads as stale against the real clock"
     unset -f _seed
     command rm -f "$f"
 }
