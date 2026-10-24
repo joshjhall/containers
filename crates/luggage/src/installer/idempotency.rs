@@ -965,6 +965,42 @@ mod tests {
         assert_eq!(child.calls, ["poll"]);
     }
 
+    /// The test above only proves the deadline computes: its child exits on
+    /// the first poll, so the deadline is never consulted. This one keeps the
+    /// child running for two polls, which pins what an unrepresentable
+    /// deadline MEANS — wait, not "already expired". Reading it as expired
+    /// would kill every still-running probe on its first poll, turning a
+    /// slow-but-valid probe into a spurious timeout (#1358).
+    #[cfg(unix)]
+    #[test]
+    fn wait_within_waits_on_a_running_child_under_an_unrepresentable_timeout() {
+        use std::os::unix::process::ExitStatusExt as _;
+
+        /// Running for the first two polls, then exited.
+        struct ExitsOnThirdPoll {
+            calls: Vec<&'static str>,
+        }
+        impl ProbeChild for ExitsOnThirdPoll {
+            fn poll(&mut self) -> io::Result<Option<ExitStatus>> {
+                self.calls.push("poll");
+                Ok((self.calls.len() >= 3).then(|| ExitStatus::from_raw(0)))
+            }
+            fn kill_all(&mut self) {
+                self.calls.push("kill");
+            }
+            fn reap(&mut self) {
+                self.calls.push("reap");
+            }
+        }
+
+        let mut child = ExitsOnThirdPoll { calls: Vec::new() };
+
+        let status = wait_within(&mut child, Duration::MAX).unwrap();
+
+        assert!(status.success());
+        assert_eq!(child.calls, ["poll", "poll", "poll"], "must wait, never kill");
+    }
+
     /// The counterpart: a child that exits on its own is neither killed nor
     /// reaped again, so the test above is not satisfied by an unconditional
     /// kill.
