@@ -85,9 +85,10 @@ test_cells_install_from_the_vendored_catalog() {
 # lines inside the list are skipped; any other line before the list dedents
 # prints `UNPARSED: <line>`, which the caller fails on, so an entry (in
 # particular a `!` exclusion) can never be dropped silently. The `on:`,
-# trigger, and `paths:` keys may carry trailing blanks or a comment; any other
-# text after them (flow style) is UNPARSED too, as is a compact `    - ` entry,
-# so a shape this reader cannot follow is never reported as "no paths:".
+# trigger, and `paths:` keys may carry trailing blanks or a comment. Any other
+# text after the trigger or `paths:` key (flow style) is UNPARSED too, as is a
+# compact `    - ` entry. Shapes outside that (an inline `on:` value, another
+# indent width) yield no entries, which the caller also fails on.
 _trigger_paths() {
     /usr/bin/awk -v ev="$1" '
         /^on:[[:space:]]*(#.*)?$/ { inon = 1; next }
