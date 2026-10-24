@@ -325,7 +325,9 @@ mod tests {
         let err =
             check_within("tool", "tool", &args, "1.0.0", dir.path(), &BTreeMap::new(), timeout)
                 .unwrap_err();
-        assert!(start.elapsed() < Duration::from_secs(5), "the hung child must be killed");
+        let elapsed = start.elapsed();
+        assert!(elapsed >= timeout, "must wait out the deadline first ({elapsed:?})");
+        assert!(elapsed < Duration::from_secs(5), "the hung child must be killed ({elapsed:?})");
         assert_probe_child_gone(dir.path(), "tool");
         match err {
             LuggageError::ValidationFailed { tool, version, message } => {
@@ -351,7 +353,11 @@ mod tests {
 
     /// A probe that cannot be spawned at all must still surface through the
     /// launch-failure branch, not be misreported as a timeout — the deadline
-    /// only applies once a child exists (#1344).
+    /// only applies once a child exists (#1344). The trigger is an executable
+    /// shim whose shebang names a nonexistent interpreter, so `exec` fails
+    /// with `ENOENT` from path lookup alone. A mode-000 file instead relies on
+    /// the filesystem enforcing mode bits for `EACCES` (Linux root still gets
+    /// it, but a permission-ignoring mount would run the shim).
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
@@ -360,8 +366,9 @@ mod tests {
 
         let dir = tempdir().unwrap();
         let tool = dir.path().join("tool");
-        fs::write(&tool, "#!/bin/sh\necho tool 1.0.0\n").unwrap();
-        fs::set_permissions(&tool, fs::Permissions::from_mode(0o000)).unwrap();
+        let interpreter = dir.path().join("no-such-interpreter");
+        fs::write(&tool, format!("#!{}\necho tool 1.0.0\n", interpreter.display())).unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).unwrap();
 
         let err = check_within(
             "tool",
