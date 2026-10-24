@@ -608,7 +608,9 @@ test_merge_evidence_now_edge_cases() {
     _seed
     local yesterday
     yesterday=$(jq -nr 'now - 86400 | todate')
-    (unset EVIDENCE_NOW && merge_evidence_row "$f" "$(jq -c --arg t "$yesterday" '.tested_at = $t' <<<"$real")")
+    rc=0
+    (unset EVIDENCE_NOW && merge_evidence_row "$f" "$(jq -c --arg t "$yesterday" '.tested_at = $t' <<<"$real")") || rc=$?
+    assert_equals "0" "$rc" "a day-old repeat merges cleanly against the default clock"
     assert_equals "$yesterday" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
         "and that default is the current time, not merely some earlier epoch"
     unset -f _seed
