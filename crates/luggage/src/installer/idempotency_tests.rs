@@ -516,6 +516,40 @@ fn run_version_check_within_deadline_captures_output() {
     assert_eq!(String::from_utf8_lossy(&err.stderr), "tool 2.0.0 stderr\n");
 }
 
+/// The probe's stdin is `/dev/null`. Unlike [`Command::output`], `spawn()`
+/// defaults stdin to *inherit*, so dropping the explicit `Stdio::null()`
+/// would hand a REPL-ish `version_args` the caller's terminal to block on.
+/// The shim succeeds only if its stdin is the null device and a `read` hits
+/// EOF at once; an inherited stdin that is not `/dev/null` fails the `-ef`
+/// check (or blocks in `read` into the deadline). A runner whose own stdin
+/// is already `/dev/null` cannot tell inherit from null — that residual is
+/// accepted rather than swapping the test process's fd 0.
+#[cfg(unix)]
+#[test]
+#[serial_test::serial]
+fn run_version_check_within_gives_the_probe_a_null_stdin() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("tool");
+    fs::write(
+        &path,
+        "#!/bin/sh\n[ /dev/stdin -ef /dev/null ] || { echo 'stdin is not /dev/null' >&2; exit 3; }\n\
+         if read -r line; then echo \"stdin had data: $line\" >&2; exit 4; fi\n\
+         echo 'tool 1.0.0'\n",
+    )
+    .unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let out =
+        run_version_check_within(&path, VERSION_ARGS, &BTreeMap::new(), VERSION_PROBE_TIMEOUT)
+            .expect("a probe reading stdin must hit EOF, not wait out the deadline");
+    assert!(
+        out.status.success(),
+        "probe stdin must be /dev/null: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "tool 1.0.0\n");
+}
+
 /// Output past a pipe buffer (~64KiB) is captured whole. With piped
 /// stdio and a `try_wait` poll the child would block on a full pipe and
 /// this would time out instead — the deadlock the tempfile capture
@@ -872,10 +906,12 @@ fn already_installed_returns_false_when_the_probe_times_out() {
 /// A non-`ETXTBSY` launch error must be returned on the *first* attempt,
 /// never retried. Pointing at a path with no file on disk makes `exec`
 /// fail with `ENOENT`, which the `other => break other?` arm must surface
-/// immediately — a near-zero elapsed time proves the retry loop's backoff
-/// (which would add ≥`ETXTBSY_BACKOFF` per attempt) never ran. Serialized
-/// so the tight timing bound doesn't share the runner with shim-spawning
-/// tests.
+/// immediately. Retrying it would sleep `ETXTBSY_BACKOFF` per attempt, so
+/// finishing under the full `ETXTBSY_BACKOFF * ETXTBSY_RETRIES` budget
+/// proves the loop did not exhaust its retries on it — a bound that also
+/// leaves headroom for the two capture tempfiles created before the spawn.
+/// Serialized so the timing bound doesn't share the runner with
+/// shim-spawning tests.
 #[cfg(unix)]
 #[test]
 #[serial_test::serial]
@@ -890,14 +926,14 @@ fn run_version_check_returns_non_etxtbsy_error_without_retrying() {
     let elapsed = start.elapsed();
 
     let err = result.expect_err("a missing binary must surface its launch error");
-    assert_ne!(
-        err.raw_os_error(),
-        Some(ETXTBSY),
-        "the induced error must be a genuine non-ETXTBSY failure",
+    assert_eq!(
+        err.kind(),
+        io::ErrorKind::NotFound,
+        "the induced error must be the missing binary's ENOENT, got: {err}",
     );
     assert!(
-        elapsed < ETXTBSY_BACKOFF,
-        "a non-ETXTBSY error must return before any backoff sleep (elapsed {elapsed:?})",
+        elapsed < ETXTBSY_BACKOFF * ETXTBSY_RETRIES,
+        "a non-ETXTBSY error must not be retried through the backoff (elapsed {elapsed:?})",
     );
 }
 
