@@ -297,7 +297,7 @@ mod tests {
     fn stage_validate_honors_the_version_probe_timeout_option() {
         use std::time::{Duration, Instant};
 
-        use crate::installer::idempotency::{assert_probe_child_gone, write_sleeping_shim};
+        use crate::installer::idempotency::tests::{assert_probe_child_gone, write_sleeping_shim};
 
         let dir = tempfile::tempdir().unwrap();
         write_sleeping_shim(dir.path(), "tool");
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn stage_validate_uses_the_resolved_version_args() {
-        use crate::installer::idempotency::write_subcommand_shim;
+        use crate::installer::idempotency::tests::write_subcommand_shim;
 
         let dir = tempfile::tempdir().unwrap();
         write_subcommand_shim(dir.path(), "go", "go version go1.27.2 linux/arm64");

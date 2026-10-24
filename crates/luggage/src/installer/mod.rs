@@ -866,7 +866,11 @@ mod tests {
     #[serial_test::serial]
     fn idempotency_skip_uses_the_resolved_version_args() {
         let dir = tempfile::tempdir().unwrap();
-        idempotency::write_subcommand_shim(dir.path(), "go", "go version go1.27.2 linux/arm64");
+        idempotency::tests::write_subcommand_shim(
+            dir.path(),
+            "go",
+            "go version go1.27.2 linux/arm64",
+        );
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             bin_root: dir.path().to_owned(),
@@ -900,7 +904,7 @@ mod tests {
     #[serial_test::serial]
     fn idempotency_precheck_honors_the_version_probe_timeout_option() {
         let dir = tempfile::tempdir().unwrap();
-        idempotency::write_sleeping_shim(dir.path(), "tool");
+        idempotency::tests::write_sleeping_shim(dir.path(), "tool");
         let installer = Installer::with_options(InstallerOptions {
             dry_run: true,
             install_system_packages: false,
@@ -921,7 +925,7 @@ mod tests {
             elapsed < idempotency::VERSION_PROBE_TIMEOUT / 2,
             "the 1s option must bound the pre-check, took {elapsed:?}"
         );
-        idempotency::assert_probe_child_gone(dir.path(), "tool");
+        idempotency::tests::assert_probe_child_gone(dir.path(), "tool");
     }
 
     /// `sample_resolved_with_deps` with a pinless tier-2 verification — an
