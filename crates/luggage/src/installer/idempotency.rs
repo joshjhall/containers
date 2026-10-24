@@ -878,6 +878,69 @@ mod tests {
         assert_eq!(out.stderr.len(), BYTES);
     }
 
+    /// SIGKILLs the recorded grandchild on drop, so a failed assertion cannot
+    /// leak the shim's `sleep 30`. Never asserts: a panic in `drop` while
+    /// already unwinding would abort the test binary.
+    #[cfg(unix)]
+    struct KillOnDrop(rustix::process::Pid);
+
+    #[cfg(unix)]
+    impl Drop for KillOnDrop {
+        fn drop(&mut self) {
+            let _ = rustix::process::kill_process(self.0, rustix::process::Signal::KILL);
+        }
+    }
+
+    /// A probe that exits while a backgrounded grandchild still holds the
+    /// inherited stdout/stderr returns promptly (#1359). With piped stdio and
+    /// read-to-EOF the read would block until the grandchild's `sleep 30`
+    /// ended — the hang the tempfile capture exists to avoid. The
+    /// still-running check proves the fds really were held at return, so the
+    /// elapsed bound cannot pass because the grandchild died early.
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn run_version_check_returns_while_a_grandchild_holds_the_capture_fds() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("tool");
+        fs::write(
+            &path,
+            "#!/bin/sh\necho 'tool 1.0.0'\nsleep 30 &\necho $! > \"$0.gpid\"\nexit 0\n",
+        )
+        .unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let start = Instant::now();
+        let result =
+            run_version_check_within(&path, VERSION_ARGS, &BTreeMap::new(), VERSION_PROBE_TIMEOUT);
+        let elapsed = start.elapsed();
+
+        let gpid = fs::read_to_string(dir.path().join("tool.gpid"))
+            .expect("the shim must record its background pid before exiting");
+        let gpid = gpid.trim().to_owned();
+        let raw: i32 = gpid.parse().unwrap_or_else(|e| panic!("unparsable pid {gpid:?} ({e})"));
+        let guard = KillOnDrop(
+            rustix::process::Pid::from_raw(raw)
+                .unwrap_or_else(|| panic!("pid {raw} is not positive")),
+        );
+
+        let out = result.expect("a probe that exits 0 must succeed despite a live grandchild");
+        assert!(out.status.success());
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "tool 1.0.0\n");
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "must not wait on the grandchild holding the capture fds ({elapsed:?})",
+        );
+        assert!(pid_is_running(&gpid), "the grandchild must still be alive when the probe returns");
+
+        drop(guard);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while pid_is_running(&gpid) {
+            assert!(Instant::now() < deadline, "cleanup must kill the grandchild (pid {gpid})");
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     /// A probe that floods both streams far past the cap and then exits 0
     /// comes back with exactly [`VERSION_PROBE_OUTPUT_CAP`] bytes of each —
     /// the cap bounds what is read into memory, without turning the
