@@ -62,6 +62,58 @@ fn interrupt_kills_registered_groups_and_refuses_new_spawns() {
     assert_eq!(err.kind(), io::ErrorKind::Interrupted);
 }
 
+/// While the watcher holds the lock `interrupt_all` returned, a probe caller
+/// cannot reap: it must not see the killed probe's status and carry on with
+/// the install before the re-raised signal ends the process. Releasing the
+/// lock lets the reap through, and that reap deregisters the group.
+#[test]
+fn reap_blocks_while_the_interrupt_lock_is_held() {
+    static REG: Mutex<Registry> = Mutex::new(Registry::new());
+
+    let (mut child, tracked) = spawn_tracked_in(&REG, &mut grouped_sleep()).unwrap();
+    let pid = Pid::from_child(&child);
+    let held = interrupt_all(&REG);
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let reaper = std::thread::spawn(move || {
+        let status = tracked.reap_locked(|| child.wait().map(Some));
+        tx.send(()).unwrap();
+        (status, tracked)
+    });
+    assert!(
+        rx.recv_timeout(Duration::from_millis(300)).is_err(),
+        "the reap must block while the interrupt lock is held",
+    );
+    // Killed but not reaped: a zombie still answers `kill(pid, 0)`, while a
+    // reaped pid is ESRCH and free for reuse while still registered.
+    assert!(
+        rustix::process::test_kill_process(pid).is_ok(),
+        "the probe must not be reaped while the interrupt lock is held",
+    );
+
+    drop(held);
+    rx.recv_timeout(Duration::from_secs(2)).expect("releasing the lock must let the reap finish");
+    let (status, tracked) = reaper.join().unwrap();
+    assert_eq!(status.unwrap().unwrap().signal(), Some(Signal::KILL.as_raw()));
+    assert!(lock(&REG).pgids.is_empty(), "a completed reap must deregister the group");
+    drop(tracked);
+}
+
+/// A poll that finds the child still running leaves it registered; only a
+/// reap deregisters.
+#[test]
+fn a_running_poll_keeps_the_group_registered() {
+    static REG: Mutex<Registry> = Mutex::new(Registry::new());
+
+    let (mut child, tracked) = spawn_tracked_in(&REG, &mut grouped_sleep()).unwrap();
+    assert!(tracked.reap_locked(|| child.try_wait()).unwrap().is_none());
+    assert_eq!(lock(&REG).pgids.len(), 1, "a still-running probe must stay registered");
+
+    let _ = child.kill();
+    tracked.reap_locked(|| child.wait().map(Some)).unwrap();
+    assert_eq!(lock(&REG).pgids, Vec::new(), "a reap must deregister the group");
+}
+
 /// Interrupting luggage mid-probe leaves no probe or descendant running, for
 /// each signal the watcher handles.
 #[test]

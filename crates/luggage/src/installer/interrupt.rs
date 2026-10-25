@@ -52,8 +52,8 @@ fn lock(registry: &Mutex<Registry>) -> MutexGuard<'_, Registry> {
     registry.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Deregisters its process group on drop. Keep it alive until the child has
-/// been reaped, so an interrupt during the wait still finds the group.
+/// Keeps a probe's process group registered until the child is reaped through
+/// [`Self::reap_locked`], or until the guard drops (an early-return path).
 #[derive(Debug)]
 #[must_use = "dropping the guard deregisters the probe group immediately"]
 pub struct Tracked {
@@ -61,12 +61,36 @@ pub struct Tracked {
     pgid: Pid,
 }
 
+impl Tracked {
+    /// Run `reap` under the registry lock, and deregister the group in the
+    /// same critical section when it reports the child reaped (`Ok(Some)`).
+    ///
+    /// Reaping frees the leader's pid for reuse. Done under the lock, no
+    /// interrupt can observe a reaped probe's pgid still registered and
+    /// `killpg` whatever process took that pid next. Dropping the guard after
+    /// a separate reap would leave exactly that window.
+    pub fn reap_locked<T>(
+        &self,
+        reap: impl FnOnce() -> io::Result<Option<T>>,
+    ) -> io::Result<Option<T>> {
+        let mut live = lock(self.registry);
+        let reaped = reap();
+        if matches!(reaped, Ok(Some(_))) {
+            deregister(&mut live, self.pgid);
+        }
+        reaped
+    }
+}
+
+fn deregister(live: &mut Registry, pgid: Pid) {
+    if let Some(i) = live.pgids.iter().position(|p| *p == pgid) {
+        live.pgids.swap_remove(i);
+    }
+}
+
 impl Drop for Tracked {
     fn drop(&mut self) {
-        let mut live = lock(self.registry);
-        if let Some(i) = live.pgids.iter().position(|p| *p == self.pgid) {
-            live.pgids.swap_remove(i);
-        }
+        deregister(&mut lock(self.registry), self.pgid);
     }
 }
 
@@ -108,8 +132,8 @@ pub fn spawn_tracked_in(
 /// [`Tracked`] guard that will deregister it.
 ///
 /// Returns the still-held lock. The watcher keeps it until the process dies,
-/// so a probe caller cannot act on the status of a probe killed here: its
-/// guard's drop blocks on the lock instead of returning.
+/// so a probe caller cannot act on the status of a probe killed here:
+/// `Tracked::reap_locked` blocks on the lock instead of returning.
 pub fn interrupt_all(registry: &Mutex<Registry>) -> MutexGuard<'_, Registry> {
     let mut live = lock(registry);
     live.interrupted = true;

@@ -179,7 +179,8 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
     let mut attempt = 0;
     // On unix the guard keeps the probe's group registered for the interrupt
     // handler until the probe is reaped, and no longer: once reaped, its pid
-    // may be recycled by an unrelated process.
+    // may be recycled by an unrelated process. `TrackedChild` reaps and
+    // deregisters in one critical section.
     let (mut child, tracked) = loop {
         let mut command = Command::new(binary);
         command
@@ -207,13 +208,13 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
         }
     };
 
-    // `wait_within` reaps the child on every return, error paths included.
-    let status = wait_within(&mut child, timeout);
     #[cfg(unix)]
-    drop(tracked);
+    let status = wait_within(&mut TrackedChild { child: &mut child, tracked: &tracked }, timeout)?;
     #[cfg(not(unix))]
-    let () = tracked;
-    let status = status?;
+    let status = {
+        let () = tracked;
+        wait_within(&mut child, timeout)?
+    };
 
     Ok(Output {
         status,
@@ -253,6 +254,33 @@ impl ProbeChild for Child {
 
     fn reap(&mut self) {
         let _ = self.wait();
+    }
+}
+
+/// A probe [`Child`] whose every reap also deregisters its process group from
+/// the interrupt registry, atomically with respect to the interrupt handler
+/// (see [`super::interrupt::Tracked::reap_locked`]).
+#[cfg(unix)]
+struct TrackedChild<'a> {
+    child: &'a mut Child,
+    tracked: &'a super::interrupt::Tracked,
+}
+
+#[cfg(unix)]
+impl ProbeChild for TrackedChild<'_> {
+    fn poll(&mut self) -> io::Result<Option<ExitStatus>> {
+        self.tracked.reap_locked(|| self.child.try_wait())
+    }
+
+    fn kill_all(&mut self) {
+        self.child.kill_all();
+    }
+
+    fn reap(&mut self) {
+        let _ = self.tracked.reap_locked(|| {
+            self.child.reap();
+            Ok(Some(()))
+        });
     }
 }
 
