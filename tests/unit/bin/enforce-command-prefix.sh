@@ -461,6 +461,35 @@ test_fixed_no_trailing_newline_gains_one() {
     assert_equals "15" "$size" "'command grep x' plus a trailing newline"
 }
 
+# Test: a rewritten file keeps its mode (the tmpfile is created 0600)
+test_fixed_file_keeps_mode() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
+    chmod 755 "$TEST_TEMP_DIR/test.sh"
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals "755" "$(stat -c '%a' "$TEST_TEMP_DIR/test.sh")" \
+        "Fixed file should keep its 755 mode"
+}
+
+# Test: an unreadable file makes awk fail → exit 2, message, no tmpfile left
+test_awk_failure_exits_2() {
+    if [ "$(id -u)" -eq 0 ]; then
+        skip_test "root can read a mode-000 file"
+        return
+    fi
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
+    chmod 000 "$TEST_TEMP_DIR/test.sh"
+    local exit_code=0 err
+    err=$("$SCRIPT" "$TEST_TEMP_DIR/test.sh" 2>&1 >/dev/null) || exit_code=$?
+    chmod 644 "$TEST_TEMP_DIR/test.sh"
+    assert_equals "2" "$exit_code" "awk failure should exit 2, not 0 or 1"
+    assert_contains "$err" "awk failed" "Failure should be reported on stderr"
+    local leftovers
+    leftovers=$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*' | /usr/bin/wc -l)
+    assert_equals "0" "$leftovers" "No tmpfile should be left behind"
+}
+
 # Test: a file name containing '=' is read as a file, not an awk assignment
 test_filename_with_equals() {
     write_fixture "$TEST_TEMP_DIR/a=b.sh" 'grep x' # enforce-command-prefix: off
@@ -508,6 +537,8 @@ run_test test_dedup_mid_line "command command collapsed mid-line"
 run_test test_dedup_requires_word_boundary "foo-command command is not collapsed"
 run_test test_clean_no_trailing_newline_untouched "Clean file without trailing newline is untouched"
 run_test test_fixed_no_trailing_newline_gains_one "Fixed file without trailing newline gains one"
+run_test test_fixed_file_keeps_mode "Fixed file keeps its mode"
+run_test test_awk_failure_exits_2 "awk failure exits 2 and cleans up"
 run_test test_filename_with_equals "File name containing = is processed as a file"
 
 # Generate test report
