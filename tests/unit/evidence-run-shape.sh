@@ -91,6 +91,17 @@ test_open_pr_sources_step_calls_the_lib() {
     assert_contains "$run" 'SOURCES=$(evidence_db_sources "$PWD/_db" "$PWD" "$(date -u +%s)")' \
         "and resolves its sources through evidence_db_sources"
     assert_not_contains "$run" 'gh pr list' "no inline listing is left in the step"
+    # The setup job's checkout is sparse: a lib it sources but does not list
+    # is missing on the runner, and the step fails before resolving anything.
+    local lib sparse
+    sparse="$(/usr/bin/awk '
+        /- name: Checkout catalog and base-image tree/ { on = 1; next }
+        on && /- name: / { exit }
+        on { print }
+    ' "$WF")"
+    for lib in evidence-sources.sh evidence-matrix.sh evidence-epoch.sh; do
+        assert_contains "$sparse" "bin/lib/$lib" "the setup checkout lists bin/lib/$lib"
+    done
 }
 
 test_open_pr_sources_count_only_added_rows() {

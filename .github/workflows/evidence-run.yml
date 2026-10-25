@@ -138,6 +138,7 @@ jobs:
           sparse-checkout: |
             bin/lib/evidence-epoch.sh
             bin/lib/evidence-matrix.sh
+            bin/lib/evidence-sources.sh
             base-images
             crates/luggage/testdata/catalog
 
