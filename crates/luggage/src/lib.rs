@@ -62,6 +62,9 @@ pub use resolver::{ResolutionWarning, ResolvedInstall, VersionSpec};
 ///
 /// Returns the OS error if the handlers or the watcher thread cannot be set
 /// up.
+// Off unix the body is a bare `Ok(())`, which clippy wants `const`; on unix it
+// calls a non-const fn, so the signature cannot be `const` on every target.
+#[cfg_attr(not(unix), allow(clippy::missing_const_for_fn))]
 pub fn install_interrupt_handler() -> std::io::Result<()> {
     #[cfg(unix)]
     return installer::interrupt::install_handler();
