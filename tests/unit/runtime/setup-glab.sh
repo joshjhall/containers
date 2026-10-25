@@ -399,7 +399,7 @@ test_xtrace_no_token_leak_on_login_failure() {
 # token) or `return 0` (invalid token) follows.
 test_xtrace_restored_on_early_returns() {
     _install_stub_glab
-    local output last
+    local output after
     output=$(_run_setup_glab_traced -u GITLAB_TOKEN) || true
     assert_contains "$output" "+ _info 'GITLAB_TOKEN not set" \
         "[no-token] xtrace should be restored before the help message"
@@ -408,8 +408,31 @@ test_xtrace_restored_on_early_returns() {
     output=$(_run_setup_glab_traced GITLAB_TOKEN="zq9 ") || true
     assert_contains "$output" "GITLAB_TOKEN is too short" "[invalid] should take the validate-fail path"
     assert_not_contains "$output" "zq9" "[invalid] token must not appear anywhere in the xtrace"
-    last=$(printf '%s\n' "$output" | command tail -n 1)
-    assert_equals "+ return 0" "$last" "[invalid] xtrace should be restored before the return"
+    # Anchor on what follows the warning, not the last line, so later trailing
+    # trace output cannot break it
+    after=$(printf '%s\n' "$output" | command sed -n '/GITLAB_TOKEN is too short/,$p')
+    assert_contains "$after" "+ return 0" "[invalid] xtrace should be restored before the return"
+}
+
+# The restores must put back the caller's state, not force xtrace on: an
+# untraced run (the normal case) must produce no trace lines after them.
+test_xtrace_stays_off_when_untraced() {
+    local output
+    _install_stub_glab
+    output=$(command env -u BASH_ENV -u GITLAB_TOKEN -u GITLAB_HOST \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash "$SETUP_GLAB_SCRIPT" 2>&1) || true
+    assert_contains "$output" "GITLAB_TOKEN not set" "[no-token] should take the no-token path"
+    assert_not_contains "$output" "+ _info" "[no-token] untraced run must stay untraced after the restore"
+
+    output=$(command env -u BASH_ENV -u GITLAB_HOST \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITLAB_TOKEN="zq9 " \
+        bash "$SETUP_GLAB_SCRIPT" 2>&1) || true
+    assert_contains "$output" "GITLAB_TOKEN is too short" "[invalid] should take the validate-fail path"
+    assert_not_contains "$output" "+ return 0" "[invalid] untraced run must stay untraced after the restore"
 }
 
 # ---------------------------------------------------------------------------
@@ -597,6 +620,7 @@ run_test_with_setup test_xtrace_no_token_leak "Whole xtrace is token-free on the
 run_test_with_setup test_xtrace_no_stored_token_leak "Already-authenticated path keeps stored token out of xtrace"
 run_test_with_setup test_xtrace_no_token_leak_on_login_failure "Failed glab login keeps token out of xtrace"
 run_test_with_setup test_xtrace_restored_on_early_returns "No-token and invalid-token returns restore xtrace"
+run_test_with_setup test_xtrace_stays_off_when_untraced "Restores leave an untraced run untraced"
 run_test_with_setup test_verification_after_auth "Verification step after authentication"
 
 # Generate test report

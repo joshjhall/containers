@@ -504,7 +504,7 @@ test_xtrace_no_stored_token_leak() {
 # restore the trace ends at the `_xt=` save; with it, the traced `_info` (no
 # token) or `return 0` (invalid token) follows.
 test_xtrace_restored_on_early_returns() {
-    local output last
+    local output after
     _install_stub_gh ok
     output=$(command env -u BASH_ENV -u GITHUB_TOKEN -u GH_TOKEN \
         HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
@@ -521,8 +521,31 @@ test_xtrace_restored_on_early_returns() {
         bash -x "$SETUP_GH_SCRIPT" 2>&1) || true
     assert_contains "$output" "GITHUB_TOKEN is too short" "[invalid] should take the validate-fail path"
     assert_not_contains "$output" "zq9" "[invalid] token must not appear anywhere in the xtrace"
-    last=$(printf '%s\n' "$output" | command tail -n 1)
-    assert_equals "+ return 0" "$last" "[invalid] xtrace should be restored before the return"
+    # Anchor on what follows the warning, not the last line, so later trailing
+    # trace output cannot break it
+    after=$(printf '%s\n' "$output" | command sed -n '/GITHUB_TOKEN is too short/,$p')
+    assert_contains "$after" "+ return 0" "[invalid] xtrace should be restored before the return"
+}
+
+# The restores must put back the caller's state, not force xtrace on: an
+# untraced run (the normal case) must produce no trace lines after them.
+test_xtrace_stays_off_when_untraced() {
+    local output
+    _install_stub_gh ok
+    output=$(command env -u BASH_ENV -u GITHUB_TOKEN -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "GITHUB_TOKEN not set" "[no-token] should take the no-token path"
+    assert_not_contains "$output" "+ _info" "[no-token] untraced run must stay untraced after the restore"
+
+    output=$(command env -u BASH_ENV -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITHUB_TOKEN="zq9 " \
+        bash "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "GITHUB_TOKEN is too short" "[invalid] should take the validate-fail path"
+    assert_not_contains "$output" "+ return 0" "[invalid] untraced run must stay untraced after the restore"
 }
 
 run_test_with_setup test_login_clears_env_token "Login runs with env tokens cleared and persists"
@@ -530,6 +553,7 @@ run_test_with_setup test_login_failure_reported "Failed login is reported with n
 run_test_with_setup test_xtrace_no_token_leak "Whole xtrace is token-free on login, restored on failure"
 run_test_with_setup test_xtrace_no_stored_token_leak "Already-authenticated path keeps stored token out of xtrace"
 run_test_with_setup test_xtrace_restored_on_early_returns "No-token and invalid-token returns restore xtrace"
+run_test_with_setup test_xtrace_stays_off_when_untraced "Restores leave an untraced run untraced"
 
 run_test_with_setup test_warn_defined "_warn helper is defined"
 run_test_with_setup test_validate_token_defined "_validate_token function is defined"
