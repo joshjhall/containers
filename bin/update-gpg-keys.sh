@@ -58,10 +58,14 @@ log_error() {
 # most of a keyring's keys before failing on a damaged record, so the exit
 # status must be checked, not just the `pub` count (#1410).
 # ============================================================================
+#
+# Optional $2: parent directory for the scratch copy, so a caller's interrupt
+# trap that removes that directory also removes the scratch.
 count_keyring_keys() {
     local src_dir="$1"
+    local scratch_parent="${2:-${TMPDIR:-/tmp}}"
     local scratch output count
-    scratch=$(mktemp -d)
+    scratch=$(mktemp -d "$scratch_parent/keyring-check.XXXXXX")
     cp "$src_dir"/pubring.kbx "$scratch"/ || {
         rm -rf "$scratch"
         return 1
@@ -220,8 +224,12 @@ update_nodejs_keys() {
     q_previous=$(printf '%q' "$previous")
     q_keyring=$(printf '%q' "$keyring_dir")
     q_temp=$(printf '%q' "$temp_dir")
+    local on_interrupt="rm -rf $q_staging; if [ -d $q_keyring ]; then rm -rf $q_previous; elif [ -d $q_previous ]; then mv $q_previous $q_keyring; fi; rm -rf $q_temp"
+    # Separate traps so the exit status names the signal (128+2 / 128+15)
     # shellcheck disable=SC2064 # expand paths now; the trap outlives this scope
-    trap "rm -rf $q_staging; if [ -d $q_keyring ]; then rm -rf $q_previous; elif [ -d $q_previous ]; then mv $q_previous $q_keyring; fi; rm -rf $q_temp; exit 130" INT TERM
+    trap "$on_interrupt; exit 130" INT
+    # shellcheck disable=SC2064 # expand paths now; the trap outlives this scope
+    trap "$on_interrupt; exit 143" TERM
 
     # trustdb.gpg is optional (count_keyring_keys treats it the same way);
     # copying only what upstream ships makes the result mirror upstream exactly
@@ -236,7 +244,8 @@ update_nodejs_keys() {
     if ! chmod 700 "$staging" || ! chmod 600 "$staging"/*; then
         staged_ok=false
     fi
-    if [ "$staged_ok" = true ] && ! count_keyring_keys "$staging" >/dev/null; then
+    # Scratch under $temp_dir, so the interrupt trap's cleanup covers it
+    if [ "$staged_ok" = true ] && ! count_keyring_keys "$staging" "$temp_dir" >/dev/null; then
         staged_ok=false
     fi
     if [ "$staged_ok" != true ]; then
@@ -259,7 +268,9 @@ update_nodejs_keys() {
     fi
     if ! mv "$staging" "$keyring_dir"; then
         log_error "Could not install the new keyring — restoring the existing one"
-        [ -d "$previous" ] && mv "$previous" "$keyring_dir"
+        if [ -d "$previous" ] && ! mv "$previous" "$keyring_dir"; then
+            log_error "Restore failed — the previous keyring is at $previous; move it back to $keyring_dir by hand"
+        fi
         trap - INT TERM
         rm -rf "$staging"
         cd "$REPO_ROOT"

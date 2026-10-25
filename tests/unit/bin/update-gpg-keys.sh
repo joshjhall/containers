@@ -386,6 +386,98 @@ test_gpg_nodejs_empty_keyring_rejected() {
     assert_contains "$output" "contains no public keys" "should name the empty keyring as the failure"
 }
 
+# run_update_failing_mv <repo> <keys_dir> <dest-glob> [times]
+# Run the update with an exported `mv` that fails the first <times> (default 1)
+# calls whose destination matches <dest-glob>; every other mv runs for real.
+# The count lives in a file because each mv call is a function in the same
+# child shell, but the counter must survive across calls reliably.
+run_update_failing_mv() {
+    local counter="$TEST_TEMP_DIR/mv-fail-count"
+    printf '%s' "${4:-1}" >"$counter"
+    (
+        # shellcheck disable=SC2329 # invoked by the child script via export -f
+        mv() {
+            local left
+            # shellcheck disable=SC2053 # glob match on purpose
+            if [[ "${!#}" == $MV_FAIL_GLOB ]]; then
+                left=$(command cat "$MV_FAIL_COUNTER")
+                if [ "$left" -gt 0 ]; then
+                    printf '%s' "$((left - 1))" >"$MV_FAIL_COUNTER"
+                    return 1
+                fi
+            fi
+            command mv "$@"
+        }
+        export -f mv
+        export MV_FAIL_GLOB="$3" MV_FAIL_COUNTER="$counter"
+        run_update "$1" "$2"
+    )
+}
+
+# Test: if the existing keyring cannot be moved aside, it is kept as-is
+test_gpg_nodejs_move_aside_failure_keeps_existing() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo"
+
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest"
+    printf 'previous-pubring' >"$dest/pubring.kbx"
+
+    local output rc=0
+    output=$(run_update_failing_mv "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys" '*/keyring.old.*') || rc=$?
+
+    assert_not_equals "0" "$rc" "update must exit non-zero when the keyring cannot be moved aside"
+    assert_contains "$output" "Could not move the existing keyring aside" "should name the move-aside failure"
+    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "existing keyring untouched"
+    local leftovers
+    leftovers=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 1 -maxdepth 1 -name 'keyring.*' | command wc -l)
+    assert_equals "0" "$leftovers" "no keyring.new.*/keyring.old.* directories left behind"
+}
+
+# Test: if installing the staged keyring fails, the moved-aside keyring is put back
+test_gpg_nodejs_install_failure_restores_existing() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo"
+
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest"
+    printf 'previous-pubring' >"$dest/pubring.kbx"
+
+    # Fail only the first rename onto .../keyring (staging -> keyring); the
+    # restore that follows targets the same path and must succeed
+    local output rc=0
+    output=$(run_update_failing_mv "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys" "$dest" 1) || rc=$?
+
+    assert_not_equals "0" "$rc" "update must exit non-zero when the new keyring cannot be installed"
+    assert_contains "$output" "Could not install the new keyring" "should name the install failure"
+    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "previous keyring restored"
+    local leftovers
+    leftovers=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 1 -maxdepth 1 -name 'keyring.*' | command wc -l)
+    assert_equals "0" "$leftovers" "no keyring.new.*/keyring.old.* directories left behind"
+}
+
+# Test: if both the install and the restore fail, the stranded keyring's path
+# is reported rather than claiming a restore that did not happen
+test_gpg_nodejs_failed_restore_reports_stranded_keyring() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo"
+
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest"
+    printf 'previous-pubring' >"$dest/pubring.kbx"
+
+    local output rc=0
+    output=$(run_update_failing_mv "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys" "$dest" 2) || rc=$?
+
+    assert_not_equals "0" "$rc" "update must exit non-zero"
+    assert_contains "$output" "Restore failed — the previous keyring is at" \
+        "should report where the stranded keyring is"
+    local stranded
+    stranded=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 1 -maxdepth 1 -name 'keyring.old.*' | command head -n 1)
+    assert_equals "previous-pubring" "$(command cat "$stranded/pubring.kbx" 2>/dev/null)" \
+        "the reported path holds the previous keyring"
+}
+
 # Test: when upstream drops trustdb.gpg, the previous one does not linger
 # beside the new pubring.kbx
 test_gpg_nodejs_dropped_trustdb_not_left_stale() {
@@ -440,6 +532,9 @@ run_test_with_setup test_gpg_nodejs_readable_keyring_succeeds "Node.js: readable
 run_test_with_setup test_gpg_nodejs_unreadable_keyring_fails_closed "Node.js: unreadable keyring fails closed"
 run_test_with_setup test_gpg_nodejs_staged_copy_failure_keeps_existing "Node.js: staged-copy check failure keeps existing keyring"
 run_test_with_setup test_gpg_nodejs_empty_keyring_rejected "Node.js: keyring with no keys is rejected"
+run_test_with_setup test_gpg_nodejs_move_aside_failure_keeps_existing "Node.js: move-aside failure keeps existing keyring"
+run_test_with_setup test_gpg_nodejs_install_failure_restores_existing "Node.js: install failure restores existing keyring"
+run_test_with_setup test_gpg_nodejs_failed_restore_reports_stranded_keyring "Node.js: failed restore reports the stranded keyring path"
 run_test_with_setup test_gpg_nodejs_dropped_trustdb_not_left_stale "Node.js: dropped upstream trustdb.gpg is not left stale"
 
 # Generate test report
