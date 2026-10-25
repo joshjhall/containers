@@ -156,6 +156,8 @@ check_version() {
             case "$latest_getter" in
                 "github")
                     latest=$(get_github_release "$latest_args")
+                    # Release tags carry a "v" (v10.2.0); installed versions don't
+                    latest="${latest#v}"
                     ;;
                 "pypi")
                     latest=$(get_pypi_version "$latest_args")
