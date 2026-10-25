@@ -42,7 +42,8 @@ _GH_STUB="$(
     command cat <<'STUB'
 #!/usr/bin/env bash
 # gh stub: logs each call, fails the first fail_<op> calls, and answers from
-# $GH_STUB_DIR (list.json, pr-<n>.json, repo/ = the bare origin).
+# $GH_STUB_DIR (list.json, pr-<n>.json, repo/ = the bare origin) with the
+# suite's own git and jq ($GH_STUB_GIT, $GH_STUB_JQ).
 set -u
 d="$GH_STUB_DIR"
 printf '%s\n' "$*" >>"$d/calls"
@@ -64,23 +65,29 @@ if [ -s "$d/fail_$op" ]; then
 fi
 case "$op" in
     pr-list) cat "$d/list.json" ;;
-    pr-view) /usr/bin/jq -r "$q" "$d/pr-$3.json" ;;
+    pr-view) "$GH_STUB_JQ" -r "$q" "$d/pr-$3.json" ;;
     api-compare)
         spec="${2##*/compare/}"
         a="${spec%%...*}" b="${spec##*...}"
-        g() { /usr/local/bin/git -C "$d/repo" "$@"; }
+        g() { "$GH_STUB_GIT" -C "$d/repo" "$@"; }
         base="$(g merge-base "$a" "$b")" || exit 1
         if [ "$a" = "$b" ]; then st=identical
         elif g merge-base --is-ancestor "$a" "$b"; then st=ahead
         elif g merge-base --is-ancestor "$b" "$a"; then st=behind
         else st=diverged; fi
-        /usr/bin/jq -nr --arg s "$st" --arg m "$base" "{status: \$s, merge_base_commit: {sha: \$m}} | $q"
+        "$GH_STUB_JQ" -nr --arg s "$st" --arg m "$base" "{status: \$s, merge_base_commit: {sha: \$m}} | $q"
         ;;
     *) echo "gh stub: unhandled $*" >&2; exit 2 ;;
 esac
 STUB
 )"
 _BASE_PATH="$PATH"
+# Resolved once, before any stub dir is on PATH: images differ in where git
+# lives (/usr/local/bin vs /usr/bin), and a baked-in path that is missing on
+# the runner fails every compare for the wrong reason.
+GH_STUB_GIT="$(command -v git)"
+GH_STUB_JQ="$(command -v jq)"
+export GH_STUB_GIT GH_STUB_JQ
 
 # _row <tuple> — one pass row for os-osv-arch.
 _row() {

@@ -145,6 +145,7 @@ evidence_db_sources() {
             # Through a file, not a pipe: a pipeline's status is tar's alone.
             if ! command git -C "$db" archive -o "$dir.tar" "$rev" tools ||
                 ! command tar -x --no-same-owner -f "$dir.tar" -C "$dir"; then
+                command rm -f "$dir.tar"
                 command echo "evidence_db_sources: cannot extract containers-db#$n tools/ ($side)" >&2
                 return 1
             fi
