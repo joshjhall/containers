@@ -448,6 +448,19 @@ test_clean_no_trailing_newline_untouched() {
     assert_equals "10" "$size" "No trailing newline should be added to a clean file"
 }
 
+# Test: a fixed file without a trailing newline is rewritten WITH one
+# (every rewritten line is newline-terminated — pinned from the original
+# per-line implementation, so the output stays byte-identical)
+test_fixed_no_trailing_newline_gains_one() {
+    printf 'grep x' >"$TEST_TEMP_DIR/test.sh"
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    local size
+    size=$(/usr/bin/wc -c <"$TEST_TEMP_DIR/test.sh")
+    assert_equals "15" "$size" "'command grep x' plus a trailing newline"
+}
+
 # Test: a file name containing '=' is read as a file, not an awk assignment
 test_filename_with_equals() {
     write_fixture "$TEST_TEMP_DIR/a=b.sh" 'grep x' # enforce-command-prefix: off
@@ -494,6 +507,7 @@ run_test test_heredoc_dquote_and_backslash_delim "Double-quoted and backslash he
 run_test test_dedup_mid_line "command command collapsed mid-line"
 run_test test_dedup_requires_word_boundary "foo-command command is not collapsed"
 run_test test_clean_no_trailing_newline_untouched "Clean file without trailing newline is untouched"
+run_test test_fixed_no_trailing_newline_gains_one "Fixed file without trailing newline gains one"
 run_test test_filename_with_equals "File name containing = is processed as a file"
 
 # Generate test report
