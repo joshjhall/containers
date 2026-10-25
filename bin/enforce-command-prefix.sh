@@ -3,6 +3,11 @@
 # Prevents alias interference in interactive shells (grep→rg, cat→bat, etc.).
 # Also deduplicates 'command command X' → 'command X'.
 # Auto-fixes files in-place. Exit 1 = changes made, exit 0 = clean.
+#
+# Each file is processed by a single awk program (one process per file, not
+# ~15 per line — #1424). The awk rules mirror the original grep/sed pipeline
+# byte-for-byte; see the comments inside the program for the sed semantics
+# each helper reproduces.
 set -euo pipefail
 
 # Target commands that are commonly aliased in interactive shells
@@ -11,104 +16,154 @@ CMDS="ls|cat|grep|sed|awk|head|tail|find|sort|wc|tr|cut|tee"
 # Inline suppression marker — add to any line to skip enforcement
 SUPPRESS_MARKER="enforce-command-prefix: off"
 
+# Portable awk (mawk/BWK/gawk): no gensub, no backreferences, [ \t] instead of
+# [[:blank:]]. Exits 1 if any line changed, 0 if clean.
+read -r -d '' ENFORCE_AWK <<'AWK' || true
+# ins(s, re, g): sed 's/(PREFIX)(CMD)(SUFFIX)/\1command \2\3/[g]'. None of the
+# prefixes (blanks, |, &&, ||, ;, $( ) contain a lowercase letter, so the
+# command name starts at the first [a-z] inside the match. With g, scanning
+# resumes after each match, as sed's /g does.
+function ins(s, re, g,    out, rs, rl, m, p) {
+    out = ""
+    while (match(s, re)) {
+        rs = RSTART; rl = RLENGTH
+        m = substr(s, rs, rl)
+        p = match(m, /[a-z]/)
+        out = out substr(s, 1, rs - 1) substr(m, 1, p - 1) "command " substr(m, p)
+        s = substr(s, rs + rl)
+        if (!g) break
+    }
+    return out s
+}
+
+# dedup_once(s): one pass of
+#   sed -E 's/(^|[^A-Za-z_-])command[[:blank:]]+command[[:blank:]]/\1command /g'
+# The ^ branch can only match at the very start of the line: sed's /g rescans
+# the remainder with REG_NOTBOL.
+function dedup_once(s,    out, bol, rs, rl) {
+    out = ""; bol = 1
+    while (1) {
+        if (bol && match(s, /^command[ \t]+command[ \t]/)) {
+            out = out "command "
+            s = substr(s, RLENGTH + 1)
+        } else if (match(s, /[^A-Za-z_-]command[ \t]+command[ \t]/)) {
+            rs = RSTART; rl = RLENGTH
+            out = out substr(s, 1, rs) "command "
+            s = substr(s, rs + rl)
+        } else {
+            break
+        }
+        bol = 0
+    }
+    return out s
+}
+
+function dedup(s) {
+    while (s ~ /(^|[^A-Za-z_-])command[ \t]+command[ \t]/)
+        s = dedup_once(s)
+    return s
+}
+
+# Heredoc delimiter, as sed -nE 's/.*<<-?[[:blank:]]*\\?["']?(IDENT)["']?.*/\1/p'
+# extracts it: greedy .* means the LAST '<<' on the line that can start a
+# match wins. Returns "" if the line has no heredoc start.
+function heredoc_delim(s,    i, t) {
+    if (s !~ /<<-?[ \t]*\\?["']?[A-Za-z_]/) return ""
+    for (i = length(s) - 1; i >= 1; i--) {
+        t = substr(s, i)
+        if (t ~ /^<<-?[ \t]*\\?["']?[A-Za-z_]/) {
+            t = substr(t, 3)
+            sub(/^-/, "", t)
+            sub(/^[ \t]*/, "", t)
+            sub(/^\\/, "", t)
+            sub(/^["']/, "", t)
+            match(t, /^[A-Za-z_][A-Za-z_0-9]*/)
+            return substr(t, 1, RLENGTH)
+        }
+    }
+    return ""
+}
+
+BEGIN {
+    C = "(" cmds ")"
+    B = "[ \t]"
+    r_start = "^" B "*" C B;        r_start_eol = "^" B "*" C "$"
+    r_pipe = "[|]" B "*" C B;       r_pipe_eol = "[|]" B "*" C "$"
+    r_list = "(&&|[|][|]|;)" B "*" C B
+    r_list_eol = "(&&|[|][|]|;)" B "*" C "$"
+    r_subst = "[$][(]" B "*" C B;   r_subst_eol = "[$][(]" B "*" C "$"
+    in_heredoc = 0; changed = 0
+}
+
+{
+    line = $0
+
+    # --- Heredoc state machine ---
+    if (in_heredoc) {
+        # End delimiter (may have leading blanks for <<-)
+        if (line ~ ("^[ \t]*" delim "$")) { in_heredoc = 0; delim = "" }
+        print line
+        next
+    }
+
+    # Heredoc start is detected before the skips below, so a heredoc opened
+    # on a comment or alias line still suppresses its body.
+    d = heredoc_delim(line)
+    if (d != "") { delim = d; in_heredoc = 1 }
+
+    # --- Skip lines that should not be modified ---
+    if (line ~ /^[ \t]*#/ || line ~ /^[ \t]*alias[ \t]/ || index(line, marker)) {
+        print line
+        next
+    }
+
+    # --- Apply fixes (same order as the original sed pipeline) ---
+    new = dedup(line)
+    new = ins(new, r_start, 0);  new = ins(new, r_start_eol, 0)
+    new = ins(new, r_pipe, 1);   new = ins(new, r_pipe_eol, 1)
+    new = ins(new, r_list, 1);   new = ins(new, r_list_eol, 1)
+    new = ins(new, r_subst, 1);  new = ins(new, r_subst_eol, 1)
+    new = dedup(new)
+
+    if (new != line) changed = 1
+    print new
+}
+
+END { exit changed }
+AWK
+
 fixed=0
 
 for file in "$@"; do
     [ -f "$file" ] || continue
 
+    # Keep awk from reading an operand like 'a=b.sh' as a variable assignment.
+    case "$file" in
+        /*) path="$file" ;;
+        *) path="./$file" ;;
+    esac
+
     tmpfile=$(/usr/bin/mktemp "${file}.enforce.XXXXXX")
-    changed=0
-    in_heredoc=0
-    heredoc_delim=""
+    rc=0
+    /usr/bin/awk -v cmds="$CMDS" -v marker="$SUPPRESS_MARKER" \
+        "$ENFORCE_AWK" "$path" >"$tmpfile" || rc=$?
 
-    while IFS= read -r line || [ -n "$line" ]; do
-        # --- Heredoc state machine ---
-        if [ "$in_heredoc" -eq 1 ]; then
-            # Check for heredoc end delimiter (may have leading tabs for <<-)
-            if printf '%s\n' "$line" | /usr/bin/grep -qxE "[[:blank:]]*${heredoc_delim}"; then
-                in_heredoc=0
-                heredoc_delim=""
-            fi
-            printf '%s\n' "$line"
-            continue
-        fi
-
-        # Detect heredoc start: <<[-]?['"]?DELIM['"]?
-        # Capture the delimiter, stripping optional quotes and backslash
-        if printf '%s\n' "$line" | /usr/bin/grep -qE '<<-?[[:blank:]]*\\?["'"'"']?[A-Za-z_][A-Za-z_0-9]*["'"'"']?'; then
-            heredoc_delim=$(printf '%s\n' "$line" | /usr/bin/sed -nE "s/.*<<-?[[:blank:]]*\\\\?[\"']?([A-Za-z_][A-Za-z_0-9]*)[\"']?.*/\1/p" | /usr/bin/head -n1)
-            if [ -n "$heredoc_delim" ]; then
-                in_heredoc=1
-            fi
-        fi
-
-        # --- Skip lines that should not be modified ---
-        # Skip comment lines (leading whitespace + #)
-        if printf '%s\n' "$line" | /usr/bin/grep -qE '^[[:blank:]]*#'; then
-            printf '%s\n' "$line"
-            continue
-        fi
-
-        # Skip alias definitions
-        if printf '%s\n' "$line" | /usr/bin/grep -qE '^[[:blank:]]*alias[[:blank:]]'; then
-            printf '%s\n' "$line"
-            continue
-        fi
-
-        # Skip lines with inline suppression marker
-        case "$line" in
-            *"$SUPPRESS_MARKER"*)
-                printf '%s\n' "$line"
-                continue
-                ;;
-        esac
-
-        # --- Apply fixes ---
-        newline="$line"
-
-        # 1. Deduplicate: 'command command ' → 'command '
-        #    Handle multiple levels (command command command → command)
-        while printf '%s\n' "$newline" | /usr/bin/grep -qE '(^|[^A-Za-z_-])command[[:blank:]]+command[[:blank:]]'; do
-            newline=$(printf '%s\n' "$newline" | /usr/bin/sed -E 's/(^|[^A-Za-z_-])command[[:blank:]]+command[[:blank:]]/\1command /g')
-        done
-
-        # 2. Start of line: bare command at beginning (after optional whitespace)
-        newline=$(printf '%s\n' "$newline" | /usr/bin/sed -E "s/^([[:blank:]]*)(${CMDS})([[:blank:]])/\1command \2\3/")
-        # Also handle command at end of line (e.g., standalone 'ls')
-        newline=$(printf '%s\n' "$newline" | /usr/bin/sed -E "s/^([[:blank:]]*)(${CMDS})$/\1command \2/")
-
-        # 3. After pipe: | cmd
-        newline=$(printf '%s\n' "$newline" | /usr/bin/sed -E "s/(\|[[:blank:]]*)(${CMDS})([[:blank:]])/\1command \2\3/g")
-        newline=$(printf '%s\n' "$newline" | /usr/bin/sed -E "s/(\|[[:blank:]]*)(${CMDS})$/\1command \2/g")
-
-        # 4. After && || ;
-        newline=$(printf '%s\n' "$newline" | /usr/bin/sed -E "s/((&&|\|\||;)[[:blank:]]*)(${CMDS})([[:blank:]])/\1command \3\4/g")
-        newline=$(printf '%s\n' "$newline" | /usr/bin/sed -E "s/((&&|\|\||;)[[:blank:]]*)(${CMDS})$/\1command \3/g")
-
-        # 5. After $(: subshell command substitution
-        newline=$(printf '%s\n' "$newline" | /usr/bin/sed -E "s/(\\\$\([[:blank:]]*)(${CMDS})([[:blank:]])/\1command \2\3/g")
-        newline=$(printf '%s\n' "$newline" | /usr/bin/sed -E "s/(\\\$\([[:blank:]]*)(${CMDS})$/\1command \2/g")
-
-        # 6. Clean up any 'command command' we may have introduced
-        while printf '%s\n' "$newline" | /usr/bin/grep -qE '(^|[^A-Za-z_-])command[[:blank:]]+command[[:blank:]]'; do
-            newline=$(printf '%s\n' "$newline" | /usr/bin/sed -E 's/(^|[^A-Za-z_-])command[[:blank:]]+command[[:blank:]]/\1command /g')
-        done
-
-        if [ "$newline" != "$line" ]; then
-            changed=1
-        fi
-
-        printf '%s\n' "$newline"
-    done <"$file" >"$tmpfile"
-
-    if [ "$changed" -eq 1 ]; then
-        chmod --reference="$file" "$tmpfile" 2>/dev/null || true
-        /usr/bin/mv "$tmpfile" "$file"
-        printf 'Fixed: %s\n' "$file"
-        fixed=1
-    else
-        /usr/bin/rm -f "$tmpfile"
-    fi
+    case "$rc" in
+        0)
+            /usr/bin/rm -f "$tmpfile"
+            ;;
+        1)
+            chmod --reference="$file" "$tmpfile" 2>/dev/null || true
+            /usr/bin/mv "$tmpfile" "$file"
+            printf 'Fixed: %s\n' "$file"
+            fixed=1
+            ;;
+        *)
+            /usr/bin/rm -f "$tmpfile"
+            printf 'enforce-command-prefix: awk failed (exit %s) on %s\n' "$rc" "$file" >&2
+            exit 2
+            ;;
+    esac
 done
 
 exit "$fixed"

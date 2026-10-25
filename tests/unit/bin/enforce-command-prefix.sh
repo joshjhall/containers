@@ -381,6 +381,83 @@ test_subshell_cmd_at_eol() {
     assert_contains "$result" "command wc" "Should fix subshell cmd"
 }
 
+# Test: <<- heredoc ends at a tab-indented delimiter; enforcement resumes after it
+test_heredoc_dash_tab_delim() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        'command cat <<-EOF' \
+        "$(printf '\tgrep inside')" \
+        "$(printf '\tEOF')" \
+        'grep after' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 once the heredoc has closed"
+    local expected
+    expected=$(printf 'command cat <<-EOF\n\tgrep inside\n\tEOF\ncommand grep after')
+    assert_equals "$expected" "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "Body kept, line after tab-indented delimiter fixed"
+}
+
+# Test: double-quoted and backslash-escaped heredoc delimiters
+test_heredoc_dquote_and_backslash_delim() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        'command cat <<"DQ"' \
+        'sed dq-body' \
+        'DQ' \
+        'command cat <<\BS' \
+        'awk bs-body' \
+        'BS' \
+        'sort after' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 for the line after both heredocs"
+    local result
+    result=$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")
+    assert_contains "$result" "$(printf '\nsed dq-body\n')" "Double-quoted heredoc body untouched"
+    assert_contains "$result" "$(printf '\nawk bs-body\n')" "Backslash heredoc body untouched"
+    assert_contains "$result" "command sort after" "Line after heredocs is fixed"
+}
+
+# Test: 'command command' collapse mid-line (after ;), not just at line start
+test_dedup_mid_line() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'x; command command grep y' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals 'x; command grep y' "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "Mid-line command command collapsed"
+}
+
+# Test: 'command command' preceded by a word character is not a duplicate
+test_dedup_requires_word_boundary() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'foo-command command grep x' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "0" "$exit_code" "Should exit 0 — nothing to collapse"
+    assert_equals 'foo-command command grep x' "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "foo-command command left alone"
+}
+
+# Test: a clean file without a trailing newline is left byte-for-byte untouched
+test_clean_no_trailing_newline_untouched() {
+    printf 'echo clean' >"$TEST_TEMP_DIR/test.sh"
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "0" "$exit_code" "Should exit 0 for a clean file"
+    local size
+    size=$(/usr/bin/wc -c <"$TEST_TEMP_DIR/test.sh")
+    assert_equals "10" "$size" "No trailing newline should be added to a clean file"
+}
+
+# Test: a file name containing '=' is read as a file, not an awk assignment
+test_filename_with_equals() {
+    write_fixture "$TEST_TEMP_DIR/a=b.sh" 'grep x' # enforce-command-prefix: off
+    local exit_code=0
+    (cd "$TEST_TEMP_DIR" && "$SCRIPT" "a=b.sh" >/dev/null) || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals 'command grep x' "$(/usr/bin/cat "$TEST_TEMP_DIR/a=b.sh")" \
+        "Relative a=b.sh should be fixed in place"
+}
+
 # Run all tests
 run_test test_script_exists "Script exists and is executable"
 run_test test_valid_syntax "Valid bash syntax"
@@ -412,6 +489,12 @@ run_test test_multiple_files "Multiple files with mixed state"
 run_test test_all_target_commands "All 13 target commands are handled"
 run_test test_pipe_cmd_at_eol "Pipe command at end of line"
 run_test test_subshell_cmd_at_eol "Subshell command at end of line"
+run_test test_heredoc_dash_tab_delim "<<- heredoc ends at tab-indented delimiter"
+run_test test_heredoc_dquote_and_backslash_delim "Double-quoted and backslash heredoc delimiters"
+run_test test_dedup_mid_line "command command collapsed mid-line"
+run_test test_dedup_requires_word_boundary "foo-command command is not collapsed"
+run_test test_clean_no_trailing_newline_untouched "Clean file without trailing newline is untouched"
+run_test test_filename_with_equals "File name containing = is processed as a file"
 
 # Generate test report
 generate_report
