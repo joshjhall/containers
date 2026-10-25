@@ -906,24 +906,19 @@ fn already_installed_returns_false_when_the_probe_times_out() {
 /// A non-`ETXTBSY` launch error must be returned on the *first* attempt,
 /// never retried. Pointing at a path with no file on disk makes `exec`
 /// fail with `ENOENT`, which the `other => break other?` arm must surface
-/// immediately. Retrying it would sleep `ETXTBSY_BACKOFF` per attempt, so
-/// finishing under the full `ETXTBSY_BACKOFF * ETXTBSY_RETRIES` budget
-/// proves the loop did not exhaust its retries on it — a bound that also
-/// leaves headroom for the two capture tempfiles created before the spawn.
-/// Serialized so the timing bound doesn't share the runner with
-/// shim-spawning tests.
+/// immediately. The check counts spawn attempts rather than timing the
+/// backoff: a wall-clock bound under the full retry budget could not tell a
+/// correct run from one that retried once or twice (#1408), while exactly one
+/// attempt fails any retry of this error at all, with no load sensitivity.
 #[cfg(unix)]
 #[test]
-#[serial_test::serial]
 fn run_version_check_returns_non_etxtbsy_error_without_retrying() {
-    use std::time::Instant;
-
     let dir = tempdir().unwrap();
     let missing = dir.path().join("does-not-exist");
 
-    let start = Instant::now();
+    SPAWN_ATTEMPTS.set(0);
     let result = run_version_check(&missing, VERSION_ARGS, &BTreeMap::new());
-    let elapsed = start.elapsed();
+    let attempts = SPAWN_ATTEMPTS.get();
 
     let err = result.expect_err("a missing binary must surface its launch error");
     assert_eq!(
@@ -931,9 +926,9 @@ fn run_version_check_returns_non_etxtbsy_error_without_retrying() {
         io::ErrorKind::NotFound,
         "the induced error must be the missing binary's ENOENT, got: {err}",
     );
-    assert!(
-        elapsed < ETXTBSY_BACKOFF * ETXTBSY_RETRIES,
-        "a non-ETXTBSY error must not be retried through the backoff (elapsed {elapsed:?})",
+    assert_eq!(
+        attempts, 1,
+        "a non-ETXTBSY error must be returned on the first spawn, never retried"
     );
 }
 

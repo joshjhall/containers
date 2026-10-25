@@ -28,6 +28,15 @@ const ETXTBSY: i32 = 26;
 const ETXTBSY_RETRIES: u32 = 3;
 const ETXTBSY_BACKOFF: Duration = Duration::from_millis(50);
 
+// Spawn attempts made by `run_version_check_within` on this thread, so a test
+// can pin the retry count exactly instead of inferring it from wall-clock
+// backoff (#1408). Thread-local because the loop runs on the caller's thread,
+// so concurrently running tests can't skew each other's count.
+#[cfg(test)]
+thread_local! {
+    static SPAWN_ATTEMPTS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
 /// Default deadline for one version-probe exec (#1344).
 ///
 /// A `--version` answers in milliseconds; the headroom is for JVM-style tools
@@ -178,6 +187,8 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
         // and everything it forked in one signal.
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut command, 0);
+        #[cfg(test)]
+        SPAWN_ATTEMPTS.set(SPAWN_ATTEMPTS.get() + 1);
         let spawned = command.spawn();
         match spawned {
             Err(e) if e.raw_os_error() == Some(ETXTBSY) && attempt < ETXTBSY_RETRIES => {
