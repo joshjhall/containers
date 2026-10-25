@@ -91,6 +91,14 @@ map_to_test() {
             return
             ;;
 
+        # The evidence-matrix suites' shared fixtures (#1381) → both suites
+        # that source them. Like the scan above, they live outside tests/unit/
+        # so the unit runner does not execute them as a suite.
+        tests/lib/evidence-matrix-fixtures.sh)
+            map_to_test "bin/lib/evidence-matrix.sh"
+            return
+            ;;
+
         # Test files themselves — run directly
         tests/unit/*.sh)
             if [ -f "${PROJECT_ROOT}/${file}" ]; then

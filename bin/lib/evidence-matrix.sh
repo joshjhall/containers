@@ -34,7 +34,7 @@
 # evidence_matrix covers one tool; evidence_matrix_all (what the workflow runs)
 # merges every luggage tool in the catalog under one cap (#1341).
 #
-# Sourced by .github/workflows/evidence-run.yml and tests/unit/evidence-matrix.sh.
+# Sourced by .github/workflows/evidence-run.yml and tests/unit/bin/lib/evidence-matrix{,-all}.sh.
 # Requires jq.
 
 # _em_arch_plumbing <arch> — "<runner> <runtime> <rust_target>" for an arch.
