@@ -203,6 +203,10 @@ test_heredoc_content_unchanged() {
     result=$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")
     assert_contains "$result" "grep -q \"pattern\" file" "Heredoc body should not be modified"
     assert_contains "$result" "find /tmp" "Heredoc body find should not be modified"
+    # The two checks above are substrings of the rewritten forms too; these can fail
+    assert_equals "1" "$exit_code" "Opening 'cat' line is fixed"
+    assert_not_contains "$result" "command grep" "Heredoc body grep must stay bare"
+    assert_not_contains "$result" "command find" "Heredoc body find must stay bare"
 }
 
 # Test: Heredoc with quoted delimiter → unchanged body
@@ -379,6 +383,33 @@ test_subshell_cmd_at_eol() {
     local result
     result=$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")
     assert_contains "$result" "command wc" "Should fix subshell cmd"
+}
+
+# Test: bare command at end of line after && || ; and directly after $(
+test_list_and_subst_cmd_at_eol() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        'true && sort' \
+        'false || tr' \
+        'x; wc' \
+        'y=$(ls' \
+        ')' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    local expected
+    expected=$(printf 'true && command sort\nfalse || command tr\nx; command wc\ny=$(command ls\n)')
+    assert_equals "$expected" "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "EOL forms after && || ; and \$( are all prefixed"
+}
+
+# Test: a file name starting with '-' is not read as an option
+test_filename_leading_dash() {
+    write_fixture "$TEST_TEMP_DIR/-t.sh" 'grep x' # enforce-command-prefix: off
+    local exit_code=0
+    (cd "$TEST_TEMP_DIR" && "$SCRIPT" "-t.sh" >/dev/null 2>&1) || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals 'command grep x' "$(/usr/bin/cat "$TEST_TEMP_DIR/-t.sh")" \
+        "Relative -t.sh should be fixed in place"
 }
 
 # Test: <<- heredoc ends at a tab-indented delimiter; enforcement resumes after it
@@ -572,6 +603,8 @@ run_test test_multiple_files "Multiple files with mixed state"
 run_test test_all_target_commands "All 13 target commands are handled"
 run_test test_pipe_cmd_at_eol "Pipe command at end of line"
 run_test test_subshell_cmd_at_eol "Subshell command at end of line"
+run_test test_list_and_subst_cmd_at_eol "EOL command after && || ; and \$( is fixed"
+run_test test_filename_leading_dash "File name starting with - is processed as a file"
 run_test test_heredoc_dash_tab_delim "<<- heredoc ends at tab-indented delimiter"
 run_test test_heredoc_dquote_and_backslash_delim "Double-quoted and backslash heredoc delimiters"
 run_test test_dedup_mid_line "command command collapsed mid-line"

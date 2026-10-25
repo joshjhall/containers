@@ -137,13 +137,14 @@ fixed=0
 for file in "$@"; do
     [ -f "$file" ] || continue
 
-    # Keep awk from reading an operand like 'a=b.sh' as a variable assignment.
+    # Keep awk from reading an operand like 'a=b.sh' as a variable assignment,
+    # and mktemp/chmod/mv from reading '-x.sh' as an option.
     case "$file" in
         /*) path="$file" ;;
         *) path="./$file" ;;
     esac
 
-    tmpfile=$(/usr/bin/mktemp "${file}.enforce.XXXXXX")
+    tmpfile=$(/usr/bin/mktemp "${path}.enforce.XXXXXX")
     rc=0
     /usr/bin/awk -v cmds="$CMDS" -v marker="$SUPPRESS_MARKER" \
         "$ENFORCE_AWK" "$path" >"$tmpfile" || rc=$?
@@ -153,8 +154,8 @@ for file in "$@"; do
             /usr/bin/rm -f "$tmpfile"
             ;;
         1)
-            chmod --reference="$file" "$tmpfile" 2>/dev/null || true
-            /usr/bin/mv "$tmpfile" "$file"
+            chmod --reference="$path" "$tmpfile" 2>/dev/null || true
+            /usr/bin/mv "$tmpfile" "$path"
             printf 'Fixed: %s\n' "$file"
             fixed=1
             ;;
