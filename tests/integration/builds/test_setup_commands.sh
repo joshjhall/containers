@@ -87,9 +87,9 @@ _start_container() {
 
 # ---------------------------------------------------------------------------
 # Helper: install a mock gh/glab in ~/.local/bin (which is in PATH and takes
-# precedence over /usr/bin). This is needed because real gh/glab auth login
-# fails in these tests (gh refuses login while GITHUB_TOKEN is set, #1457), and
-# set -e kills the script before _persist_token runs.
+# precedence over /usr/bin). This keeps the tests off github.com/gitlab.com:
+# with the fake tokens used here, a real login would be rejected and set -e
+# would end the script before _persist_token runs.
 # ---------------------------------------------------------------------------
 _install_mock_gh() {
     local container="$1"
@@ -108,11 +108,12 @@ MOCK
     '
 }
 
-# Variant for the auth-login path (#1083): reports NOT authenticated, so
-# setup-gh's early `gh auth status` check falls through to the login step,
-# without contacting github.com. Records argv in /tmp/gh-mock.argv and the
-# stdin piped to login in /tmp/gh-mock.stdin. Mirrors real gh (2.103.2), which
-# refuses `auth login` with exit 1 while GITHUB_TOKEN is set in its env.
+# Variant for the auth-login path (#1083): reports NOT authenticated until a
+# login succeeds, so setup-gh's early `gh auth status` check falls through to
+# the login step, without contacting github.com. Records argv in
+# /tmp/gh-mock.argv and the stdin piped to login in /tmp/gh-mock.stdin. Mirrors
+# real gh (2.103.2), which refuses `auth login` with exit 1 while GITHUB_TOKEN
+# or GH_TOKEN is set in its env; setup-gh clears both for the login (#1457).
 # Removed by _remove_mock_gh like the default mock.
 _install_mock_gh_unauthenticated() {
     local container="$1"
@@ -122,13 +123,14 @@ _install_mock_gh_unauthenticated() {
 #!/bin/bash
 printf "%s\n" "$*" >> /tmp/gh-mock.argv
 case "$*" in
-    *"auth status"*) exit 1 ;;
+    *"auth status"*) [ -f /tmp/gh-mock.loggedin ] ;;
     *"auth login"*)
         command cat >> /tmp/gh-mock.stdin
-        if [ -n "${GITHUB_TOKEN:-}" ]; then
+        if [ -n "${GITHUB_TOKEN:-}" ] || [ -n "${GH_TOKEN:-}" ]; then
             echo "The value of the GITHUB_TOKEN environment variable is being used for authentication." >&2
             exit 1
         fi
+        touch /tmp/gh-mock.loggedin
         exit 0 ;;
     *)               exit 0 ;;
 esac
@@ -379,19 +381,20 @@ test_setup_gh_attempts_auth() {
     # Verify that setup-gh reaches the auth step with a valid-format token and
     # pipes it to `gh auth login --with-token` on stdin, never on argv. The
     # mock keeps this off github.com (#1083). Like real gh, it refuses login
-    # while GITHUB_TOKEN is set, so setup-gh exits 1 under set -e before its
-    # post-login verify (setup-gh bug: #1457).
+    # while GITHUB_TOKEN is set, so this passes only because setup-gh clears
+    # the env token for the login (#1457).
     _install_mock_gh_unauthenticated "$c"
 
     local output rc=0
     output=$(docker exec "$c" bash -c 'export GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" && setup-gh 2>&1') || rc=$?
     assert_contains "$output" "authenticating gh CLI" "Should attempt authentication"
-    # Tie the exit to the refused login, not some later set -e failure. When
-    # #1457 lands, flip these to rc=0 + "gh authenticated" and also assert the
-    # bashrc persistence marker for the post-login path.
-    assert_equals "1" "$rc" "setup-gh exits 1 when gh refuses login (real gh behavior; flip to 0 when #1457 is fixed)"
-    assert_contains "$output" "GITHUB_TOKEN environment variable is being used" "Exit should come from gh refusing login"
-    assert_not_contains "$output" "gh authenticated" "Post-login verify is unreachable while #1457 is open"
+    assert_equals "0" "$rc" "setup-gh should succeed once login runs without the env token"
+    assert_not_contains "$output" "GITHUB_TOKEN environment variable is being used" "gh must not refuse login"
+    assert_contains "$output" "gh authenticated" "Post-login verify should pass"
+
+    local bashrc
+    bashrc=$(docker exec "$c" bash -c 'cat /home/developer/.bashrc')
+    assert_contains "$bashrc" "# setup-gh: GITHUB_TOKEN" "_persist_token should run on the login path"
 
     local argv stdin
     argv=$(docker exec "$c" cat /tmp/gh-mock.argv 2>&1)
@@ -407,8 +410,8 @@ test_setup_gh_persists_bashrc() {
     local c="setup-gh-bashrc-$$"
     _start_container "$c" "$DEVTOOLS_IMAGE"
 
-    # Replace gh with a mock that always succeeds (real gh fails with fake tokens,
-    # and set -e kills the script before _persist_token runs)
+    # Replace gh with a mock that always succeeds, keeping the test off
+    # github.com (a real login with the fake token would fail under set -e)
     _install_mock_gh "$c"
 
     docker exec "$c" bash -c 'export GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" && setup-gh' 2>&1

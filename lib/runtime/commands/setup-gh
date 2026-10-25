@@ -82,12 +82,19 @@ main() {
     # Validate token format
     _validate_token "$token" "GITHUB_TOKEN" || return 0
 
-    # Authenticate (pipe token via stdin to avoid exposing it in process listings)
+    # Authenticate (pipe token via stdin to avoid exposing it in process listings).
+    # gh refuses `auth login` while GITHUB_TOKEN or GH_TOKEN is set in its env,
+    # so clear both for the login only (#1457).
     _info "authenticating gh CLI"
     local _xt; _xt=$(set +o | command grep xtrace)
     { set +x; } 2>/dev/null
-    printf '%s' "$token" | gh auth login --with-token 2>&1
+    local rc=0
+    printf '%s' "$token" | command env -u GITHUB_TOKEN -u GH_TOKEN gh auth login --with-token 2>&1 || rc=$?
     eval "$_xt"
+    if [ "$rc" -ne 0 ]; then
+        _warn "gh auth login failed (exit ${rc}) — GITHUB_TOKEN may be invalid or expired, or github.com unreachable"
+        return "$rc"
+    fi
 
     # Persist token derivation in bashrc
     _persist_token

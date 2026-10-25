@@ -321,6 +321,13 @@ Runs five steps in order:
 
 - Authenticate via `gh auth login --with-token` / `glab auth login --stdin`
   (token piped via stdin to avoid process listing exposure)
+- `setup-gh` runs the login with `GITHUB_TOKEN` / `GH_TOKEN` cleared from
+  `gh`'s environment (gh refuses to store credentials while either is set). A
+  rejected login prints a warning and exits non-zero
+- The CLI stores the token in its own auth store (`~/.config/gh/hosts.yml` /
+  glab's config when no system keyring is available) — the one place an
+  OP-resolved token is written to disk, by design, so new shells can
+  re-derive it
 - Persist a bashrc snippet that re-derives `GITHUB_TOKEN` / `GITLAB_TOKEN`
   from the CLI's auth store on subsequent shells (so the env var is always
   available even without OP refs)

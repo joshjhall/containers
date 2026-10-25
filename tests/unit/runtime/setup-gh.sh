@@ -341,6 +341,129 @@ test_main_validates_token() {
         "main should validate token before authenticating"
 }
 
+# ---------------------------------------------------------------------------
+# Behavioral tests: login runs with GITHUB_TOKEN/GH_TOKEN cleared (#1457)
+# ---------------------------------------------------------------------------
+
+# Install a stub gh in $TEST_TEMP_DIR/bin. Every invocation appends one line to
+# $TEST_TEMP_DIR/gh.calls: argv plus whether GITHUB_TOKEN/GH_TOKEN were set in
+# its env. Like real gh, `auth login` is refused while either token is set.
+# `auth status` fails until a login succeeds. $1=fail makes every login fail.
+_install_stub_gh() {
+    local mode="${1:-ok}"
+    mkdir -p "$TEST_TEMP_DIR/bin"
+    command cat >"$TEST_TEMP_DIR/bin/gh" <<STUB
+#!/bin/bash
+state="$TEST_TEMP_DIR"
+STUB
+    command cat >>"$TEST_TEMP_DIR/bin/gh" <<'STUB'
+printf '%s GITHUB_TOKEN=%s GH_TOKEN=%s\n' "$*" \
+    "${GITHUB_TOKEN:+set}" "${GH_TOKEN:+set}" >>"$state/gh.calls"
+case "$*" in
+    *"auth status"*) [ -f "$state/gh.loggedin" ] ;;
+    *"auth login"*)
+        command cat >"$state/gh.stdin"
+        if [ -n "${GITHUB_TOKEN:-}" ] || [ -n "${GH_TOKEN:-}" ]; then
+            echo "The value of the GITHUB_TOKEN environment variable is being used for authentication." >&2
+            exit 1
+        fi
+STUB
+    if [ "$mode" = "fail" ]; then
+        printf '        echo "error validating token" >&2\n        exit 1 ;;\n' >>"$TEST_TEMP_DIR/bin/gh"
+    else
+        printf '        touch "$state/gh.loggedin"\n        exit 0 ;;\n' >>"$TEST_TEMP_DIR/bin/gh"
+    fi
+    command cat >>"$TEST_TEMP_DIR/bin/gh" <<'STUB'
+    *) exit 0 ;;
+esac
+STUB
+    chmod +x "$TEST_TEMP_DIR/bin/gh"
+}
+
+# Run setup-gh against the stub. BASH_ENV is unset (it rebuilds PATH on
+# non-interactive bash and would bypass the stub); the loaded flags keep the
+# host's .env.secrets / OP cache out of the run. GH_TOKEN is set too, so the
+# stub refuses the login unless setup-gh clears BOTH variables.
+_run_setup_gh() {
+    command env -u BASH_ENV \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" \
+        GH_TOKEN="ghp_fake_gh_token_for_testing_0987654321" \
+        bash "$SETUP_GH_SCRIPT" 2>&1
+}
+
+# Guard every behavioral test: the stub must have been the gh that ran, and the
+# login must have reached it with no token in its env. A stub bypassed via PATH,
+# or a fall-through to the real gh, leaves the log empty and fails here.
+_assert_stub_login_without_env_token() {
+    local calls=""
+    [ -f "$TEST_TEMP_DIR/gh.calls" ] && calls=$(command cat "$TEST_TEMP_DIR/gh.calls")
+    assert_not_empty "$calls" "Stub gh call log must be non-empty (stub was invoked)"
+    # Whole-line match: a substring would also accept "GH_TOKEN=set".
+    local login_line
+    login_line=$(printf '%s\n' "$calls" | command grep -F 'auth login' || true)
+    assert_equals "auth login --with-token GITHUB_TOKEN= GH_TOKEN=" "$login_line" \
+        "gh auth login --with-token must run once, with GITHUB_TOKEN and GH_TOKEN cleared"
+}
+
+test_login_clears_env_token() {
+    _install_stub_gh ok
+
+    local output rc=0
+    output=$(_run_setup_gh) || rc=$?
+
+    _assert_stub_login_without_env_token
+    assert_equals "0" "$rc" "setup-gh should succeed when login runs without env token"
+    assert_contains "$output" "gh authenticated" "Post-login verify should pass"
+    assert_not_contains "$output" "environment variable is being used" "gh must not refuse login"
+    assert_equals "ghp_fake_token_for_testing_1234567890" "$(command cat "$TEST_TEMP_DIR/gh.stdin")" \
+        "Token should be piped to gh on stdin"
+    assert_file_contains "$TEST_HOME/.bashrc" "# setup-gh: GITHUB_TOKEN" \
+        "_persist_token should run on the login path"
+}
+
+test_login_failure_reported() {
+    _install_stub_gh fail
+
+    local output rc=0
+    output=$(_run_setup_gh) || rc=$?
+
+    _assert_stub_login_without_env_token
+    assert_equals "1" "$rc" "setup-gh should return gh's exit code when gh rejects the token"
+    assert_contains "$output" "gh auth login failed" "Login failure should be reported"
+    assert_not_contains "$output" "gh authenticated" "Must not claim success after a failed login"
+}
+
+# Under bash -x the login block must keep the token out of the trace, and the
+# failure path must restore xtrace before it warns. (Lines before the block,
+# e.g. the sanitize step, are out of scope here.)
+test_login_block_xtrace_safe() {
+    local mode output block
+    for mode in ok fail; do
+        command rm -rf "$TEST_TEMP_DIR/bin" "$TEST_TEMP_DIR"/gh.*
+        _install_stub_gh "$mode"
+        output=$(command env -u BASH_ENV \
+            HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+            _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+            GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" \
+            bash -x "$SETUP_GH_SCRIPT" 2>&1) || true
+        _assert_stub_login_without_env_token
+        block=$(printf '%s\n' "$output" | command sed -n '/authenticating gh CLI/,$p')
+        assert_not_empty "$block" "[$mode] trace should reach the login block"
+        assert_not_contains "$block" "ghp_fake_token_for_testing_1234567890" \
+            "[$mode] token must not appear in xtrace from the login block on"
+        if [ "$mode" = "fail" ]; then
+            assert_contains "$block" "+ _warn 'gh auth login failed" \
+                "[fail] xtrace should be restored before the failure warning"
+        fi
+    done
+}
+
+run_test_with_setup test_login_clears_env_token "Login runs with env tokens cleared and persists"
+run_test_with_setup test_login_failure_reported "Failed login is reported with non-zero exit"
+run_test_with_setup test_login_block_xtrace_safe "Login block keeps token out of xtrace, restores it on failure"
+
 run_test_with_setup test_warn_defined "_warn helper is defined"
 run_test_with_setup test_validate_token_defined "_validate_token function is defined"
 run_test_with_setup test_validate_token_accepts_valid "_validate_token accepts valid token"
