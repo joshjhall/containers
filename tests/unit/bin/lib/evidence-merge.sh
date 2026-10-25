@@ -108,6 +108,22 @@ test_changed_core_replaces_even_when_older() {
         "a repeat with a changed error_class replaces the row"
 }
 
+test_dedup_key_includes_digest() {
+    # A different image_digest is a different image: the new row is appended
+    # and the old one kept, while a result change on the same key replaces it.
+    local f out
+    f=$(_version_file "$(_stamp "$FAIL_ROW" "$STORED_AT")")
+    merge_evidence_row "$f" "$(command jq -c '. + {image_digest: "sha256:cc", tested_at: "2026-10-02T00:00:00Z"}' <<<"$FAIL_ROW")"
+    out=$(command jq -c '[.tested[].image_digest]' "$f")
+    assert_equals '["sha256:aa","sha256:cc"]' "$out" "a new digest appends beside the old row"
+
+    merge_evidence_row "$f" "$(command jq -c '. + {result: "pass", tested_at: "2026-10-03T00:00:00Z"} | del(.error_class)' <<<"$FAIL_ROW")"
+    out=$(command jq -c '[.tested[] | [.image_digest, .result]]' "$f")
+    command rm -f "$f"
+    assert_equals '[["sha256:cc","fail"],["sha256:aa","pass"]]' "$out" \
+        "fail to pass on the same key replaces that row only"
+}
+
 test_future_stamp_reads_as_stale() {
     # #1356: a stored stamp past EVIDENCE_NOW + skew reads as 0, so a genuine
     # repeat refreshes it; an incoming future stamp reads as 0 and is a no-op.
@@ -164,6 +180,7 @@ run_test test_equal_epoch_repeat_is_noop "an equal-epoch repeated failure is a n
 run_test test_newer_repeat_refreshes_in_place "a newer repeated failure refreshes its row in place"
 run_test test_newer_pass_repeat_is_noop "a newer repeated pass is a no-op"
 run_test test_changed_core_replaces_even_when_older "a changed non-volatile field replaces the row"
+run_test test_dedup_key_includes_digest "the dedup key includes image_digest"
 run_test test_future_stamp_reads_as_stale "a future tested_at on either side reads as stale"
 run_test test_invalid_input_is_rejected "invalid rows and EVIDENCE_NOW return 2 and leave the file untouched"
 run_test test_tuple_slug "evidence_tuple_slug drops an absent os_version"
