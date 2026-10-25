@@ -121,11 +121,48 @@ test_future_stamp_reads_as_stale() {
     _assert_noop "2030-01-01T00:00:00Z" "an incoming future stamp must not pin the row"
 }
 
+# _assert_rejected <row-json> <evidence-now> <stderr-fragment> <message> — the
+# merge returns 2, names the problem on stderr, and leaves the file untouched.
+_assert_rejected() {
+    local f before err rc=0
+    f=$(_version_file "$(_stamp "$FAIL_ROW" "$STORED_AT")")
+    before=$(command mktemp "$TEST_SCRATCH_BASE/evidence-merge.XXXXXX")
+    err=$(command mktemp "$TEST_SCRATCH_BASE/evidence-merge.XXXXXX")
+    command cp "$f" "$before"
+    EVIDENCE_NOW="$2" merge_evidence_row "$f" "$1" 2>"$err" || rc=$?
+    assert_equals "2" "$rc" "$4: return code"
+    assert_contains "$(command cat "$err")" "$3" "$4: stderr names the problem"
+    if command cmp -s "$before" "$f"; then
+        pass_test
+    else
+        fail_test "$4: file changed to $(command jq -c . "$f")"
+    fi
+    command rm -f "$f" "$before" "$err"
+}
+
+test_invalid_input_is_rejected() {
+    _assert_rejected 'not json' "$EVIDENCE_NOW" "row is not valid JSON" "a non-JSON row"
+    _assert_rejected "$(command jq -c 'del(.result)' <<<"$FAIL_ROW")" "$EVIDENCE_NOW" \
+        "missing required" "a row without .result"
+    _assert_rejected "$(_stamp "$FAIL_ROW" 2026-10-20T00:00:00Z)" "abc" \
+        "EVIDENCE_NOW must be 1-12 digits" "a non-numeric EVIDENCE_NOW"
+    _assert_rejected "$(_stamp "$FAIL_ROW" 2026-10-20T00:00:00Z)" "1234567890123" \
+        "EVIDENCE_NOW must be 1-12 digits" "a 13-digit EVIDENCE_NOW"
+}
+
+test_tuple_slug() {
+    assert_equals "debian-13-amd64" "$(evidence_tuple_slug "$FAIL_ROW")" "with os_version"
+    assert_equals "debian-amd64" "$(evidence_tuple_slug "$(command jq -c 'del(.os_version)' <<<"$FAIL_ROW")")" \
+        "without os_version"
+}
+
 run_test test_older_repeat_is_noop "an older repeated failure is a byte-identical no-op"
 run_test test_equal_epoch_repeat_is_noop "an equal-epoch repeated failure is a no-op (the <= boundary)"
 run_test test_newer_repeat_refreshes_in_place "a newer repeated failure refreshes its row in place"
 run_test test_newer_pass_repeat_is_noop "a newer repeated pass is a no-op"
 run_test test_changed_core_replaces_even_when_older "a changed non-volatile field replaces the row"
 run_test test_future_stamp_reads_as_stale "a future tested_at on either side reads as stale"
+run_test test_invalid_input_is_rejected "invalid rows and EVIDENCE_NOW return 2 and leave the file untouched"
+run_test test_tuple_slug "evidence_tuple_slug drops an absent os_version"
 
 generate_report
