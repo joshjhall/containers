@@ -152,8 +152,9 @@ pub(crate) fn run_version_check<S: AsRef<OsStr>>(
 /// SIGINT/SIGTERM before exiting (#1370). A library caller that skips that
 /// call keeps the gap. A probe that exits on its own has its group killed
 /// too, before the leader is reaped, so a descendant it backgrounded (a JVM
-/// launcher's daemon, a script's `cmd &`) does not outlive it (#1371). One gap
-/// remains regardless: a descendant that moved itself to another group or
+/// launcher's daemon, a script's `cmd &`) does not outlive it (#1371); on
+/// OpenBSD and Cygwin, which lack the `waitid` this needs, it still does. One
+/// gap remains regardless: a descendant that moved itself to another group or
 /// session escapes, as with any `killpg`.
 /// Its stdout/stderr go to anonymous tempfiles rather than pipes, so
 /// polling never deadlocks on a full pipe buffer, and a grandchild that

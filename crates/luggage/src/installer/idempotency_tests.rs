@@ -462,6 +462,18 @@ fn run_version_check_kills_descendants_left_by_a_normal_exit() {
     }
 }
 
+/// ECHILD from the `WNOWAIT` peek (a child already reaped) is tolerated, so
+/// `try_wait` reports the reaped state rather than the poll failing (#1371).
+/// Unreachable through the poll loop, so it is driven on the helper directly.
+#[cfg(all(unix, not(any(target_os = "openbsd", target_os = "cygwin"))))]
+#[test]
+fn kill_group_if_exited_tolerates_an_already_reaped_child() {
+    let mut child = Command::new("true").spawn().unwrap();
+    child.wait().unwrap();
+
+    kill_group_if_exited(&child).expect("ECHILD must not fail the poll");
+}
+
 /// `proc_stat_state` takes the field after the LAST `)`, so a `comm` with
 /// spaces or its own `)` cannot shift the state, and a line it cannot
 /// parse is `None` — which `pid_is_running` turns into a panic, never into
