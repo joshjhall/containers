@@ -171,6 +171,55 @@ fn a_timed_out_probe_leaves_no_live_registration() {
     assert!(!lock(&LIVE).pgids.contains(&pid), "a reaped probe's group must be deregistered");
 }
 
+/// A failed watcher spawn drops its `Signals`, and signal-hook does not put
+/// the OS default back when the last action is unregistered: SIGTERM would
+/// then be silently swallowed. `restore_termination` must make it fatal
+/// again. The control run skips the restore and must survive, which proves
+/// the swallowing is real and keeps the main assertion from passing vacuously.
+#[test]
+#[serial_test::serial]
+fn restore_termination_undoes_a_dropped_watcher_registration() {
+    const CHILD_MODE: &str = "LUGGAGE_RESTORE_TERMINATION_CHILD";
+
+    if let Some(mode) = std::env::var_os(CHILD_MODE) {
+        drop(Signals::new([SIGTERM]).unwrap());
+        if mode == "restore" {
+            restore_termination(&[SIGTERM]);
+        }
+        signal_hook::low_level::raise(SIGTERM).unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        println!("survived SIGTERM");
+        return;
+    }
+
+    let module = module_path!();
+    let module = module.split_once("::").map_or(module, |(_, rest)| rest);
+    let name = format!("{module}::restore_termination_undoes_a_dropped_watcher_registration");
+    let run = |mode: &str| {
+        Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &name, "--test-threads=1", "--nocapture"])
+            .env(CHILD_MODE, mode)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap()
+    };
+
+    let control = run("no-restore");
+    assert!(
+        control.status.success() && String::from_utf8_lossy(&control.stdout).contains("survived"),
+        "without the restore, a dropped registration must swallow SIGTERM ({})",
+        control.status,
+    );
+    let restored = run("restore");
+    assert_eq!(
+        restored.status.signal(),
+        Some(Signal::TERM.as_raw()),
+        "after restore_termination, SIGTERM must be fatal again ({}):\n{}",
+        restored.status,
+        String::from_utf8_lossy(&restored.stderr),
+    );
+}
+
 /// `SigIgn` is a hex mask with bit `n - 1` for signal `n`: SIGINT (2) is
 /// 0x2, SIGTERM (15) is 0x4000.
 #[test]

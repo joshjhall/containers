@@ -177,8 +177,8 @@ pub fn install_handler() -> io::Result<()> {
         *installed = true;
         return Ok(());
     }
-    let mut signals = Signals::new(handled)?;
-    thread::Builder::new().name("luggage-interrupt".into()).spawn(move || {
+    let mut signals = Signals::new(&handled)?;
+    let spawned = thread::Builder::new().name("luggage-interrupt".into()).spawn(move || {
         if let Some(sig) = signals.forever().next() {
             // Held, not dropped: see `interrupt_all`.
             let _held = interrupt_all(&LIVE);
@@ -188,10 +188,28 @@ pub fn install_handler() -> io::Result<()> {
             let _ = signal_hook::low_level::emulate_default_handler(sig);
             std::process::exit(128 + sig);
         }
-    })?;
+    });
+    if let Err(e) = spawned {
+        restore_termination(&handled);
+        return Err(e);
+    }
     *installed = true;
     drop(installed);
     Ok(())
+}
+
+/// Make each of `signals` terminate the process again, after a failed watcher
+/// spawn has dropped its `Signals`. Unregistering signal-hook's last action
+/// does not restore the OS default, so without this luggage would silently
+/// ignore Ctrl-C and SIGTERM for the rest of its run. An always-true
+/// conditional default runs the default action from signal-hook's own
+/// handler. Best-effort: a failure here leaves the signal as it already was.
+fn restore_termination(signals: &[i32]) {
+    let always = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    for &sig in signals {
+        let _ =
+            signal_hook::flag::register_conditional_default(sig, std::sync::Arc::clone(&always));
+    }
 }
 
 /// SIGINT and SIGTERM, minus any whose bit is set in `ignored` (a `SigIgn`
