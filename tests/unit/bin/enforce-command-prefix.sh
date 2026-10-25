@@ -726,6 +726,37 @@ test_mode_unreadable_exits_2() {
         "No tmpfile should be left behind"
 }
 
+# Helper: run the hook on test.sh ('grep x') with $1 as the
+# body of a stub named $2; sets exit_code
+run_with_stub() {
+    /usr/bin/mkdir -p "$TEST_TEMP_DIR/stub"
+    printf '#!/bin/sh\n%s\n' "$1" >"$TEST_TEMP_DIR/stub/$2"
+    /bin/chmod 755 "$TEST_TEMP_DIR/stub/$2"
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
+    exit_code=0
+    env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" \
+        "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null 2>&1 || exit_code=$?
+}
+
+# Test: a BSD stat (no -c) still supplies the mode via 'stat -f %Lp'
+test_mode_from_bsd_stat() {
+    local exit_code
+    run_with_stub 'case "$1" in -f) printf "750\n" ;; *) exit 1 ;; esac' stat
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals "750" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Mode should come from stat -f"
+}
+
+# Test: SIGTERM mid-rewrite (sent by a chmod stub while the tmpfile exists)
+# exits 143, leaves the original intact and removes the tmpfile
+test_sigterm_removes_tmpfile() {
+    local exit_code
+    run_with_stub 'kill -TERM "$PPID"; exit 1' chmod
+    assert_equals "143" "$exit_code" "SIGTERM should exit 143"
+    assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" "Original should be intact"
+    assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
+        "The trap should remove the in-flight tmpfile"
+}
+
 # Test: a write failure stops the run — earlier fixes stand, later files
 # are untouched, exit 2
 test_unwritable_file_stops_batch() {
@@ -829,6 +860,8 @@ run_test test_unwritable_file_exits_2 "Unwritable file exits 2 and keeps the tmp
 run_test test_symlink_operand_skipped "Symlinked operand is skipped, target untouched"
 run_test test_fixed_file_replaced_atomically "Fix replaces the file by rename, not in place"
 run_test test_mode_unreadable_exits_2 "Unreadable mode exits 2 and leaves the original"
+run_test test_mode_from_bsd_stat "Mode is read via BSD stat -f when -c is rejected"
+run_test test_sigterm_removes_tmpfile "SIGTERM mid-rewrite exits 143 and removes the tmpfile"
 run_test test_unwritable_file_stops_batch "Write failure stops the batch with exit 2"
 run_test test_awk_failure_exits_2 "awk failure exits 2 and cleans up"
 run_test test_filename_with_equals "File name containing = is processed as a file"
