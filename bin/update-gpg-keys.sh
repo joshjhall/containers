@@ -209,10 +209,12 @@ update_nodejs_keys() {
     # The committed keyring is not touched until the staged copy has passed,
     # so no failure or interruption can leave it empty or half-written.
     mkdir -p "$(dirname "$keyring_dir")"
-    local staging
+    local staging previous="${keyring_dir}.old.$$"
     staging=$(mktemp -d "${keyring_dir}.new.XXXXXX")
-    # shellcheck disable=SC2064 # expand $staging now; the trap outlives this scope
-    trap "rm -rf '$staging'" INT TERM
+    # On interrupt: drop the staging dir, and if the swap below had already
+    # moved the existing keyring aside, put it back
+    # shellcheck disable=SC2064 # expand paths now; the trap outlives this scope
+    trap "rm -rf '$staging'; [ -d '$keyring_dir' ] || { [ -d '$previous' ] && mv '$previous' '$keyring_dir'; }; exit 130" INT TERM
 
     # trustdb.gpg is optional (count_keyring_keys treats it the same way);
     # copying only what upstream ships makes the result mirror upstream exactly
@@ -240,7 +242,6 @@ update_nodejs_keys() {
     fi
 
     # Swap the validated keyring into place
-    local previous="${keyring_dir}.old.$$"
     if [ -d "$keyring_dir" ] && ! mv "$keyring_dir" "$previous"; then
         log_error "Could not move the existing keyring aside — keeping it"
         trap - INT TERM
