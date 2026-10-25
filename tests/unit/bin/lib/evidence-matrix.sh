@@ -530,6 +530,12 @@ test_malformed_published_file_is_named() {
     _db_version "$db" 1.90.0 debian-13-amd64
     command cat "$f" "$f" >"$f.two" && command mv "$f.two" "$f"
     _malformed_fails "$db" "$f" "a file with two documents"
+
+    # Together they keep the total value count equal to the file count, so
+    # only a per-file count sees them: the empty 1.80.0 is the culprit.
+    : >"$db/tools/rust/versions/1.80.0.json"
+    _malformed_fails "$db" "$db/tools/rust/versions/1.80.0.json" "an empty file beside a two-document one"
+    _db_version "$db" 1.80.0 debian-13-amd64
     _db_version "$db" 1.90.0 debian-13-amd64
 
     # The culprit sits in a later source (an open PR's rows): main is fine.

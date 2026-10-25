@@ -168,9 +168,12 @@ _em_published_evidence() {
         files+=("${found[@]}")
     done
     # Slurping drops an empty file and splits one holding two documents, so
-    # the value count must match the file count as well as each value's shape.
-    command jq -cs --argjson now "$now" --argjson n "${#files[@]}" "$_EM_EVIDENCE_JQ$_EM_VERSION_FILE_OK_JQ"'
-        if length == $n and all(em_version_file_ok) then . else error("malformed version file") end
+    # values are counted per file (input_filename): a total count would let
+    # an empty file and a two-document one cancel out.
+    command jq -cn --argjson now "$now" --argjson n "${#files[@]}" "$_EM_EVIDENCE_JQ$_EM_VERSION_FILE_OK_JQ"'
+        [inputs | {f: input_filename, v: .}] | group_by(.f)
+        | if length == $n and all(length == 1 and (.[0].v | em_version_file_ok))
+          then map(.[0].v) else error("malformed version file") end
         | group_by(.version)
         | map({key: .[0].version, value: ([ .[].tested // [] | .[] ] | em_evidence($now))})
         | from_entries
