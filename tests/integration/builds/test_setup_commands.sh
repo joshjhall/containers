@@ -386,7 +386,12 @@ test_setup_gh_attempts_auth() {
     local output rc=0
     output=$(docker exec "$c" bash -c 'export GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" && setup-gh 2>&1') || rc=$?
     assert_contains "$output" "authenticating gh CLI" "Should attempt authentication"
+    # Tie the exit to the refused login, not some later set -e failure. When
+    # #1457 lands, flip these to rc=0 + "gh authenticated" and also assert the
+    # bashrc persistence marker for the post-login path.
     assert_equals "1" "$rc" "setup-gh exits 1 when gh refuses login (real gh behavior; flip to 0 when #1457 is fixed)"
+    assert_contains "$output" "GITHUB_TOKEN environment variable is being used" "Exit should come from gh refusing login"
+    assert_not_contains "$output" "gh authenticated" "Post-login verify is unreachable while #1457 is open"
 
     local argv stdin
     argv=$(docker exec "$c" cat /tmp/gh-mock.argv 2>&1)
