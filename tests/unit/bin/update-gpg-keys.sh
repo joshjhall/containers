@@ -280,9 +280,28 @@ make_fixture_repo() {
 }
 
 # run_update <repo> <keys_dir> — run the real script for nodejs; prints combined output
+# With STALE_OLD_PID_DIR=1, first plant the leftover a SIGKILLed run would
+# leave at keyring.old.<pid> — under the script's OWN pid, by creating it and
+# then exec-ing the script in the same process (#1436).
 run_update() {
+    if [ "${STALE_OLD_PID_DIR:-}" = "1" ]; then
+        # shellcheck disable=SC2016 # $$ / $1 / $2 expand in the child shell
+        NODEJS_RELEASE_KEYS_REPO="$1" GPG_KEYS_DIR="$2" bash -c '
+            stale="$1/nodejs/keyring.old.$$"
+            command mkdir -p "$stale" &&
+                printf stale-pubring >"$stale/pubring.kbx" &&
+                exec bash "$2" nodejs
+        ' _ "$2" "$SOURCE_FILE" 2>&1
+        return
+    fi
     NODEJS_RELEASE_KEYS_REPO="$1" GPG_KEYS_DIR="$2" \
         bash "$SOURCE_FILE" nodejs 2>&1
+}
+
+# stale_old_pid_dir <keys_dir> — print the planted keyring.old.<pid> leftover
+stale_old_pid_dir() {
+    command grep -l 'stale-pubring' "$1"/nodejs/keyring.old.*/pubring.kbx 2>/dev/null |
+        command head -n 1 | command xargs -r dirname
 }
 
 # Test: a readable upstream keyring is copied byte-for-byte and the script exits 0
@@ -486,9 +505,65 @@ test_gpg_nodejs_failed_restore_reports_stranded_keyring() {
     assert_contains "$output" "Restore failed — the previous keyring is at" \
         "should report where the stranded keyring is"
     local stranded
-    stranded=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 1 -maxdepth 1 -name 'keyring.old.*' | command head -n 1)
+    stranded=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 2 -maxdepth 2 -path '*/keyring.old.*/keyring' | command head -n 1)
+    assert_contains "$output" "the previous keyring is at $stranded;" \
+        "the reported path is the moved-aside keyring"
     assert_equals "previous-pubring" "$(command cat "$stranded/pubring.kbx" 2>/dev/null)" \
         "the reported path holds the previous keyring"
+}
+
+# Test: a leftover keyring.old.<pid> under the script's own pid (a SIGKILLed
+# earlier run) does not swallow the keyring on a successful update (#1436)
+test_gpg_nodejs_stale_old_pid_dir_success() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo"
+
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest"
+    printf 'previous-pubring' >"$dest/pubring.kbx"
+
+    local output rc=0
+    output=$(STALE_OLD_PID_DIR=1 run_update "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys") || rc=$?
+
+    assert_equals "0" "$rc" "update should succeed despite the leftover (output: $output)"
+    if command cmp -s "$COMMITTED_NODEJS_KEYRING/pubring.kbx" "$dest/pubring.kbx"; then
+        assert_true true "new pubring.kbx installed"
+    else
+        assert_true false "new pubring.kbx not installed"
+    fi
+    assert_false "[ -e '$dest/keyring' ]" "no keyring nested inside the keyring"
+    local stale
+    stale=$(stale_old_pid_dir "$TEST_TEMP_DIR/keys")
+    assert_not_empty "$stale" "the leftover the script did not create is left alone"
+    local nested
+    nested=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 2 -name keyring | command wc -l)
+    assert_equals "0" "$nested" "no keyring nested anywhere under nodejs/"
+}
+
+# Test: with the same leftover, an install failure restores the REAL previous
+# keyring — not the stale copy, and not nested at keyring/keyring (#1436)
+test_gpg_nodejs_stale_old_pid_dir_install_failure() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo"
+
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest"
+    printf 'previous-pubring' >"$dest/pubring.kbx"
+
+    local output rc=0
+    output=$(STALE_OLD_PID_DIR=1 run_update_failing_mv "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys" "$dest" 1) || rc=$?
+
+    assert_not_equals "0" "$rc" "update must exit non-zero when the new keyring cannot be installed"
+    assert_contains "$output" "Could not install the new keyring" "should name the install failure"
+    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx" 2>/dev/null)" \
+        "the real previous keyring is restored, not the stale leftover"
+    assert_false "[ -e '$dest/keyring' ]" "no keyring nested inside the restored keyring"
+    local stale
+    stale=$(stale_old_pid_dir "$TEST_TEMP_DIR/keys")
+    assert_not_empty "$stale" "the leftover the script did not create is left alone"
+    local others
+    others=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 1 -maxdepth 1 -name 'keyring.*' ! -path "$stale" | command wc -l)
+    assert_equals "0" "$others" "no keyring.new.*/keyring.old.* of this run left behind"
 }
 
 # assert_mktemp_guard <fail-pattern> <expected-message>
@@ -499,6 +574,7 @@ test_gpg_nodejs_failed_restore_reports_stranded_keyring() {
 # <fail-pattern> selects the mktemp that fails, by its last argument:
 #   keyring-check.  - count_keyring_keys' scratch (first hit: the upstream check)
 #   .new.           - the staging dir beside the keyring
+#   .old.           - the holder dir the existing keyring is moved aside into
 #   <plain>         - the template-less `mktemp -d` for update_nodejs_keys' temp_dir
 # Every other mktemp runs for real, so each case reaches its own guard. Each
 # guard is proven by removing it and watching its case fail.
@@ -583,6 +659,11 @@ test_gpg_nodejs_scratch_mktemp_failure_fails_closed() {
 test_gpg_nodejs_staging_mktemp_failure_fails_closed() {
     require_gpg || return 0
     assert_mktemp_guard ".new." "Could not create a staging directory"
+}
+
+test_gpg_nodejs_previous_mktemp_failure_fails_closed() {
+    require_gpg || return 0
+    assert_mktemp_guard ".old." "Could not create a directory to move the existing keyring aside"
 }
 
 test_gpg_nodejs_tempdir_mktemp_failure_fails_closed() {
@@ -720,8 +801,11 @@ run_test_with_setup test_gpg_nodejs_empty_keyring_rejected "Node.js: keyring wit
 run_test_with_setup test_gpg_nodejs_move_aside_failure_keeps_existing "Node.js: move-aside failure keeps existing keyring"
 run_test_with_setup test_gpg_nodejs_install_failure_restores_existing "Node.js: install failure restores existing keyring"
 run_test_with_setup test_gpg_nodejs_failed_restore_reports_stranded_keyring "Node.js: failed restore reports the stranded keyring path"
+run_test_with_setup test_gpg_nodejs_stale_old_pid_dir_success "Node.js: leftover keyring.old.<pid> does not swallow the keyring (#1436)"
+run_test_with_setup test_gpg_nodejs_stale_old_pid_dir_install_failure "Node.js: leftover keyring.old.<pid> is not restored as the keyring (#1436)"
 run_test_with_setup test_gpg_nodejs_scratch_mktemp_failure_fails_closed "Node.js: scratch mktemp failure fails closed"
 run_test_with_setup test_gpg_nodejs_staging_mktemp_failure_fails_closed "Node.js: staging mktemp failure fails closed"
+run_test_with_setup test_gpg_nodejs_previous_mktemp_failure_fails_closed "Node.js: move-aside holder mktemp failure fails closed"
 run_test_with_setup test_gpg_nodejs_tempdir_mktemp_failure_fails_closed "Node.js: temp_dir mktemp failure fails closed"
 run_test_with_setup test_gpg_python_tempdir_mktemp_failure_fails_closed "Python: temp_dir mktemp failure fails closed"
 run_test_with_setup test_gpg_hashicorp_tempdir_mktemp_failure_fails_closed "HashiCorp: temp_dir mktemp failure fails closed"
