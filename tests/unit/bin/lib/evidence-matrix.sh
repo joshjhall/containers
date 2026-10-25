@@ -182,6 +182,77 @@ test_open_ingest_pr_rows_count_as_covered() {
     assert_equals "" "$out" "and prints no matrix"
 }
 
+test_pr_rows_drop_inherited_rows() {
+    # A PR head carries main's rows from its branch point. A pass row revoked
+    # on main since must not be re-asserted by the PR's stale copy (#1327).
+    local r main base head rows out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    base="$(command mktemp -d "$TEST_TEMP_DIR/base.XXXXXX")"
+    head="$(command mktemp -d "$TEST_TEMP_DIR/head.XXXXXX")"
+    main="$(command mktemp -d "$TEST_TEMP_DIR/main.XXXXXX")"
+    rows="$TEST_TEMP_DIR/rows.$$.$RANDOM"
+    _db_version "$base" 1.90.0 debian-13-amd64
+    _db_version "$head" 1.90.0 debian-13-amd64,debian-13-arm64
+    _db_version "$main" 1.90.0 ""
+    evidence_pr_rows "$base" "$head" "$rows"
+    assert_equals '[{"os":"debian","os_version":"13","arch":"arm64","result":"pass"}]' \
+        "$(command jq -c .tested "$rows/tools/rust/versions/1.90.0.json")" \
+        "only the row the PR added survives"
+
+    out="$(EVIDENCE_TESTED_SOURCE="$main:$rows" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'1.90.0 alpine-3.24-amd64\n1.90.0 debian-13-amd64' "$(_cells "$out")" \
+        "the revoked amd64 pass is pending again; the PR's own arm64 row still covers"
+
+    # Mutation guard: unioning the head tree whole re-asserts the revoked row.
+    out="$(EVIDENCE_TESTED_SOURCE="$main:$head" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 alpine-3.24-amd64" "$(_cells "$out")" \
+        "the fixture does distinguish: the whole head tree hides the amd64 cell"
+}
+
+test_pr_rows_new_file_and_untouched_tool() {
+    # A version file the PR adds counts whole; a file (or tool) whose rows are
+    # all inherited is not written, and reads as "no rows from this source".
+    local base head rows
+    base="$(command mktemp -d "$TEST_TEMP_DIR/base.XXXXXX")"
+    head="$(command mktemp -d "$TEST_TEMP_DIR/head.XXXXXX")"
+    rows="$TEST_TEMP_DIR/rows.$$.$RANDOM"
+    _db_version "$base" 1.90.0 debian-13-amd64
+    _db_version "$head" 1.90.0 debian-13-amd64
+    _db_version "$base" 1.22.0 debian-13-amd64 "" "" go
+    _db_version "$head" 1.22.0 debian-13-amd64 "" "" go
+    _db_version "$head" 1.91.0 debian-13-amd64,alpine-3.24-amd64
+    evidence_pr_rows "$base" "$head" "$rows"
+    assert_equals "tools/rust/versions/1.91.0.json" \
+        "$(cd "$rows" && command find tools -type f | command sort)" \
+        "only the new version file is written; unchanged rust 1.90.0 and go are not"
+    assert_equals "2" "$(command jq '.tested | length' "$rows/tools/rust/versions/1.91.0.json")" \
+        "a new file's rows all count"
+    assert_dir_exists "$rows/tools" "out keeps a readable tools/ tree"
+    assert_dir_not_exists "$rows/tools/go" "with no tools/go for the untouched tool"
+}
+
+test_pr_rows_unreadable_is_an_error() {
+    local base head rc=0
+    base="$(command mktemp -d "$TEST_TEMP_DIR/base.XXXXXX")"
+    head="$(command mktemp -d "$TEST_TEMP_DIR/head.XXXXXX")"
+    _db_version "$base" 1.90.0 ""
+    command mkdir -p "$head/tools/rust/versions"
+    command echo '{not json' >"$head/tools/rust/versions/1.90.0.json"
+    evidence_pr_rows "$base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
+    assert_equals "1" "$rc" "an unparsable head file is exit 1"
+
+    _db_version "$head" 1.90.0 ""
+    command echo '{not json' >"$base/tools/rust/versions/1.90.0.json"
+    rc=0
+    evidence_pr_rows "$base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
+    assert_equals "1" "$rc" "an unparsable base file is exit 1"
+
+    rc=0
+    evidence_pr_rows "$TEST_TEMP_DIR/no-such-base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
+    assert_equals "1" "$rc" "a base with no tools/ tree is exit 1"
+}
+
 test_open_prs_filters_trust_and_age() {
     # Only same-repo ingest branches by the ingest identity, under the age
     # bound, count. A fork can name a branch evidence/batch/* too.
@@ -562,6 +633,9 @@ run_test test_published_evidence_decides_pending "published evidence decides pen
 run_test test_published_source_overrides_vendored_tested "published source overrides vendored tested[]"
 run_test test_version_missing_from_published_is_pending "a version absent from published evidence is pending"
 run_test test_open_ingest_pr_rows_count_as_covered "open ingest PR rows count as covered"
+run_test test_pr_rows_drop_inherited_rows "an open PR counts only the rows it adds, not main's stale ones"
+run_test test_pr_rows_new_file_and_untouched_tool "PR rows: new files count whole, untouched tools are absent"
+run_test test_pr_rows_unreadable_is_an_error "PR rows: an unreadable side is an error"
 run_test test_open_prs_filters_trust_and_age "open evidence PRs: trust and age filter"
 run_test test_open_prs_unparsable_listing_is_an_error "open evidence PRs: unparsable listing is an error"
 run_test test_fully_published_coverage_exits_3 "full published coverage exits 3"

@@ -167,12 +167,20 @@ jobs:
 
       # A previous run's ingest PR (evidence/batch/<run-id>) is often still
       # awaiting auto-merge when the next push resolves its matrix, so its rows
-      # are not on main yet. Each open one's tools/ tree joins the evidence
-      # source, so those cells count as covered instead of being re-queued.
+      # are not on main yet. The rows each open one ADDS over its merge-base
+      # (evidence_pr_rows) join the evidence source, so those cells count as
+      # covered instead of being re-queued. Not its whole tools/ tree: that
+      # carries main's rows as of its branch point, so a pass row since
+      # removed on main would be re-asserted (#1327).
       # evidence_open_prs keeps only same-repo PRs by the ingest identity
       # under 24h old. The PRs are listed BEFORE main is re-fetched, so a PR
       # that merges in between is on the main read rather than in neither.
-      # A failed listing or fetch fails the job, like the checkout above.
+      # refs/pull/N/head survives a close, so each PR's state is re-read after
+      # its fetch and a CLOSED one is skipped (MERGED still counts: main may
+      # predate the merge). A close after that re-read still counts for this
+      # one run; that seconds-wide window is accepted.
+      # A failed listing, state read, or fetch fails the job, like the
+      # checkout above.
       - name: Collect open evidence PRs (containers-db)
         id: db_sources
         if: github.event_name != 'workflow_dispatch'
@@ -194,14 +202,26 @@ jobs:
           SOURCES="$PWD/_db"
           for n in $PRS; do
             git -C _db fetch --quiet --depth 1 origin "refs/pull/$n/head:refs/evidence-pr/$n"
-            mkdir -p "_db_pr/$n"
-            git -C _db archive "refs/evidence-pr/$n" tools | tar -x --no-same-owner -C "_db_pr/$n"
-            if [ -n "$(find "_db_pr/$n" -type l -print -quit)" ]; then
-              echo "containers-db#$n tools/ contains symlinks; refusing it" >&2
-              exit 1
+            STATE=$(gh pr view "$n" --repo joshjhall/containers-db --json state -q .state)
+            if [ "$STATE" = CLOSED ]; then
+              echo "containers-db#$n closed without merging since it was listed; its rows do not count"
+              continue
             fi
-            SOURCES="$SOURCES:$PWD/_db_pr/$n"
-            echo "Counting open evidence PR joshjhall/containers-db#$n as published evidence"
+            HEAD_SHA=$(git -C _db rev-parse "refs/evidence-pr/$n")
+            BASE_SHA=$(gh api "repos/joshjhall/containers-db/compare/main...$HEAD_SHA" -q .merge_base_commit.sha)
+            git -C _db fetch --quiet --depth 1 origin "$BASE_SHA"
+            for side in head base; do
+              mkdir -p "_db_pr/$n/$side"
+              if [ "$side" = head ]; then REV="$HEAD_SHA"; else REV="$BASE_SHA"; fi
+              git -C _db archive "$REV" tools | tar -x --no-same-owner -C "_db_pr/$n/$side"
+              if [ -n "$(find "_db_pr/$n/$side" -type l -print -quit)" ]; then
+                echo "containers-db#$n tools/ ($side) contains symlinks; refusing it" >&2
+                exit 1
+              fi
+            done
+            evidence_pr_rows "_db_pr/$n/base" "_db_pr/$n/head" "_db_pr/$n/rows"
+            SOURCES="$SOURCES:$PWD/_db_pr/$n/rows"
+            echo "Counting the rows open evidence PR joshjhall/containers-db#$n adds as published evidence"
           done
           echo "sources=$SOURCES" >> "$GITHUB_OUTPUT"
 

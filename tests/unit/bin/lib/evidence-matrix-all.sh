@@ -262,7 +262,7 @@ test_pr_source_predating_a_tool_adds_nothing() {
     assert_equals "0" "$rc" "a PR source without the tool is not an error"
     assert_equals $'go 1.23.4 debian-13-amd64\nrust 1.90.0 debian-13-arm64' "$(_tool_cells "$out")" \
         "go comes from main; the PR's rust pass still covers its cell"
-    assert_equals "evidence_matrix: $pr predates go (no tools/go); it adds no go evidence" \
+    assert_equals "evidence_matrix: $pr has no tools/go; it adds no go evidence" \
         "$(command cat "$err")" "and the skip is said, not silent"
 }
 
