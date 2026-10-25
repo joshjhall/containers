@@ -860,6 +860,11 @@ test_fail_cooldown_override() {
     rc=0
     out="$(EVIDENCE_NOW=99999999999999999999 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
     assert_equals "1" "$rc" "an overflowing EVIDENCE_NOW is an error"
+    # #1403: the 12-digit cap is the boundary, not just a guard on huge values.
+    rc=0
+    out="$(EVIDENCE_NOW=1792540800000 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "a 13-digit EVIDENCE_NOW is an error"
+    assert_equals "" "$out" "and prints no matrix"
     rc=0
     out="$(EVIDENCE_NOW="$_NOW" EVIDENCE_FAIL_COOLDOWN_DAYS=999999 EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
     assert_equals "3" "$rc" "the largest accepted cooldown still keeps the failure out"
@@ -893,6 +898,10 @@ test_vendored_future_fail_is_retried() {
     out="$(EVIDENCE_NOW="$_NOW" evidence_matrix "$r/catalog" rust "$r")"
     assert_equals "alpine-3.24-amd64|debian-13-amd64" "$(command jq -r '[.include[].tuple] | join("|")' <<<"$out")" \
         "a future vendored fail is retried after the untested cell; the skewed one waits"
+    # #1403: a zero-padded EVIDENCE_NOW is decimal (10#), not an octal error.
+    out="$(EVIDENCE_NOW=001792540800 evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "alpine-3.24-amd64|debian-13-amd64" "$(command jq -r '[.include[].tuple] | join("|")' <<<"$out")" \
+        "a zero-padded EVIDENCE_NOW yields the same matrix as the unpadded one"
 }
 
 test_missing_index_is_an_error() {
