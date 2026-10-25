@@ -65,6 +65,56 @@ test_artifact_name_is_per_cell() {
         "artifact name includes tool, version, and tuple"
 }
 
+# _db_sources_run — the executable lines of the "Collect open evidence PRs"
+# step's run: block (comments dropped, so prose cannot satisfy a pin).
+_db_sources_run() {
+    /usr/bin/awk '
+        /- name: Collect open evidence PRs/ { on = 1; next }
+        on && /- name: / { exit }
+        on { print }
+    ' "$WF" | /usr/bin/grep -vE '^[[:space:]]*#'
+}
+
+test_open_pr_sources_count_only_added_rows() {
+    # #1327: an open PR's whole head tree re-asserted rows main had since
+    # revoked; only the rows it adds over its merge-base may count.
+    local run
+    run="$(_db_sources_run)"
+    assert_contains "$run" 'evidence_pr_rows "_db_pr/$n/base" "_db_pr/$n/head" "_db_pr/$n/rows"' \
+        "each PR is reduced to its added rows, base before head"
+    assert_contains "$run" 'SOURCES="$SOURCES:$PWD/_db_pr/$n/rows"' "the rows tree joins SOURCES"
+    assert_not_contains "$run" 'SOURCES="$SOURCES:$PWD/_db_pr/$n/head"' "the head tree itself never joins SOURCES"
+    assert_not_contains "$run" 'SOURCES="$SOURCES:$PWD/_db_pr/$n"' "nor the old whole-PR tree"
+}
+
+test_open_pr_sources_pin_the_main_read() {
+    # Merge-bases and the merged check use the fetched main SHA, not the
+    # moving ref, or a PR that merges mid-step lands in neither source.
+    local run
+    run="$(_db_sources_run)"
+    assert_contains "$run" 'MAIN_SHA=$(git -C _db rev-parse HEAD)' "the main read's SHA is captured"
+    assert_contains "$run" 'compare/$MAIN_SHA...$HEAD_SHA' "the merge-base is taken against it"
+    assert_contains "$run" 'compare/$MERGE_SHA...$MAIN_SHA' "the merged check is too"
+    assert_not_contains "$run" 'compare/main...' "never against live main"
+}
+
+test_open_pr_sources_skip_closed_and_landed() {
+    # refs/pull/N/head survives a close; a PR merged into the main read has
+    # its rows there already. Both are skipped after the head fetch.
+    local run fetch_line state_line
+    run="$(_db_sources_run)"
+    assert_contains "$run" '--json state,mergeCommit' "each PR's state is re-read"
+    assert_contains "$run" 'if [ "$STATE" = CLOSED ]; then' "a closed PR is detected"
+    assert_contains "$run" 'if [ "$IN_MAIN" = ahead ] || [ "$IN_MAIN" = identical ]; then' \
+        "a merged PR already in the main read is detected"
+    assert_equals "2" "$(/usr/bin/grep -c '^[[:space:]]*continue$' <<<"$run")" \
+        "and both are skipped"
+    fetch_line="$(/usr/bin/grep -n 'refs/pull/$n/head' <<<"$run" | /usr/bin/cut -d: -f1)"
+    state_line="$(/usr/bin/grep -n 'json state,mergeCommit' <<<"$run" | /usr/bin/cut -d: -f1)"
+    assert_true "[ ${fetch_line:-0} -gt 0 ] && [ ${state_line:-0} -gt ${fetch_line:-0} ]" \
+        "the state is read after the head fetch"
+}
+
 test_cells_install_from_the_vendored_catalog() {
     local cell
     cell="$(_job_block evidence)"
@@ -337,6 +387,9 @@ run_test test_cells_install_as_the_container_user "cells install as the containe
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
 run_test test_artifact_name_is_per_cell "artifact name is per cell"
+run_test test_open_pr_sources_count_only_added_rows "open-PR sources count only the rows each PR adds (#1327)"
+run_test test_open_pr_sources_pin_the_main_read "open-PR sources take merge-bases against the fetched main"
+run_test test_open_pr_sources_skip_closed_and_landed "open-PR sources skip closed and already-landed PRs"
 run_test test_cells_install_from_the_vendored_catalog "cells install from the vendored catalog"
 run_test test_trigger_paths_cover_evidence_scripts "trigger paths cover every evidence lib and script"
 run_test test_trigger_paths_parser_fixtures "paths: parser fails closed on fixture workflows"

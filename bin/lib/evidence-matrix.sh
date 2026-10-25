@@ -105,20 +105,21 @@ def em_evidence($now):
 # The source is a colon-separated list of
 # directories laid out like containers-db (tools/<tool>/versions/*.json); rows
 # from all of them are unioned. evidence-run.yml passes containers-db main plus
-# the head of each still-open evidence/batch/* PR, so cells a previous run
-# evidenced count as covered while its auto-merge is pending.
+# the rows each still-open evidence/batch/* PR adds (evidence_pr_rows), so cells
+# a previous run evidenced count as covered while its auto-merge is pending.
 #
 # Writes `null` when the variable is unset (unit tests, local runs): the
 # vendored `tested[]` decides, as before. When a listed directory holds no
 # version files or unparsable JSON, it fails: an unreadable source must not
 # turn into "every cell pending", which is the silent re-test loop #1319 fixed.
 #
-# One exception (#1341): a LATER source (an open ingest PR's head) that has a
-# readable tools/ tree but no tools/<tool>/ was branched before that tool
-# reached containers-db. It has no rows for the tool, which is not the same as
-# being unreadable. It contributes nothing for that tool instead of failing
-# every tool's matrix until the PR merges or ages out. The first source
-# (containers-db main) stays strict, as does any source with no tools/ at all.
+# One exception (#1341): a LATER source (an open ingest PR's rows, see
+# evidence_pr_rows) that has a readable tools/ tree but no tools/<tool>/ adds
+# no rows for that tool: the PR did not touch it, or was branched before the
+# tool reached containers-db. That is not the same as being unreadable, so it
+# contributes nothing for that tool instead of failing every tool's matrix.
+# The first source (containers-db main) stays strict, as does any source with
+# no tools/ at all.
 #
 # Main missing tools/<tool> means the tool was vendored before its
 # containers-db PR merged. The drift gate (#815, check-catalog-drift.sh) only
@@ -142,7 +143,7 @@ _em_published_evidence() {
         found=("$dir"/*.json)
         if [ ! -e "${found[0]}" ]; then
             if [ "$i" -gt 0 ] && [ -d "$src/tools" ] && [ ! -e "$src/tools/$tool" ]; then
-                command echo "evidence_matrix: $src predates $tool (no tools/$tool); it adds no $tool evidence" >&2
+                command echo "evidence_matrix: $src has no tools/$tool; it adds no $tool evidence" >&2
                 continue
             fi
             if [ "$i" -eq 0 ] && [ -d "$src/tools" ] && [ ! -e "$src/tools/$tool" ]; then
@@ -162,6 +163,53 @@ _em_published_evidence() {
         command echo "evidence_matrix: unreadable published evidence for $tool in $EVIDENCE_TESTED_SOURCE" >&2
         return 1
     }
+}
+
+# evidence_pr_rows <base_dir> <head_dir> <out_dir> — writes to out_dir the
+# tested[] rows an open ingest PR adds: each head version file's rows minus
+# the rows already in the same file at the PR's merge-base (#1327). All three
+# are containers-db-shaped trees (tools/<tool>/versions/*.json).
+#
+# A PR head carries main's rows as of its branch point. Unioning the whole
+# tree let a pass row since removed or corrected on main re-assert itself
+# from the PR's stale copy for up to the 24h age bound. Only rows the PR
+# itself writes are its evidence. A changed row counts as added: the PR is
+# asserting it.
+#
+# A file is written only when it gains a row, so a tool the PR adds nothing
+# for has no tools/<tool> in out_dir; _em_published_evidence reads that as
+# "no rows from this source". An empty or unparsable file on either side is
+# exit 1.
+evidence_pr_rows() {
+    local base="$1" head="$2" out="$3" f rel prev rows
+    if [ ! -d "$base/tools" ] || [ ! -d "$head/tools" ]; then
+        command echo "evidence_pr_rows: $base and $head must both hold a tools/ tree" >&2
+        return 1
+    fi
+    command mkdir -p "$out/tools" || return 1
+    for f in "$head"/tools/*/versions/*.json; do
+        [ -e "$f" ] || continue
+        rel="${f#"$head"/}"
+        prev="$base/$rel"
+        [ -e "$prev" ] || prev=/dev/null
+        # jq reads a zero-byte file as no input: an empty base would hand
+        # every inherited row back as the PR's, an empty head would vanish.
+        if [ ! -s "$f" ] || { [ "$prev" != /dev/null ] && [ ! -s "$prev" ]; }; then
+            command echo "evidence_pr_rows: empty $rel in $head or $base" >&2
+            return 1
+        fi
+        rows="$(command jq -c --slurpfile base "$prev" '
+            ($base[0].tested // []) as $old
+            | {tool, version, tested: [ .tested[]? | select(. as $r | any($old[]; . == $r) | not) ]}
+            | select(.tested != [])
+        ' "$f")" || {
+            command echo "evidence_pr_rows: unreadable $rel in $head or $base" >&2
+            return 1
+        }
+        [ -n "$rows" ] || continue
+        command mkdir -p "$out/$(command dirname "$rel")" || return 1
+        command printf '%s\n' "$rows" >"$out/$rel" || return 1
+    done
 }
 
 # evidence_open_prs <now_epoch> [owner] [max_age_hours] — reads
