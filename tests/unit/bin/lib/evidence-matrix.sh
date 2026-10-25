@@ -455,9 +455,81 @@ test_unreadable_published_source_is_an_error() {
 
     command echo '{not json' >"$db/tools/rust/versions/1.90.0.json"
     rc=0
-    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
     assert_equals "1" "$rc" "an unparsable source is exit 1"
     assert_equals "" "$out" "and prints no matrix"
+    assert_equals "$(_malformed_msg "$db/tools/rust/versions/1.90.0.json")" \
+        "$(command cat "$err")" "and names the unparsable file (#1329)"
+}
+
+_malformed_msg() {
+    command echo "evidence_matrix: unreadable published evidence for rust: $1 (needs a string .version and an array .tested)"
+}
+
+# _malformed_fails <source> <bad_file> <what> — evidence_matrix over a
+# 1.90.0 catalog exits 1, prints no matrix, and names exactly bad_file.
+_malformed_fails() {
+    local src="$1" bad="$2" what="$3" r out err rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(EVIDENCE_TESTED_SOURCE="$src" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
+    assert_equals "1" "$rc" "$what is exit 1"
+    assert_equals "" "$out" "$what prints no matrix"
+    assert_equals "$(_malformed_msg "$bad")" "$(command cat "$err")" "$what is named in the error"
+}
+
+# _mutate <file> <jq filter> — rewrites a version file in place.
+_mutate() {
+    local tmp
+    tmp="$(command mktemp "$TEST_TEMP_DIR/mut.XXXXXX")"
+    command jq "$2" "$1" >"$tmp" && command mv "$tmp" "$1"
+}
+
+test_malformed_published_file_is_named() {
+    # #1329: a version file with a bad shape stays fatal (skipping it would
+    # make its cells pending again, #1319), and the message names the file
+    # rather than only the source list. 1.80.0 is valid, so the culprit is
+    # not just "the only file there is".
+    local db pr f
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.80.0 debian-13-amd64
+    _db_version "$db" 1.90.0 debian-13-amd64
+    f="$db/tools/rust/versions/1.90.0.json"
+
+    _mutate "$f" 'del(.version)'
+    _malformed_fails "$db" "$f" "a file with no version key"
+
+    _mutate "$f" '.version = null'
+    _malformed_fails "$db" "$f" "a null version"
+
+    _mutate "$f" '.version = "1.90.0" | .tested = "x"'
+    _malformed_fails "$db" "$f" "a non-array tested"
+
+    # Without the explicit check jq iterates an object's values as rows and
+    # exits 0, so this is the case only the shape check catches.
+    _mutate "$f" '.tested = {a: {os: "debian", os_version: "13", arch: "amd64", result: "pass"}}'
+    _malformed_fails "$db" "$f" "an object tested"
+
+    # The culprit sits in a later source (an open PR's rows): main is fine.
+    _mutate "$f" '.tested = []'
+    pr="$(command mktemp -d "$TEST_TEMP_DIR/pr.XXXXXX")"
+    _db_version "$pr" 1.90.0 debian-13-amd64
+    _mutate "$pr/tools/rust/versions/1.90.0.json" 'del(.version)'
+    _malformed_fails "$db:$pr" "$pr/tools/rust/versions/1.90.0.json" "a bad file in a PR-rows source"
+}
+
+test_published_file_without_tested_is_valid() {
+    # A version file with no tested key has no rows: its cells are pending,
+    # not an error (the #1329 shape check must not reject it).
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 ""
+    _mutate "$db/tools/rust/versions/1.90.0.json" 'del(.tested)'
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-amd64" "$(_cells "$out")" "no tested key means pending"
 }
 
 test_recent_fail_is_not_pending() {
@@ -754,6 +826,8 @@ run_test test_open_prs_filters_trust_and_age "open evidence PRs: trust and age f
 run_test test_open_prs_unparsable_listing_is_an_error "open evidence PRs: unparsable listing is an error"
 run_test test_fully_published_coverage_exits_3 "full published coverage exits 3"
 run_test test_unreadable_published_source_is_an_error "an unreadable evidence source is an error, not a full matrix"
+run_test test_malformed_published_file_is_named "a malformed published version file is fatal and named"
+run_test test_published_file_without_tested_is_valid "a published version file without tested is pending, not an error"
 run_test test_recent_fail_is_not_pending "a recently failed cell is not pending"
 run_test test_only_recent_failures_exits_3 "only recent failures exits 3"
 run_test test_stale_fail_sorts_after_untested "stale failures retry after never-tested cells"

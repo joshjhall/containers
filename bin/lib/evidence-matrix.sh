@@ -127,8 +127,19 @@ def em_evidence($now):
 # order. That failure gets its own message naming the tool and the fix
 # (#1365), because it fails every tool's matrix, not just that tool's.
 #
+# A version file without a string .version, or with a .tested that is neither
+# absent nor an array, fails too (#1329), and the message names the file.
+# Skipping it would make that version's cells pending, which is the same
+# re-test loop. The check is explicit, so it does not depend on how a given
+# jq release handles a null object key.
+#
 # A file, not a jq argument: the map grows with containers-db and one argv
 # string is capped at 128 KiB.
+_EM_VERSION_FILE_OK_JQ='
+def em_version_file_ok:
+    type == "object" and (.version | type) == "string"
+    and ((.tested // []) | type) == "array";
+'
 _em_published_evidence() {
     local tool="$1" out="$2" now="$3"
     if [ -z "${EVIDENCE_TESTED_SOURCE:-}" ]; then
@@ -155,14 +166,23 @@ _em_published_evidence() {
         fi
         files+=("${found[@]}")
     done
-    command jq -cs --argjson now "$now" "$_EM_EVIDENCE_JQ"'
-        group_by(.version)
-        | map({key: .[0].version, value: ([ .[].tested[]? ] | em_evidence($now))})
+    command jq -cs --argjson now "$now" "$_EM_EVIDENCE_JQ$_EM_VERSION_FILE_OK_JQ"'
+        if all(em_version_file_ok) then . else error("malformed version file") end
+        | group_by(.version)
+        | map({key: .[0].version, value: ([ .[].tested // [] | .[] ] | em_evidence($now))})
         | from_entries
-    ' "${files[@]}" >"$out" || {
-        command echo "evidence_matrix: unreadable published evidence for $tool in $EVIDENCE_TESTED_SOURCE" >&2
-        return 1
-    }
+    ' "${files[@]}" >"$out" 2>/dev/null && return 0
+
+    # Failure path only: one jq per file to name the culprit (#1329).
+    local f
+    for f in "${files[@]}"; do
+        command jq -e "$_EM_VERSION_FILE_OK_JQ"'em_version_file_ok' "$f" >/dev/null 2>&1 || {
+            command echo "evidence_matrix: unreadable published evidence for $tool: $f (needs a string .version and an array .tested)" >&2
+            return 1
+        }
+    done
+    command echo "evidence_matrix: unreadable published evidence for $tool in $EVIDENCE_TESTED_SOURCE" >&2
+    return 1
 }
 
 # evidence_pr_rows <base_dir> <head_dir> <out_dir> — writes to out_dir the
