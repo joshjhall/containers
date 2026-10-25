@@ -561,6 +561,25 @@ test_unnamed_evidence_failure_names_the_sources() {
     assert_contains "$(command sed -n 2p "$err")" "Cannot index number" "which is jq's cause"
 }
 
+test_evidence_scratch_is_removed() {
+    # The batch jq's stderr sidecar sits next to evidence_matrix's mktemp
+    # output; every exit path (success, a named file, the fallback) removes
+    # both, so a scratch TMPDIR is empty afterwards.
+    local r db tmp f case
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    f="$db/tools/rust/versions/1.90.0.json"
+    for case in ok named fallback; do
+        _db_version "$db" 1.90.0 ""
+        [ "$case" = named ] && _mutate "$f" 'del(.version)'
+        [ "$case" = fallback ] && _mutate "$f" '.tested = [1]'
+        tmp="$(command mktemp -d "$TEST_TEMP_DIR/tmp.XXXXXX")"
+        TMPDIR="$tmp" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" >/dev/null 2>&1 || true
+        assert_equals "" "$(command ls -A "$tmp")" "no scratch left after the $case path"
+    done
+}
+
 test_published_file_without_tested_is_valid() {
     # A version file with no tested key has no rows: its cells are pending,
     # not an error (the #1329 shape check must not reject it).
@@ -870,6 +889,7 @@ run_test test_fully_published_coverage_exits_3 "full published coverage exits 3"
 run_test test_unreadable_published_source_is_an_error "an unreadable evidence source is an error, not a full matrix"
 run_test test_malformed_published_file_is_named "a malformed published version file is fatal and named"
 run_test test_unnamed_evidence_failure_names_the_sources "a failure no file check explains falls back to the source list"
+run_test test_evidence_scratch_is_removed "published-evidence scratch is removed on every exit path"
 run_test test_published_file_without_tested_is_valid "a published version file without tested is pending, not an error"
 run_test test_recent_fail_is_not_pending "a recently failed cell is not pending"
 run_test test_only_recent_failures_exits_3 "only recent failures exits 3"
