@@ -44,8 +44,10 @@ COMPOSE_FILE="$DEVCONTAINER_DIR/docker-compose.yml"
 DROP_VOLUMES=false
 REMOVE_IMAGE=false
 
+# Print the header comment up to (not including) the "After it finishes" note,
+# so the help tracks header edits instead of a hardcoded line range.
 usage() {
-    command sed -n '2,33p' "${BASH_SOURCE[0]}" | command sed 's/^# \{0,1\}//'
+    command sed -n '/^# After it finishes/q; 2,$p' "${BASH_SOURCE[0]}" | command sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
