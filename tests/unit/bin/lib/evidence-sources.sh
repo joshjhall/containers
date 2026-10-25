@@ -363,6 +363,38 @@ test_persistent_compare_failure_fails() {
     assert_equals "" "$OUT" "and no sources"
 }
 
+test_unparsable_listing_fails() {
+    # A listing jq cannot read must not pass as "no open PRs", which would
+    # re-queue every cell those PRs cover.
+    _setup
+    command printf 'not json\n' >"$GH_STUB_DIR/list.json"
+    _collect
+    _assert_stubbed
+    assert_equals "1" "$RC" "an unparsable listing fails the job"
+    assert_equals "evidence_db_sources: unparsable PR listing" "$(command tail -n1 <<<"$ERR")" \
+        "with the listing named"
+    assert_equals "" "$OUT" "and no sources"
+}
+
+test_unreadable_pr_rows_fail() {
+    # A PR version file evidence_pr_rows cannot parse fails the job rather
+    # than dropping that PR's rows and re-queueing its cells.
+    _setup
+    command git -C "$SRC" checkout --quiet -b pr7
+    command printf '{not json\n' >"$SRC/tools/rust/versions/1.90.0.json"
+    _commit "$SRC" "pr 7" >/dev/null
+    command git -C "$SRC" push --quiet origin "HEAD:refs/pull/7/head"
+    command git -C "$SRC" checkout --quiet main
+    _listing 7
+    _pr_state 7 OPEN
+    _collect
+    _assert_stubbed
+    assert_equals "1" "$RC" "unreadable PR rows fail the job"
+    assert_equals "evidence_pr_rows: unreadable tools/rust/versions/1.90.0.json in $T/_db_pr/7/head or $T/_db_pr/7/base" \
+        "$(command tail -n1 <<<"$ERR")" "naming the file"
+    assert_equals "" "$OUT" "and no sources"
+}
+
 test_retry_discards_a_failed_attempts_output() {
     local n="$TEST_TEMP_DIR/flaky.$$.$RANDOM" out
     echo 0 >"$n"
@@ -407,6 +439,8 @@ run_test test_persistent_listing_failure_fails "a persistent listing failure fai
 run_test test_persistent_state_failure_fails "a persistent state-read failure fails after 3 attempts"
 run_test test_persistent_fetch_failure_fails "a persistent fetch failure fails after 3 attempts"
 run_test test_persistent_compare_failure_fails "a persistent merge-base lookup failure fails after 3 attempts"
+run_test test_unparsable_listing_fails "an unparsable listing fails the job"
+run_test test_unreadable_pr_rows_fail "unreadable PR rows fail the job"
 run_test test_retry_discards_a_failed_attempts_output "a failed attempt's partial output is discarded"
 run_test test_empty_source_list_is_refused "an empty source list is refused"
 
