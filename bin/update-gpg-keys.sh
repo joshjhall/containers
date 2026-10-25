@@ -211,10 +211,17 @@ update_nodejs_keys() {
     mkdir -p "$(dirname "$keyring_dir")"
     local staging previous="${keyring_dir}.old.$$"
     staging=$(mktemp -d "${keyring_dir}.new.XXXXXX")
-    # On interrupt: drop the staging dir, and if the swap below had already
-    # moved the existing keyring aside, put it back
+    # On interrupt: drop the staging dir and the temp clone; if the swap below
+    # had moved the existing keyring aside, put it back, otherwise drop the
+    # moved-aside copy so nothing stray is left under lib/gpg-keys to commit.
+    # Paths are %q-quoted because the trap string is evaluated later.
+    local q_staging q_previous q_keyring q_temp
+    q_staging=$(printf '%q' "$staging")
+    q_previous=$(printf '%q' "$previous")
+    q_keyring=$(printf '%q' "$keyring_dir")
+    q_temp=$(printf '%q' "$temp_dir")
     # shellcheck disable=SC2064 # expand paths now; the trap outlives this scope
-    trap "rm -rf '$staging'; [ -d '$keyring_dir' ] || { [ -d '$previous' ] && mv '$previous' '$keyring_dir'; }; exit 130" INT TERM
+    trap "rm -rf $q_staging; if [ -d $q_keyring ]; then rm -rf $q_previous; elif [ -d $q_previous ]; then mv $q_previous $q_keyring; fi; rm -rf $q_temp; exit 130" INT TERM
 
     # trustdb.gpg is optional (count_keyring_keys treats it the same way);
     # copying only what upstream ships makes the result mirror upstream exactly
@@ -259,8 +266,10 @@ update_nodejs_keys() {
         rm -rf "$temp_dir"
         return 1
     fi
-    trap - INT TERM
+    # Clear the moved-aside copy BEFORE dropping the trap, so an interrupt
+    # here still removes it rather than leaving it under lib/gpg-keys
     rm -rf "$previous"
+    trap - INT TERM
 
     log_info "  Total keys in keyring: $total_keys"
     echo ""
