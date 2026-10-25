@@ -26,7 +26,7 @@
 set -euo pipefail
 
 # Source .env file if it exists (for GITHUB_TOKEN and other config)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 if [ -f "$SCRIPT_DIR/.env" ]; then
     set -a # Automatically export all variables
     source "$SCRIPT_DIR/.env"
@@ -121,7 +121,7 @@ should_display_section() {
 
 # Source shared version API functions
 # shellcheck source=lib/runtime/lib/version-api.sh
-_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 source "${_script_dir}/lib/version-api.sh"
 
 check_version() {
@@ -464,7 +464,7 @@ run_section "Development Tools" "Development Tools" \
     "act:act:--version:act version \K[0-9]+\.[0-9]+\.[0-9]+:github:nektos/act" \
     "fzf:fzf:--version:\K[0-9]+\.[0-9]+\.[0-9]+:github:junegunn/fzf" \
     "ripgrep:rg:--version:ripgrep \K[0-9]+\.[0-9]+\.[0-9]+:github:BurntSushi/ripgrep" \
-    "fd:fd:--version:fd \K[0-9]+\.[0-9]+\.[0-9]+:github:sharkdp/fd" \
+    "fd:fd:--version:(fd|fdfind) \K[0-9]+\.[0-9]+\.[0-9]+:github:sharkdp/fd" \
     "bat:bat:--version:bat \K[0-9]+\.[0-9]+\.[0-9]+:github:sharkdp/bat" \
     "eza:eza:--version:v\K[0-9]+\.[0-9]+\.[0-9]+:github:eza-community/eza" \
     "exa:exa:--version:v\K[0-9]+\.[0-9]+\.[0-9]+:github:ogham/exa" \
@@ -539,14 +539,14 @@ else
     total_count=0
 
     for tool in "${!VERSION_STATUS[@]}"; do
-        ((total_count++))
+        total_count=$((total_count + 1))
         case "${VERSION_STATUS[$tool]}" in
-            "installed") ((installed_count++)) ;;
-            "missing") ((missing_count++)) ;;
-            "outdated") ((outdated_count++)) ;;
-            "up-to-date") ((uptodate_count++)) ;;
-            "newer") ((newer_count++)) ;;
-            *) ((unknown_count++)) ;;
+            "installed") installed_count=$((installed_count + 1)) ;;
+            "missing") missing_count=$((missing_count + 1)) ;;
+            "outdated") outdated_count=$((outdated_count + 1)) ;;
+            "up-to-date") uptodate_count=$((uptodate_count + 1)) ;;
+            "newer") newer_count=$((newer_count + 1)) ;;
+            *) unknown_count=$((unknown_count + 1)) ;;
         esac
     done
 
