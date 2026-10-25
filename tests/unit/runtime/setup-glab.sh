@@ -266,12 +266,19 @@ test_auth_no_token_leak() {
     disable_line=$(command sed -n "${main_line},\$p" "$SETUP_GLAB_SCRIPT" | command grep -n '{ set +x; } 2>/dev/null' | command head -1 | command cut -d: -f1)
     disable_line=$((main_line + disable_line - 1))
     auth_line=$(command grep -n 'glab auth login' "$SETUP_GLAB_SCRIPT" | command head -1 | command cut -d: -f1)
-    restore_line=$(command sed -n "${main_line},\$p" "$SETUP_GLAB_SCRIPT" | command grep -n 'eval "$_xt"' | command head -1 | command cut -d: -f1)
-    restore_line=$((main_line + restore_line - 1))
+    # Early returns restore xtrace too, so take the first restore after login
+    restore_line=$(command sed -n "${auth_line},\$p" "$SETUP_GLAB_SCRIPT" | command grep -n 'eval "$_xt"' | command head -1 | command cut -d: -f1)
+    restore_line=$((auth_line + restore_line - 1))
+    # The region must open before main() first expands the token (#1468)
+    local deref_line
+    deref_line=$(command sed -n "${main_line},\$p" "$SETUP_GLAB_SCRIPT" | command grep -n '\$GITLAB_TOKEN\|\${GITLAB_TOKEN' | command head -1 | command cut -d: -f1)
+    deref_line=$((main_line + deref_line - 1))
 
     # Verify correct ordering
     assert_true [ "$save_line" -lt "$disable_line" ] \
         "Xtrace save should come before disable"
+    assert_true [ "$disable_line" -lt "$deref_line" ] \
+        "Xtrace disable should come before the first GITLAB_TOKEN expansion in main()"
     assert_true [ "$disable_line" -lt "$auth_line" ] \
         "Xtrace disable should come before auth login"
     assert_true [ "$auth_line" -lt "$restore_line" ] \
@@ -284,6 +291,77 @@ test_verification_after_auth() {
         "Should verify authentication after login"
     assert_file_contains "$SETUP_GLAB_SCRIPT" 'glab authenticated' \
         "Should report successful authentication"
+}
+
+# ---------------------------------------------------------------------------
+# Behavioral tests: no token in the bash -x trace (#1468)
+# ---------------------------------------------------------------------------
+
+# Install a stub glab in $TEST_TEMP_DIR/bin. Every invocation appends its argv
+# to $TEST_TEMP_DIR/glab.calls. `auth status` fails until a login succeeds (or
+# glab.loggedin is pre-created); `auth login` reads the token from stdin;
+# `config get token` prints a stored token distinct from the env one.
+_install_stub_glab() {
+    mkdir -p "$TEST_TEMP_DIR/bin"
+    command cat >"$TEST_TEMP_DIR/bin/glab" <<STUB
+#!/bin/bash
+state="$TEST_TEMP_DIR"
+STUB
+    command cat >>"$TEST_TEMP_DIR/bin/glab" <<'STUB'
+printf '%s\n' "$*" >>"$state/glab.calls"
+case "$*" in
+    *"auth status"*) [ -f "$state/glab.loggedin" ] ;;
+    *"auth login"*)
+        command cat >"$state/glab.stdin"
+        touch "$state/glab.loggedin" ;;
+    *"config get token"*) echo "fake-gitlab-stored-token-5555" ;;
+    *) exit 0 ;;
+esac
+STUB
+    chmod +x "$TEST_TEMP_DIR/bin/glab"
+}
+
+# Run setup-glab under bash -x against the stub. BASH_ENV is unset (it rebuilds
+# PATH on non-interactive bash and would bypass the stub); the loaded flags keep
+# the host's .env.secrets / OP cache out of the run. Extra args (env -u NAME or
+# NAME=value) go first: env stops parsing options at the first assignment.
+_run_setup_glab_traced() {
+    command env -u BASH_ENV -u GITLAB_HOST "$@" \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash -x "$SETUP_GLAB_SCRIPT" 2>&1
+}
+
+# Login path: the env token must not appear anywhere in the trace — not in the
+# emptiness check, sanitize, validate, or the login itself.
+test_xtrace_no_token_leak() {
+    _install_stub_glab
+    local output
+    output=$(_run_setup_glab_traced GITLAB_TOKEN="fake-gitlab-token-for-testing-1234") || true
+    assert_file_contains "$TEST_TEMP_DIR/glab.calls" "auth login --hostname gitlab.com --stdin" \
+        "Stub glab auth login must have been called"
+    assert_equals "fake-gitlab-token-for-testing-1234" "$(command cat "$TEST_TEMP_DIR/glab.stdin")" \
+        "Token should be piped to glab on stdin"
+    # A trace that never got past startup would pass the leak check vacuously
+    assert_contains "$output" "+ main" "Trace should be non-empty and enter main"
+    assert_contains "$output" "+ _persist_token" "xtrace should be restored after the login"
+    assert_not_contains "$output" "fake-gitlab-token-for-testing-1234" \
+        "Token must not appear anywhere in the xtrace"
+}
+
+# Already authenticated with GITLAB_TOKEN unset: the token read back from
+# `glab config get token` and exported must stay out of the trace too.
+test_xtrace_no_stored_token_leak() {
+    _install_stub_glab
+    touch "$TEST_TEMP_DIR/glab.loggedin"
+    local output
+    output=$(_run_setup_glab_traced -u GITLAB_TOKEN) || true
+    assert_file_contains "$TEST_TEMP_DIR/glab.calls" "config get token" \
+        "Stub glab config get token must have been called (already-authenticated path)"
+    assert_contains "$output" "glab already authenticated" "Should take the already-authenticated path"
+    assert_contains "$output" "+ _persist_token" "xtrace should be restored before _persist_token"
+    assert_not_contains "$output" "fake-gitlab-stored-token-5555" \
+        "Stored token must not appear anywhere in the xtrace"
 }
 
 # ---------------------------------------------------------------------------
@@ -467,6 +545,8 @@ run_test_with_setup test_main_validates_hostname "main validates hostname"
 run_test_with_setup test_sources_wait_for_op_cache "Script sources _wait-for-op-cache helper"
 run_test_with_setup test_no_inline_op_cache "No inline OP cache block (regression guard)"
 run_test_with_setup test_auth_no_token_leak "Auth block does not leak token in xtrace"
+run_test_with_setup test_xtrace_no_token_leak "Whole xtrace is token-free on the login path"
+run_test_with_setup test_xtrace_no_stored_token_leak "Already-authenticated path keeps stored token out of xtrace"
 run_test_with_setup test_verification_after_auth "Verification step after authentication"
 
 # Generate test report
