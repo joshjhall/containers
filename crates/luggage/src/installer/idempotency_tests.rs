@@ -521,13 +521,67 @@ fn run_version_check_within_deadline_captures_output() {
 /// would hand a REPL-ish `version_args` the caller's terminal to block on.
 /// The shim succeeds only if its stdin is the null device and a `read` hits
 /// EOF at once; an inherited stdin that is not `/dev/null` fails the `-ef`
-/// check (or blocks in `read` into the deadline). A runner whose own stdin
-/// is already `/dev/null` cannot tell inherit from null — that residual is
-/// accepted rather than swapping the test process's fd 0.
+/// check (or blocks in `read` into the deadline).
+///
+/// A runner whose own stdin is already `/dev/null` (most CI) cannot tell
+/// inherit from null, so the probe never runs in this process: the test
+/// re-execs its own binary for just itself, with a pipe as stdin (#1409).
+/// The child refuses to probe unless its stdin really is not `/dev/null`,
+/// and the parent requires `1 passed` rather than a bare exit 0 — a filter
+/// that matched nothing also exits 0, which would pass on no assertion.
 #[cfg(unix)]
 #[test]
 #[serial_test::serial]
 fn run_version_check_within_gives_the_probe_a_null_stdin() {
+    use std::io::Write as _;
+    use std::os::unix::fs::MetadataExt as _;
+
+    const CHILD_MARKER: &str = "LUGGAGE_NULL_STDIN_PROBE_CHILD";
+
+    if std::env::var_os(CHILD_MARKER).is_some() {
+        let id = |p: &str| {
+            let m = fs::metadata(p).unwrap();
+            (m.dev(), m.ino())
+        };
+        assert_ne!(
+            id("/dev/stdin"),
+            id("/dev/null"),
+            "re-exec'd child must run with a non-null stdin, or the probe check is vacuous",
+        );
+        assert_probe_stdin_is_null();
+        return;
+    }
+
+    let module = module_path!();
+    let module = module.split_once("::").map_or(module, |(_, rest)| rest);
+    let name = format!("{module}::run_version_check_within_gives_the_probe_a_null_stdin");
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", &name, "--test-threads=1", "--nocapture"])
+        .env(CHILD_MARKER, "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // Data on the pipe makes an inherited stdin visible to the shim's
+    // `read` too, not just to its `-ef` check. The write result is ignored:
+    // a child that already died fails it with EPIPE, and the assertion below
+    // reports that child's output, which an `unwrap` here would swallow.
+    let _ = child.stdin.take().unwrap().write_all(b"from-parent\n");
+    let out = child.wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success() && stdout.contains("1 passed"),
+        "re-exec'd probe test failed ({}):\n--- stdout ---\n{stdout}\n--- stderr ---\n{}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr),
+    );
+}
+
+/// The shim half of [`run_version_check_within_gives_the_probe_a_null_stdin`],
+/// run only inside its re-exec'd child.
+#[cfg(unix)]
+fn assert_probe_stdin_is_null() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("tool");
     fs::write(
