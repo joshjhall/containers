@@ -150,23 +150,48 @@ fn sig_ign_mask_is_parsed_and_filters_the_handled_signals() {
 
 /// luggage started with SIGINT ignored (`nohup`, a background job) keeps
 /// ignoring it: the handler must not turn an inherited ignore into a fatal
-/// signal. The ignore is set the way a real parent sets it, by a shell
-/// `trap '' INT` that `exec`s the re-exec'd test, and SIGINT must leave both
-/// the child and its probe running.
+/// signal.
 #[cfg(target_os = "linux")]
 #[test]
 #[serial_test::serial]
 fn an_inherited_sigint_ignore_survives_the_handler() {
+    assert_inherited_ignore_survives(
+        "an_inherited_sigint_ignore_survives_the_handler",
+        "INT",
+        Signal::INT,
+    );
+}
+
+/// With both signals inherited as ignored, `install_handler` registers
+/// nothing and spawns no watcher, yet still reports success; SIGTERM must
+/// stay as harmless as before.
+#[cfg(target_os = "linux")]
+#[test]
+#[serial_test::serial]
+fn inherited_ignores_of_both_signals_survive_the_handler() {
+    assert_inherited_ignore_survives(
+        "inherited_ignores_of_both_signals_survive_the_handler",
+        "INT TERM",
+        Signal::TERM,
+    );
+}
+
+/// The ignore is set the way a real parent sets it, by a shell `trap ''
+/// {traps}` that `exec`s the named re-exec'd test. `signal`, which the trap
+/// covers, must then leave both the child and its probe running.
+#[cfg(target_os = "linux")]
+fn assert_inherited_ignore_survives(test: &str, traps: &str, signal: Signal) {
     const CHILD_DIR: &str = "LUGGAGE_INTERRUPT_IGNORED_CHILD_DIR";
 
     if let Some(dir) = std::env::var_os(CHILD_DIR) {
         let dir = Path::new(&dir);
+        let bit = 1u64 << (signal.as_raw() - 1);
         assert_ne!(
-            inherited_ignored_signals() & 0x2,
+            inherited_ignored_signals() & bit,
             0,
-            "the re-exec'd child must start with SIGINT ignored, or this test is vacuous",
+            "the re-exec'd child must start with {signal:?} ignored, or this test is vacuous",
         );
-        install_handler().unwrap();
+        install_handler().expect("installing over inherited ignores must still succeed");
         write_sleeping_shim(dir, "tool");
         let _ = run_version_check_within(
             &dir.join("tool"),
@@ -180,9 +205,9 @@ fn an_inherited_sigint_ignore_survives_the_handler() {
     let dir = tempfile::tempdir().unwrap();
     let module = module_path!();
     let module = module.split_once("::").map_or(module, |(_, rest)| rest);
-    let name = format!("{module}::an_inherited_sigint_ignore_survives_the_handler");
+    let name = format!("{module}::{test}");
     let mut child = Command::new("/bin/sh")
-        .args(["-c", "trap '' INT; exec \"$0\" \"$@\""])
+        .args(["-c", &format!("trap '' {traps}; exec \"$0\" \"$@\"")])
         .arg(std::env::current_exe().unwrap())
         .args(["--exact", &name, "--test-threads=1", "--nocapture"])
         .env(CHILD_DIR, dir.path())
@@ -213,7 +238,7 @@ fn an_inherited_sigint_ignore_survives_the_handler() {
     };
     let _probe_guard = KillOnDrop(Pid::from_raw(pid.parse().unwrap()).unwrap());
 
-    rustix::process::kill_process(Pid::from_child(&child), Signal::INT).unwrap();
+    rustix::process::kill_process(Pid::from_child(&child), signal).unwrap();
     std::thread::sleep(Duration::from_millis(500));
     let still_running = child.try_wait().unwrap().is_none();
     let probe_alive = pid_is_running(&pid);
@@ -221,7 +246,7 @@ fn an_inherited_sigint_ignore_survives_the_handler() {
     let out = child.wait_with_output().unwrap();
     assert!(
         still_running && probe_alive,
-        "an inherited SIGINT ignore must survive the handler (child running={still_running}, \
+        "an inherited {signal:?} ignore must survive the handler (child running={still_running}, \
          probe running={probe_alive}, child {}):\n{}\n{}",
         out.status,
         String::from_utf8_lossy(&out.stdout),
