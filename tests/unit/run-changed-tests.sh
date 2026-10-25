@@ -489,6 +489,30 @@ test_bin_nested_maps_by_relative_path() {
     out=$(map_to_test "bin/lib/evidence-merge.sh")
     assert_equals "$TESTS_DIR/unit/bin/lib/evidence-merge.sh" "$out" \
         "bin/lib/evidence-merge.sh must map to its own suite"
+
+    # #1381: the matrix lib's suite was split along the single-tool /
+    # every-tool seam. The exact set: a dropped sibling narrows push-time
+    # coverage silently.
+    out=$(map_to_test "bin/lib/evidence-matrix.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/lib/evidence-matrix-all.sh
+$TESTS_DIR/unit/bin/lib/evidence-matrix.sh" "$out" \
+        "bin/lib/evidence-matrix.sh must map to both of its split suites"
+}
+
+# The split suites' shared fixtures sit outside tests/unit/ (so the unit runner
+# does not execute them), which puts them outside every glob arm: without a
+# dedicated arm, an edit to them alone runs no suite at push time (#1381).
+test_evidence_matrix_fixtures_map_to_both_suites() {
+    local out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    out=$(map_to_test "tests/lib/evidence-matrix-fixtures.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/lib/evidence-matrix-all.sh
+$TESTS_DIR/unit/bin/lib/evidence-matrix.sh" "$out" \
+        "the shared fixtures must map to exactly the two suites that source them"
 }
 
 # Extract collect_test_files (the main block's dedupe / ALL / GO_TEST step).
@@ -717,6 +741,7 @@ run_test test_bin_unmatched_collects_nothing "uncovered bin script maps to and c
 run_test test_bin_sibling_skips_longer_owned_suite "bin sibling fanout skips suites a longer bin stem owns (#1031)"
 run_test test_bin_sibling_owner_is_longest_stem "bin sibling ownership goes to the longest bin stem (#1031)"
 run_test test_bin_nested_maps_by_relative_path "nested bin/** script maps by its path under bin/ (#1031)"
+run_test test_evidence_matrix_fixtures_map_to_both_suites "evidence-matrix shared fixtures map to both split suites (#1381)"
 run_test test_collect_dedupes_overlapping_inputs "runner main block runs each overlapping suite once (#1031)"
 run_test test_collect_sets_run_all "runner main block sets RUN_ALL and stops at ALL (#1031)"
 run_test test_collect_go_test_sentinel "runner main block handles the GO_TEST sentinel (#1031)"
