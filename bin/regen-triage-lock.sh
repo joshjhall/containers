@@ -89,7 +89,7 @@ command tar -C "$TRIAGE_DIR" -cf - "${inputs[@]}" |
             bundle lock
             bundle lock --add-platform x86_64-linux aarch64-linux
         } >&2
-        cat Gemfile.lock
+        command cat Gemfile.lock
     ' >"$tmp_lock" || die "bundler failed to regenerate the lock"
 
 # A zero exit is not proof the lock moved — verify the outcome before it
