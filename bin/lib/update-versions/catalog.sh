@@ -101,7 +101,13 @@ mirror_upstream_catalog_entry() {
     if [ -s "$tmp" ] && command jq -e \
         --arg t "$tool" --arg v "$version" \
         '.tool == $t and .version == $v' "$tmp" >/dev/null 2>&1; then
-        command cp "$tmp" "$dest"
+        # Drop trailing blank lines so the copy ends in exactly one newline:
+        # containers-db files written by evidence ingest before the
+        # evidence-merge.sh fix end in "}\n\n", which end-of-file-fixer fails.
+        command awk '{ line[NR]=$0; n=NR } END {
+            while (n > 0 && line[n] == "") n--
+            for (i = 1; i <= n; i++) print line[i]
+        }' "$tmp" >"$dest"
         command rm -f "$tmp"
         echo -e "${BLUE}    Mirrored containers-db entry for ${tool}@${version}${NC}"
         return 0

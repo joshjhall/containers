@@ -239,13 +239,22 @@ jobs:
             echo "Warning: GPG key updates failed, continuing anyway"
           }
 
-          # Fix trailing newlines on all modified files (matches end-of-file-fixer pre-commit hook)
-          for f in $(git diff --name-only); do
-            if [ -f "$f" ] && [ -s "$f" ] && [ "$(tail -c1 "$f" | wc -l)" -eq 0 ]; then
-              echo "" >> "$f"
-              echo "Fixed missing trailing newline: $f"
+          # Normalize trailing newlines with the end-of-file-fixer hook's own
+          # script, over modified AND untracked files: new vendored catalog
+          # entries are untracked, so `git diff --name-only` never saw them,
+          # and the old add-only loop could not strip an extra blank line
+          # (the 2026-10-25 failure on a mirrored go@1.27.3 entry). Excludes
+          # mirror the hook's. Exit 1 only means "fixed something".
+          mapfile -t EOF_FILES < <(git ls-files --modified --others --exclude-standard \
+            | grep -vE '^(tests/results|lib/gpg-keys)/' || true)
+          if [ "${#EOF_FILES[@]}" -gt 0 ]; then
+            EOF_STATUS=0
+            ./bin/fix-end-of-file.sh "${EOF_FILES[@]}" || EOF_STATUS=$?
+            if [ "$EOF_STATUS" -gt 1 ]; then
+              echo "::error::bin/fix-end-of-file.sh failed with status $EOF_STATUS"
+              exit "$EOF_STATUS"
             fi
-          done
+          fi
 
           # Format JSON files with dprint (jq expands compact arrays; dprint normalizes)
           # No file args — dprint.json excludes already cover non-formatted paths
