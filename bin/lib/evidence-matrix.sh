@@ -178,7 +178,8 @@ _em_published_evidence() {
 #
 # A file is written only when it gains a row, so a tool the PR adds nothing
 # for has no tools/<tool> in out_dir; _em_published_evidence reads that as
-# "no rows from this source". An unparsable file on either side is exit 1.
+# "no rows from this source". An empty or unparsable file on either side is
+# exit 1.
 evidence_pr_rows() {
     local base="$1" head="$2" out="$3" f rel prev rows
     if [ ! -d "$base/tools" ] || [ ! -d "$head/tools" ]; then
@@ -191,6 +192,12 @@ evidence_pr_rows() {
         rel="${f#"$head"/}"
         prev="$base/$rel"
         [ -e "$prev" ] || prev=/dev/null
+        # jq reads a zero-byte file as no input: an empty base would hand
+        # every inherited row back as the PR's, an empty head would vanish.
+        if [ ! -s "$f" ] || { [ "$prev" != /dev/null ] && [ ! -s "$prev" ]; }; then
+            command echo "evidence_pr_rows: empty $rel in $head or $base" >&2
+            return 1
+        fi
         rows="$(command jq -c --slurpfile base "$prev" '
             ($base[0].tested // []) as $old
             | {tool, version, tested: [ .tested[]? | select(. as $r | any($old[]; . == $r) | not) ]}

@@ -230,6 +230,17 @@ test_pr_rows_new_file_and_untouched_tool() {
         "a new file's rows all count"
     assert_dir_exists "$rows/tools" "out keeps a readable tools/ tree"
     assert_dir_not_exists "$rows/tools/go" "with no tools/go for the untouched tool"
+
+    # The real reader takes that shape as "no go rows here", not exit 1.
+    local r main out rc=0
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.22.0 debian-13-amd64 "" go
+    main="$(command mktemp -d "$TEST_TEMP_DIR/main.XXXXXX")"
+    _db_version "$main" 1.22.0 "" "" "" go
+    out="$(EVIDENCE_TESTED_SOURCE="$main:$rows" evidence_matrix "$r/catalog" go "$r" 2>/dev/null)" || rc=$?
+    assert_equals "0" "$rc" "a rows tree without the tool is not an error"
+    assert_equals "1.22.0 debian-13-amd64" "$(_cells "$out")" "and adds no go evidence"
 }
 
 test_pr_rows_changed_row_counts() {
@@ -262,6 +273,20 @@ test_pr_rows_unreadable_is_an_error() {
     rc=0
     evidence_pr_rows "$base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
     assert_equals "1" "$rc" "an unparsable base file is exit 1"
+
+    # Zero-byte files are no jq input, not "no rows": an empty base would
+    # re-assert every inherited row, an empty head would drop silently.
+    : >"$base/tools/rust/versions/1.90.0.json"
+    _db_version "$head" 1.90.0 debian-13-amd64
+    rc=0
+    evidence_pr_rows "$base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
+    assert_equals "1" "$rc" "a zero-byte base file is exit 1"
+
+    _db_version "$base" 1.90.0 ""
+    : >"$head/tools/rust/versions/1.90.0.json"
+    rc=0
+    evidence_pr_rows "$base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
+    assert_equals "1" "$rc" "a zero-byte head file is exit 1"
 
     rc=0
     evidence_pr_rows "$TEST_TEMP_DIR/no-such-base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
