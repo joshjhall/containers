@@ -213,6 +213,11 @@
           "sha256": "1b2bf6991e5540728b862f49721241d3d52acb9d48e48ce5ea0d24d75978dfc4",
           "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.1.1/spring-boot-cli-4.1.1-bin.tar.gz",
           "added": "2026-08-24"
+        },
+        "4.1.2": {
+          "sha256": "f51704793a19dc108b037cbe9261b742070f3b4af9cec6d4e676d0362795d486",
+          "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.1.2/spring-boot-cli-4.1.2-bin.tar.gz",
+          "added": "2026-10-25"
         }
       }
     },
@@ -666,6 +671,19 @@
             }
           },
           "added": "2026-10-12"
+        },
+        "2.6.3": {
+          "checksums": {
+            "amd64": {
+              "sha256": "1e5134625f00231035bfb14c12141cdc8fcab69b8275f354287808bb5d86d3ae",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.6.3/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "72eb52bfcbac58338fa507e394684c3ef74bbb49bcd5f78910e5f900e4610e25",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.6.3/biome-linux-arm64"
+            }
+          },
+          "added": "2026-10-25"
         }
       }
     },
@@ -950,6 +968,19 @@
             }
           },
           "added": "2026-10-12"
+        },
+        "0.64.3": {
+          "checksums": {
+            "amd64": {
+              "sha256": "f71cb7e22d6776439eba168d5cb296092d6413fea7148fe4d70684a2702a4fee",
+              "url": "https://github.com/dprint/dprint/releases/download/0.64.3/dprint-x86_64-unknown-linux-gnu.zip"
+            },
+            "arm64": {
+              "sha256": "c820bfc67b0cd6f5f0fa4d00ecdcb056944c86030859f5e50151c88d9164b30d",
+              "url": "https://github.com/dprint/dprint/releases/download/0.64.3/dprint-aarch64-unknown-linux-gnu.zip"
+            }
+          },
+          "added": "2026-10-25"
         }
       }
     },
@@ -1321,12 +1352,25 @@
             }
           },
           "added": "2026-10-18"
+        },
+        "1.26.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "43d379fef8cb450961a14ff113e7bce7b5e1e52db709c776d186f928d8a20a40",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.26.1/cargo-binstall-x86_64-unknown-linux-musl.tgz"
+            },
+            "arm64": {
+              "sha256": "243dbea9976495f0a5640f856283b5b3d934113381c9a1fba347c9e4b1fea142",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.26.1/cargo-binstall-aarch64-unknown-linux-musl.tgz"
+            }
+          },
+          "added": "2026-10-25"
         }
       }
     }
   },
   "metadata": {
-    "generated": "2026-10-18T06:52:55Z",
+    "generated": "2026-10-25T14:24:24Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
