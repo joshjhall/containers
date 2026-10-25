@@ -220,6 +220,44 @@ fn restore_termination_undoes_a_dropped_watcher_registration() {
     );
 }
 
+/// With nothing to handle (both signals inherited as ignored) the install is
+/// done without registering or spawning anything, and stays done.
+#[test]
+fn an_empty_signal_set_installs_nothing_and_is_done() {
+    static STATE: Mutex<InstallState> = Mutex::new(InstallState::NotYet);
+
+    let spawned = std::cell::Cell::new(false);
+    let spawn = |_| {
+        spawned.set(true);
+        Err(io::Error::other("unreachable"))
+    };
+    install_with(&STATE, &[], spawn).unwrap();
+    assert!(!spawned.get(), "an empty signal set must not spawn a watcher");
+    assert_eq!(*STATE.lock().unwrap(), InstallState::Done);
+}
+
+/// A successful install spawns exactly once; a second call is a no-op that
+/// neither registers nor spawns again. The watcher is a thread that returns
+/// at once, so this runs in-process. It registers SIGUSR2, which nothing in
+/// the suite uses: a dropped registration leaves its signal swallowed for the
+/// rest of the test binary, which must never be SIGINT or SIGTERM.
+#[test]
+#[serial_test::serial]
+fn a_successful_install_is_idempotent() {
+    static STATE: Mutex<InstallState> = Mutex::new(InstallState::NotYet);
+
+    let spawns = std::cell::Cell::new(0);
+    let spawn = |signals: Signals| {
+        spawns.set(spawns.get() + 1);
+        thread::Builder::new().spawn(move || drop(signals))
+    };
+    let usr2 = signal_hook::consts::SIGUSR2;
+    install_with(&STATE, &[usr2], spawn).unwrap();
+    assert_eq!(*STATE.lock().unwrap(), InstallState::Done);
+    install_with(&STATE, &[usr2], spawn).unwrap();
+    assert_eq!(spawns.get(), 1, "a second install must not register or spawn again");
+}
+
 /// A failed install is final. The injected spawn failure must come back as
 /// the error and leave SIGTERM fatal (the restore ran). A retry must error
 /// without even calling its spawn, because a handler registered next to the
