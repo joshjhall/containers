@@ -27,10 +27,11 @@ write_fixture() {
 }
 
 # Helper: octal permission bits of a file, GNU (stat -c) or BSD (stat -f).
-# Prints nothing if neither form works. Bare 'stat' (not 'command stat') so an
+# Prints nothing (and still returns 0, so set -e can't skip the caller's
+# skip_test) if neither form works. Bare 'stat' (not 'command stat') so an
 # exported stat() stub can stand in for a BSD userland.
 file_mode() {
-    stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null
+    stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null || true
 }
 
 # Setup function - runs before each test
@@ -567,7 +568,8 @@ test_empty_file() {
     output=$("$SCRIPT" "$TEST_TEMP_DIR/test.sh") || exit_code=$?
     assert_equals "0" "$exit_code" "Should exit 0 for an empty file"
     assert_equals "" "$output" "No Fixed: line for an empty file"
-    assert_equals "0" "$(/usr/bin/wc -c <"$TEST_TEMP_DIR/test.sh")" \
+    # $(( )) drops the leading padding BSD wc puts before the count
+    assert_equals "0" "$(($(/usr/bin/wc -c <"$TEST_TEMP_DIR/test.sh")))" \
         "Empty file stays zero bytes"
 }
 
