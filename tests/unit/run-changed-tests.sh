@@ -483,6 +483,12 @@ test_bin_nested_maps_by_relative_path() {
     out=$(map_to_test "bin/lib/common.sh")
     assert_equals "$TESTS_DIR/unit/bin/lib/common.sh" "$out" \
         "bin/lib/common.sh must map to tests/unit/bin/lib/common.sh only"
+
+    # #1386: the merge lib had no suite at its conventional path, so an edit to
+    # it alone selected nothing at push time.
+    out=$(map_to_test "bin/lib/evidence-merge.sh")
+    assert_equals "$TESTS_DIR/unit/bin/lib/evidence-merge.sh" "$out" \
+        "bin/lib/evidence-merge.sh must map to its own suite"
 }
 
 # Extract collect_test_files (the main block's dedupe / ALL / GO_TEST step).
