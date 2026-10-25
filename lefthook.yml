@@ -344,9 +344,13 @@ pre-push:
         # `typos $files`: word-splitting would break any path containing a space
         # (e.g. GitLab issue templates like ".gitlab/issue_templates/Bug
         # Report.md"), splitting one filename into two bad arguments.
+        #
+        # --force-exclude: typos skips _typos.toml's extend-exclude for paths
+        # passed explicitly, so without it a pushed binary keyring under
+        # lib/gpg-keys/ is scanned as text and blocks the push (#1410).
         files=$(/usr/bin/printf '%s\n' {push_files} | /usr/bin/grep -v '^$' || true)
         if [ -n "$files" ]; then
-          /usr/bin/printf '%s\n' "$files" | /usr/bin/xargs -d '\n' typos
+          /usr/bin/printf '%s\n' "$files" | /usr/bin/xargs -d '\n' typos --force-exclude
         else
           typos
         fi

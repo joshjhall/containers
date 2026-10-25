@@ -23,7 +23,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-GPG_KEYS_DIR="${REPO_ROOT}/lib/gpg-keys"
+GPG_KEYS_DIR="${GPG_KEYS_DIR:-${REPO_ROOT}/lib/gpg-keys}"
+NODEJS_RELEASE_KEYS_REPO="${NODEJS_RELEASE_KEYS_REPO:-https://github.com/nodejs/release-keys.git}"
 
 # Track success/failure for final summary
 UPDATED_LANGUAGES=()
@@ -47,6 +48,51 @@ log_warning() {
 
 log_error() {
     echo -e "\033[0;31m✗ $1\033[0m" >&2
+}
+
+# ============================================================================
+# count_keyring_keys - Print the number of public keys in a keyring directory
+#
+# Reads a scratch copy so gpg never writes into the source directory, and
+# fails (return 1) when gpg exits non-zero or lists no keys. gpg can print
+# most of a keyring's keys before failing on a damaged record, so the exit
+# status must be checked, not just the `pub` count (#1410).
+# ============================================================================
+#
+# Optional $2: parent directory for the scratch copy, so a caller's interrupt
+# trap that removes that directory also removes the scratch.
+count_keyring_keys() {
+    local src_dir="$1"
+    local scratch_parent="${2:-${TMPDIR:-/tmp}}"
+    local scratch output count
+    # Every caller runs this with set -e suspended, so check mktemp explicitly:
+    # an empty $scratch would turn `chmod 600 "$scratch"/*` into `chmod 600 /*`
+    if ! scratch=$(mktemp -d "$scratch_parent/keyring-check.XXXXXX") || [ ! -d "$scratch" ]; then
+        log_error "Could not create a scratch directory under $scratch_parent"
+        return 1
+    fi
+    cp "$src_dir"/pubring.kbx "$scratch"/ || {
+        rm -rf "$scratch"
+        return 1
+    }
+    [ -f "$src_dir/trustdb.gpg" ] && cp "$src_dir/trustdb.gpg" "$scratch"/
+    chmod 700 "$scratch"
+    chmod 600 "$scratch"/*
+
+    if ! output=$(GNUPGHOME="$scratch" gpg --batch --list-keys 2>&1); then
+        rm -rf "$scratch"
+        log_error "gpg cannot read keyring in $src_dir:"
+        printf '%s\n' "$output" | command grep '^gpg:' >&2 || true
+        return 1
+    fi
+    rm -rf "$scratch"
+
+    count=$(printf '%s\n' "$output" | command grep -c '^pub' || true)
+    if [ "${count:-0}" -eq 0 ]; then
+        log_error "Keyring in $src_dir contains no public keys"
+        return 1
+    fi
+    echo "$count"
 }
 
 # ============================================================================
@@ -131,11 +177,16 @@ update_nodejs_keys() {
     local keyring_dir="${GPG_KEYS_DIR}/nodejs/keyring"
     local metadata_file="${GPG_KEYS_DIR}/nodejs/keyring-metadata.json"
     local temp_dir
-    temp_dir=$(mktemp -d)
+    # Checked explicitly: main runs this with set -e suspended, and an empty
+    # $temp_dir would aim the clone, scratch checks, and cleanup at /
+    if ! temp_dir=$(mktemp -d) || [ ! -d "$temp_dir" ]; then
+        log_error "Could not create a temporary directory"
+        return 1
+    fi
 
     # Clone the official release-keys repository
     log_info "Fetching latest release-keys from GitHub..."
-    if ! git clone --depth=1 https://github.com/nodejs/release-keys.git "$temp_dir/release-keys" &>/dev/null; then
+    if ! git clone --depth=1 "$NODEJS_RELEASE_KEYS_REPO" "$temp_dir/release-keys" &>/dev/null; then
         log_error "Failed to clone nodejs/release-keys repository"
         rm -rf "$temp_dir"
         return 1
@@ -154,19 +205,98 @@ update_nodejs_keys() {
     log_info "  Commit date: $commit_date"
     echo ""
 
+    # Validate the upstream keyring BEFORE touching the committed one, so an
+    # unreadable keyring can never replace a working one (#1410)
+    local total_keys
+    if ! total_keys=$(count_keyring_keys "$temp_dir/release-keys/gpg"); then
+        log_error "Upstream Node.js keyring is unreadable — keeping existing keyring"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
     # Copy the full keyring (including historical keys)
     log_info "Copying keyring files..."
-    mkdir -p "$keyring_dir"
-    cp gpg/pubring.kbx "$keyring_dir/"
-    cp gpg/trustdb.gpg "$keyring_dir/"
 
-    # Set secure permissions on keyring directory and files
-    chmod 700 "$keyring_dir"
-    chmod 600 "$keyring_dir"/*
+    # Build the new keyring in a staging directory beside the committed one
+    # (same filesystem, so the final swap is a rename) and validate it there.
+    # The committed keyring is not touched until the staged copy has passed,
+    # so no failure or interruption can leave it empty or half-written.
+    mkdir -p "$(dirname "$keyring_dir")"
+    local staging previous="${keyring_dir}.old.$$"
+    if ! staging=$(mktemp -d "${keyring_dir}.new.XXXXXX") || [ ! -d "$staging" ]; then
+        log_error "Could not create a staging directory beside $keyring_dir — keeping existing keyring"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    # On interrupt: drop the staging dir and the temp clone; if the swap below
+    # had moved the existing keyring aside, put it back, otherwise drop the
+    # moved-aside copy so nothing stray is left under lib/gpg-keys to commit.
+    # Paths are %q-quoted because the trap string is evaluated later.
+    local q_staging q_previous q_keyring q_temp
+    q_staging=$(printf '%q' "$staging")
+    q_previous=$(printf '%q' "$previous")
+    q_keyring=$(printf '%q' "$keyring_dir")
+    q_temp=$(printf '%q' "$temp_dir")
+    local on_interrupt="rm -rf $q_staging; if [ -d $q_keyring ]; then rm -rf $q_previous; elif [ -d $q_previous ]; then mv $q_previous $q_keyring; fi; rm -rf $q_temp"
+    # Separate traps so the exit status names the signal (128+2 / 128+15)
+    # shellcheck disable=SC2064 # expand paths now; the trap outlives this scope
+    trap "$on_interrupt; exit 130" INT
+    # shellcheck disable=SC2064 # expand paths now; the trap outlives this scope
+    trap "$on_interrupt; exit 143" TERM
 
-    # Count keys
-    local total_keys
-    total_keys=$(GNUPGHOME="$temp_dir/release-keys/gpg" gpg --list-keys 2>/dev/null | command grep -c "^pub" || echo "0")
+    # trustdb.gpg is optional (count_keyring_keys treats it the same way);
+    # copying only what upstream ships makes the result mirror upstream exactly
+    local keyring_files=(pubring.kbx)
+    [ -f gpg/trustdb.gpg ] && keyring_files+=(trustdb.gpg)
+    local f staged_ok=true
+    for f in "${keyring_files[@]}"; do
+        if ! cp "gpg/$f" "$staging/" || ! cmp -s "gpg/$f" "$staging/$f"; then
+            staged_ok=false
+        fi
+    done
+    if ! chmod 700 "$staging" || ! chmod 600 "$staging"/*; then
+        staged_ok=false
+    fi
+    # Scratch under $temp_dir, so the interrupt trap's cleanup covers it
+    if [ "$staged_ok" = true ] && ! count_keyring_keys "$staging" "$temp_dir" >/dev/null; then
+        staged_ok=false
+    fi
+    if [ "$staged_ok" != true ]; then
+        log_error "Staged Node.js keyring does not match upstream or is unreadable — keeping existing keyring"
+        trap - INT TERM
+        rm -rf "$staging"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    # Swap the validated keyring into place
+    if [ -d "$keyring_dir" ] && ! mv "$keyring_dir" "$previous"; then
+        log_error "Could not move the existing keyring aside — keeping it"
+        trap - INT TERM
+        rm -rf "$staging"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    if ! mv "$staging" "$keyring_dir"; then
+        log_error "Could not install the new keyring — restoring the existing one"
+        if [ -d "$previous" ] && ! mv "$previous" "$keyring_dir"; then
+            log_error "Restore failed — the previous keyring is at $previous; move it back to $keyring_dir by hand"
+        fi
+        trap - INT TERM
+        rm -rf "$staging"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    # Clear the moved-aside copy BEFORE dropping the trap, so an interrupt
+    # here still removes it rather than leaving it under lib/gpg-keys
+    rm -rf "$previous"
+    trap - INT TERM
+
     log_info "  Total keys in keyring: $total_keys"
     echo ""
 
