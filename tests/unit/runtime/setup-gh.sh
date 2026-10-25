@@ -466,6 +466,9 @@ test_xtrace_no_token_leak() {
         if [ "$mode" = "fail" ]; then
             assert_contains "$output" "+ _warn 'gh auth login failed" \
                 "[fail] xtrace should be restored before the failure warning"
+        else
+            assert_contains "$output" "+ _persist_token" \
+                "[ok] xtrace should be restored after the login"
         fi
     done
 }
