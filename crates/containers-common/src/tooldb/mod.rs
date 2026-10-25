@@ -30,8 +30,8 @@ mod version;
 
 pub use dependency::{Dependency, DependencyPurpose};
 pub use install_method::{
-    InstallMethod, InstallMethodKind, Invoke, PlatformPredicate, PostInstall, StringOrVec,
-    Verification,
+    BuildStep, InstallMethod, InstallMethodKind, Invoke, PlatformPredicate, PostInstall,
+    StringOrVec, Verification,
 };
 pub use tool::{
     Activity, ActivityScore, ActivitySignals, Alternative, AlternativeRelationship, AvailableEntry,

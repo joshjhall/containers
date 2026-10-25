@@ -239,8 +239,12 @@ For each feature script (e.g. `node.sh`, `python.sh`):
    luggage implements. `method_kind` is the dispatch discriminant —
    `script-installer`, `binary-tarball`, `package-manager`, or
    `source-build`; the sibling `name` is a label for logs only and selects
-   nothing. Rust used `script-installer` (rustup-init); other features may
-   need `binary-tarball` or `package-manager`. If the kind isn't implemented
+   nothing. Rust used `script-installer` (rustup-init); go and node use
+   `binary-tarball`; python uses `source-build`, whose ordered
+   `build_steps[]` (`./configure …`, `make -j{nproc}`, `make install`) run
+   in the extracted source tree as root, streaming output to the feature
+   log. Build-dependency packages stay in the method's `dependencies`, not
+   in `build_steps`. `package-manager` is not wired yet. If the kind isn't implemented
    yet, that's a luggage-side issue, not a port — and a kind luggage doesn't
    recognise (or a missing `method_kind`) fails as a catalog error rather
    than being inferred from the method name.

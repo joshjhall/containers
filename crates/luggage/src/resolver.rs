@@ -26,7 +26,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use containers_common::tooldb::{
-    ActivityScore, Dependency, InstallMethod, InstallMethodKind, Invoke, PostInstall,
+    ActivityScore, BuildStep, Dependency, InstallMethod, InstallMethodKind, Invoke, PostInstall,
     SupportStatus, Verification,
 };
 use containers_common::version::{Constraint, Version, VersionStyle};
@@ -133,6 +133,11 @@ pub struct ResolvedInstall {
     /// dropped from each archive entry. `None` means `0`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub strip_components: Option<u32>,
+    /// `build_steps` for the chosen method — the ordered commands a
+    /// `source-build` runs in the extracted source tree. `None` for every
+    /// other kind.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub build_steps: Option<Vec<BuildStep>>,
     /// The platform that produced this resolution.
     pub platform: Platform,
     /// Non-fatal warnings raised by the policy gate.
@@ -425,6 +430,7 @@ fn build_resolved(
         cache_dirs: method.cache_dirs.clone(),
         prefix: method.prefix.clone(),
         strip_components: method.strip_components,
+        build_steps: method.build_steps.clone(),
         platform,
         warnings,
     }
@@ -516,6 +522,7 @@ mod tests {
             cache_dirs: None,
             prefix: None,
             strip_components: None,
+            build_steps: None,
         }
     }
 

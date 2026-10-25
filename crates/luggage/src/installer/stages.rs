@@ -115,6 +115,7 @@ impl Installer {
             version: Some(resolved.version.as_str()),
             rustup_target: target,
             arch: Some(resolved.platform.arch.as_str()),
+            nproc: None,
         };
         if let Some(l) = logger {
             l.step(&format!("verify (tier {})", resolved.verification_tier));
@@ -171,6 +172,8 @@ impl Installer {
                 prefix: resolved.prefix.as_deref(),
                 strip_components: resolved.strip_components.unwrap_or(0),
                 max_extract_bytes: self.options.max_extract_bytes,
+                build_steps: resolved.build_steps.as_deref().unwrap_or(&[]),
+                log: logger,
                 runner: self.runner.as_ref(),
             },
         )

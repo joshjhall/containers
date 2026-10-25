@@ -90,6 +90,34 @@ pub struct InstallMethod {
     /// `<prefix>/bin/node`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strip_components: Option<u32>,
+    /// Ordered build commands a `source-build` method runs inside the
+    /// extracted source tree (python: `./configure …`, `make -j{nproc}`,
+    /// `make install`).
+    ///
+    /// Each step runs with its working directory set to the extracted source
+    /// root; the first non-zero exit aborts the install. Args accept the
+    /// `{nproc}` placeholder (host CPU count), so build parallelism is the
+    /// catalog's call rather than luggage's; any other placeholder is an
+    /// error. Only meaningful for `method_kind: source-build`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_steps: Option<Vec<BuildStep>>,
+}
+
+/// One command in a `source-build` method's [`InstallMethod::build_steps`].
+///
+/// An argv rather than a shell line: nothing is word-split or globbed, so a
+/// configure flag carrying spaces (`LDFLAGS=-Wl,-rpath /usr/local/lib`) is a
+/// single arg exactly as written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BuildStep {
+    /// Program to run. A relative path containing `/` (`./configure`) is
+    /// resolved against the extracted source root; a bare name (`make`) is
+    /// looked up on `PATH`.
+    pub command: String,
+    /// Argument vector, after placeholder substitution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Vec<String>>,
 }
 
 /// The install *shape* of an [`InstallMethod`] — which installer

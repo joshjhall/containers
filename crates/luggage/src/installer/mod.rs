@@ -334,6 +334,7 @@ impl Installer {
             version: Some(resolved.version.as_str()),
             rustup_target: target,
             arch: Some(resolved.platform.arch.as_str()),
+            nproc: None,
         };
 
         let source_url = match resolved.source_url_template.as_deref() {
@@ -695,6 +696,7 @@ mod tests {
             cache_dirs: None,
             prefix: None,
             strip_components: None,
+            build_steps: None,
             platform: Platform {
                 os: "debian".into(),
                 os_version: Some("12".into()),
