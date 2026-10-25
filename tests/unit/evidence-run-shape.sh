@@ -277,7 +277,7 @@ _source_target() {
 _workflow_entry_scripts() {
     local line target
     /usr/bin/grep -vE '^[[:space:]]*#' "${1:-$WF}" |
-        /usr/bin/grep -oE '(^|[[:space:]"'"'"'=]|\./|WORKSPACE\}?/)bin/[A-Za-z0-9_./-]+\.sh' |
+        /usr/bin/grep -oE '(^|[[:space:]"'"'"'=(;&|]|\./|WORKSPACE\}?/)bin/[A-Za-z0-9_./-]+\.sh' |
         /usr/bin/sed -E 's#^[^b]*##' |
         while IFS= read -r line; do _normalize_path "$line"; done
     while IFS= read -r line; do
@@ -510,7 +510,8 @@ test_derivation_edge_forms() {
             '          run "./bin/q1.sh"' "          bash 'bin/q2.sh'" '          x="$GITHUB_WORKSPACE/bin/q3.sh"' \
             '          /usr/bin/ignored.sh' '          true | source bin/s1.sh' \
             '          if true; then source bin/s2.sh' '          for i in 1; do source bin/s3.sh; done' \
-            '          else source bin/s4.sh' >"$dir/seps.yml"
+            '          else source bin/s4.sh' '          v=$(bin/c1.sh);bin/c2.sh&&bin/c3.sh|bin/c4.sh' \
+            '          tools/bin/ignored.sh' >"$dir/seps.yml"
         printf '%s\n' 'on:' '  push:' '    branches: [main]' 'jobs:' >"$dir/nopaths.yml"
         printf '%s\n' 'on:' '  push:' '    paths: ["a"]' 'jobs:' >"$dir/flow.yml"
     }
@@ -533,10 +534,12 @@ test_derivation_edge_forms() {
         "$(_derived_scripts "$dir/forms.yml" "$dir")" \
         "braced \$GITHUB_WORKSPACE, '. ', bash, chained source, cycles, missing files, and unset SCRIPT_DIR"
     # Literal sweep: double- and single-quoted, unbraced $GITHUB_WORKSPACE/,
-    # never /usr/bin/. Source sweep: after |, then, do, and else. The last
-    # target swallows `; done`, so it fails to resolve rather than misread.
-    # The literal sweep has already caught s3, so nothing is dropped.
+    # after $( ; && |, never a nested .../bin/. Source sweep: after |, then,
+    # do, and else. The s3 target swallows `; done`, so it fails to resolve
+    # rather than misread. The literal sweep has already caught s3, so
+    # nothing is dropped.
     assert_equals "$(printf '%s\n' bin/q1.sh bin/q2.sh bin/q3.sh bin/s1.sh bin/s2.sh bin/s3.sh bin/s4.sh \
+        bin/c1.sh bin/c2.sh bin/c3.sh bin/c4.sh \
         bin/s1.sh bin/s2.sh 'UNRESOLVED:           for i in 1; do source bin/s3.sh; done' bin/s4.sh)" \
         "$(_workflow_entry_scripts "$dir/seps.yml")" \
         "quoted and workspace-prefixed paths, and source after | then do else, are all read"
