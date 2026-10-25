@@ -276,10 +276,14 @@ _source_target() {
 # this cannot read never drops a file silently.
 _workflow_entry_scripts() {
     local line target
-    /usr/bin/grep -vE '^[[:space:]]*#' "${1:-$WF}" |
-        /usr/bin/grep -oE '(^|[[:space:]"'"'"'=(;&|]|\./|WORKSPACE\}?/)bin/[A-Za-z0-9_./-]+\.sh' |
-        /usr/bin/sed -E 's#^[^b]*##' |
-        while IFS= read -r line; do _normalize_path "$line"; done
+    # No literal path is a grep exit 1, not an error: never let it end the
+    # function under errexit before the source sweep runs.
+    {
+        /usr/bin/grep -vE '^[[:space:]]*#' "${1:-$WF}" |
+            /usr/bin/grep -oE '(^|[[:space:]"'"'"'=(;&|]|\./|WORKSPACE\}?/)bin/[A-Za-z0-9_./-]+\.sh' |
+            /usr/bin/sed -E 's#^[^b]*##' |
+            while IFS= read -r line; do _normalize_path "$line"; done
+    } || true
     while IFS= read -r line; do
         target="$(_source_target "$line")"
         [ -n "$target" ] || continue
@@ -519,6 +523,8 @@ test_derivation_edge_forms() {
             '          if true; then source bin/s2.sh' '          for i in 1; do source bin/s3.sh; done' \
             '          else source bin/s4.sh' '          v=$(bin/c1.sh);bin/c2.sh&&bin/c3.sh|bin/c4.sh' \
             '          tools/bin/ignored.sh' >"$dir/seps.yml"
+        printf '%s\n' 'jobs:' '  j:' '    steps:' '      - run: |' '          source "$HOME/x.sh"' \
+            >"$dir/noliteral.yml"
         printf '%s\n' 'on:' '  push:' '    branches: [main]' 'jobs:' >"$dir/nopaths.yml"
         printf '%s\n' 'on:' '  push:' '    paths: ["a"]' 'jobs:' >"$dir/flow.yml"
     }
@@ -550,6 +556,10 @@ test_derivation_edge_forms() {
         bin/s1.sh bin/s2.sh 'UNRESOLVED:           for i in 1; do source bin/s3.sh; done' bin/s4.sh)" \
         "$(_workflow_entry_scripts "$dir/seps.yml")" \
         "quoted and workspace-prefixed paths, and source after | then do else, are all read"
+    # shellcheck disable=SC2016
+    assert_equals 'UNRESOLVED:           source "$HOME/x.sh"' \
+        "$(set -euo pipefail && _workflow_entry_scripts "$dir/noliteral.yml")" \
+        "with no literal bin path, the source sweep still runs under errexit"
     assert_equals "NOPATHS" "$(_uncovered push "$dir/nopaths.yml" bin/lib/a.sh)" "a trigger without paths: is NOPATHS"
     assert_equals 'UNPARSED:     paths: ["a"]' "$(_uncovered push "$dir/flow.yml" bin/lib/a.sh)" \
         "an unreadable paths: entry is passed through"
