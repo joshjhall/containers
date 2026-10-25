@@ -199,14 +199,17 @@ _civ_make_hermetic_bin() {
 }
 
 # Add stubs that land in each remaining counter branch: rg is behind the
-# stubbed latest (outdated), bat is ahead of it (newer), and aws has no
-# latest-version getter (installed). Each counter's first increment is from 0.
+# stubbed latest (outdated), bat is ahead of it (newer), aws has no
+# latest-version getter (installed), and gh prints output its pattern cannot
+# parse (error, counted by the `*)` arm as Unknown). Each counter's first
+# increment is from 0.
 _civ_add_branch_stubs() {
     local bin="$TEST_TEMP_DIR/bin"
     printf '#!/bin/sh\necho "ripgrep 1.0.0"\n' >"$bin/rg"
     printf '#!/bin/sh\necho "bat 99.0.0"\n' >"$bin/bat"
     printf '#!/bin/sh\necho "aws-cli/2.0.0 Python/3.11"\n' >"$bin/aws"
-    chmod +x "$bin/rg" "$bin/bat" "$bin/aws"
+    printf '#!/bin/sh\necho "nonsense"\n' >"$bin/gh"
+    chmod +x "$bin/rg" "$bin/bat" "$bin/aws" "$bin/gh"
 }
 
 # Run the script (or a symlink to it) under the hermetic PATH.
@@ -240,6 +243,7 @@ test_civ_summary_every_counter_branch() {
     assert_file_contains "$TEST_TEMP_DIR/out" "Outdated: .*m1[^0-9]" "one outdated tool (rg)"
     assert_file_contains "$TEST_TEMP_DIR/out" "Newer: .*m1[^0-9]" "one newer tool (bat)"
     assert_file_contains "$TEST_TEMP_DIR/out" "Installed: .*m1[^0-9]" "one installed-only tool (aws)"
+    assert_file_contains "$TEST_TEMP_DIR/out" "Unknown: .*m1[^0-9]" "one unparseable tool (gh)"
     assert_file_contains "$TEST_TEMP_DIR/out" "Missing: .*m[1-9][0-9]*[^0-9]" "the rest are missing"
 }
 
@@ -265,7 +269,9 @@ test_civ_json_completes() {
     _civ_make_hermetic_bin
     _civ_run "$SOURCE_FILE" --json
     assert_equals "0" "$CIV_RC" "--json exits 0"
-    assert_file_contains "$TEST_TEMP_DIR/out" '"tool": "fd"' "--json lists fd"
+    assert_file_contains "$TEST_TEMP_DIR/out" \
+        '"tool": "fd", "installed": "10.2.0", "latest": "v10.2.0", "status": "up-to-date"' \
+        "--json reports fd's fdfind version as up-to-date"
 }
 
 run_test_with_setup test_civ_summary_completes "Summary completes and exits 0 with counters starting at 0"
