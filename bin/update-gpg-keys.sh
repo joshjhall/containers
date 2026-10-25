@@ -203,45 +203,63 @@ update_nodejs_keys() {
 
     # Copy the full keyring (including historical keys)
     log_info "Copying keyring files..."
-    mkdir -p "$keyring_dir"
 
-    # Back up the current keyring so a failed re-check below can restore it
-    local backup_dir="$temp_dir/previous-keyring"
-    mkdir -p "$backup_dir"
-    command find "$keyring_dir" -mindepth 1 -maxdepth 1 -type f -exec cp -p {} "$backup_dir/" \;
+    # Build the new keyring in a staging directory beside the committed one
+    # (same filesystem, so the final swap is a rename) and validate it there.
+    # The committed keyring is not touched until the staged copy has passed,
+    # so no failure or interruption can leave it empty or half-written.
+    mkdir -p "$(dirname "$keyring_dir")"
+    local staging
+    staging=$(mktemp -d "${keyring_dir}.new.XXXXXX")
+    # shellcheck disable=SC2064 # expand $staging now; the trap outlives this scope
+    trap "rm -rf '$staging'" INT TERM
 
-    # Mirror upstream exactly: clear the old files so one upstream no longer
-    # ships (e.g. trustdb.gpg) cannot linger beside the new pubring.kbx
-    command find "$keyring_dir" -mindepth 1 -maxdepth 1 -type f -delete
-
-    # trustdb.gpg is optional (count_keyring_keys treats it the same way)
+    # trustdb.gpg is optional (count_keyring_keys treats it the same way);
+    # copying only what upstream ships makes the result mirror upstream exactly
     local keyring_files=(pubring.kbx)
     [ -f gpg/trustdb.gpg ] && keyring_files+=(trustdb.gpg)
-    local f
+    local f staged_ok=true
     for f in "${keyring_files[@]}"; do
-        cp "gpg/$f" "$keyring_dir/"
+        if ! cp "gpg/$f" "$staging/" || ! cmp -s "gpg/$f" "$staging/$f"; then
+            staged_ok=false
+        fi
     done
-
-    # Set secure permissions on keyring directory and files
-    chmod 700 "$keyring_dir"
-    chmod 600 "$keyring_dir"/*
-
-    # Re-check the written copy: it must be byte-identical to upstream and readable
-    local written_ok=true
-    for f in "${keyring_files[@]}"; do
-        cmp -s "gpg/$f" "$keyring_dir/$f" || written_ok=false
-    done
-    if [ "$written_ok" = true ] && ! count_keyring_keys "$keyring_dir" >/dev/null; then
-        written_ok=false
+    if ! chmod 700 "$staging" || ! chmod 600 "$staging"/*; then
+        staged_ok=false
     fi
-    if [ "$written_ok" != true ]; then
-        log_error "Written Node.js keyring does not match upstream or is unreadable — restoring previous keyring"
-        command find "$keyring_dir" -mindepth 1 -maxdepth 1 -type f -delete
-        command find "$backup_dir" -mindepth 1 -maxdepth 1 -type f -exec cp -p {} "$keyring_dir/" \;
+    if [ "$staged_ok" = true ] && ! count_keyring_keys "$staging" >/dev/null; then
+        staged_ok=false
+    fi
+    if [ "$staged_ok" != true ]; then
+        log_error "Staged Node.js keyring does not match upstream or is unreadable — keeping existing keyring"
+        trap - INT TERM
+        rm -rf "$staging"
         cd "$REPO_ROOT"
         rm -rf "$temp_dir"
         return 1
     fi
+
+    # Swap the validated keyring into place
+    local previous="${keyring_dir}.old.$$"
+    if [ -d "$keyring_dir" ] && ! mv "$keyring_dir" "$previous"; then
+        log_error "Could not move the existing keyring aside — keeping it"
+        trap - INT TERM
+        rm -rf "$staging"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    if ! mv "$staging" "$keyring_dir"; then
+        log_error "Could not install the new keyring — restoring the existing one"
+        [ -d "$previous" ] && mv "$previous" "$keyring_dir"
+        trap - INT TERM
+        rm -rf "$staging"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    trap - INT TERM
+    rm -rf "$previous"
 
     log_info "  Total keys in keyring: $total_keys"
     echo ""

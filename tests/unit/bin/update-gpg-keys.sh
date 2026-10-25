@@ -328,14 +328,14 @@ test_gpg_nodejs_unreadable_keyring_fails_closed() {
     fi
 }
 
-# Test: if the written copy fails its re-check, the previous keyring is restored.
-# A readable upstream passes the pre-copy check; a `cmp` function that always
-# reports a mismatch forces the post-copy branch.
-test_gpg_nodejs_post_copy_failure_restores_previous() {
+# Test: if the staged copy fails its check, the existing keyring is untouched.
+# A readable upstream passes the upstream check; a `cmp` function that always
+# reports a mismatch forces the staged-copy branch.
+test_gpg_nodejs_staged_copy_failure_keeps_existing() {
     require_gpg || return 0
     make_fixture_repo "$TEST_TEMP_DIR/repo"
 
-    # Previous keyring: distinct sentinel bytes so a restore is unambiguous
+    # Existing keyring: distinct sentinel bytes so "untouched" is unambiguous
     local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
     command mkdir -p "$dest"
     printf 'previous-pubring' >"$dest/pubring.kbx"
@@ -351,11 +351,39 @@ test_gpg_nodejs_post_copy_failure_restores_previous() {
         run_update "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys"
     ) || rc=$?
 
-    assert_not_equals "0" "$rc" "update must exit non-zero when the written keyring fails its re-check"
-    assert_contains "$output" "restoring previous keyring" \
-        "should report the post-copy failure, not the pre-copy one"
-    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "pubring.kbx restored"
-    assert_equals "previous-trustdb" "$(command cat "$dest/trustdb.gpg")" "trustdb.gpg restored"
+    assert_not_equals "0" "$rc" "update must exit non-zero when the staged keyring fails its check"
+    assert_contains "$output" "Staged Node.js keyring does not match upstream" \
+        "should report the staged-copy failure, not the upstream one"
+    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "pubring.kbx untouched"
+    assert_equals "previous-trustdb" "$(command cat "$dest/trustdb.gpg")" "trustdb.gpg untouched"
+    if [ -e "$TEST_TEMP_DIR/keys/nodejs/keyring-metadata.json" ]; then
+        assert_true false "metadata must not be written when the staged keyring is rejected"
+    fi
+    # No staging or swap directories may be left beside the keyring
+    local leftovers
+    leftovers=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 1 -maxdepth 1 -name 'keyring.*' | command wc -l)
+    assert_equals "0" "$leftovers" "no keyring.new.*/keyring.old.* directories left behind"
+}
+
+# Test: an upstream keyring gpg reads cleanly but that holds no keys is rejected
+test_gpg_nodejs_empty_keyring_rejected() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo"
+
+    # Replace the fixture's keyring with an empty keybox gpg creates itself
+    local empty_home="$TEST_TEMP_DIR/empty-home"
+    command mkdir -p "$empty_home"
+    command chmod 700 "$empty_home"
+    GNUPGHOME="$empty_home" gpg --batch --list-keys >/dev/null 2>&1
+    command cp "$empty_home/pubring.kbx" "$TEST_TEMP_DIR/repo/gpg/pubring.kbx"
+    git -C "$TEST_TEMP_DIR/repo" -c user.name=test -c user.email=test@example.com \
+        -c commit.gpgsign=false commit -q -am "empty keyring"
+
+    local output rc=0
+    output=$(run_update "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys") || rc=$?
+
+    assert_not_equals "0" "$rc" "update must exit non-zero for a keyring with no keys"
+    assert_contains "$output" "contains no public keys" "should name the empty keyring as the failure"
 }
 
 # Test: when upstream drops trustdb.gpg, the previous one does not linger
@@ -410,7 +438,8 @@ run_test_with_setup test_gpg_main_defaults_to_all "main() defaults to all langua
 run_test_with_setup test_gpg_script_syntax "Script has valid bash syntax"
 run_test_with_setup test_gpg_nodejs_readable_keyring_succeeds "Node.js: readable keyring is copied byte-exact"
 run_test_with_setup test_gpg_nodejs_unreadable_keyring_fails_closed "Node.js: unreadable keyring fails closed"
-run_test_with_setup test_gpg_nodejs_post_copy_failure_restores_previous "Node.js: post-copy check failure restores previous keyring"
+run_test_with_setup test_gpg_nodejs_staged_copy_failure_keeps_existing "Node.js: staged-copy check failure keeps existing keyring"
+run_test_with_setup test_gpg_nodejs_empty_keyring_rejected "Node.js: keyring with no keys is rejected"
 run_test_with_setup test_gpg_nodejs_dropped_trustdb_not_left_stale "Node.js: dropped upstream trustdb.gpg is not left stale"
 
 # Generate test report
