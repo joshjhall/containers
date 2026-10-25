@@ -145,6 +145,13 @@ pub fn interrupt_all(registry: &Mutex<Registry>) -> MutexGuard<'_, Registry> {
 
 /// Install the SIGINT/SIGTERM watcher. Idempotent.
 ///
+/// A signal luggage inherited as ignored (`nohup`, a background job in a
+/// non-interactive shell) stays ignored: registering a handler would replace
+/// that disposition and make the signal fatal where it was not before. The
+/// inherited set is read from `/proc/self/status` on Linux, since querying
+/// `sigaction` needs `unsafe`. Elsewhere it cannot be read, and both signals
+/// are handled.
+///
 /// # Errors
 ///
 /// Returns the OS error if the signal handlers cannot be registered or the
@@ -156,7 +163,13 @@ pub fn install_handler() -> io::Result<()> {
     if *installed {
         return Ok(());
     }
-    let mut signals = Signals::new([SIGINT, SIGTERM])?;
+    let ignored = inherited_ignored_signals();
+    let handled = handled_signals(ignored);
+    if handled.is_empty() {
+        *installed = true;
+        return Ok(());
+    }
+    let mut signals = Signals::new(handled)?;
     thread::Builder::new().name("luggage-interrupt".into()).spawn(move || {
         if let Some(sig) = signals.forever().next() {
             // Held, not dropped: see `interrupt_all`.
@@ -171,6 +184,33 @@ pub fn install_handler() -> io::Result<()> {
     *installed = true;
     drop(installed);
     Ok(())
+}
+
+/// SIGINT and SIGTERM, minus any whose bit is set in `ignored` (a `SigIgn`
+/// mask, where bit `n - 1` stands for signal `n`).
+fn handled_signals(ignored: u64) -> Vec<i32> {
+    [SIGINT, SIGTERM]
+        .into_iter()
+        .filter(|sig| u32::try_from(*sig - 1).map_or(true, |bit| ignored & (1 << bit) == 0))
+        .collect()
+}
+
+/// This process's ignored-signal mask, from the `SigIgn:` line of
+/// `/proc/self/status`. An unreadable or malformed file reads as "nothing
+/// ignored", so luggage falls back to handling both signals rather than
+/// silently handling neither.
+fn inherited_ignored_signals() -> u64 {
+    std::fs::read_to_string("/proc/self/status").map_or(0, |status| parse_sig_ign(&status))
+}
+
+/// Parse the hex mask on the `SigIgn:` line of a `/proc/<pid>/status` body;
+/// 0 if absent or malformed.
+fn parse_sig_ign(status: &str) -> u64 {
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigIgn:"))
+        .and_then(|mask| u64::from_str_radix(mask.trim(), 16).ok())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

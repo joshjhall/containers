@@ -6,7 +6,9 @@ use std::path::Path;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
-use crate::installer::idempotency::tests::{KillOnDrop, pid_is_running, write_forking_shim};
+use crate::installer::idempotency::tests::{
+    KillOnDrop, pid_is_running, write_forking_shim, write_sleeping_shim,
+};
 use crate::installer::idempotency::{VERSION_PROBE_TIMEOUT, run_version_check_within};
 
 /// A `sleep 30` leading its own process group, the way probes are spawned.
@@ -112,6 +114,119 @@ fn a_running_poll_keeps_the_group_registered() {
     let _ = child.kill();
     tracked.reap_locked(|| child.wait().map(Some)).unwrap();
     assert_eq!(lock(&REG).pgids, Vec::new(), "a reap must deregister the group");
+}
+
+/// A failed reap leaves the child unreaped, so its group must stay
+/// registered for the interrupt handler; the error is passed through.
+#[test]
+fn a_failed_reap_keeps_the_group_registered() {
+    static REG: Mutex<Registry> = Mutex::new(Registry::new());
+
+    let (mut child, tracked) = spawn_tracked_in(&REG, &mut grouped_sleep()).unwrap();
+    let err = tracked.reap_locked::<()>(|| Err(io::Error::other("poll failed"))).unwrap_err();
+    assert_eq!(err.to_string(), "poll failed");
+    assert_eq!(lock(&REG).pgids.len(), 1, "an unreaped probe must stay registered");
+
+    let _ = child.kill();
+    let _ = child.wait();
+    drop(tracked);
+}
+
+/// `SigIgn` is a hex mask with bit `n - 1` for signal `n`: SIGINT (2) is
+/// 0x2, SIGTERM (15) is 0x4000.
+#[test]
+fn sig_ign_mask_is_parsed_and_filters_the_handled_signals() {
+    let status = "Name:\tluggage\nSigBlk:\t0000000000000000\nSigIgn:\t0000000000004002\n";
+    assert_eq!(parse_sig_ign(status), 0x4002);
+    assert_eq!(parse_sig_ign("Name:\tluggage\n"), 0, "a missing line reads as nothing ignored");
+    assert_eq!(parse_sig_ign("SigIgn:\tnot-hex\n"), 0, "a malformed mask reads as nothing ignored");
+
+    assert_eq!(handled_signals(0), vec![SIGINT, SIGTERM]);
+    assert_eq!(handled_signals(0x2), vec![SIGTERM], "an ignored SIGINT stays ignored");
+    assert_eq!(handled_signals(0x4000), vec![SIGINT], "an ignored SIGTERM stays ignored");
+    assert_eq!(handled_signals(0x4002), Vec::<i32>::new());
+    assert_eq!(handled_signals(0x1000), vec![SIGINT, SIGTERM], "other bits do not matter");
+}
+
+/// luggage started with SIGINT ignored (`nohup`, a background job) keeps
+/// ignoring it: the handler must not turn an inherited ignore into a fatal
+/// signal. The ignore is set the way a real parent sets it, by a shell
+/// `trap '' INT` that `exec`s the re-exec'd test, and SIGINT must leave both
+/// the child and its probe running.
+#[cfg(target_os = "linux")]
+#[test]
+#[serial_test::serial]
+fn an_inherited_sigint_ignore_survives_the_handler() {
+    const CHILD_DIR: &str = "LUGGAGE_INTERRUPT_IGNORED_CHILD_DIR";
+
+    if let Some(dir) = std::env::var_os(CHILD_DIR) {
+        let dir = Path::new(&dir);
+        assert_ne!(
+            inherited_ignored_signals() & 0x2,
+            0,
+            "the re-exec'd child must start with SIGINT ignored, or this test is vacuous",
+        );
+        install_handler().unwrap();
+        write_sleeping_shim(dir, "tool");
+        let _ = run_version_check_within(
+            &dir.join("tool"),
+            &["--version"],
+            &std::collections::BTreeMap::new(),
+            VERSION_PROBE_TIMEOUT * 6,
+        );
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let module = module_path!();
+    let module = module.split_once("::").map_or(module, |(_, rest)| rest);
+    let name = format!("{module}::an_inherited_sigint_ignore_survives_the_handler");
+    let mut child = Command::new("/bin/sh")
+        .args(["-c", "trap '' INT; exec \"$0\" \"$@\""])
+        .arg(std::env::current_exe().unwrap())
+        .args(["--exact", &name, "--test-threads=1", "--nocapture"])
+        .env(CHILD_DIR, dir.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let pid = loop {
+        if let Ok(raw) = std::fs::read_to_string(dir.path().join("tool.pid"))
+            && !raw.trim().is_empty()
+        {
+            break raw.trim().to_owned();
+        }
+        if Instant::now() >= deadline || child.try_wait().unwrap().is_some() {
+            let _ = child.kill();
+            let out = child.wait_with_output().unwrap();
+            panic!(
+                "the re-exec'd child never started the probe ({}):\n{}\n{}",
+                out.status,
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr),
+            );
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let _probe_guard = KillOnDrop(Pid::from_raw(pid.parse().unwrap()).unwrap());
+
+    rustix::process::kill_process(Pid::from_child(&child), Signal::INT).unwrap();
+    std::thread::sleep(Duration::from_millis(500));
+    let still_running = child.try_wait().unwrap().is_none();
+    let probe_alive = pid_is_running(&pid);
+    let _ = child.kill();
+    let out = child.wait_with_output().unwrap();
+    assert!(
+        still_running && probe_alive,
+        "an inherited SIGINT ignore must survive the handler (child running={still_running}, \
+         probe running={probe_alive}, child {}):\n{}\n{}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
 }
 
 /// Interrupting luggage mid-probe leaves no probe or descendant running, for
