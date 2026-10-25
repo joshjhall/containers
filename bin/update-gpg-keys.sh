@@ -210,6 +210,10 @@ update_nodejs_keys() {
     mkdir -p "$backup_dir"
     command find "$keyring_dir" -mindepth 1 -maxdepth 1 -type f -exec cp -p {} "$backup_dir/" \;
 
+    # Mirror upstream exactly: clear the old files so one upstream no longer
+    # ships (e.g. trustdb.gpg) cannot linger beside the new pubring.kbx
+    command find "$keyring_dir" -mindepth 1 -maxdepth 1 -type f -delete
+
     # trustdb.gpg is optional (count_keyring_keys treats it the same way)
     local keyring_files=(pubring.kbx)
     [ -f gpg/trustdb.gpg ] && keyring_files+=(trustdb.gpg)

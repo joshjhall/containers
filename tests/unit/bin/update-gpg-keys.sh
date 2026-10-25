@@ -257,10 +257,11 @@ require_gpg() {
     return 1
 }
 
-# make_fixture_repo <dir> [corrupt]
+# make_fixture_repo <dir> [corrupt|no-trustdb]
 # Build a one-commit git repo shaped like nodejs/release-keys from the
 # committed keyring. With "corrupt", append one newline to pubring.kbx — the
-# exact damage auto-patch's trailing-newline fixer did (#1410).
+# exact damage auto-patch's trailing-newline fixer did (#1410). With
+# "no-trustdb", upstream ships only pubring.kbx.
 make_fixture_repo() {
     local repo="$1"
     local mode="${2:-}"
@@ -269,6 +270,8 @@ make_fixture_repo() {
     command cp "$COMMITTED_NODEJS_KEYRING/pubring.kbx" "$COMMITTED_NODEJS_KEYRING/trustdb.gpg" "$repo/gpg-only-active-keys/"
     if [ "$mode" = "corrupt" ]; then
         printf '\n' >>"$repo/gpg/pubring.kbx"
+    elif [ "$mode" = "no-trustdb" ]; then
+        command rm -f "$repo/gpg/trustdb.gpg"
     fi
     git -C "$repo" init -q
     git -C "$repo" add -A
@@ -355,6 +358,27 @@ test_gpg_nodejs_post_copy_failure_restores_previous() {
     assert_equals "previous-trustdb" "$(command cat "$dest/trustdb.gpg")" "trustdb.gpg restored"
 }
 
+# Test: when upstream drops trustdb.gpg, the previous one does not linger
+# beside the new pubring.kbx
+test_gpg_nodejs_dropped_trustdb_not_left_stale() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo" no-trustdb
+
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest"
+    command cp "$COMMITTED_NODEJS_KEYRING/pubring.kbx" "$COMMITTED_NODEJS_KEYRING/trustdb.gpg" "$dest/"
+
+    local output rc=0
+    output=$(run_update "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys") || rc=$?
+
+    assert_equals "0" "$rc" "update should succeed without an upstream trustdb.gpg (output: $output)"
+    if [ -e "$dest/trustdb.gpg" ]; then
+        assert_true false "stale trustdb.gpg left beside the new pubring.kbx"
+    else
+        assert_true true "previous trustdb.gpg removed when upstream ships none"
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
@@ -387,6 +411,7 @@ run_test_with_setup test_gpg_script_syntax "Script has valid bash syntax"
 run_test_with_setup test_gpg_nodejs_readable_keyring_succeeds "Node.js: readable keyring is copied byte-exact"
 run_test_with_setup test_gpg_nodejs_unreadable_keyring_fails_closed "Node.js: unreadable keyring fails closed"
 run_test_with_setup test_gpg_nodejs_post_copy_failure_restores_previous "Node.js: post-copy check failure restores previous keyring"
+run_test_with_setup test_gpg_nodejs_dropped_trustdb_not_left_stale "Node.js: dropped upstream trustdb.gpg is not left stale"
 
 # Generate test report
 generate_report
