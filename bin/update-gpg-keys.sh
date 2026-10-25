@@ -104,7 +104,12 @@ update_python_keys() {
 
     local keys_dir="${GPG_KEYS_DIR}/python/keys"
     local temp_dir
-    temp_dir=$(mktemp -d)
+    # Checked explicitly: main runs this with set -e suspended, and an empty
+    # $temp_dir would aim the downloads and the copy at /
+    if ! temp_dir=$(mktemp -d) || [ ! -d "$temp_dir" ]; then
+        log_error "Could not create a temporary directory"
+        return 1
+    fi
 
     # Download Python GPG keys from official sources
     log_info "Fetching Python release manager GPG keys..."
@@ -377,7 +382,12 @@ update_hashicorp_keys() {
 
     local keys_dir="${GPG_KEYS_DIR}/hashicorp/keys"
     local temp_dir
-    temp_dir=$(mktemp -d)
+    # Checked explicitly: main runs this with set -e suspended, and an empty
+    # $temp_dir would aim the downloads and the copy at /
+    if ! temp_dir=$(mktemp -d) || [ ! -d "$temp_dir" ]; then
+        log_error "Could not create a temporary directory"
+        return 1
+    fi
 
     # Download HashiCorp GPG key from official source
     log_info "Fetching HashiCorp Security GPG key..."
@@ -441,7 +451,12 @@ update_golang_keys() {
 
     local keys_dir="${GPG_KEYS_DIR}/golang/keys"
     local temp_dir
-    temp_dir=$(mktemp -d)
+    # Checked explicitly: main runs this with set -e suspended, and an empty
+    # $temp_dir would aim the downloads and the copy at /
+    if ! temp_dir=$(mktemp -d) || [ ! -d "$temp_dir" ]; then
+        log_error "Could not create a temporary directory"
+        return 1
+    fi
 
     # Download Google Linux Packages Signing Key
     log_info "Fetching Google Linux Packages Signing Key..."
