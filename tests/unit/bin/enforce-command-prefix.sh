@@ -26,6 +26,14 @@ write_fixture() {
     done >"$file"
 }
 
+# Helper: octal permission bits of a file, GNU (stat -c) or BSD (stat -f).
+# Prints nothing (and still returns 0, so set -e can't skip the caller's
+# skip_test) if neither form works. Bare 'stat' (not 'command stat') so an
+# exported stat() stub can stand in for a BSD userland.
+file_mode() {
+    stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null || true
+}
+
 # Setup function - runs before each test
 setup() {
     export TEST_TEMP_DIR
@@ -523,6 +531,75 @@ test_heredoc_on_comment_line() {
         "ls inside stays bare"
 }
 
+# Test: a heredoc opened on an alias line still suppresses its body
+test_heredoc_on_alias_line() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        "alias usage='cat <<EOF'" \
+        'grep inside' \
+        'EOF' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "0" "$exit_code" "Body after an alias-line heredoc is not rewritten"
+    local expected
+    expected=$(printf "alias usage='cat <<EOF'\ngrep inside\nEOF")
+    assert_equals "$expected" "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "grep inside stays bare"
+}
+
+# Test: a heredoc opened on a suppression-marker line still suppresses its body
+test_heredoc_on_marker_line() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        'cat <<EOF  # enforce-command-prefix: off' \
+        'ls inside' \
+        'EOF' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "0" "$exit_code" "Body after a marker-line heredoc is not rewritten"
+    local expected
+    expected=$(printf 'cat <<EOF  # enforce-command-prefix: off\nls inside\nEOF')
+    assert_equals "$expected" "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "ls inside stays bare"
+}
+
+# Test: an empty file → exit 0, still zero bytes, no Fixed: line
+test_empty_file() {
+    : >"$TEST_TEMP_DIR/test.sh"
+    local exit_code=0 output
+    output=$("$SCRIPT" "$TEST_TEMP_DIR/test.sh") || exit_code=$?
+    assert_equals "0" "$exit_code" "Should exit 0 for an empty file"
+    assert_equals "" "$output" "No Fixed: line for an empty file"
+    # A deleted operand would read as size 0 below, so pin existence first
+    assert_file_exists "$TEST_TEMP_DIR/test.sh"
+    # $(( )) drops the leading padding BSD wc puts before the count
+    assert_equals "0" "$(($(/usr/bin/wc -c <"$TEST_TEMP_DIR/test.sh")))" \
+        "Empty file stays zero bytes"
+    assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
+        "No tmpfile should be left for a clean file"
+}
+
+# Test: file_mode falls back to BSD 'stat -f %Lp' and prints nothing (rc 0)
+# when neither form works. Each stub lives in a subshell so it can't leak.
+test_file_mode_fallbacks() {
+    local f="$TEST_TEMP_DIR/m.sh"
+    : >"$f"
+    local bsd
+    bsd=$(
+        stat() {
+            [ "$1" = "-f" ] && [ "$2" = "%Lp" ] && [ "$3" = "$f" ] || return 1
+            printf '640\n'
+        }
+        file_mode "$f"
+    )
+    assert_equals "640" "$bsd" "BSD stat -f %Lp is used when -c is rejected"
+    local none rc=0
+    none=$(
+        stat() { return 1; }
+        file_mode "$f"
+    ) || rc=$?
+    assert_equals "0" "$rc" "file_mode returns 0 when no stat form works"
+    assert_equals "" "$none" "file_mode prints nothing when no stat form works"
+}
+
 # Test: consecutive pipe matches on one line are all rewritten (sed /g rescan)
 test_consecutive_pipe_matches() {
     write_fixture "$TEST_TEMP_DIR/test.sh" 'x | ls | ls | ls' # enforce-command-prefix: off
@@ -540,8 +617,13 @@ test_fixed_file_keeps_mode() {
     local exit_code=0
     "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
     assert_equals "1" "$exit_code" "Should exit 1 when changes made"
-    assert_equals "755" "$(stat -c '%a' "$TEST_TEMP_DIR/test.sh")" \
-        "Fixed file should keep its 755 mode"
+    local mode
+    mode=$(file_mode "$TEST_TEMP_DIR/test.sh")
+    if [ -z "$mode" ]; then
+        skip_test "Neither GNU nor BSD stat can report the file mode"
+        return
+    fi
+    assert_equals "755" "$mode" "Fixed file should keep its 755 mode"
 }
 
 # Test: mode survives a BSD-style chmod that rejects GNU --reference (#1429).
@@ -558,12 +640,17 @@ test_fixed_file_keeps_mode_without_gnu_chmod() {
     env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" \
         "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
     assert_equals "1" "$exit_code" "Should exit 1 when changes made"
-    assert_equals "755" "$(stat -c '%a' "$TEST_TEMP_DIR/test.sh")" \
-        "Fixed file should keep 755 without GNU chmod --reference"
     assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" \
         "Fixed content should be written back"
     assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
         "No tmpfile should be left after a successful write"
+    local mode
+    mode=$(file_mode "$TEST_TEMP_DIR/test.sh")
+    if [ -z "$mode" ]; then
+        skip_test "Neither GNU nor BSD stat can report the file mode"
+        return
+    fi
+    assert_equals "755" "$mode" "Fixed file should keep 755 without GNU chmod --reference"
 }
 
 # Test: a fixable but unwritable file → exit 2, and the tmpfile holding the
@@ -697,6 +784,10 @@ run_test test_clean_no_trailing_newline_untouched "Clean file without trailing n
 run_test test_fixed_no_trailing_newline_gains_one "Fixed file without trailing newline gains one"
 run_test test_heredoc_last_delim_wins "Last heredoc delimiter on a line governs the body"
 run_test test_heredoc_on_comment_line "Heredoc opened on a comment line suppresses its body"
+run_test test_heredoc_on_alias_line "Heredoc opened on an alias line suppresses its body"
+run_test test_heredoc_on_marker_line "Heredoc opened on a marker line suppresses its body"
+run_test test_empty_file "Empty file exits 0 and stays empty"
+run_test test_file_mode_fallbacks "file_mode falls back to BSD stat, else prints nothing"
 run_test test_consecutive_pipe_matches "Consecutive piped commands are all prefixed"
 run_test test_fixed_file_keeps_mode "Fixed file keeps its mode"
 run_test test_fixed_file_keeps_mode_without_gnu_chmod "Fixed file keeps its mode without GNU chmod"
