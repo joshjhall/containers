@@ -544,6 +544,90 @@ test_fixed_file_keeps_mode() {
         "Fixed file should keep its 755 mode"
 }
 
+# Test: mode survives a BSD-style chmod that rejects GNU --reference (#1429).
+# The stub is first on PATH; BASH_ENV is cleared so /etc/bash_env can't
+# rebuild PATH and drop it.
+test_fixed_file_keeps_mode_without_gnu_chmod() {
+    /usr/bin/mkdir -p "$TEST_TEMP_DIR/stub"
+    printf '#!/bin/sh\ncase "$1" in --reference*) exit 1 ;; esac\nexec /bin/chmod "$@"\n' \
+        >"$TEST_TEMP_DIR/stub/chmod"
+    /bin/chmod 755 "$TEST_TEMP_DIR/stub/chmod"
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
+    chmod 755 "$TEST_TEMP_DIR/test.sh"
+    local exit_code=0
+    env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" \
+        "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals "755" "$(stat -c '%a' "$TEST_TEMP_DIR/test.sh")" \
+        "Fixed file should keep 755 without GNU chmod --reference"
+    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" \
+        "Fixed content should be written back"
+    assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
+        "No tmpfile should be left after a successful write"
+}
+
+# Test: a fixable but unwritable file → exit 2, and the tmpfile holding the
+# fixed content is kept and named (the original may already be truncated)
+test_unwritable_file_exits_2() {
+    if [ "$(id -u)" -eq 0 ]; then
+        skip_test "root can write a mode-555 file"
+        return
+    fi
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
+    chmod 555 "$TEST_TEMP_DIR/test.sh"
+    local exit_code=0 err kept
+    err=$("$SCRIPT" "$TEST_TEMP_DIR/test.sh" 2>&1 >/dev/null) || exit_code=$?
+    chmod 644 "$TEST_TEMP_DIR/test.sh"
+    assert_equals "2" "$exit_code" "Write failure should exit 2, not 0 or 1"
+    assert_contains "$err" "could not write" "Write failure should be reported on stderr"
+    kept=$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')
+    assert_not_empty "$kept" "The tmpfile with the fixed content should be kept"
+    assert_contains "$err" "fixed content kept at $kept" \
+        "Stderr should name the kept tmpfile"
+    assert_contains "$(command cat "$kept")" "command grep x" \
+        "Kept tmpfile should hold the fixed content"
+    assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" \
+        "Unwritable original should be unchanged"
+}
+
+# Test: a symlinked operand stays a symlink and its target is rewritten
+# (the old mv path replaced the link with a regular file)
+test_symlink_operand_rewrites_target() {
+    write_fixture "$TEST_TEMP_DIR/target.sh" 'grep x' # enforce-command-prefix: off
+    /usr/bin/ln -s target.sh "$TEST_TEMP_DIR/link.sh"
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/link.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_true "[ -L '$TEST_TEMP_DIR/link.sh' ]" "Operand should still be a symlink"
+    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/target.sh")" \
+        "Symlink target should hold the fixed content"
+    assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
+        "No tmpfile should be left after a successful write"
+}
+
+# Test: a write failure stops the run — earlier fixes stand, later files
+# are untouched, exit 2
+test_unwritable_file_stops_batch() {
+    if [ "$(id -u)" -eq 0 ]; then
+        skip_test "root can write a mode-555 file"
+        return
+    fi
+    write_fixture "$TEST_TEMP_DIR/a.sh" 'grep x' # enforce-command-prefix: off
+    write_fixture "$TEST_TEMP_DIR/b.sh" 'grep x' # enforce-command-prefix: off
+    write_fixture "$TEST_TEMP_DIR/c.sh" 'grep x' # enforce-command-prefix: off
+    chmod 555 "$TEST_TEMP_DIR/b.sh"
+    local exit_code=0 out
+    out=$("$SCRIPT" "$TEST_TEMP_DIR/a.sh" "$TEST_TEMP_DIR/b.sh" "$TEST_TEMP_DIR/c.sh" \
+        2>/dev/null) || exit_code=$?
+    chmod 644 "$TEST_TEMP_DIR/b.sh"
+    assert_equals "2" "$exit_code" "Write failure should exit 2"
+    assert_contains "$out" "Fixed: $TEST_TEMP_DIR/a.sh" "Earlier fix should be reported"
+    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/a.sh")" \
+        "Earlier file should stay fixed"
+    assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/c.sh")" \
+        "Later file should be untouched"
+}
+
 # Test: an unreadable file makes awk fail → exit 2, message, no tmpfile left
 test_awk_failure_exits_2() {
     if [ "$(id -u)" -eq 0 ]; then
@@ -615,6 +699,10 @@ run_test test_heredoc_last_delim_wins "Last heredoc delimiter on a line governs 
 run_test test_heredoc_on_comment_line "Heredoc opened on a comment line suppresses its body"
 run_test test_consecutive_pipe_matches "Consecutive piped commands are all prefixed"
 run_test test_fixed_file_keeps_mode "Fixed file keeps its mode"
+run_test test_fixed_file_keeps_mode_without_gnu_chmod "Fixed file keeps its mode without GNU chmod"
+run_test test_unwritable_file_exits_2 "Unwritable file exits 2 and keeps the tmpfile"
+run_test test_symlink_operand_rewrites_target "Symlinked operand keeps the link and rewrites its target"
+run_test test_unwritable_file_stops_batch "Write failure stops the batch with exit 2"
 run_test test_awk_failure_exits_2 "awk failure exits 2 and cleans up"
 run_test test_filename_with_equals "File name containing = is processed as a file"
 
