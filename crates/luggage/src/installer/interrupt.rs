@@ -151,7 +151,19 @@ pub fn interrupt_all(registry: &Mutex<Registry>) -> MutexGuard<'_, Registry> {
     live
 }
 
-/// Install the SIGINT/SIGTERM watcher. Idempotent.
+/// Where [`install_handler`] stands. `Failed` is terminal: a failed attempt
+/// leaves permanent always-true defaults behind (see [`restore_termination`]),
+/// and a later handler registered next to them would let the default kill
+/// luggage before the watcher could kill the probes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallState {
+    NotYet,
+    Done,
+    Failed,
+}
+
+/// Install the SIGINT/SIGTERM watcher. Idempotent once it succeeds; after a
+/// failure every later call returns an error without registering anything.
 ///
 /// A signal luggage inherited as ignored (`nohup`, a background job in a
 /// non-interactive shell) stays ignored: registering a handler would replace
@@ -163,47 +175,70 @@ pub fn interrupt_all(registry: &Mutex<Registry>) -> MutexGuard<'_, Registry> {
 /// # Errors
 ///
 /// Returns the OS error if the signal handlers cannot be registered or the
-/// watcher thread cannot be spawned.
+/// watcher thread cannot be spawned, and an error on every call after such a
+/// failure.
 pub fn install_handler() -> io::Result<()> {
-    static INSTALLED: Mutex<bool> = Mutex::new(false);
+    static STATE: Mutex<InstallState> = Mutex::new(InstallState::NotYet);
 
-    let mut installed = INSTALLED.lock().unwrap_or_else(PoisonError::into_inner);
-    if *installed {
-        return Ok(());
-    }
-    let ignored = inherited_ignored_signals();
-    let handled = handled_signals(ignored);
-    if handled.is_empty() {
-        *installed = true;
-        return Ok(());
-    }
-    let mut signals = Signals::new(&handled)?;
-    let spawned = thread::Builder::new().name("luggage-interrupt".into()).spawn(move || {
-        if let Some(sig) = signals.forever().next() {
-            // Held, not dropped: see `interrupt_all`.
-            let _held = interrupt_all(&LIVE);
-            // Restores the default action and re-raises, so luggage dies by
-            // the signal itself. The exit is a fallback for a signal missing
-            // from signal-hook's table, which SIGINT and SIGTERM are not.
-            let _ = signal_hook::low_level::emulate_default_handler(sig);
-            std::process::exit(128 + sig);
-        }
-    });
-    if let Err(e) = spawned {
-        restore_termination(&handled);
-        return Err(e);
-    }
-    *installed = true;
-    drop(installed);
-    Ok(())
+    install_with(&STATE, &handled_signals(inherited_ignored_signals()), |signals| {
+        thread::Builder::new().name("luggage-interrupt".into()).spawn(move || watch(signals))
+    })
 }
 
-/// Make each of `signals` terminate the process again, after a failed watcher
-/// spawn has dropped its `Signals`. Unregistering signal-hook's last action
-/// does not restore the OS default, so without this luggage would silently
-/// ignore Ctrl-C and SIGTERM for the rest of its run. An always-true
-/// conditional default runs the default action from signal-hook's own
-/// handler. Best-effort: a failure here leaves the signal as it already was.
+/// [`install_handler`] against an explicit state and signal set, with the
+/// watcher spawn injected so a test can make it fail.
+pub fn install_with(
+    state: &Mutex<InstallState>,
+    handled: &[i32],
+    spawn: impl FnOnce(Signals) -> io::Result<thread::JoinHandle<()>>,
+) -> io::Result<()> {
+    let mut state = state.lock().unwrap_or_else(PoisonError::into_inner);
+    match *state {
+        InstallState::Done => return Ok(()),
+        InstallState::Failed => {
+            return Err(io::Error::other(
+                "the interrupt handler failed to install earlier; not retrying",
+            ));
+        }
+        InstallState::NotYet => {}
+    }
+    if handled.is_empty() {
+        *state = InstallState::Done;
+        return Ok(());
+    }
+    // `Signals::new` can fail after registering some signals and drop them
+    // again, which swallows those signals the same way a failed spawn does.
+    let installed = Signals::new(handled).and_then(spawn);
+    *state = if installed.is_ok() { InstallState::Done } else { InstallState::Failed };
+    drop(state);
+    if installed.is_err() {
+        restore_termination(handled);
+    }
+    installed.map(drop)
+}
+
+/// The watcher thread: wait for the first handled signal, kill every live
+/// probe group, then die by that signal.
+fn watch(mut signals: Signals) {
+    if let Some(sig) = signals.forever().next() {
+        // Held, not dropped: see `interrupt_all`.
+        let _held = interrupt_all(&LIVE);
+        // Restores the default action and re-raises, so luggage dies by the
+        // signal itself. The exit is a fallback for a signal missing from
+        // signal-hook's table, which SIGINT and SIGTERM are not.
+        let _ = signal_hook::low_level::emulate_default_handler(sig);
+        std::process::exit(128 + sig);
+    }
+}
+
+/// Make each of `signals` terminate the process again, after a failed install
+/// has dropped its `Signals`. Unregistering signal-hook's last action does not
+/// restore the OS default, so without this luggage would silently ignore
+/// Ctrl-C and SIGTERM for the rest of its run. An always-true conditional
+/// default runs the default action from signal-hook's own handler. The
+/// registrations are permanent, which is why a failed install never retries
+/// (see [`InstallState`]). Best-effort: a failure here leaves the signal as it
+/// already was.
 fn restore_termination(signals: &[i32]) {
     let always = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
     for &sig in signals {

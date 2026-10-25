@@ -220,6 +220,56 @@ fn restore_termination_undoes_a_dropped_watcher_registration() {
     );
 }
 
+/// A failed install is final. The injected spawn failure must come back as
+/// the error and leave SIGTERM fatal (the restore ran). A retry must error
+/// without even calling its spawn, because a handler registered next to the
+/// leftover defaults would let them kill luggage before the watcher killed
+/// the probes.
+#[test]
+#[serial_test::serial]
+fn a_failed_install_restores_termination_and_never_retries() {
+    const CHILD: &str = "LUGGAGE_FAILED_INSTALL_CHILD";
+
+    if std::env::var_os(CHILD).is_some() {
+        static STATE: Mutex<InstallState> = Mutex::new(InstallState::NotYet);
+        let err =
+            install_with(&STATE, &[SIGTERM], |_| Err(io::Error::other("no threads"))).unwrap_err();
+        assert_eq!(err.to_string(), "no threads");
+        assert_eq!(*STATE.lock().unwrap(), InstallState::Failed);
+
+        let retried = std::cell::Cell::new(false);
+        install_with(&STATE, &[SIGTERM], |_| {
+            retried.set(true);
+            Err(io::Error::other("unreachable"))
+        })
+        .expect_err("a retry after a failure must error");
+        assert!(!retried.get(), "a retry after a failure must not register or spawn anything");
+
+        signal_hook::low_level::raise(SIGTERM).unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        println!("survived SIGTERM");
+        return;
+    }
+
+    let module = module_path!();
+    let module = module.split_once("::").map_or(module, |(_, rest)| rest);
+    let name = format!("{module}::a_failed_install_restores_termination_and_never_retries");
+    let out = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", &name, "--test-threads=1", "--nocapture"])
+        .env(CHILD, "1")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.signal(),
+        Some(Signal::TERM.as_raw()),
+        "a failed install must leave SIGTERM fatal ({}):\n{}\n{}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+}
+
 /// `SigIgn` is a hex mask with bit `n - 1` for signal `n`: SIGINT (2) is
 /// 0x2, SIGTERM (15) is 0x4000.
 #[test]
