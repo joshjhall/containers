@@ -491,12 +491,24 @@ test_gpg_nodejs_failed_restore_reports_stranded_keyring() {
         "the reported path holds the previous keyring"
 }
 
-# Test: if a scratch/staging mktemp fails, the update fails closed without
-# running cp/chmod on an empty path (which would expand to `chmod 600 /*`).
+# assert_mktemp_guard <fail-pattern> <expected-message>
+# Run the update with exactly ONE kind of mktemp failing, and assert it fails
+# closed with that guard's own message, without running cp/chmod on an empty
+# path (which would expand to `chmod 600 /*`).
+#
+# <fail-pattern> selects the mktemp that fails, by its last argument:
+#   keyring-check.  - count_keyring_keys' scratch (first hit: the upstream check)
+#   .new.           - the staging dir beside the keyring
+#   <plain>         - the template-less `mktemp -d` for update_nodejs_keys' temp_dir
+# Every other mktemp runs for real, so each case reaches its own guard. Each
+# guard is proven by removing it and watching its case fail.
+#
 # Safety: cp and chmod are exported tripwires that refuse — and record — any
-# call outside this test's scratch tree, so a regressed guard cannot touch /.
-test_gpg_nodejs_mktemp_failure_fails_closed() {
-    require_gpg || return 0
+# empty, `/`, or direct-child-of-`/` target, so a regressed guard cannot
+# touch the root filesystem.
+assert_mktemp_guard() {
+    local fail_pattern="$1"
+    local expected="$2"
     make_fixture_repo "$TEST_TEMP_DIR/repo"
 
     local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
@@ -508,10 +520,14 @@ test_gpg_nodejs_mktemp_failure_fails_closed() {
     local output rc=0
     # shellcheck disable=SC2329 # invoked by the child script via export -f
     output=$(
-        # Fail only the scratch and staging mktemps (they take a template);
-        # the plain `mktemp -d` for the clone dir still works
         mktemp() {
-            if [ "$#" -ge 2 ]; then return 1; fi
+            local target="${!#}"
+            if [ "$MKTEMP_FAIL" = "<plain>" ]; then
+                # The template-less call is `mktemp -d` (last arg is the flag)
+                [ "$target" = "-d" ] && return 1
+            else
+                case "$target" in *"$MKTEMP_FAIL"*) return 1 ;; esac
+            fi
             command mktemp "$@"
         }
         # Trip on exactly the hazard an empty $scratch/$staging creates: an
@@ -546,15 +562,32 @@ test_gpg_nodejs_mktemp_failure_fails_closed() {
             command chmod "$@"
         }
         export -f mktemp guard_path cp chmod
-        export TRIPWIRE_LOG="$trip" TEST_TEMP_DIR
+        export TRIPWIRE_LOG="$trip" TEST_TEMP_DIR MKTEMP_FAIL="$fail_pattern"
         run_update "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys"
     ) || rc=$?
 
-    assert_not_equals "0" "$rc" "update must exit non-zero when a scratch mktemp fails"
-    assert_contains "$output" "Could not create a scratch directory" \
-        "should name the mktemp failure"
-    assert_equals "" "$(command cat "$trip")" "no cp/chmod may target a path outside the test scratch"
+    assert_not_equals "0" "$rc" "update must exit non-zero when the $fail_pattern mktemp fails"
+    assert_contains "$output" "$expected" "should name the $fail_pattern mktemp failure"
+    assert_equals "" "$(command cat "$trip")" "no cp/chmod may target an empty, /, or top-level path"
     assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "existing keyring untouched"
+    local leftovers
+    leftovers=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 1 -maxdepth 1 -name 'keyring.*' | command wc -l)
+    assert_equals "0" "$leftovers" "no keyring.new.*/keyring.old.* directories left behind"
+}
+
+test_gpg_nodejs_scratch_mktemp_failure_fails_closed() {
+    require_gpg || return 0
+    assert_mktemp_guard "keyring-check." "Could not create a scratch directory"
+}
+
+test_gpg_nodejs_staging_mktemp_failure_fails_closed() {
+    require_gpg || return 0
+    assert_mktemp_guard ".new." "Could not create a staging directory"
+}
+
+test_gpg_nodejs_tempdir_mktemp_failure_fails_closed() {
+    require_gpg || return 0
+    assert_mktemp_guard "<plain>" "Could not create a temporary directory"
 }
 
 # Test: when upstream drops trustdb.gpg, the previous one does not linger
@@ -614,7 +647,9 @@ run_test_with_setup test_gpg_nodejs_empty_keyring_rejected "Node.js: keyring wit
 run_test_with_setup test_gpg_nodejs_move_aside_failure_keeps_existing "Node.js: move-aside failure keeps existing keyring"
 run_test_with_setup test_gpg_nodejs_install_failure_restores_existing "Node.js: install failure restores existing keyring"
 run_test_with_setup test_gpg_nodejs_failed_restore_reports_stranded_keyring "Node.js: failed restore reports the stranded keyring path"
-run_test_with_setup test_gpg_nodejs_mktemp_failure_fails_closed "Node.js: scratch mktemp failure fails closed, touches nothing outside scratch"
+run_test_with_setup test_gpg_nodejs_scratch_mktemp_failure_fails_closed "Node.js: scratch mktemp failure fails closed"
+run_test_with_setup test_gpg_nodejs_staging_mktemp_failure_fails_closed "Node.js: staging mktemp failure fails closed"
+run_test_with_setup test_gpg_nodejs_tempdir_mktemp_failure_fails_closed "Node.js: temp_dir mktemp failure fails closed"
 run_test_with_setup test_gpg_nodejs_dropped_trustdb_not_left_stale "Node.js: dropped upstream trustdb.gpg is not left stale"
 
 # Generate test report
