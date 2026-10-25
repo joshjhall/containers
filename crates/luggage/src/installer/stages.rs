@@ -256,7 +256,8 @@ mod tests {
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let digest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         let warnings = installer.stage_verify(&resolved, digest, "get-pip.py", None).unwrap();
 
@@ -280,7 +281,8 @@ mod tests {
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let digest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         let warnings =
             installer.stage_verify(&resolved, digest, "get-pip.py", Some(&logger)).unwrap();
@@ -310,7 +312,8 @@ mod tests {
             bin_root: dir.path().to_owned(),
             version_probe_timeout: timeout,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let mut resolved = sample_resolved_with_deps();
         resolved.version = "1.0.0".into();
         resolved.primary_binary = "tool".into();
@@ -346,7 +349,8 @@ mod tests {
             InstallerOptions { install_system_packages: false, ..InstallerOptions::default() },
             Arc::new(mock),
             Arc::new(methods::ProcessRunner),
-        );
+        )
+        .unwrap();
         let warnings = installer.stage_verify(&resolved, &digest, "art", None).unwrap();
         assert!(warnings.is_empty(), "expected empty, got {warnings:?}");
     }
@@ -379,7 +383,8 @@ mod tests {
             InstallerOptions { install_system_packages: false, ..InstallerOptions::default() },
             Arc::new(mock),
             Arc::new(methods::ProcessRunner),
-        );
+        )
+        .unwrap();
         installer
             .stage_verify(&resolved, &digest, "go1.27.2.linux-arm64.tar.gz", None)
             .expect("the arm64 checksum URL must be the one fetched");
@@ -400,7 +405,8 @@ mod tests {
             install_system_packages: false,
             bin_root: dir.path().to_owned(),
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let mut resolved = sample_resolved_with_deps();
         resolved.tool = "go".into();
         resolved.version = "1.27.2".into();
@@ -425,7 +431,8 @@ mod tests {
         let installer = Installer::with_options(InstallerOptions {
             record_dependency_versions: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let resolved = sample_resolved_with_deps();
         assert!(installer.captured_dependency_versions(&resolved).is_none());
     }
@@ -438,7 +445,8 @@ mod tests {
             record_dependency_versions: true,
             install_system_packages: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let resolved = sample_resolved_with_deps();
         assert!(installer.captured_dependency_versions(&resolved).is_none());
     }
@@ -451,7 +459,8 @@ mod tests {
             record_dependency_versions: true,
             install_system_packages: true,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let mut resolved = sample_resolved_with_deps();
         resolved.platform = Platform { os: "haiku".into(), os_version: None, arch: "amd64".into() };
         assert!(installer.captured_dependency_versions(&resolved).is_none());
@@ -464,7 +473,8 @@ mod tests {
             record_dependency_versions: true,
             install_system_packages: true,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let mut resolved = sample_resolved_with_deps();
         // What Catalog::resolve produces for a tool with no dependencies.
         resolved.dependencies = Some(vec![]);

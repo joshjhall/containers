@@ -166,7 +166,8 @@ fn install_rust_runs_full_pipeline() {
         options_in(&roots),
         mock as Arc<dyn HttpClient>,
         runner.clone() as Arc<dyn luggage::installer::methods::CommandRunner>,
-    );
+    )
+    .unwrap();
     let report = installer.run(&resolved).expect("install should succeed");
 
     assert!(!report.already_installed, "first install should not skip");
@@ -212,7 +213,8 @@ fn dry_run_performs_no_http_or_command_io() {
         opts,
         mock as Arc<dyn HttpClient>,
         runner.clone() as Arc<dyn luggage::installer::methods::CommandRunner>,
-    );
+    )
+    .unwrap();
 
     installer.run(&resolved).expect("dry-run should succeed");
     assert!(runner.calls().is_empty(), "dry-run should not invoke any commands");
@@ -231,7 +233,8 @@ fn corrupt_artifact_returns_tier_3_verification_failed() {
         options_in(&roots),
         mock as Arc<dyn HttpClient>,
         runner as Arc<dyn luggage::installer::methods::CommandRunner>,
-    );
+    )
+    .unwrap();
 
     let err = installer.run(&resolved).expect_err("verification should fail");
     match err {
@@ -256,7 +259,8 @@ fn run_with_report_on_verification_failure_populates_error_class() {
         options_in(&roots),
         mock as Arc<dyn HttpClient>,
         runner as Arc<dyn luggage::installer::methods::CommandRunner>,
-    );
+    )
+    .unwrap();
 
     let (report, result) = installer.run_with_report(&resolved);
     assert!(result.is_err(), "verification should fail");
@@ -302,7 +306,8 @@ fn run_with_report_on_success_captures_validate_output() {
         options_in(&roots),
         mock as Arc<dyn HttpClient>,
         runner as Arc<dyn luggage::installer::methods::CommandRunner>,
-    );
+    )
+    .unwrap();
 
     let (report, result) = installer.run_with_report(&resolved);
     result.expect("install should succeed");
@@ -328,7 +333,8 @@ fn idempotent_skip_when_rustc_already_at_target_version() {
         options_in(&roots),
         mock as Arc<dyn HttpClient>,
         runner.clone() as Arc<dyn luggage::installer::methods::CommandRunner>,
-    );
+    )
+    .unwrap();
     let report = installer.run(&resolved).expect("idempotency check should pass");
     assert!(report.already_installed, "should report already_installed");
     assert!(runner.calls().is_empty(), "no commands should run on the idempotent path");
@@ -365,7 +371,8 @@ fn force_reruns_install_even_when_idempotent_check_matches() {
         opts,
         mock as Arc<dyn HttpClient>,
         runner.clone() as Arc<dyn luggage::installer::methods::CommandRunner>,
-    );
+    )
+    .unwrap();
     let report = installer.run(&resolved).expect("force install should succeed");
     assert!(!report.already_installed);
     assert!(!runner.calls().is_empty(), "force should invoke commands");
@@ -548,7 +555,8 @@ fn plan_surfaces_skipped_deps_when_not_strict() {
         opts,
         Arc::new(MockHttpClient::new()) as Arc<dyn HttpClient>,
         Arc::new(RecordingRunner::new()) as Arc<dyn luggage::installer::methods::CommandRunner>,
-    );
+    )
+    .unwrap();
 
     let plan = installer.plan(&resolved).expect("plan should not error in non-strict mode");
     assert!(
@@ -577,7 +585,8 @@ fn strict_install_errors_on_unknown_dependency() {
         opts,
         Arc::new(MockHttpClient::new()) as Arc<dyn HttpClient>,
         Arc::new(RecordingRunner::new()) as Arc<dyn luggage::installer::methods::CommandRunner>,
-    );
+    )
+    .unwrap();
 
     let (report, result) = installer.run_with_report(&resolved);
     match result.expect_err("strict mode must reject the unknown dep") {
@@ -616,4 +625,26 @@ fn write_version_shim_impl(path: &Path, line: &str, to_stderr: bool) {
     let mut perms = fs::metadata(path).unwrap().permissions();
     perms.set_mode(0o755);
     fs::set_permissions(path, perms).unwrap();
+}
+
+/// A library caller who hand-builds degenerate options gets a clean refusal
+/// from the public constructor, naming the field, rather than an installer
+/// whose every version probe times out on its first poll (#1399).
+#[test]
+fn public_constructor_refuses_a_zero_version_probe_timeout() {
+    let roots = TempDir::new().unwrap();
+    let opts =
+        InstallerOptions { version_probe_timeout: std::time::Duration::ZERO, ..options_in(&roots) };
+    let result = Installer::with_runners(
+        opts,
+        Arc::new(MockHttpClient::new()) as Arc<dyn HttpClient>,
+        Arc::new(RecordingRunner::new()) as Arc<dyn luggage::installer::methods::CommandRunner>,
+    );
+    match result {
+        Err(LuggageError::Catalog(msg)) => {
+            assert!(msg.contains("version_probe_timeout"), "got: {msg}");
+        }
+        Err(other) => panic!("expected Catalog, got {other:?}"),
+        Ok(_) => panic!("a zero version_probe_timeout must be refused"),
+    }
 }

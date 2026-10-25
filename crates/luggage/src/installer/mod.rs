@@ -17,6 +17,7 @@ pub mod idempotency;
 pub(crate) mod interrupt;
 pub mod logging;
 pub mod methods;
+mod options;
 pub mod post_install;
 pub mod rustup_target;
 mod stages;
@@ -26,11 +27,13 @@ pub mod user;
 pub mod validate;
 pub mod verify;
 
+pub use options::InstallerOptions;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use containers_common::tooldb::InstalledDependency;
 use serde::{Deserialize, Serialize};
@@ -67,82 +70,6 @@ fn tuning_env_value(
         Err(std::env::VarError::NotPresent) => Ok(None),
         Err(std::env::VarError::NotUnicode(raw)) => {
             Err(LuggageError::Catalog(format!("{name} is not valid UTF-8: `{}`", raw.display())))
-        }
-    }
-}
-
-/// Installer configuration.
-///
-/// The flags are independent install toggles, not a state machine, so the
-/// plain-struct shape is the clearest carrier despite the bool count.
-#[derive(Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)]
-pub struct InstallerOptions {
-    /// Skip side-effects; build the plan and return it.
-    pub dry_run: bool,
-    /// Bypass the idempotency check and reinstall regardless.
-    pub force: bool,
-    /// Per-feature log directory (`/var/log/luggage/` in production).
-    pub log_dir: PathBuf,
-    /// Where binaries are symlinked (default `/usr/local/bin`). Tests override.
-    pub bin_root: PathBuf,
-    /// Cache root for tool data (default `/cache`). Tests override.
-    pub cache_root: PathBuf,
-    /// Scratch directory for downloads. Defaults to `/tmp`.
-    pub tmp_root: PathBuf,
-    /// Optional override for the install user; falls back to `$USERNAME`.
-    pub user_override: Option<String>,
-    /// When `true`, the installer also runs `apt-get update && apt-get
-    /// install -y ...` (or distro equivalent) for catalog dependencies.
-    /// Defaults to `true`; tests turn it off to stay hermetic.
-    pub install_system_packages: bool,
-    /// When `true`, after a successful install the installer queries the host
-    /// package manager for each dependency's resolved version and records
-    /// them on [`InstallReport::dependencies`]. Defaults to `false`; the CLI
-    /// turns it on only when `--json-report` is requested (the sole consumer)
-    /// so ordinary installs and hermetic tests skip the extra queries.
-    pub record_dependency_versions: bool,
-    /// When `true` (the default), a catalog dependency id with no
-    /// system-package mapping is a hard error
-    /// ([`LuggageError::UnknownDependency`]) rather than a warn-and-skip.
-    /// The CLI's `--allow-unknown-deps` flag sets this to `false`.
-    pub fail_on_unknown_deps: bool,
-    /// When `true`, a tier-4 (TOFU) verification is refused outright rather
-    /// than accepted with a warning — the artifact has no publisher checksum,
-    /// so nothing establishes its authenticity. Defaults to `false`, matching
-    /// the bash build's `REQUIRE_VERIFIED_DOWNLOADS` default; the CLI's
-    /// `--require-verified-downloads` flag (same env var) sets it.
-    pub require_verified_downloads: bool,
-    /// Ceiling on total decompressed bytes a `binary-tarball` install may
-    /// produce. Guards the build host's disk against a decompression bomb —
-    /// a small artifact that expands enormously. Defaults to
-    /// [`methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES`] (2 GiB); the CLI
-    /// reads `LUGGAGE_MAX_EXTRACT_BYTES` to override it.
-    pub max_extract_bytes: u64,
-    /// Deadline for each version probe — the idempotency pre-check and the
-    /// post-install validation. Defaults to
-    /// [`idempotency::VERSION_PROBE_TIMEOUT`] (10s); the CLI reads
-    /// `LUGGAGE_VERSION_PROBE_TIMEOUT` (seconds) to override it, for hosts
-    /// where a correct probe is just slow (qemu emulation, a cold cache).
-    pub version_probe_timeout: Duration,
-}
-
-impl Default for InstallerOptions {
-    fn default() -> Self {
-        Self {
-            dry_run: false,
-            force: false,
-            log_dir: PathBuf::from("/var/log/luggage"),
-            bin_root: PathBuf::from("/usr/local/bin"),
-            cache_root: PathBuf::from("/cache"),
-            tmp_root: PathBuf::from("/tmp"),
-            user_override: None,
-            install_system_packages: true,
-            record_dependency_versions: false,
-            fail_on_unknown_deps: true,
-            require_verified_downloads: false,
-            max_extract_bytes: methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
-            version_probe_timeout: idempotency::VERSION_PROBE_TIMEOUT,
         }
     }
 }
@@ -274,18 +201,28 @@ impl std::fmt::Debug for Installer {
 
 impl Installer {
     /// Build with production HTTP + process runners.
-    #[must_use]
-    pub fn with_options(options: InstallerOptions) -> Self {
-        Self { options, http: Arc::new(UreqClient::default()), runner: Arc::new(ProcessRunner) }
+    ///
+    /// # Errors
+    ///
+    /// [`LuggageError::Catalog`] when `options` fails
+    /// [`InstallerOptions::validate`] — rejected, not clamped (#1399).
+    pub fn with_options(options: InstallerOptions) -> Result<Self> {
+        Self::with_runners(options, Arc::new(UreqClient::default()), Arc::new(ProcessRunner))
     }
 
     /// Build with caller-supplied runners. Used by tests.
+    ///
+    /// # Errors
+    ///
+    /// [`LuggageError::Catalog`] when `options` fails
+    /// [`InstallerOptions::validate`].
     pub fn with_runners(
         options: InstallerOptions,
         http: Arc<dyn HttpClient>,
         runner: Arc<dyn CommandRunner>,
-    ) -> Self {
-        Self { options, http, runner }
+    ) -> Result<Self> {
+        options.validate()?;
+        Ok(Self { options, http, runner })
     }
 
     /// Borrow the underlying options.
@@ -629,6 +566,8 @@ fn install_basename(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
     use crate::Platform;
     use containers_common::tooldb::{Dependency, InstallMethodKind, Verification};
 
@@ -717,7 +656,8 @@ mod tests {
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let plan = installer.plan(&resolved).unwrap();
         assert!(plan.source_url.is_none(), "fixture must exercise the missing-URL path");
         let err = installer.run_stages(&resolved, plan, None).unwrap_err();
@@ -821,7 +761,8 @@ mod tests {
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let plan = installer.plan(&resolved).unwrap();
         let dry = Installer::report_dry_run(plan, None, 0.0);
         assert!(dry.warnings.is_empty(), "expected empty, got {:?}", dry.warnings);
@@ -837,7 +778,8 @@ mod tests {
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         for platform_arch in ["amd64", "arm64"] {
             let mut resolved = sample_resolved_with_deps();
             resolved.version = "1.27.2".into();
@@ -882,7 +824,8 @@ mod tests {
             cache_root: dir.path().join("cache"),
             tmp_root: dir.path().join("tmp"),
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let mut resolved = sample_resolved_with_deps();
         resolved.tool = "go".into();
         resolved.version = "1.27.2".into();
@@ -916,7 +859,8 @@ mod tests {
             log_dir: dir.path().join("log"),
             version_probe_timeout: Duration::from_secs(1),
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let mut resolved = sample_resolved_with_deps();
         resolved.version = "1.0.0".into();
         resolved.primary_binary = "tool".into();
@@ -959,7 +903,8 @@ mod tests {
             install_system_packages: false,
             require_verified_downloads: true,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         match installer.plan(&resolved).unwrap_err() {
             LuggageError::VerificationFailed { tier, .. } => assert_eq!(tier, 4),
             other => panic!("expected a pre-download tier-4 refusal, got {other:?}"),
@@ -973,7 +918,8 @@ mod tests {
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         match installer.plan(&pinless_tier_2_resolved()).unwrap_err() {
             LuggageError::Catalog(msg) => assert!(msg.contains("pinned_checksum"), "got: {msg}"),
             other => panic!("expected a pre-download Catalog refusal, got {other:?}"),
@@ -990,7 +936,8 @@ mod tests {
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         match installer.plan(&resolved).unwrap_err() {
             LuggageError::VerificationFailed { tier: 2, reason, .. } => {
                 assert!(reason.contains("not a hex digest"), "got: {reason}");
@@ -1010,7 +957,8 @@ mod tests {
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         match installer.plan(&resolved).unwrap_err() {
             LuggageError::VerificationFailed { tier: 2, reason, .. } => {
                 assert!(reason.contains("is 8 hex characters"), "got: {reason}");
@@ -1035,7 +983,8 @@ mod tests {
                 install_system_packages: false,
                 require_verified_downloads: strict,
                 ..InstallerOptions::default()
-            });
+            })
+            .unwrap();
             let plan =
                 installer.plan(&resolved).unwrap_or_else(|e| panic!("strict={strict}: {e:?}"));
             assert_eq!(plan.verification_tier, 2, "strict={strict}");
@@ -1050,7 +999,8 @@ mod tests {
         let installer = Installer::with_options(InstallerOptions {
             install_system_packages: false,
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         for algorithm in ["md5", "sha384"] {
             let mut resolved = pinless_tier_2_resolved();
             resolved.verification.algorithm = Some(algorithm.into());
@@ -1081,7 +1031,8 @@ mod tests {
             fail_on_unknown_deps: true,
             log_dir: tempfile::tempdir().unwrap().keep(),
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let (report, result) = installer.run_with_report(&resolved);
         match result.unwrap_err() {
             LuggageError::Catalog(msg) => assert!(msg.contains("pinned_checksum"), "got: {msg}"),
@@ -1100,7 +1051,8 @@ mod tests {
             install_system_packages: false,
             log_dir: tempfile::tempdir().unwrap().keep(),
             ..InstallerOptions::default()
-        });
+        })
+        .unwrap();
         let (report, result) = installer.run_with_report(&pinless_tier_2_resolved());
         match result.unwrap_err() {
             LuggageError::Catalog(msg) => assert!(msg.contains("pinned_checksum"), "got: {msg}"),
