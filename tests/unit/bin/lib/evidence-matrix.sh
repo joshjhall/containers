@@ -266,6 +266,14 @@ test_pr_rows_unreadable_is_an_error() {
     rc=0
     evidence_pr_rows "$TEST_TEMP_DIR/no-such-base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
     assert_equals "1" "$rc" "a base with no tools/ tree is exit 1"
+
+    # A head with no tools/ must not yield an empty-but-readable rows tree,
+    # which _em_published_evidence would read as "no rows" (#1319).
+    local rows="$TEST_TEMP_DIR/rows.$$.$RANDOM"
+    rc=0
+    evidence_pr_rows "$base" "$TEST_TEMP_DIR/no-such-head" "$rows" 2>/dev/null || rc=$?
+    assert_equals "1" "$rc" "a head with no tools/ tree is exit 1"
+    assert_dir_not_exists "$rows" "and writes no rows tree"
 }
 
 test_open_prs_filters_trust_and_age() {
