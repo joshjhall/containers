@@ -147,7 +147,7 @@ _em_published_evidence() {
         command echo null >"$out"
         return 0
     fi
-    local src dir files=() found srcs i
+    local src dir files=() found srcs i f
     IFS=: read -r -a srcs <<<"$EVIDENCE_TESTED_SOURCE"
     for i in "${!srcs[@]}"; do
         src="${srcs[$i]}"
@@ -167,6 +167,17 @@ _em_published_evidence() {
         fi
         files+=("${found[@]}")
     done
+    # A source listed twice names the same file twice, which the per-file
+    # count below would read as two documents in one file. Its rows union
+    # to the same evidence anyway, so drop the repeat.
+    local -A seen=()
+    local -a uniq=()
+    for f in "${files[@]}"; do
+        [ -n "${seen[$f]:-}" ] && continue
+        seen[$f]=1
+        uniq+=("$f")
+    done
+    files=("${uniq[@]}")
     # Slurping drops an empty file and splits one holding two documents, so
     # values are counted per file (input_filename): a total count would let
     # an empty file and a two-document one cancel out.
@@ -184,7 +195,6 @@ _em_published_evidence() {
 
     # Failure path only: one jq per file to name the culprit (#1329). jq's
     # own message is kept for the case no file check explains.
-    local f
     for f in "${files[@]}"; do
         command jq -ne "$_EM_VERSION_FILE_OK_JQ"'[inputs] | length == 1 and (.[0] | em_version_file_ok)' "$f" >/dev/null 2>&1 || {
             command echo "evidence_matrix: unreadable published evidence for $tool: $f (must be one JSON object with a string .version and, if present, an array .tested)" >&2

@@ -601,6 +601,18 @@ test_evidence_scratch_is_removed() {
     done
 }
 
+test_repeated_source_is_not_two_documents() {
+    # The per-file count must not read a source listed twice as one file
+    # holding two documents: the repeat adds the same rows, nothing more.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 debian-13-amd64
+    out="$(EVIDENCE_TESTED_SOURCE="$db:$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-arm64" "$(_cells "$out")" "a repeated source counts once"
+}
+
 test_published_file_without_tested_is_valid() {
     # A version file with no tested key has no rows: its cells are pending,
     # not an error (the #1329 shape check must not reject it).
@@ -911,6 +923,7 @@ run_test test_unreadable_published_source_is_an_error "an unreadable evidence so
 run_test test_malformed_published_file_is_named "a malformed published version file is fatal and named"
 run_test test_unnamed_evidence_failure_names_the_sources "a failure no file check explains falls back to the source list"
 run_test test_evidence_scratch_is_removed "published-evidence scratch is removed on every exit path"
+run_test test_repeated_source_is_not_two_documents "a source listed twice is not a two-document file"
 run_test test_published_file_without_tested_is_valid "a published version file without tested is pending, not an error"
 run_test test_recent_fail_is_not_pending "a recently failed cell is not pending"
 run_test test_only_recent_failures_exits_3 "only recent failures exits 3"
