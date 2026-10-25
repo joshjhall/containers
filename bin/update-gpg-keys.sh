@@ -204,18 +204,36 @@ update_nodejs_keys() {
     # Copy the full keyring (including historical keys)
     log_info "Copying keyring files..."
     mkdir -p "$keyring_dir"
-    cp gpg/pubring.kbx "$keyring_dir/"
-    cp gpg/trustdb.gpg "$keyring_dir/"
+
+    # Back up the current keyring so a failed re-check below can restore it
+    local backup_dir="$temp_dir/previous-keyring"
+    mkdir -p "$backup_dir"
+    command find "$keyring_dir" -mindepth 1 -maxdepth 1 -type f -exec cp -p {} "$backup_dir/" \;
+
+    # trustdb.gpg is optional (count_keyring_keys treats it the same way)
+    local keyring_files=(pubring.kbx)
+    [ -f gpg/trustdb.gpg ] && keyring_files+=(trustdb.gpg)
+    local f
+    for f in "${keyring_files[@]}"; do
+        cp "gpg/$f" "$keyring_dir/"
+    done
 
     # Set secure permissions on keyring directory and files
     chmod 700 "$keyring_dir"
     chmod 600 "$keyring_dir"/*
 
     # Re-check the written copy: it must be byte-identical to upstream and readable
-    if ! cmp -s gpg/pubring.kbx "$keyring_dir/pubring.kbx" ||
-        ! cmp -s gpg/trustdb.gpg "$keyring_dir/trustdb.gpg" ||
-        ! count_keyring_keys "$keyring_dir" >/dev/null; then
-        log_error "Written Node.js keyring does not match upstream or is unreadable"
+    local written_ok=true
+    for f in "${keyring_files[@]}"; do
+        cmp -s "gpg/$f" "$keyring_dir/$f" || written_ok=false
+    done
+    if [ "$written_ok" = true ] && ! count_keyring_keys "$keyring_dir" >/dev/null; then
+        written_ok=false
+    fi
+    if [ "$written_ok" != true ]; then
+        log_error "Written Node.js keyring does not match upstream or is unreadable — restoring previous keyring"
+        command find "$keyring_dir" -mindepth 1 -maxdepth 1 -type f -delete
+        command find "$backup_dir" -mindepth 1 -maxdepth 1 -type f -exec cp -p {} "$keyring_dir/" \;
         cd "$REPO_ROOT"
         rm -rf "$temp_dir"
         return 1

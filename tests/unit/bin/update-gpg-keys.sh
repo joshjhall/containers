@@ -325,6 +325,36 @@ test_gpg_nodejs_unreadable_keyring_fails_closed() {
     fi
 }
 
+# Test: if the written copy fails its re-check, the previous keyring is restored.
+# A readable upstream passes the pre-copy check; a `cmp` function that always
+# reports a mismatch forces the post-copy branch.
+test_gpg_nodejs_post_copy_failure_restores_previous() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo"
+
+    # Previous keyring: distinct sentinel bytes so a restore is unambiguous
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest"
+    printf 'previous-pubring' >"$dest/pubring.kbx"
+    printf 'previous-trustdb' >"$dest/trustdb.gpg"
+
+    # An exported function, not a PATH stub: BASH_ENV rebuilds PATH in the
+    # child bash, so a PATH-prepended stub would be bypassed
+    local output rc=0
+    # shellcheck disable=SC2329 # invoked by the child script via export -f
+    output=$(
+        cmp() { return 1; }
+        export -f cmp
+        run_update "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys"
+    ) || rc=$?
+
+    assert_not_equals "0" "$rc" "update must exit non-zero when the written keyring fails its re-check"
+    assert_contains "$output" "restoring previous keyring" \
+        "should report the post-copy failure, not the pre-copy one"
+    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "pubring.kbx restored"
+    assert_equals "previous-trustdb" "$(command cat "$dest/trustdb.gpg")" "trustdb.gpg restored"
+}
+
 # ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
@@ -356,6 +386,7 @@ run_test_with_setup test_gpg_main_defaults_to_all "main() defaults to all langua
 run_test_with_setup test_gpg_script_syntax "Script has valid bash syntax"
 run_test_with_setup test_gpg_nodejs_readable_keyring_succeeds "Node.js: readable keyring is copied byte-exact"
 run_test_with_setup test_gpg_nodejs_unreadable_keyring_fails_closed "Node.js: unreadable keyring fails closed"
+run_test_with_setup test_gpg_nodejs_post_copy_failure_restores_previous "Node.js: post-copy check failure restores previous keyring"
 
 # Generate test report
 generate_report
