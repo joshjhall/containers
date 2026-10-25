@@ -662,6 +662,12 @@ RUN if [ -f /opt/container-runtime/check-build-logs.sh ]; then \
     chmod 755 /usr/local/bin/check-build-logs.sh; \
     fi
 
+# Put check-installed-versions on PATH. A symlink, not a copy: the script
+# resolves lib/version-api.sh relative to its real location (#1411).
+RUN if [ -f /opt/container-runtime/check-installed-versions.sh ]; then \
+    ln -sf /opt/container-runtime/check-installed-versions.sh /usr/local/bin/check-installed-versions.sh; \
+    fi
+
 # Install project health check startup script
 RUN if [ -f /opt/container-runtime/40-project-health-check.sh ]; then \
     cp /opt/container-runtime/40-project-health-check.sh /etc/container/startup/40-project-health-check.sh && \

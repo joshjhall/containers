@@ -173,8 +173,9 @@ extract_version() {
 
 # Compare versions
 compare_version() {
-    local current="$1"
-    local latest="$2"
+    # Strip one leading "v" so "2.38.2" and "v2.38.2" compare equal (#1411)
+    local current="${1#v}"
+    local latest="${2#v}"
 
     if [ "$current" = "$latest" ]; then
         echo "up-to-date"

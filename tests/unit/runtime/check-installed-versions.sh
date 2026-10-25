@@ -177,6 +177,79 @@ test_civ_print_section_results_func() {
         "Defines _print_section_results helper"
 }
 
+# ============================================================================
+# Functional Tests - run the real script against a hermetic PATH (#1411)
+# ============================================================================
+
+# Build $TEST_TEMP_DIR/bin holding only the utilities the script needs, a stub
+# `fd` that reports itself as fdfind (as on Debian), and a stub `curl` that
+# answers every GitHub lookup with a v-prefixed tag. No host tool or network
+# call can leak in, so every count in the Summary starts from 0.
+_civ_make_hermetic_bin() {
+    local bin="$TEST_TEMP_DIR/bin"
+    mkdir -p "$bin"
+    local util path
+    for util in bash cat cut dirname grep head readlink sed seq sort tail tr; do
+        path=$(command -v "$util") || return 1
+        command ln -s "$path" "$bin/$util"
+    done
+    printf '#!/bin/sh\necho "fdfind 10.2.0"\n' >"$bin/fd"
+    printf '#!/bin/sh\necho "{\\"tag_name\\": \\"v10.2.0\\"}"\n' >"$bin/curl"
+    chmod +x "$bin/fd" "$bin/curl"
+}
+
+# Run the script (or a symlink to it) under the hermetic PATH.
+# Captures stdout+stderr in $TEST_TEMP_DIR/out and the exit code in CIV_RC.
+_civ_run() {
+    local script="$1"
+    shift
+    CIV_RC=0
+    /usr/bin/env -i HOME="$TEST_TEMP_DIR" PATH="$TEST_TEMP_DIR/bin" \
+        "$script" "$@" >"$TEST_TEMP_DIR/out" 2>&1 || CIV_RC=$?
+}
+
+test_civ_summary_completes() {
+    _civ_make_hermetic_bin
+    _civ_run "$SOURCE_FILE"
+    assert_equals "0" "$CIV_RC" "script exits 0 under set -e"
+    # Total includes missing tools, so only its shape is stable
+    assert_file_contains "$TEST_TEMP_DIR/out" "Total tools checked: [0-9][0-9]*$" \
+        "Summary prints past the counter loop"
+    # The stub fd is the only installed tool; the value sits inside color codes
+    assert_file_contains "$TEST_TEMP_DIR/out" "Up-to-date: .*m1[^0-9]" \
+        "Summary counts exactly one up-to-date tool"
+}
+
+test_civ_fd_reports_fdfind_version() {
+    _civ_make_hermetic_bin
+    _civ_run "$SOURCE_FILE"
+    local row
+    row=$(command grep -E '^fd +' "$TEST_TEMP_DIR/out" || true)
+    assert_contains "$row" "10.2.0" "fd row shows the fdfind version"
+    assert_contains "$row" "up-to-date" "fd 10.2.0 vs latest v10.2.0 is up-to-date"
+}
+
+test_civ_runs_through_symlink() {
+    _civ_make_hermetic_bin
+    command ln -s "$SOURCE_FILE" "$TEST_TEMP_DIR/bin/check-installed-versions.sh"
+    _civ_run "$TEST_TEMP_DIR/bin/check-installed-versions.sh"
+    assert_equals "0" "$CIV_RC" "script exits 0 when invoked through a PATH symlink"
+    assert_file_contains "$TEST_TEMP_DIR/out" "Total tools checked: [0-9][0-9]*$" \
+        "symlinked script still finds lib/version-api.sh"
+}
+
+test_civ_json_completes() {
+    _civ_make_hermetic_bin
+    _civ_run "$SOURCE_FILE" --json
+    assert_equals "0" "$CIV_RC" "--json exits 0"
+    assert_file_contains "$TEST_TEMP_DIR/out" '"tool": "fd"' "--json lists fd"
+}
+
+run_test_with_setup test_civ_summary_completes "Summary completes and exits 0 with counters starting at 0"
+run_test_with_setup test_civ_fd_reports_fdfind_version "fd version parsed from fdfind output"
+run_test_with_setup test_civ_runs_through_symlink "Script runs through a PATH symlink"
+run_test_with_setup test_civ_json_completes "--json output completes and exits 0"
+
 run_test test_civ_print_section_results_func "Defines _print_section_results helper"
 run_test test_civ_strict_mode "check-installed-versions.sh uses set -euo pipefail"
 run_test test_civ_check_version_func "Defines check_version function"

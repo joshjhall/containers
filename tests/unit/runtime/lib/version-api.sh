@@ -165,6 +165,27 @@ test_compare_version_outdated() {
     assert_equals "outdated" "$result" "compare_version returns outdated when current < latest"
 }
 
+# A leading "v" on either side is not a version difference (#1411)
+test_compare_version_v_prefix_latest() {
+    local result
+    result=$(_run_vapi_subshell "compare_version '2.38.2' 'v2.38.2'")
+    assert_equals "up-to-date" "$result" "compare_version ignores a leading v on latest"
+}
+
+test_compare_version_v_prefix_current() {
+    local result
+    result=$(_run_vapi_subshell "compare_version 'v2.38.2' '2.38.2'")
+    assert_equals "up-to-date" "$result" "compare_version ignores a leading v on current"
+}
+
+test_compare_version_v_prefix_ordering() {
+    local result
+    result=$(_run_vapi_subshell "compare_version 'v1.0.0' '1.1.0'")
+    assert_equals "outdated" "$result" "compare_version orders v-prefixed current below latest"
+    result=$(_run_vapi_subshell "compare_version 'v1.2.0' '1.1.0'")
+    assert_equals "newer" "$result" "compare_version orders v-prefixed current above latest"
+}
+
 # ============================================================================
 # Functional Tests - get_github_release with mock curl
 # ============================================================================
@@ -232,6 +253,9 @@ run_test_with_setup test_compare_version_rate_limited "compare_version: 'rate-li
 run_test_with_setup test_compare_version_not_found "compare_version: 'not found' latest returns unknown"
 run_test_with_setup test_compare_version_newer "compare_version: current > latest returns newer"
 run_test_with_setup test_compare_version_outdated "compare_version: current < latest returns outdated"
+run_test_with_setup test_compare_version_v_prefix_latest "compare_version: 2.38.2 vs v2.38.2 is up-to-date"
+run_test_with_setup test_compare_version_v_prefix_current "compare_version: v2.38.2 vs 2.38.2 is up-to-date"
+run_test_with_setup test_compare_version_v_prefix_ordering "compare_version: v prefix keeps newer/outdated ordering"
 
 # Registry functions with mock curl
 run_test_with_setup test_github_release_normal "get_github_release: extracts tag from JSON"
