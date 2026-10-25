@@ -590,6 +590,61 @@ test_gpg_nodejs_tempdir_mktemp_failure_fails_closed() {
     assert_mktemp_guard "<plain>" "Could not create a temporary directory"
 }
 
+# assert_tempdir_guard <lang>
+# Run the python/hashicorp/golang updater with its `mktemp -d` failing and
+# assert it fails closed before any download (#1432). With an empty
+# $temp_dir, `curl -o "$temp_dir/x.asc"` writes /x.asc and the copy reads
+# from /. curl is an exported stub that records every call and fails, so no
+# network is used and a regressed guard shows up in the log, not just as a
+# non-zero exit (a failing curl would produce that on its own).
+assert_tempdir_guard() {
+    local lang="$1"
+    local curl_log="$TEST_TEMP_DIR/curl.log"
+    : >"$curl_log"
+    local output rc=0
+    # shellcheck disable=SC2329 # invoked by the child script via export -f
+    output=$(
+        mktemp() {
+            [ "${!#}" = "-d" ] && return 1
+            command mktemp "$@"
+        }
+        curl() {
+            printf '%s\n' "$*" >>"$CURL_LOG"
+            return 1
+        }
+        export -f mktemp curl
+        export CURL_LOG="$curl_log"
+        GPG_KEYS_DIR="$TEST_TEMP_DIR/keys" bash "$SOURCE_FILE" "$lang" 2>&1
+    ) || rc=$?
+
+    assert_not_equals "0" "$rc" "$lang update must exit non-zero when mktemp fails"
+    assert_contains "$output" "Could not create a temporary directory" \
+        "$lang should name the temp_dir mktemp failure"
+    assert_equals "" "$(command cat "$curl_log")" "$lang must not download once mktemp fails"
+    assert_dir_not_exists "$TEST_TEMP_DIR/keys/$lang/keys" "$lang keys dir must not be created"
+}
+
+test_gpg_python_tempdir_mktemp_failure_fails_closed() {
+    assert_tempdir_guard python
+}
+
+test_gpg_hashicorp_tempdir_mktemp_failure_fails_closed() {
+    assert_tempdir_guard hashicorp
+}
+
+test_gpg_golang_tempdir_mktemp_failure_fails_closed() {
+    assert_tempdir_guard golang
+}
+
+# Test: every mktemp result is checked before use — main suspends set -e, so
+# an unchecked failure leaves an empty path that resolves under / (#1432)
+test_gpg_every_mktemp_checked() {
+    local unchecked
+    unchecked=$(command grep -n '\$(mktemp' "$SOURCE_FILE" |
+        command grep -vE 'if ! [A-Za-z_]+=\$\(mktemp ' || true)
+    assert_equals "" "$unchecked" "every \$(mktemp ...) must be guarded with 'if ! var=\$(mktemp ...)'"
+}
+
 # Test: when upstream drops trustdb.gpg, the previous one does not linger
 # beside the new pubring.kbx
 test_gpg_nodejs_dropped_trustdb_not_left_stale() {
@@ -650,6 +705,10 @@ run_test_with_setup test_gpg_nodejs_failed_restore_reports_stranded_keyring "Nod
 run_test_with_setup test_gpg_nodejs_scratch_mktemp_failure_fails_closed "Node.js: scratch mktemp failure fails closed"
 run_test_with_setup test_gpg_nodejs_staging_mktemp_failure_fails_closed "Node.js: staging mktemp failure fails closed"
 run_test_with_setup test_gpg_nodejs_tempdir_mktemp_failure_fails_closed "Node.js: temp_dir mktemp failure fails closed"
+run_test_with_setup test_gpg_python_tempdir_mktemp_failure_fails_closed "Python: temp_dir mktemp failure fails closed"
+run_test_with_setup test_gpg_hashicorp_tempdir_mktemp_failure_fails_closed "HashiCorp: temp_dir mktemp failure fails closed"
+run_test_with_setup test_gpg_golang_tempdir_mktemp_failure_fails_closed "Go: temp_dir mktemp failure fails closed"
+run_test_with_setup test_gpg_every_mktemp_checked "Every mktemp result is checked"
 run_test_with_setup test_gpg_nodejs_dropped_trustdb_not_left_stale "Node.js: dropped upstream trustdb.gpg is not left stale"
 
 # Generate test report
