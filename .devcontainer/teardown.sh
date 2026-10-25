@@ -28,6 +28,9 @@
 #   --volumes,-v  also drop named cache volumes (pip/npm/cargo/… — slower rebuild)
 #   --help,-h     show this help
 #
+#   If the container is already gone, the project name can only be guessed, so
+#   --rmi / --volumes are refused; the refusal prints the explicit command.
+#
 # After it finishes, reopen the project in Zed to rebuild + start the container:
 #   Cmd/Ctrl+Shift+P -> "project: open remote"  (or Ctrl/Alt+Cmd+Shift+O)
 
@@ -41,8 +44,10 @@ COMPOSE_FILE="$DEVCONTAINER_DIR/docker-compose.yml"
 DROP_VOLUMES=false
 REMOVE_IMAGE=false
 
+# Print the header comment up to (not including) the "After it finishes" note,
+# so the help tracks header edits instead of a hardcoded line range.
 usage() {
-    command sed -n '2,30p' "${BASH_SOURCE[0]}" | command sed 's/^# \{0,1\}//'
+    command sed -n '/^# After it finishes/q; 2,$p' "${BASH_SOURCE[0]}" | command sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -64,9 +69,7 @@ done
 
 # --- guards -----------------------------------------------------------------
 # Must run on the host: you can't tear down the container from inside it.
-# TEARDOWN_DOCKERENV_FILE is a test seam (the unit tests themselves run inside
-# a container, where /.dockerenv always exists).
-if [ -f "${TEARDOWN_DOCKERENV_FILE:-/.dockerenv}" ] || [ -f "$HOME/.container-initialized" ]; then
+if [ -f /.dockerenv ] || [ -f "$HOME/.container-initialized" ]; then
     printf 'teardown.sh: looks like this is running INSIDE the dev container.\n' >&2
     printf '             Run it from a host terminal instead.\n' >&2
     exit 1
@@ -111,9 +114,11 @@ if [ -z "$PROJECT_NAME" ]; then
     # destructive --rmi/--volumes could wipe ANOTHER clone's image or caches.
     if [ "$REMOVE_IMAGE" = true ] || [ "$DROP_VOLUMES" = true ]; then
         printf 'teardown.sh: refusing --rmi/--volumes on a guessed project name.\n' >&2
-        printf '             Another clone named "%s" would share it. If you are sure, run:\n' \
+        printf '             No container is left to read the real name from (e.g. it was\n' >&2
+        printf '             already torn down), and another clone named "%s" would\n' \
             "$(command basename "$(command dirname "$DEVCONTAINER_DIR")")" >&2
-        printf '               docker compose -p %s -f %s down%s%s\n' "$PROJECT_NAME" "$COMPOSE_FILE" \
+        printf '             share the guess. If you are sure, run:\n' >&2
+        printf '               docker compose -p %q -f %q down%s%s\n' "$PROJECT_NAME" "$COMPOSE_FILE" \
             "$([ "$REMOVE_IMAGE" = true ] && printf ' --rmi local')" \
             "$([ "$DROP_VOLUMES" = true ] && printf ' --volumes')" >&2
         exit 1

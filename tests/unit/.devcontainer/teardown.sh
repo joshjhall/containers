@@ -16,19 +16,31 @@ test_suite "Devcontainer Teardown Tests"
 
 SCRIPT="$PROJECT_ROOT/.devcontainer/teardown.sh"
 
-# Lay out <TEST_TEMP_DIR>/proj/.devcontainer/{teardown.sh,docker-compose.yml}
+# Lay out <TEST_TEMP_DIR>/<proj>/.devcontainer/{teardown.sh,docker-compose.yml}
 # (a copy, so the script's DEVCONTAINER_DIR is the sandbox), an empty HOME,
 # and a `docker` stub that logs each invocation's args to $TEST_TEMP_DIR/calls.
 # The stub answers `ps` with $DOCKER_PS_OUTPUT and everything else with 0.
+# $1 names the project folder (default "proj"), which sets the guessed name.
+#
+# This suite itself runs inside a container, where /.dockerenv always exists,
+# so the copy's /.dockerenv guard is repointed at $TEST_TEMP_DIR/dockerenv
+# (absent unless a test creates it). The rewrite is verified: had it silently
+# missed, every test would fail on the real /.dockerenv for the wrong reason.
 _make_sandbox() {
-    local sb="$TEST_TEMP_DIR"
-    command mkdir -p "$sb/proj/.devcontainer" "$sb/home" "$sb/bin"
-    command cp "$SCRIPT" "$sb/proj/.devcontainer/teardown.sh"
-    command printf 'services: {}\n' >"$sb/proj/.devcontainer/docker-compose.yml"
+    local sb="$TEST_TEMP_DIR" proj=${1:-proj}
+    SANDBOX_DIR="$sb/$proj/.devcontainer"
+    command mkdir -p "$SANDBOX_DIR" "$sb/home" "$sb/bin"
+    command sed "s|-f /\\.dockerenv |-f \"$sb/dockerenv\" |" "$SCRIPT" >"$SANDBOX_DIR/teardown.sh"
+    if command grep -q '/\.dockerenv' "$SANDBOX_DIR/teardown.sh" ||
+        ! command grep -qF -- "-f \"$sb/dockerenv\" " "$SANDBOX_DIR/teardown.sh"; then
+        assert_true false "Sandbox rewrite of the /.dockerenv guard applied"
+        return 1
+    fi
+    command printf 'services: {}\n' >"$SANDBOX_DIR/docker-compose.yml"
     : >"$sb/calls"
     command cat >"$sb/bin/docker" <<EOF
 #!/bin/sh
-echo "\$*" >>"$sb/calls"
+printf '%s\n' "\$*" >>"$sb/calls"
 if [ "\$1" = ps ]; then
     printf '%s' "\${DOCKER_PS_OUTPUT:-}"
 fi
@@ -41,8 +53,7 @@ EOF
 # env assignments; the rest are script args. BASH_ENV is unset because the
 # container's /etc/bash_env re-prepends system dirs to PATH, which would let a
 # real docker shadow the stub. The ${envs[@]+…} form keeps an empty array
-# safe under set -u on bash < 4.4. TEARDOWN_DOCKERENV_FILE points at a file that
-# does not exist, since this suite itself runs inside a container.
+# safe under set -u on bash < 4.4.
 _run_teardown() {
     local -a envs=()
     while [ $# -gt 0 ] && [[ "$1" == *=* ]]; do
@@ -50,29 +61,42 @@ _run_teardown() {
         shift
     done
     command env -u BASH_ENV PATH="$TEST_TEMP_DIR/bin:$PATH" HOME="$TEST_TEMP_DIR/home" \
-        TEARDOWN_DOCKERENV_FILE="$TEST_TEMP_DIR/no-dockerenv" ${envs[@]+"${envs[@]}"} \
-        bash "$TEST_TEMP_DIR/proj/.devcontainer/teardown.sh" "$@"
+        ${envs[@]+"${envs[@]}"} bash "$SANDBOX_DIR/teardown.sh" "$@"
 }
 
 _compose_prefix() {
-    command echo "compose -p $1 -f $TEST_TEMP_DIR/proj/.devcontainer/docker-compose.yml"
+    command echo "compose -p $1 -f $SANDBOX_DIR/docker-compose.yml"
+}
+
+# Number of `docker compose … down` invocations in the call log. A substring
+# match on "down" would also hit any argument that merely contains it.
+_count_down_calls() {
+    command grep -cE '^compose( .*)? down( |$)' "$TEST_TEMP_DIR/calls" || true
 }
 
 # --- argument parsing -------------------------------------------------------
 
+# Usage goes to stdout with an empty stderr. The unknown-option path prints the
+# same usage, but on stderr and exiting 1, so it cannot satisfy this test.
 test_help_exits_zero() {
     _make_sandbox
-    local rc=0 out
-    out=$(_run_teardown --help 2>&1) || rc=$?
+    local flag rc out err
+    for flag in --help -h; do
+        rc=0
+        out=$(_run_teardown "$flag" 2>"$TEST_TEMP_DIR/stderr") || rc=$?
+        err=$(command cat "$TEST_TEMP_DIR/stderr")
 
-    assert_equals "0" "$rc" "--help exits 0"
-    assert_contains "$out" "Usage:" "--help prints usage"
-    assert_not_contains "$(command cat "$TEST_TEMP_DIR/calls")" "down" "--help does not tear anything down"
-
-    rc=0
-    out=$(_run_teardown -h 2>&1) || rc=$?
-    assert_equals "0" "$rc" "-h exits 0"
-    assert_contains "$out" "Usage:" "-h prints usage"
+        assert_equals "0" "$rc" "$flag exits 0"
+        assert_contains "$out" "Usage:" "$flag prints usage on stdout"
+        assert_contains "$out" "If the container is already gone" "$flag documents the already-torn-down case"
+        assert_contains "$out" "the refusal prints the explicit command" "$flag prints the whole note"
+        assert_not_contains "$out" "set -euo pipefail" "$flag stops at the end of the header"
+        assert_not_contains "$out" "After it finishes" "$flag excludes the sentinel line itself"
+        assert_not_contains "$out" "/usr/bin/env bash" "$flag skips the shebang"
+        assert_equals "" "$err" "$flag writes nothing to stderr"
+        assert_not_contains "$out" "unknown option" "$flag is not treated as unknown"
+    done
+    assert_equals "0" "$(_count_down_calls)" "--help does not tear anything down"
 }
 
 test_unknown_option_fails() {
@@ -91,7 +115,7 @@ test_refuses_inside_container_dockerenv() {
     _make_sandbox
     : >"$TEST_TEMP_DIR/dockerenv"
     local rc=0 out
-    out=$(_run_teardown TEARDOWN_DOCKERENV_FILE="$TEST_TEMP_DIR/dockerenv" 2>&1) || rc=$?
+    out=$(_run_teardown 2>&1) || rc=$?
 
     assert_equals "1" "$rc" "Exits 1 when /.dockerenv exists"
     assert_contains "$out" "INSIDE the dev container" "Explains it must run on the host"
@@ -117,8 +141,7 @@ test_fails_without_docker() {
         command ln -s "$(command -v "$t")" "$tools/$t"
     done
     out=$(command env -u BASH_ENV PATH="$tools" HOME="$TEST_TEMP_DIR/home" \
-        TEARDOWN_DOCKERENV_FILE="$TEST_TEMP_DIR/no-dockerenv" \
-        "$tools/bash" "$TEST_TEMP_DIR/proj/.devcontainer/teardown.sh" 2>&1) || rc=$?
+        "$tools/bash" "$SANDBOX_DIR/teardown.sh" 2>&1) || rc=$?
 
     assert_equals "1" "$rc" "Exits 1 when docker is missing"
     assert_contains "$out" "docker not found" "Reports the missing docker"
@@ -126,7 +149,7 @@ test_fails_without_docker() {
 
 test_fails_without_compose_file() {
     _make_sandbox
-    command rm "$TEST_TEMP_DIR/proj/.devcontainer/docker-compose.yml"
+    command rm "$SANDBOX_DIR/docker-compose.yml"
     local rc=0 out
     out=$(_run_teardown 2>&1) || rc=$?
 
@@ -144,10 +167,11 @@ test_discovered_name_plain_down() {
     assert_equals "0" "$rc" "Teardown exits 0"
     assert_contains "$out" "Targeting Compose project: myproj_devcontainer" "Discovered name is reported"
     assert_contains "$(command cat "$TEST_TEMP_DIR/calls")" \
-        "label=com.docker.compose.project.working_dir=$TEST_TEMP_DIR/proj/.devcontainer" \
+        "label=com.docker.compose.project.working_dir=$SANDBOX_DIR" \
         "Discovery filters on the .devcontainer working_dir label"
     assert_equals "$(_compose_prefix myproj_devcontainer) down" "$(command tail -n 1 "$TEST_TEMP_DIR/calls")" \
         "Runs a plain compose down on the discovered project"
+    assert_equals "1" "$(_count_down_calls)" "Exactly one compose down is counted"
 }
 
 test_discovered_name_rmi_and_volumes() {
@@ -189,9 +213,28 @@ test_fallback_name_refuses_destructive_flags() {
 
         assert_equals "1" "$rc" "$flag on a guessed name exits 1"
         assert_contains "$out" "refusing --rmi/--volumes on a guessed project name" "$flag refusal is explained"
-        assert_not_contains "$(command cat "$TEST_TEMP_DIR/calls")" "down" "$flag refusal runs no compose down"
+        assert_equals "0" "$(_count_down_calls)" "$flag refusal runs no compose down"
     done
     assert_contains "$out" "docker compose -p proj_devcontainer" "Refusal prints the explicit command to run"
+    assert_contains "$out" "already torn down" "Refusal names the already-torn-down case"
+}
+
+# The printed hint must paste as-is: a path with a space has to stay one word.
+# Re-parse the hint with a recording `docker` function to prove the argv split.
+test_fallback_refusal_hint_is_shell_quoted() {
+    _make_sandbox "my proj"
+    local rc=0 out hint rec="$TEST_TEMP_DIR/argv"
+    out=$(_run_teardown --rmi --volumes 2>&1) || rc=$?
+
+    assert_equals "1" "$rc" "Refused on the guessed name"
+    hint=$(command printf '%s\n' "$out" | command sed -n 's/^ *\(docker compose -p .*\)$/\1/p')
+    assert_contains "$hint" 'my\ proj_devcontainer' "Project name is shell-quoted"
+
+    docker() { command printf '%s\n' "$@" >"$rec"; }
+    eval "$hint"
+    unset -f docker
+    assert_equals "compose|-p|my proj_devcontainer|-f|$SANDBOX_DIR/docker-compose.yml|down|--rmi|local|--volumes" \
+        "$(command paste -sd '|' "$rec")" "Hint re-parses into the intended argv"
 }
 
 run_test test_help_exits_zero "--help / -h print usage and exit 0"
@@ -204,6 +247,7 @@ run_test test_discovered_name_plain_down "Discovered project name: plain down"
 run_test test_discovered_name_rmi_and_volumes "Discovered project name: --rmi / --volumes"
 run_test test_fallback_name_plain_down "Fallback project name: plain down"
 run_test test_fallback_name_refuses_destructive_flags "Fallback project name: refuses --rmi / --volumes"
+run_test test_fallback_refusal_hint_is_shell_quoted "Fallback refusal hint is shell-quoted"
 
 # Generate test report
 generate_report
