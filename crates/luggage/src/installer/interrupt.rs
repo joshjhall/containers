@@ -19,6 +19,7 @@
 //! `main`. A library caller that skips it keeps the gap described on
 //! `run_version_check_within`.
 
+use std::cell::Cell;
 use std::io;
 use std::process::{Child, Command};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -59,6 +60,10 @@ fn lock(registry: &Mutex<Registry>) -> MutexGuard<'_, Registry> {
 pub struct Tracked {
     registry: &'static Mutex<Registry>,
     pgid: Pid,
+    // Set once `reap_locked` has deregistered the group. The pid is free for
+    // reuse from then on, so a later drop must not deregister by value: a
+    // concurrent probe given the recycled pid would lose its live entry.
+    reaped: Cell<bool>,
 }
 
 impl Tracked {
@@ -77,6 +82,7 @@ impl Tracked {
         let reaped = reap();
         if matches!(reaped, Ok(Some(_))) {
             deregister(&mut live, self.pgid);
+            self.reaped.set(true);
         }
         reaped
     }
@@ -90,7 +96,9 @@ fn deregister(live: &mut Registry, pgid: Pid) {
 
 impl Drop for Tracked {
     fn drop(&mut self) {
-        deregister(&mut lock(self.registry), self.pgid);
+        if !self.reaped.get() {
+            deregister(&mut lock(self.registry), self.pgid);
+        }
     }
 }
 
@@ -123,7 +131,7 @@ pub fn spawn_tracked_in(
     let pgid = Pid::from_child(&child);
     live.pgids.push(pgid);
     drop(live);
-    Ok((child, Tracked { registry, pgid }))
+    Ok((child, Tracked { registry, pgid, reaped: Cell::new(false) }))
 }
 
 /// Mark `registry` interrupted and SIGKILL every recorded group. A group whose

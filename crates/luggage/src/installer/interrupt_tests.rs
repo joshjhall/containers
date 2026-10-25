@@ -7,7 +7,7 @@ use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use crate::installer::idempotency::tests::{
-    KillOnDrop, pid_is_running, write_forking_shim, write_sleeping_shim,
+    KillOnDrop, TEST_TIMEOUT, pid_is_running, write_forking_shim, write_sleeping_shim,
 };
 use crate::installer::idempotency::{VERSION_PROBE_TIMEOUT, run_version_check_within};
 
@@ -130,6 +130,45 @@ fn a_failed_reap_keeps_the_group_registered() {
     let _ = child.kill();
     let _ = child.wait();
     drop(tracked);
+}
+
+/// Once a reap has deregistered a group, the guard's drop must not
+/// deregister again by value: the pid is free for reuse, and a concurrent
+/// probe that got it must keep its live entry.
+#[test]
+fn a_dropped_guard_spares_a_recycled_pgid_after_its_reap() {
+    static REG: Mutex<Registry> = Mutex::new(Registry::new());
+
+    let (mut child, tracked) = spawn_tracked_in(&REG, &mut grouped_sleep()).unwrap();
+    let pgid = Pid::from_child(&child);
+    let _ = child.kill();
+    tracked.reap_locked(|| child.wait().map(Some)).unwrap();
+
+    // Another probe is handed the recycled pid and registers it.
+    lock(&REG).pgids.push(pgid);
+    drop(tracked);
+    assert_eq!(lock(&REG).pgids, vec![pgid], "the stale guard removed another probe's entry");
+}
+
+/// The production path: a probe that times out is killed and reaped through
+/// `TrackedChild`, and leaves no entry behind in the live registry.
+#[test]
+#[serial_test::serial]
+fn a_timed_out_probe_leaves_no_live_registration() {
+    let dir = tempfile::tempdir().unwrap();
+    write_sleeping_shim(dir.path(), "tool");
+    let err = run_version_check_within(
+        &dir.path().join("tool"),
+        &["--version"],
+        &std::collections::BTreeMap::new(),
+        TEST_TIMEOUT,
+    )
+    .expect_err("a sleeping probe must time out");
+    assert_eq!(err.kind(), io::ErrorKind::TimedOut);
+
+    let raw = std::fs::read_to_string(dir.path().join("tool.pid")).unwrap();
+    let pid = Pid::from_raw(raw.trim().parse().unwrap()).unwrap();
+    assert!(!lock(&LIVE).pgids.contains(&pid), "a reaped probe's group must be deregistered");
 }
 
 /// `SigIgn` is a hex mask with bit `n - 1` for signal `n`: SIGINT (2) is
