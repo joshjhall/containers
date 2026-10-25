@@ -293,18 +293,24 @@ impl ProbeChild for TrackedChild<'_> {
 /// it backgrounded does not outlive the probe (#1371). Must run before the
 /// reap: `WNOWAIT` leaves the leader a zombie, which keeps its pid — and so
 /// the pgid — reserved through the `killpg`. Killing after the reap could
-/// signal an unrelated group that was handed the recycled pid. The kill fails
-/// with ESRCH when the group is already empty, the usual case.
+/// signal an unrelated group that was handed the recycled pid. With nothing
+/// left running, the kill reaches only the zombie leader, a no-op; its result
+/// is ignored either way. ECHILD (the child already reaped, which the poll
+/// loop never does before this point) is left for `try_wait` to report.
 #[cfg(all(unix, not(any(target_os = "openbsd", target_os = "cygwin"))))]
 fn kill_group_if_exited(child: &Child) -> io::Result<()> {
     use rustix::process::{WaitId, WaitIdOptions};
 
     let pid = rustix::process::Pid::from_child(child);
     let peek = WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT;
-    if rustix::process::waitid(WaitId::Pid(pid), peek)?.is_some() {
-        let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
+    match rustix::process::waitid(WaitId::Pid(pid), peek) {
+        Ok(Some(_)) => {
+            let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
+            Ok(())
+        }
+        Ok(None) | Err(rustix::io::Errno::CHILD) => Ok(()),
+        Err(e) => Err(e.into()),
     }
-    Ok(())
 }
 
 /// Poll `child` until it exits or `timeout` elapses. On timeout, or if a poll
