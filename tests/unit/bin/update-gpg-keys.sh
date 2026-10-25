@@ -14,6 +14,7 @@ init_test_framework
 test_suite "Bin Update GPG Keys Tests"
 
 SOURCE_FILE="$PROJECT_ROOT/bin/update-gpg-keys.sh"
+KEYRING_SWAP_LIB="$PROJECT_ROOT/bin/lib/keyring-swap.sh"
 
 # Setup function - runs before each test
 setup() {
@@ -73,6 +74,14 @@ test_gpg_defines_update_hashicorp_keys() {
 test_gpg_defines_update_golang_keys() {
     assert_file_contains "$SOURCE_FILE" "update_golang_keys()" \
         "Should define update_golang_keys function"
+}
+
+# Test: Script sources the keyring stage/validate/swap helper (#1426)
+test_gpg_sources_keyring_swap() {
+    assert_file_contains "$SOURCE_FILE" 'source "$SCRIPT_DIR/lib/keyring-swap.sh"' \
+        "Should source bin/lib/keyring-swap.sh"
+    assert_file_contains "$SOURCE_FILE" 'swap_keyring_atomic "$temp_dir/release-keys/gpg"' \
+        "update_nodejs_keys should swap via swap_keyring_atomic"
 }
 
 # Test: Script defines main function
@@ -446,6 +455,86 @@ run_update_failing_mv() {
     )
 }
 
+# run_update_term_on_install <repo> <keys_dir> <tmpdir> <mid|post>
+# Run the real script with an exported `mv` that sends SIGTERM to the script
+# on the install rename (staging keyring.new.* -> keyring) (#1427):
+#   mid  - signal BEFORE the rename: the existing keyring is already moved
+#          aside, so the trap must put it back
+#   post - signal AFTER the rename: the trap must only clean up
+# An exported function, not a PATH stub: BASH_ENV rebuilds PATH in the child
+# bash. $$ inside it is the script's own pid (mv runs in the script's shell).
+# TMPDIR is pinned so the temp clone's location is known.
+run_update_term_on_install() {
+    (
+        # shellcheck disable=SC2329 # invoked by the child script via export -f
+        mv() {
+            # shellcheck disable=SC2053 # glob match on purpose
+            if [[ "$1" == */keyring.new.* && "${!#}" == $MV_TERM_DEST ]]; then
+                if [ "$MV_TERM_WINDOW" = post ]; then
+                    command mv "$@" || return 1
+                fi
+                kill -TERM $$
+                return 1
+            fi
+            command mv "$@"
+        }
+        export -f mv
+        export MV_TERM_DEST="$2/nodejs/keyring" MV_TERM_WINDOW="$4" TMPDIR="$3"
+        run_update "$1" "$2"
+    )
+}
+
+# assert_term_window <mid|post> — drive one SIGTERM window end-to-end
+assert_term_window() {
+    local window="$1"
+    make_fixture_repo "$TEST_TEMP_DIR/repo"
+
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest" "$TEST_TEMP_DIR/tmp"
+    printf 'previous-pubring' >"$dest/pubring.kbx"
+    printf 'previous-trustdb' >"$dest/trustdb.gpg"
+
+    local output rc=0
+    output=$(run_update_term_on_install "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys" \
+        "$TEST_TEMP_DIR/tmp" "$window") || rc=$?
+
+    assert_equals "143" "$rc" "$window-swap SIGTERM exits through the TERM trap (output: $output)"
+    if [ "$window" = mid ]; then
+        assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx" 2>/dev/null)" \
+            "previous pubring.kbx restored"
+        assert_equals "previous-trustdb" "$(command cat "$dest/trustdb.gpg" 2>/dev/null)" \
+            "previous trustdb.gpg restored"
+    else
+        if command cmp -s "$COMMITTED_NODEJS_KEYRING/pubring.kbx" "$dest/pubring.kbx"; then
+            assert_true true "new pubring.kbx in place"
+        else
+            assert_true false "new pubring.kbx not in place after a post-swap SIGTERM"
+        fi
+    fi
+    assert_false "[ -e '$dest/keyring' ]" "no keyring nested inside the keyring"
+    local leftovers
+    leftovers=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 1 -maxdepth 1 -name 'keyring.*' | command wc -l)
+    assert_equals "0" "$leftovers" "no keyring.new.*/keyring.old.* left after a $window-swap SIGTERM"
+    local clones
+    clones=$(command find "$TEST_TEMP_DIR/tmp" -name release-keys | command wc -l)
+    assert_equals "0" "$clones" "temp clone removed after a $window-swap SIGTERM"
+    if [ -e "$TEST_TEMP_DIR/keys/nodejs/keyring-metadata.json" ]; then
+        assert_true false "metadata must not be written when the run is interrupted"
+    fi
+}
+
+# Test: SIGTERM after the move-aside, before install, restores the previous keyring
+test_gpg_nodejs_term_mid_swap_restores() {
+    require_gpg || return 0
+    assert_term_window mid
+}
+
+# Test: SIGTERM right after install keeps the new keyring and cleans up
+test_gpg_nodejs_term_post_swap_cleans_up() {
+    require_gpg || return 0
+    assert_term_window post
+}
+
 # Test: if the existing keyring cannot be moved aside, it is kept as-is
 test_gpg_nodejs_move_aside_failure_keeps_existing() {
     require_gpg || return 0
@@ -739,7 +828,7 @@ test_gpg_golang_tempdir_mktemp_empty_fails_closed() {
 # an unchecked failure leaves an empty path that resolves under / (#1432)
 test_gpg_every_mktemp_checked() {
     local unchecked
-    unchecked=$(command grep -n '\$(mktemp' "$SOURCE_FILE" |
+    unchecked=$(command grep -n '\$(mktemp' "$SOURCE_FILE" "$KEYRING_SWAP_LIB" |
         command grep -vE 'if ! ([A-Za-z_]+)=\$\(mktemp [^)]*\) \|\| \[ ! -d "\$\1" \]' || true)
     assert_equals "" "$unchecked" "every \$(mktemp ...) must be guarded with 'if ! var=\$(mktemp ...) || [ ! -d \"\$var\" ]'"
 }
@@ -774,6 +863,7 @@ run_test_with_setup test_gpg_defines_update_nodejs_keys "Defines update_nodejs_k
 run_test_with_setup test_gpg_defines_update_hashicorp_keys "Defines update_hashicorp_keys function"
 run_test_with_setup test_gpg_defines_update_golang_keys "Defines update_golang_keys function"
 run_test_with_setup test_gpg_defines_main "Defines main function"
+run_test_with_setup test_gpg_sources_keyring_swap "Sources lib/keyring-swap.sh for the keyring swap"
 run_test_with_setup test_gpg_defines_log_info "Defines log_info function"
 run_test_with_setup test_gpg_defines_log_success "Defines log_success function"
 run_test_with_setup test_gpg_defines_log_warning "Defines log_warning function"
@@ -801,6 +891,8 @@ run_test_with_setup test_gpg_nodejs_empty_keyring_rejected "Node.js: keyring wit
 run_test_with_setup test_gpg_nodejs_move_aside_failure_keeps_existing "Node.js: move-aside failure keeps existing keyring"
 run_test_with_setup test_gpg_nodejs_install_failure_restores_existing "Node.js: install failure restores existing keyring"
 run_test_with_setup test_gpg_nodejs_failed_restore_reports_stranded_keyring "Node.js: failed restore reports the stranded keyring path"
+run_test_with_setup test_gpg_nodejs_term_mid_swap_restores "Node.js: SIGTERM mid-swap restores the previous keyring (#1427)"
+run_test_with_setup test_gpg_nodejs_term_post_swap_cleans_up "Node.js: SIGTERM post-swap keeps the new keyring and cleans up (#1427)"
 run_test_with_setup test_gpg_nodejs_stale_old_pid_dir_success "Node.js: leftover keyring.old.<pid> does not swallow the keyring (#1436)"
 run_test_with_setup test_gpg_nodejs_stale_old_pid_dir_install_failure "Node.js: leftover keyring.old.<pid> is not restored as the keyring (#1436)"
 run_test_with_setup test_gpg_nodejs_scratch_mktemp_failure_fails_closed "Node.js: scratch mktemp failure fails closed"
