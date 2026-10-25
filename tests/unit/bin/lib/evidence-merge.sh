@@ -142,8 +142,11 @@ _assert_rejected() {
 
 test_invalid_input_is_rejected() {
     _assert_rejected 'not json' "$EVIDENCE_NOW" "row is not valid JSON" "a non-JSON row"
-    _assert_rejected "$(command jq -c 'del(.result)' <<<"$FAIL_ROW")" "$EVIDENCE_NOW" \
-        "missing required" "a row without .result"
+    local field
+    for field in os arch result; do
+        _assert_rejected "$(command jq -c --arg k "$field" 'del(.[$k])' <<<"$FAIL_ROW")" "$EVIDENCE_NOW" \
+            "missing required" "a row without .$field"
+    done
     _assert_rejected "$(_stamp "$FAIL_ROW" 2026-10-20T00:00:00Z)" "abc" \
         "EVIDENCE_NOW must be 1-12 digits" "a non-numeric EVIDENCE_NOW"
     _assert_rejected "$(_stamp "$FAIL_ROW" 2026-10-20T00:00:00Z)" "1234567890123" \
