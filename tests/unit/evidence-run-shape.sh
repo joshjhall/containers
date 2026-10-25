@@ -227,6 +227,7 @@ _covered() {
 
 # _normalize_path <path> — collapse `./` and `seg/..` segments of a relative
 # path, so a `../` hop resolves to the same repo-relative name as a direct one.
+# A `..` that climbs out of the repo prints `UNRESOLVED: ...` instead.
 _normalize_path() {
     local seg
     local -a out=()
@@ -234,48 +235,74 @@ _normalize_path() {
     for seg in $1; do
         case "$seg" in
             '' | .) ;;
-            ..) [ "${#out[@]}" -gt 0 ] && unset 'out[${#out[@]}-1]' ;;
+            ..)
+                if [ "${#out[@]}" -eq 0 ]; then
+                    printf 'UNRESOLVED: escapes the repo: %s\n' "$1"
+                    return
+                fi
+                unset 'out[${#out[@]}-1]'
+                ;;
             *) out+=("$seg") ;;
         esac
     done
     printf '%s\n' "${out[*]}"
 }
 
+# _source_target <line> — the target of the `source` on <line>, quotes
+# dropped, or nothing. `source` or `.` may open the line; `source` may also
+# follow `;`, `&`, `|`, or then/do/else, as in `[ -f x ] && source x`. A
+# mid-line `.` is not read: jq filters in these files are full of `then . else`
+# and `(. as $r`. The target runs to the end of the line, so anything chained
+# after it fails to resolve rather than being dropped.
+_source_target() {
+    local re_start='^[[:space:]]*(source|\.)[[:space:]]+(.*[^[:space:]])'
+    local re_mid='(^|[;&|]|[[:space:]](then|do|else))[[:space:]]*source[[:space:]]+(.*[^[:space:]])'
+    if [[ "$1" =~ $re_start ]]; then
+        printf '%s\n' "${BASH_REMATCH[2]//\"/}"
+    elif [[ "$1" =~ $re_mid ]]; then
+        printf '%s\n' "${BASH_REMATCH[3]//\"/}"
+    fi
+}
+
 # _workflow_entry_scripts [workflow] — the repo-relative scripts the workflow's
-# run: lines source or execute: `source <p>` / `. <p>` (quotes and a leading
-# $GITHUB_WORKSPACE/ dropped) and `./bin/....sh`. A source target that is not a
-# literal path after that prints `UNRESOLVED: <line>`, which the caller fails
-# on, so a form this cannot read never drops a file silently.
+# run: lines source or execute. Two sweeps over the non-comment lines, both
+# printed. First, every literal `bin/....sh` path mentioned in any form: with
+# `./` or $GITHUB_WORKSPACE/ in front, quoted, after `bash`. Second, every
+# source target per _source_target. A target that is not a literal path once
+# $GITHUB_WORKSPACE/ is dropped prints `UNRESOLVED: <line>`, which the caller
+# fails on. So a form this cannot read never drops a file silently.
 _workflow_entry_scripts() {
     local line target
+    /usr/bin/grep -vE '^[[:space:]]*#' "${1:-$WF}" |
+        /usr/bin/grep -oE '(^|[[:space:]"'"'"'=/])bin/[A-Za-z0-9_./-]+\.sh' |
+        /usr/bin/sed -E 's#^[^b]*##' |
+        while IFS= read -r line; do _normalize_path "$line"; done
     while IFS= read -r line; do
-        if [[ "$line" =~ ^[[:space:]]*(source|\.)[[:space:]]+([^[:space:];]+) ]]; then
-            target="${BASH_REMATCH[2]//\"/}"
-            target="${target#\$GITHUB_WORKSPACE/}"
-            target="${target#\$\{GITHUB_WORKSPACE\}/}"
-            if [[ "$target" =~ ^[A-Za-z0-9_./-]+$ ]]; then
-                _normalize_path "$target"
-            else
-                printf 'UNRESOLVED: %s\n' "$line"
-            fi
-        fi
-        if [[ "$line" =~ (^|[[:space:]])\./(bin/[A-Za-z0-9_./-]+\.sh) ]]; then
-            _normalize_path "${BASH_REMATCH[2]}"
+        target="$(_source_target "$line")"
+        [ -n "$target" ] || continue
+        target="${target#\$GITHUB_WORKSPACE/}"
+        target="${target#\$\{GITHUB_WORKSPACE\}/}"
+        if [[ "$target" =~ ^[A-Za-z0-9_./-]+$ ]]; then
+            _normalize_path "$target"
+        else
+            printf 'UNRESOLVED: %s\n' "$line"
         fi
     done < <(/usr/bin/grep -vE '^[[:space:]]*#' "${1:-$WF}")
 }
 
 # _sourced_by <file> [root] — the repo-relative files <file> (repo-relative,
-# under [root]) sources directly. Two forms resolve against <file>'s own
-# directory: `$(dirname "${BASH_SOURCE[0]}")/x` (with or without `command`),
-# and `$SCRIPT_DIR/x` when the file sets SCRIPT_DIR from BASH_SOURCE[0]'s
-# dirname. Any other target prints `UNRESOLVED: <file>: <line>`.
+# under [root]) sources directly, read by _source_target. Two forms resolve
+# against <file>'s own directory: `$(dirname "${BASH_SOURCE[0]}")/x` (with or
+# without `command`), and `$SCRIPT_DIR/x` when the file sets SCRIPT_DIR from
+# BASH_SOURCE[0]'s dirname. Any other target prints
+# `UNRESOLVED: <file>: <line>`. Libs that execute (not source) another script
+# are not followed; none of the evidence libs do.
 _sourced_by() {
     local file="$1" root="${2:-$PROJECT_ROOT}" dir line target rest
     dir="$(/usr/bin/dirname "$file")"
     while IFS= read -r line; do
-        [[ "$line" =~ ^[[:space:]]*(source|\.)[[:space:]]+(.*[^[:space:]]) ]] || continue
-        target="${BASH_REMATCH[2]//\"/}"
+        target="$(_source_target "$line")"
+        [ -n "$target" ] || continue
         case "$target" in
             '$(dirname ${BASH_SOURCE[0]})/'* | '$(command dirname ${BASH_SOURCE[0]})/'*)
                 rest="${target#*\)/}"
@@ -454,6 +481,56 @@ test_derived_set_catches_off_convention_helper() {
     command rm -rf "$dir"
 }
 
+test_derivation_edge_forms() {
+    # Each branch of the derivation helpers, pinned by full output (#1393
+    # review): a regression in any of them would drop a file or hang the
+    # closure, and the real workflow exercises only the common forms.
+    local dir
+    if ! dir=$(command mktemp -d "${TMPDIR:-/tmp}/evidence-run-shape.XXXXXX"); then
+        assert_true false "mktemp failed under ${TMPDIR:-/tmp}"
+        return
+    fi
+    command mkdir -p "$dir/bin/lib"
+    # shellcheck disable=SC2016
+    {
+        printf '%s\n' '#!/usr/bin/env bash' 'source "$(command dirname "${BASH_SOURCE[0]}")/../lib/b.sh"' \
+            >"$dir/bin/lib/a.sh"
+        printf '%s\n' '#!/usr/bin/env bash' '[ -n "$x" ] && source "$(dirname "${BASH_SOURCE[0]}")/a.sh"' \
+            '  jq '"'"'if .done then . else (. as $r | $r) end'"'"'' >"$dir/bin/lib/b.sh"
+        printf '%s\n' '#!/usr/bin/env bash' 'source "$SCRIPT_DIR/lib/a.sh"' >"$dir/bin/lib/noscriptdir.sh"
+        printf '%s\n' '#!/usr/bin/env bash' 'source "$(dirname "${BASH_SOURCE[0]}")/gone.sh"' \
+            >"$dir/bin/lib/dangling.sh"
+        printf '%s\n' 'jobs:' '  j:' '    steps:' '      - run: |' \
+            '          . "${GITHUB_WORKSPACE}/bin/lib/a.sh"' '          bash bin/lib/noscriptdir.sh' \
+            '          x=1; source "bin/lib/dangling.sh"' '          ./bin/lib/../../../out.sh' >"$dir/forms.yml"
+        printf '%s\n' 'on:' '  push:' '    branches: [main]' 'jobs:' >"$dir/nopaths.yml"
+        printf '%s\n' 'on:' '  push:' '    paths: ["a"]' 'jobs:' >"$dir/flow.yml"
+    }
+
+    assert_equals "bin/lib/a.sh" "$(_normalize_path ./bin/x/../lib//a.sh)" "_normalize_path collapses . .. and //"
+    assert_equals "UNRESOLVED: escapes the repo: bin/../../x.sh" "$(_normalize_path bin/../../x.sh)" \
+        "a .. above the root is UNRESOLVED"
+    # The workflow sweep first (literal paths, then source targets), then
+    # breadth-first by queue order: a.sh's b.sh (whose a.sh is already seen,
+    # so the cycle ends), noscriptdir.sh's refusal, dangling.sh's gone.sh.
+    # shellcheck disable=SC2016
+    assert_equals "$(printf '%s\n' \
+        'bin/lib/a.sh' \
+        'bin/lib/noscriptdir.sh' \
+        'bin/lib/dangling.sh' \
+        'UNRESOLVED: escapes the repo: bin/lib/../../../out.sh' \
+        'bin/lib/b.sh' \
+        'UNRESOLVED: noscriptdir.sh: source "$SCRIPT_DIR/lib/a.sh"' \
+        'UNRESOLVED: missing bin/lib/gone.sh')" \
+        "$(_derived_scripts "$dir/forms.yml" "$dir" | /usr/bin/sed 's#UNRESOLVED: bin/lib/#UNRESOLVED: #')" \
+        "braced \$GITHUB_WORKSPACE, '. ', bash, chained source, cycles, missing files, and unset SCRIPT_DIR"
+    assert_equals "NOPATHS" "$(_uncovered push "$dir/nopaths.yml" bin/lib/a.sh)" "a trigger without paths: is NOPATHS"
+    assert_equals 'UNPARSED:     paths: ["a"]' "$(_uncovered push "$dir/flow.yml" bin/lib/a.sh)" \
+        "an unreadable paths: entry is passed through"
+
+    command rm -rf "$dir"
+}
+
 test_trigger_paths_parser_fixtures() {
     # The real workflow is well-formed, so none of _trigger_paths' fail-closed
     # branches fire against it (#1392). Each fixture pins one branch by the
@@ -609,6 +686,7 @@ run_test test_open_pr_sources_skip_via_the_decision "open-PR sources skip throug
 run_test test_cells_install_from_the_vendored_catalog "cells install from the vendored catalog"
 run_test test_trigger_paths_cover_evidence_scripts "trigger paths cover every script the workflow runs or sources"
 run_test test_derived_set_catches_off_convention_helper "derived coverage catches a helper outside the evidence-* names (#1393)"
+run_test test_derivation_edge_forms "derivation resolves or fails closed on every source form"
 run_test test_trigger_paths_parser_fixtures "paths: parser fails closed on fixture workflows"
 run_test test_filter_glob_semantics "paths: glob matching follows GitHub semantics"
 
