@@ -263,36 +263,92 @@ impl CommandRunner for ProcessRunner {
         // other deadlocks once the unread pipe's buffer fills and the child
         // blocks writing to it. Lines from both arrive on one channel, so the
         // log interleaves them in roughly the order they were written.
+        //
+        // The child is waited on by its own thread rather than after the
+        // pipes reach EOF. EOF only arrives once *every* holder of the write
+        // ends closes them, and a step that backgrounds a daemon (a ccache
+        // server, a build-tool daemon) leaves a grandchild holding them after
+        // the step itself has exited — waiting for EOF first would hang the
+        // build forever. Pump threads are detached for the same reason: one
+        // stuck on a held pipe must not keep this call from returning.
         let (tx, rx) = mpsc::channel();
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
+        if let Some(pipe) = child.stdout.take() {
+            let tx = tx.clone();
+            std::thread::spawn(move || pump(pipe, Pipe::Stdout, &tx));
+        }
+        if let Some(pipe) = child.stderr.take() {
+            let tx = tx.clone();
+            std::thread::spawn(move || pump(pipe, Pipe::Stderr, &tx));
+        }
+        let (exit_tx, exit_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = exit_tx.send(child.wait());
+        });
+        drop(tx);
+
         let mut tail = Tail::default();
-        let status = std::thread::scope(|scope| {
-            if let Some(pipe) = stdout {
-                let tx = tx.clone();
-                scope.spawn(move || pump(pipe, Pipe::Stdout, &tx));
+        let mut forward = |which: Pipe, line: String| {
+            if which == Pipe::Stderr {
+                tail.push(&line);
             }
-            if let Some(pipe) = stderr {
-                let tx = tx.clone();
-                scope.spawn(move || pump(pipe, Pipe::Stderr, &tx));
+            on_line(&line);
+        };
+        let status = loop {
+            // Poll the exit at a short interval while forwarding output, so
+            // a child that exits with its pipes still held is noticed.
+            match rx.recv_timeout(EXIT_POLL_INTERVAL) {
+                Ok((which, line)) => forward(which, line),
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                // Both pumps hit EOF: the exit is all that remains.
+                Err(mpsc::RecvTimeoutError::Disconnected) => break exit_rx.recv(),
             }
-            drop(tx);
-            for (which, line) in rx {
-                if which == Pipe::Stderr {
-                    tail.push(&line);
+            if let Ok(status) = exit_rx.try_recv() {
+                break Ok(status);
+            }
+        };
+        let status = status
+            .unwrap_or_else(|_| Err(std::io::Error::other("waiter thread exited without a status")))
+            .map_err(|e| LuggageError::InstallStageFailed {
+                stage: "wait",
+                message: format!("failed to wait for `{program}`: {e}"),
+            })?;
+
+        // The step has exited. Drain what is left, but only for a bounded
+        // grace period: past it, whatever still holds the pipes is not the
+        // step, and its output is not the step's to report.
+        let deadline = std::time::Instant::now() + PIPE_DRAIN_GRACE;
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            match rx.recv_timeout(remaining) {
+                Ok((which, line)) => forward(which, line),
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    let marker = format!(
+                        "{PIPES_HELD_MARKER} stopped reading {}s after `{program}` exited \
+                         (a background process it started still holds its output)]",
+                        PIPE_DRAIN_GRACE.as_secs(),
+                    );
+                    tracing::warn!("{marker}");
+                    forward(Pipe::Stderr, marker);
+                    break;
                 }
-                on_line(&line);
             }
-            child.wait()
-        })
-        .map_err(|e| LuggageError::InstallStageFailed {
-            stage: "spawn",
-            message: format!("failed to wait for `{program}`: {e}"),
-        })?;
+        }
 
         Ok(CommandOutcome { status: status.code(), stdout: Vec::new(), stderr: tail.into_bytes() })
     }
 }
+
+/// How often [`ProcessRunner::run_streaming`] checks whether the child has
+/// exited while forwarding its output.
+const EXIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// How long [`ProcessRunner::run_streaming`] keeps reading after the child
+/// exits, before concluding a background process is holding its pipes.
+pub const PIPE_DRAIN_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Prefix of the line forwarded when output pipes outlive the step.
+pub const PIPES_HELD_MARKER: &str = "[luggage: output pipes still open:";
 
 /// Recording [`CommandRunner`] for hermetic tests.
 ///

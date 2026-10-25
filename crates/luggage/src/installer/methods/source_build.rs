@@ -92,6 +92,15 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
             ctx.build_steps.len(),
         )));
     }
+    // Also a pure catalog property, so it is checked here rather than left
+    // to `install_binaries`: by then a PGO build and a root `make install`
+    // into the prefix would already have run.
+    if !ctx.binaries.is_empty() && ctx.bin_source_dir.is_none() {
+        return Err(LuggageError::Catalog(format!(
+            "install method lists {} binaries but no `bin_source_dir` to link them from",
+            ctx.binaries.len(),
+        )));
+    }
 
     // 1. Cache dirs first — same contract as the other methods (#806).
     prepare_cache_dirs(ctx)?;

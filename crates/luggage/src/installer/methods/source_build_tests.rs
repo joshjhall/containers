@@ -462,25 +462,22 @@ fn binaries_are_symlinked_from_the_prefix() {
     assert_eq!(fs::read_link(&link).unwrap(), f.prefix.path().join("bin/python3"));
 }
 
-/// Binaries with no `bin_source_dir` are a catalog defect — but one only
-/// detectable after the build, so the build runs first and a step failure
-/// is what gets reported when both are wrong.
+/// Binaries with no `bin_source_dir` are a catalog defect knowable before
+/// anything runs, so it must fail up front — not after a multi-minute build
+/// and a root `make install` into the prefix.
 #[test]
-fn binaries_without_bin_source_dir_is_a_catalog_error() {
+fn binaries_without_bin_source_dir_fails_before_extracting_or_building() {
     let f = Fixture::python();
     let binaries = vec!["python3".to_owned()];
     let err = f
         .run_full(&python_steps(), 1, &binaries, None, &BTreeMap::new(), &BTreeMap::new())
         .unwrap_err();
-    assert!(matches!(err, LuggageError::Catalog(_)), "{err:?}");
-    assert_eq!(f.runner.streaming_calls().len(), 3, "every step runs before linking");
-
-    let g = Fixture::python();
-    g.runner.set_outcome("make", failure("boom"));
-    let err = g
-        .run_full(&python_steps(), 1, &binaries, None, &BTreeMap::new(), &BTreeMap::new())
-        .unwrap_err();
-    assert!(matches!(err, LuggageError::BuildStepFailed { step: 2, .. }), "{err:?}");
+    match err {
+        LuggageError::Catalog(msg) => assert!(msg.contains("bin_source_dir"), "{msg}"),
+        other => panic!("expected Catalog, got {other:?}"),
+    }
+    assert_eq!(f.runner.calls(), [], "nothing may run, not even a chown");
+    assert_eq!(f.leftover_build_dirs(), Vec::<String>::new(), "nothing extracted");
 }
 
 /// The #809 progress requirement: with a feature log open, each step's
@@ -705,4 +702,68 @@ fn process_runner_keeps_a_line_of_exactly_the_cap() {
     assert_eq!(seen.len(), 1);
     assert_eq!(seen[0].len(), MAX_LINE_BYTES);
     assert!(!seen[0].ends_with(TRUNCATED_MARKER));
+}
+
+/// A read error while discarding the tail of an oversized line still
+/// forwards the truncated line, then the error marker.
+#[test]
+fn pump_reports_a_read_error_after_a_truncated_line() {
+    use super::super::{MAX_LINE_BYTES, Pipe, READ_ERROR_MARKER, TRUNCATED_MARKER, pump};
+
+    /// Yields `MAX_LINE_BYTES + 10` bytes with no newline, then fails.
+    struct LongThenFails(usize);
+    impl std::io::Read for LongThenFails {
+        fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+            if self.0 == 0 {
+                return Err(std::io::Error::other("pipe went away"));
+            }
+            let n = self.0.min(out.len());
+            out[..n].fill(b'z');
+            self.0 -= n;
+            Ok(n)
+        }
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    pump(LongThenFails(MAX_LINE_BYTES + 10), Pipe::Stdout, &tx);
+    drop(tx);
+    let lines: Vec<String> = rx.into_iter().map(|(_, l)| l).collect();
+
+    assert_eq!(lines.len(), 2, "{:?}", lines.iter().map(String::len).collect::<Vec<_>>());
+    assert!(lines[0].ends_with(TRUNCATED_MARKER));
+    assert!(lines[1].starts_with(READ_ERROR_MARKER), "{}", lines[1]);
+}
+
+/// A step that backgrounds a process inheriting its output (a ccache
+/// server, a build daemon) must not hang the build: the step's own exit is
+/// collected, and the still-held pipes are reported, not waited on forever.
+#[test]
+fn process_runner_returns_when_a_background_child_holds_the_pipes() {
+    use super::super::{PIPE_DRAIN_GRACE, PIPES_HELD_MARKER};
+
+    let started = std::time::Instant::now();
+    let (outcome, seen) = sh_stream("sleep 30 & echo done");
+    let elapsed = started.elapsed();
+
+    assert!(outcome.success(), "{outcome:?}");
+    assert!(seen.iter().any(|l| l == "done"), "{seen:?}");
+    assert!(seen.iter().any(|l| l.starts_with(PIPES_HELD_MARKER)), "{seen:?}");
+    assert!(
+        elapsed < PIPE_DRAIN_GRACE + std::time::Duration::from_secs(10),
+        "must return after the drain grace, not when `sleep 30` exits: {elapsed:?}"
+    );
+}
+
+/// A normal step whose pipes close with it does not wait out the grace
+/// period and does not emit the held-pipes marker.
+#[test]
+fn process_runner_does_not_wait_out_the_grace_on_a_normal_exit() {
+    use super::super::{PIPE_DRAIN_GRACE, PIPES_HELD_MARKER};
+
+    let started = std::time::Instant::now();
+    let (outcome, seen) = sh_stream("echo quick");
+    assert!(outcome.success());
+    assert_eq!(seen, ["quick"]);
+    assert!(!seen.iter().any(|l| l.starts_with(PIPES_HELD_MARKER)));
+    assert!(started.elapsed() < PIPE_DRAIN_GRACE, "{:?}", started.elapsed());
 }
