@@ -574,7 +574,7 @@ test_repeated_fail_future_tested_at() {
 }
 
 test_merge_evidence_now_edge_cases() {
-    # #1391: EVIDENCE_NOW past 12 digits, zero-padded, and unset. Every case
+    # #1391: EVIDENCE_NOW past 12 digits, zero-padded, empty, and unset. Every case
     # starts from a stored future-dated fail, which only reads as stale (and is
     # replaced) when "now" resolves to an earlier decimal epoch.
     # shellcheck source=bin/lib/evidence-merge.sh
@@ -611,6 +611,14 @@ test_merge_evidence_now_edge_cases() {
     assert_equals "2026-10-20T00:00:00Z" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
         "and the stored 2999 fail reads as stale against the real clock"
 
+    # #1404: set-but-empty is the unset case, not a rejected value.
+    _seed
+    rc=0
+    (EVIDENCE_NOW='' merge_evidence_row "$f" "$real") || rc=$?
+    assert_equals "0" "$rc" "an empty EVIDENCE_NOW reads as unset, not rejected"
+    assert_equals "2026-10-20T00:00:00Z" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
+        "and takes the date +%s default: the stored 2999 fail is replaced"
+
     # 2999 only proves the default is before 2999. A fail stored ten minutes
     # ahead (past the 300 s skew) is stale, and a day-old repeat replaces it,
     # only when the default is the real clock: one stuck in the past reads
@@ -624,6 +632,14 @@ test_merge_evidence_now_edge_cases() {
     assert_equals "0" "$rc" "a day-old repeat merges cleanly against the default clock"
     assert_equals "$yesterday" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
         "and that default is the current time, not merely some earlier epoch"
+
+    # The same real-clock proof for a set-but-empty EVIDENCE_NOW (#1404).
+    _seed
+    rc=0
+    (EVIDENCE_NOW='' merge_evidence_row "$f" "$(jq -c --arg t "$yesterday" '.tested_at = $t' <<<"$real")") || rc=$?
+    assert_equals "0" "$rc" "a day-old repeat merges cleanly with an empty EVIDENCE_NOW"
+    assert_equals "$yesterday" "$(jq -r '[.tested[].tested_at] | join("|")' "$f")" \
+        "and the empty value resolves to the current time, not merely some earlier epoch"
     unset -f _seed
     command rm -f "$f"
 }
@@ -709,7 +725,7 @@ run_test test_repeated_fail_refreshes_tested_at "a repeated failure refreshes te
 run_test test_repeated_fail_merge_edge_cases "repeated-fail merge: duplicate matches collapse, a new error_class replaces"
 run_test test_repeated_fail_offset_tested_at "repeated-fail merge compares numeric-offset tested_at as UTC"
 run_test test_repeated_fail_future_tested_at "repeated-fail merge treats a future tested_at as stale"
-run_test test_merge_evidence_now_edge_cases "EVIDENCE_NOW: 13 digits rejected, zero-padded decimal, unset defaults to now"
+run_test test_merge_evidence_now_edge_cases "EVIDENCE_NOW: 13 digits rejected, zero-padded decimal, empty/unset default to now"
 run_test test_stdin_row_via_dash "--row - reads JSON from stdin"
 run_test test_rejects_missing_required_flag "missing --db-path is exit 2"
 run_test test_rejects_unknown_argument "unknown flag is exit 2"
