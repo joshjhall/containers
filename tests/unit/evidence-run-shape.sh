@@ -83,7 +83,7 @@ test_open_pr_sources_count_only_added_rows() {
     assert_contains "$run" 'evidence_pr_rows "_db_pr/$n/base" "_db_pr/$n/head" "_db_pr/$n/rows"' \
         "each PR is reduced to its added rows, base before head"
     assert_contains "$run" 'SOURCES="$SOURCES:$PWD/_db_pr/$n/rows"' "the rows tree joins SOURCES"
-    assert_not_contains "$run" '_db_pr/$n/head"$' "the head tree itself never joins SOURCES"
+    assert_not_contains "$run" 'SOURCES="$SOURCES:$PWD/_db_pr/$n/head"' "the head tree itself never joins SOURCES"
     assert_not_contains "$run" 'SOURCES="$SOURCES:$PWD/_db_pr/$n"' "nor the old whole-PR tree"
 }
 
