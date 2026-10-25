@@ -568,9 +568,36 @@ test_empty_file() {
     output=$("$SCRIPT" "$TEST_TEMP_DIR/test.sh") || exit_code=$?
     assert_equals "0" "$exit_code" "Should exit 0 for an empty file"
     assert_equals "" "$output" "No Fixed: line for an empty file"
+    # A deleted operand would read as size 0 below, so pin existence first
+    assert_file_exists "$TEST_TEMP_DIR/test.sh"
     # $(( )) drops the leading padding BSD wc puts before the count
     assert_equals "0" "$(($(/usr/bin/wc -c <"$TEST_TEMP_DIR/test.sh")))" \
         "Empty file stays zero bytes"
+    assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
+        "No tmpfile should be left for a clean file"
+}
+
+# Test: file_mode falls back to BSD 'stat -f %Lp' and prints nothing (rc 0)
+# when neither form works. Each stub lives in a subshell so it can't leak.
+test_file_mode_fallbacks() {
+    local f="$TEST_TEMP_DIR/m.sh"
+    : >"$f"
+    local bsd
+    bsd=$(
+        stat() {
+            [ "$1" = "-f" ] && [ "$2" = "%Lp" ] && [ "$3" = "$f" ] || return 1
+            printf '640\n'
+        }
+        file_mode "$f"
+    )
+    assert_equals "640" "$bsd" "BSD stat -f %Lp is used when -c is rejected"
+    local none rc=0
+    none=$(
+        stat() { return 1; }
+        file_mode "$f"
+    ) || rc=$?
+    assert_equals "0" "$rc" "file_mode returns 0 when no stat form works"
+    assert_equals "" "$none" "file_mode prints nothing when no stat form works"
 }
 
 # Test: consecutive pipe matches on one line are all rewritten (sed /g rescan)
@@ -760,6 +787,7 @@ run_test test_heredoc_on_comment_line "Heredoc opened on a comment line suppress
 run_test test_heredoc_on_alias_line "Heredoc opened on an alias line suppresses its body"
 run_test test_heredoc_on_marker_line "Heredoc opened on a marker line suppresses its body"
 run_test test_empty_file "Empty file exits 0 and stays empty"
+run_test test_file_mode_fallbacks "file_mode falls back to BSD stat, else prints nothing"
 run_test test_consecutive_pipe_matches "Consecutive piped commands are all prefixed"
 run_test test_fixed_file_keeps_mode "Fixed file keeps its mode"
 run_test test_fixed_file_keeps_mode_without_gnu_chmod "Fixed file keeps its mode without GNU chmod"
