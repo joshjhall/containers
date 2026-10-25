@@ -186,6 +186,31 @@ test_compare_version_v_prefix_ordering() {
     assert_equals "newer" "$result" "compare_version orders v-prefixed current above latest"
 }
 
+# The v strip runs before the sentinel checks (#1415): a v-prefixed current
+# must still hit every sentinel, not fall through to the sort -V branch
+test_compare_version_v_prefix_current_sentinels() {
+    local result sentinel
+    for sentinel in "unknown" "rate-limited" "not found"; do
+        result=$(_run_vapi_subshell "compare_version 'v1.2.3' '$sentinel'")
+        assert_equals "unknown" "$result" "compare_version returns unknown for v-prefixed current vs '$sentinel'"
+    done
+}
+
+test_compare_version_v_leading_sentinel_latest() {
+    local result
+    # Stripping one v turns "vunknown" into the "unknown" sentinel
+    result=$(_run_vapi_subshell "compare_version 'v1.2.3' 'vunknown'")
+    assert_equals "unknown" "$result" "compare_version strips vunknown into the unknown sentinel"
+}
+
+test_compare_version_empty_current() {
+    local result
+    result=$(_run_vapi_subshell "compare_version '' '1.2.3'")
+    assert_equals "outdated" "$result" "compare_version returns outdated for an empty current"
+    result=$(_run_vapi_subshell "compare_version '' 'unknown'")
+    assert_equals "unknown" "$result" "compare_version returns unknown for an empty current vs unknown"
+}
+
 # ============================================================================
 # Functional Tests - get_github_release with mock curl
 # ============================================================================
@@ -256,6 +281,9 @@ run_test_with_setup test_compare_version_outdated "compare_version: current < la
 run_test_with_setup test_compare_version_v_prefix_latest "compare_version: 2.38.2 vs v2.38.2 is up-to-date"
 run_test_with_setup test_compare_version_v_prefix_current "compare_version: v2.38.2 vs 2.38.2 is up-to-date"
 run_test_with_setup test_compare_version_v_prefix_ordering "compare_version: v prefix keeps newer/outdated ordering"
+run_test_with_setup test_compare_version_v_prefix_current_sentinels "compare_version: v-prefixed current vs sentinels returns unknown"
+run_test_with_setup test_compare_version_v_leading_sentinel_latest "compare_version: vunknown latest strips to the unknown sentinel"
+run_test_with_setup test_compare_version_empty_current "compare_version: empty current is outdated or unknown"
 
 # Registry functions with mock curl
 run_test_with_setup test_github_release_normal "get_github_release: extracts tag from JSON"
