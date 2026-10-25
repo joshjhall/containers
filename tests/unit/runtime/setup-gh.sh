@@ -486,6 +486,18 @@ test_xtrace_no_stored_token_leak() {
     assert_contains "$output" "+ _persist_token" "xtrace should be restored before _persist_token"
     assert_not_contains "$output" "gho_fake_stored_token_5555555555" \
         "Stored token must not appear anywhere in the xtrace"
+
+    # Restart case: already authenticated AND GITHUB_TOKEN injected. The
+    # emptiness check on the already-authenticated branch expands it.
+    output=$(command env -u BASH_ENV -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" \
+        bash -x "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "gh already authenticated" "[env set] should take the already-authenticated path"
+    assert_contains "$output" "+ _persist_token" "[env set] xtrace should be restored before _persist_token"
+    assert_not_contains "$output" "ghp_fake_token_for_testing_1234567890" \
+        "[env set] env token must not appear anywhere in the xtrace"
 }
 
 # The no-token and invalid-token returns must restore xtrace too. Without the

@@ -370,6 +370,14 @@ test_xtrace_no_stored_token_leak() {
     assert_contains "$output" "+ _persist_token" "xtrace should be restored before _persist_token"
     assert_not_contains "$output" "fake-gitlab-stored-token-5555" \
         "Stored token must not appear anywhere in the xtrace"
+
+    # Restart case: already authenticated AND GITLAB_TOKEN injected. The
+    # emptiness check on the already-authenticated branch expands it.
+    output=$(_run_setup_glab_traced GITLAB_TOKEN="fake-gitlab-token-for-testing-1234") || true
+    assert_contains "$output" "glab already authenticated" "[env set] should take the already-authenticated path"
+    assert_contains "$output" "+ _persist_token" "[env set] xtrace should be restored before _persist_token"
+    assert_not_contains "$output" "fake-gitlab-token-for-testing-1234" \
+        "[env set] env token must not appear anywhere in the xtrace"
 }
 
 # Failed login: glab's exit aborts the script under `set -e` (the exit code is
