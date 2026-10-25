@@ -196,6 +196,14 @@ _civ_make_hermetic_bin() {
     printf '#!/bin/sh\necho "fdfind 10.2.0"\n' >"$bin/fd"
     printf '#!/bin/sh\necho "{\\"tag_name\\": \\"v10.2.0\\"}"\n' >"$bin/curl"
     chmod +x "$bin/fd" "$bin/curl"
+
+    # Run a scratch copy of the script + its library: the script sources a
+    # sibling .env, and a developer's gitignored lib/runtime/.env must not
+    # leak into the run.
+    mkdir -p "$TEST_TEMP_DIR/rt/lib"
+    command cp "$SOURCE_FILE" "$TEST_TEMP_DIR/rt/check-installed-versions.sh"
+    command cp "$PROJECT_ROOT/lib/runtime/lib/version-api.sh" "$TEST_TEMP_DIR/rt/lib/version-api.sh"
+    CIV_SCRIPT="$TEST_TEMP_DIR/rt/check-installed-versions.sh"
 }
 
 # Add stubs that land in each remaining counter branch: rg is behind the
@@ -224,7 +232,7 @@ _civ_run() {
 
 test_civ_summary_completes() {
     _civ_make_hermetic_bin
-    _civ_run "$SOURCE_FILE"
+    _civ_run "$CIV_SCRIPT"
     assert_equals "0" "$CIV_RC" "script exits 0 under set -e"
     # Total includes missing tools, so only its shape is stable
     assert_file_contains "$TEST_TEMP_DIR/out" "Total tools checked: [0-9][0-9]*$" \
@@ -237,7 +245,7 @@ test_civ_summary_completes() {
 test_civ_summary_every_counter_branch() {
     _civ_make_hermetic_bin
     _civ_add_branch_stubs
-    _civ_run "$SOURCE_FILE" --all
+    _civ_run "$CIV_SCRIPT" --all
     assert_equals "0" "$CIV_RC" "script exits 0 with every counter branch taken"
     assert_file_contains "$TEST_TEMP_DIR/out" "Up-to-date: .*m1[^0-9]" "one up-to-date tool (fd)"
     assert_file_contains "$TEST_TEMP_DIR/out" "Outdated: .*m1[^0-9]" "one outdated tool (rg)"
@@ -249,16 +257,27 @@ test_civ_summary_every_counter_branch() {
 
 test_civ_fd_reports_fdfind_version() {
     _civ_make_hermetic_bin
-    _civ_run "$SOURCE_FILE"
+    _civ_run "$CIV_SCRIPT"
     local row
     row=$(command grep -E '^fd +' "$TEST_TEMP_DIR/out" || true)
     assert_contains "$row" "10.2.0" "fd row shows the fdfind version"
     assert_contains "$row" "up-to-date" "fd 10.2.0 vs latest v10.2.0 is up-to-date"
 }
 
+test_civ_fd_reports_upstream_version() {
+    _civ_make_hermetic_bin
+    # Upstream fd (not Debian's fdfind) prints "fd <ver>"
+    printf '#!/bin/sh\necho "fd 10.2.0"\n' >"$TEST_TEMP_DIR/bin/fd"
+    _civ_run "$CIV_SCRIPT"
+    local row
+    row=$(command grep -E '^fd +' "$TEST_TEMP_DIR/out" || true)
+    assert_contains "$row" "10.2.0" "fd row shows the upstream fd version"
+    assert_contains "$row" "up-to-date" "upstream fd 10.2.0 vs latest v10.2.0 is up-to-date"
+}
+
 test_civ_runs_through_symlink() {
     _civ_make_hermetic_bin
-    command ln -s "$SOURCE_FILE" "$TEST_TEMP_DIR/bin/check-installed-versions.sh"
+    command ln -s "$CIV_SCRIPT" "$TEST_TEMP_DIR/bin/check-installed-versions.sh"
     _civ_run "$TEST_TEMP_DIR/bin/check-installed-versions.sh"
     assert_equals "0" "$CIV_RC" "script exits 0 when invoked through a PATH symlink"
     assert_file_contains "$TEST_TEMP_DIR/out" "Total tools checked: [0-9][0-9]*$" \
@@ -267,7 +286,7 @@ test_civ_runs_through_symlink() {
 
 test_civ_json_completes() {
     _civ_make_hermetic_bin
-    _civ_run "$SOURCE_FILE" --json
+    _civ_run "$CIV_SCRIPT" --json
     assert_equals "0" "$CIV_RC" "--json exits 0"
     assert_file_contains "$TEST_TEMP_DIR/out" \
         '"tool": "fd", "installed": "10.2.0", "latest": "v10.2.0", "status": "up-to-date"' \
@@ -277,6 +296,7 @@ test_civ_json_completes() {
 run_test_with_setup test_civ_summary_completes "Summary completes and exits 0 with counters starting at 0"
 run_test_with_setup test_civ_summary_every_counter_branch "Summary survives every counter branch from 0 under set -e"
 run_test_with_setup test_civ_fd_reports_fdfind_version "fd version parsed from fdfind output"
+run_test_with_setup test_civ_fd_reports_upstream_version "fd version parsed from upstream fd output"
 run_test_with_setup test_civ_runs_through_symlink "Script runs through a PATH symlink"
 run_test_with_setup test_civ_json_completes "--json output completes and exits 0"
 
