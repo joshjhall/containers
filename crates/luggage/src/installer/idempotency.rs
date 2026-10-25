@@ -178,8 +178,9 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
     let mut stderr = capture_file()?;
     let mut attempt = 0;
     // On unix the guard keeps the probe's group registered for the interrupt
-    // handler until the probe is reaped; it drops at the end of this fn.
-    let (mut child, _tracked) = loop {
+    // handler until the probe is reaped, and no longer: once reaped, its pid
+    // may be recycled by an unrelated process.
+    let (mut child, tracked) = loop {
         let mut command = Command::new(binary);
         command
             .args(args)
@@ -206,7 +207,13 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
         }
     };
 
-    let status = wait_within(&mut child, timeout)?;
+    // `wait_within` reaps the child on every return, error paths included.
+    let status = wait_within(&mut child, timeout);
+    #[cfg(unix)]
+    drop(tracked);
+    #[cfg(not(unix))]
+    let () = tracked;
+    let status = status?;
 
     Ok(Output {
         status,

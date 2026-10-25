@@ -106,12 +106,17 @@ pub fn spawn_tracked_in(
 /// members have all exited makes `killpg` fail with ESRCH, which is ignored.
 /// The pids are not removed here, because each one still belongs to a
 /// [`Tracked`] guard that will deregister it.
-pub fn interrupt_all(registry: &Mutex<Registry>) {
+///
+/// Returns the still-held lock. The watcher keeps it until the process dies,
+/// so a probe caller cannot act on the status of a probe killed here: its
+/// guard's drop blocks on the lock instead of returning.
+pub fn interrupt_all(registry: &Mutex<Registry>) -> MutexGuard<'_, Registry> {
     let mut live = lock(registry);
     live.interrupted = true;
     for pgid in &live.pgids {
         let _ = kill_process_group(*pgid, Signal::KILL);
     }
+    live
 }
 
 /// Install the SIGINT/SIGTERM watcher. Idempotent.
@@ -130,7 +135,8 @@ pub fn install_handler() -> io::Result<()> {
     let mut signals = Signals::new([SIGINT, SIGTERM])?;
     thread::Builder::new().name("luggage-interrupt".into()).spawn(move || {
         if let Some(sig) = signals.forever().next() {
-            interrupt_all(&LIVE);
+            // Held, not dropped: see `interrupt_all`.
+            let _held = interrupt_all(&LIVE);
             // Restores the default action and re-raises, so luggage dies by
             // the signal itself. The exit is a fallback for a signal missing
             // from signal-hook's table, which SIGINT and SIGTERM are not.

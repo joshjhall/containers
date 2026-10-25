@@ -41,7 +41,7 @@ fn interrupt_kills_registered_groups_and_refuses_new_spawns() {
     static REG: Mutex<Registry> = Mutex::new(Registry::new());
 
     let (mut child, _tracked) = spawn_tracked_in(&REG, &mut grouped_sleep()).unwrap();
-    interrupt_all(&REG);
+    drop(interrupt_all(&REG));
 
     let deadline = Instant::now() + Duration::from_secs(2);
     let status = loop {
@@ -62,25 +62,38 @@ fn interrupt_kills_registered_groups_and_refuses_new_spawns() {
     assert_eq!(err.kind(), io::ErrorKind::Interrupted);
 }
 
-/// Interrupting luggage mid-probe leaves no probe or descendant running.
-///
-/// The SIGINT has to land on a whole process, so this test re-execs its own
-/// binary for just itself (the same pattern as
-/// `run_version_check_within_gives_the_probe_a_null_stdin`). The child
-/// installs the handler and probes a forking shim with a long deadline. The
-/// parent waits for the shim to record both pids, sends the child SIGINT, and
-/// requires three things: the child died by SIGINT, the probe is gone, and
-/// its forked `sleep` is gone. Without the handler the child still dies by
-/// SIGINT but both shim processes survive, so the pid checks are what
-/// discriminate.
+/// Interrupting luggage mid-probe leaves no probe or descendant running, for
+/// each signal the watcher handles.
 #[test]
 #[serial_test::serial]
 fn sigint_mid_probe_kills_the_probe_group() {
+    assert_signal_kills_probe_group("sigint_mid_probe_kills_the_probe_group", Signal::INT);
+}
+
+/// See [`sigint_mid_probe_kills_the_probe_group`]; SIGTERM must end luggage
+/// the same way.
+#[test]
+#[serial_test::serial]
+fn sigterm_mid_probe_kills_the_probe_group() {
+    assert_signal_kills_probe_group("sigterm_mid_probe_kills_the_probe_group", Signal::TERM);
+}
+
+/// The signal has to land on a whole process, so the named test re-execs its
+/// own binary for just itself (the same pattern as
+/// `run_version_check_within_gives_the_probe_a_null_stdin`). The child
+/// installs the handler (twice, which must be a no-op) and probes a forking
+/// shim with a long deadline. The parent waits for the shim to record both
+/// pids, sends the child `signal`, and requires three things: the child died
+/// by that signal, the probe is gone, and its forked `sleep` is gone. Without
+/// the handler the child still dies by the signal but both shim processes
+/// survive, so the pid checks are what discriminate.
+fn assert_signal_kills_probe_group(test: &str, signal: Signal) {
     const CHILD_DIR: &str = "LUGGAGE_INTERRUPT_PROBE_CHILD_DIR";
 
     if let Some(dir) = std::env::var_os(CHILD_DIR) {
         let dir = Path::new(&dir);
         install_handler().unwrap();
+        install_handler().expect("a second install must be a no-op, not an error");
         write_forking_shim(dir, "tool");
         let _ = run_version_check_within(
             &dir.join("tool"),
@@ -88,13 +101,13 @@ fn sigint_mid_probe_kills_the_probe_group() {
             &std::collections::BTreeMap::new(),
             VERSION_PROBE_TIMEOUT * 6,
         );
-        panic!("the probe returned; the parent's SIGINT should have ended this process first");
+        panic!("the probe returned; the parent's signal should have ended this process first");
     }
 
     let dir = tempfile::tempdir().unwrap();
     let module = module_path!();
     let module = module.split_once("::").map_or(module, |(_, rest)| rest);
-    let name = format!("{module}::sigint_mid_probe_kills_the_probe_group");
+    let name = format!("{module}::{test}");
     let mut child = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", &name, "--test-threads=1", "--nocapture"])
         .env(CHILD_DIR, dir.path())
@@ -130,12 +143,12 @@ fn sigint_mid_probe_kills_the_probe_group() {
     let guard = |pid: &str| KillOnDrop(Pid::from_raw(pid.parse().unwrap()).unwrap());
     let (_probe_guard, _bg_guard) = (guard(&pid), guard(&bgpid));
 
-    rustix::process::kill_process(Pid::from_child(&child), Signal::INT).unwrap();
+    rustix::process::kill_process(Pid::from_child(&child), signal).unwrap();
     let out = child.wait_with_output().unwrap();
     assert_eq!(
         out.status.signal(),
-        Some(Signal::INT.as_raw()),
-        "luggage must still die by SIGINT after cleaning up ({}):\n{}\n{}",
+        Some(signal.as_raw()),
+        "luggage must still die by {signal:?} after cleaning up ({}):\n{}\n{}",
         out.status,
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr),
@@ -145,7 +158,7 @@ fn sigint_mid_probe_kills_the_probe_group() {
     while pid_is_running(&pid) || pid_is_running(&bgpid) {
         assert!(
             Instant::now() < deadline,
-            "interrupt must kill the probe group: probe {pid} running={}, forked sleep {bgpid} \
+            "{signal:?} must kill the probe group: probe {pid} running={}, forked sleep {bgpid} \
              running={}",
             pid_is_running(&pid),
             pid_is_running(&bgpid),
