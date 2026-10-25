@@ -403,7 +403,12 @@ test_trigger_paths_cover_evidence_scripts() {
     # evidence-matrix.sh and evidence-epoch.sh are reached only through other
     # libs, so their presence shows the closure follows source lines.
     for f in bin/lib/evidence-sources.sh bin/lib/evidence-matrix.sh bin/lib/evidence-epoch.sh; do
-        assert_contains "$(printf '%s\n' "${derived[@]}")" "$f" "the derived set includes $f"
+        # Exact line match: a substring would accept evidence-epoch.sh.bak.
+        if /usr/bin/grep -qxF "$f" <<<"$(printf '%s\n' "${derived[@]}")"; then
+            assert_true true "the derived set includes $f"
+        else
+            assert_true false "the derived set includes $f"
+        fi
     done
     # An unmatched glob stays literal and would match its own trigger entry,
     # so keep only real files.
@@ -445,8 +450,10 @@ test_derived_set_catches_off_convention_helper() {
         printf '%s\n' '#!/usr/bin/env bash' \
             'SCRIPT_DIR="$(command cd "$(command dirname "${BASH_SOURCE[0]}")" && command pwd)"' \
             '# source "$SCRIPT_DIR/lib/commented.sh"' \
-            'source "$SCRIPT_DIR/lib/merge-util.sh"' >"$dir/bin/ingest-x.sh"
+            'source "$SCRIPT_DIR/lib/merge-util.sh"' 'source "${SCRIPT_DIR}/lib/braced-util.sh"' \
+            >"$dir/bin/ingest-x.sh"
         printf '%s\n' '#!/usr/bin/env bash' >"$dir/bin/lib/merge-util.sh"
+        printf '%s\n' '#!/usr/bin/env bash' >"$dir/bin/lib/braced-util.sh"
         printf '%s\n' 'on:' '  push:' '    paths:' '      - "bin/lib/evidence-*.sh"' 'jobs:' \
             '  j:' '    steps:' '      - run: |' '          source bin/lib/evidence-a.sh' \
             >"$dir/narrow.yml"
@@ -470,7 +477,7 @@ test_derived_set_catches_off_convention_helper() {
     assert_equals "" "$(_uncovered push "$dir/wide.yml" "${got[@]}")" \
         "listing it in paths: covers it (\$GITHUB_WORKSPACE/ prefix read)"
 
-    assert_equals "bin/ingest-x.sh bin/lib/merge-util.sh" \
+    assert_equals "bin/ingest-x.sh bin/lib/merge-util.sh bin/lib/braced-util.sh" \
         "$(_derived_scripts "$dir/exec.yml" "$dir" | /usr/bin/tr '\n' ' ' | /usr/bin/sed 's/ $//')" \
         "an executed ./bin script and its \$SCRIPT_DIR source are derived; comments are not"
 
