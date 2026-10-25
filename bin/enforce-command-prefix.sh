@@ -138,7 +138,7 @@ for file in "$@"; do
     [ -f "$file" ] || continue
 
     # Keep awk from reading an operand like 'a=b.sh' as a variable assignment,
-    # and mktemp/chmod/mv from reading '-x.sh' as an option.
+    # and mktemp/cat from reading '-x.sh' as an option.
     case "$file" in
         /*) path="$file" ;;
         *) path="./$file" ;;
@@ -154,8 +154,17 @@ for file in "$@"; do
             /usr/bin/rm -f "$tmpfile"
             ;;
         1)
-            chmod --reference="$path" "$tmpfile" 2>/dev/null || true
-            /usr/bin/mv "$tmpfile" "$path"
+            # Write back through the original inode rather than mv'ing the
+            # 0600 tmpfile over it: that keeps mode/owner without needing
+            # GNU-only `chmod --reference` (#1429). On failure the original
+            # may already be truncated, so the tmpfile is kept as the only
+            # good copy.
+            if ! command cat "$tmpfile" >"$path"; then
+                printf 'enforce-command-prefix: could not write %s; fixed content kept at %s\n' \
+                    "$file" "$tmpfile" >&2
+                exit 2
+            fi
+            /usr/bin/rm -f "$tmpfile"
             printf 'Fixed: %s\n' "$file"
             fixed=1
             ;;
