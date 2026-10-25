@@ -57,10 +57,21 @@ pub const VERSION_PROBE_TIMEOUT_ENV: &str = "LUGGAGE_VERSION_PROBE_TIMEOUT";
 /// digit, a value in the wrong unit) is a clean error instead of a probe that
 /// can effectively never time out. This is input validation only — panic
 /// safety for an unrepresentable deadline lives in `wait_within`'s
-/// `checked_add`, which must stay because
-/// [`crate::InstallerOptions::version_probe_timeout`] is a public field that
-/// never passes through this parser.
+/// `checked_add`, which stays as defense in depth: the library path checks
+/// [`crate::InstallerOptions::version_probe_timeout`] against the same bound
+/// in [`crate::InstallerOptions::validate`], but `wait_within` cannot assume
+/// every caller came through it.
 const MAX_VERSION_PROBE_TIMEOUT_SECS: u64 = 24 * 60 * 60;
+
+/// Largest accepted version-probe deadline (one day): the bound both the
+/// [`VERSION_PROBE_TIMEOUT_ENV`] parser and
+/// [`crate::InstallerOptions::validate`] enforce.
+pub const MAX_VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(MAX_VERSION_PROBE_TIMEOUT_SECS);
+
+/// Smallest accepted version-probe deadline: one second, the smallest value
+/// [`VERSION_PROBE_TIMEOUT_ENV`] can express. Anything shorter kills every
+/// probe on its first poll (#1399).
+pub const MIN_VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Interval between `try_wait` polls while the probe runs.
 const VERSION_PROBE_POLL: Duration = Duration::from_millis(10);
@@ -319,9 +330,9 @@ fn kill_group_if_exited(child: &Child) -> io::Result<()> {
 /// early return never leaves it running or a zombie.
 ///
 /// A `timeout` too large to add to `Instant::now()` means no deadline rather
-/// than a panic (#1358): the env reader caps its value, but
-/// [`crate::InstallerOptions::version_probe_timeout`] is a public field a
-/// library caller can set to anything, `Duration::MAX` included.
+/// than a panic (#1358). Both the env reader and
+/// [`crate::InstallerOptions::validate`] cap the value (#1399), but this
+/// function takes any `Duration` and must not rely on that.
 fn wait_within(child: &mut impl ProbeChild, timeout: Duration) -> io::Result<ExitStatus> {
     let deadline = Instant::now().checked_add(timeout);
     loop {

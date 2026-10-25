@@ -117,7 +117,7 @@ pub fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         // Same malformed-is-fatal contract as the extract ceiling above.
         version_probe_timeout: version_probe_timeout_from_env()?,
     };
-    let installer = Installer::with_options(opts);
+    let installer = Installer::with_options(opts)?;
 
     // Dry-run emits the plan to stdout for human inspection. Done before
     // run_with_report so we can short-circuit without spinning up the
