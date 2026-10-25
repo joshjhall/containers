@@ -382,12 +382,14 @@ STUB
 
 # Run setup-gh against the stub. BASH_ENV is unset (it rebuilds PATH on
 # non-interactive bash and would bypass the stub); the loaded flags keep the
-# host's .env.secrets / OP cache out of the run.
+# host's .env.secrets / OP cache out of the run. GH_TOKEN is set too, so the
+# stub refuses the login unless setup-gh clears BOTH variables.
 _run_setup_gh() {
-    command env -u BASH_ENV -u GH_TOKEN \
+    command env -u BASH_ENV \
         HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
         _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
         GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" \
+        GH_TOKEN="ghp_fake_gh_token_for_testing_0987654321" \
         bash "$SETUP_GH_SCRIPT" 2>&1
 }
 
@@ -398,8 +400,11 @@ _assert_stub_login_without_env_token() {
     local calls=""
     [ -f "$TEST_TEMP_DIR/gh.calls" ] && calls=$(command cat "$TEST_TEMP_DIR/gh.calls")
     assert_not_empty "$calls" "Stub gh call log must be non-empty (stub was invoked)"
-    assert_contains "$calls" "auth login --with-token GITHUB_TOKEN= GH_TOKEN=" \
-        "gh auth login --with-token must run with GITHUB_TOKEN and GH_TOKEN cleared"
+    # Whole-line match: a substring would also accept "GH_TOKEN=set".
+    local login_line
+    login_line=$(printf '%s\n' "$calls" | command grep -F 'auth login' || true)
+    assert_equals "auth login --with-token GITHUB_TOKEN= GH_TOKEN=" "$login_line" \
+        "gh auth login --with-token must run once, with GITHUB_TOKEN and GH_TOKEN cleared"
 }
 
 test_login_clears_env_token() {
@@ -425,7 +430,7 @@ test_login_failure_reported() {
     output=$(_run_setup_gh) || rc=$?
 
     _assert_stub_login_without_env_token
-    assert_not_equals "0" "$rc" "setup-gh should exit non-zero when gh rejects the token"
+    assert_equals "1" "$rc" "setup-gh should return gh's exit code when gh rejects the token"
     assert_contains "$output" "gh auth login failed" "Login failure should be reported"
     assert_not_contains "$output" "gh authenticated" "Must not claim success after a failed login"
 }
