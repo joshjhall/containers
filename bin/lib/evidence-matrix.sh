@@ -174,17 +174,24 @@ _em_published_evidence() {
         | group_by(.version)
         | map({key: .[0].version, value: ([ .[].tested // [] | .[] ] | em_evidence($now))})
         | from_entries
-    ' "${files[@]}" >"$out" 2>/dev/null && return 0
+    ' "${files[@]}" >"$out" 2>"$out.err" && {
+        command rm -f "$out.err"
+        return 0
+    }
 
-    # Failure path only: one jq per file to name the culprit (#1329).
+    # Failure path only: one jq per file to name the culprit (#1329). jq's
+    # own message is kept for the case no file check explains.
     local f
     for f in "${files[@]}"; do
         command jq -ne "$_EM_VERSION_FILE_OK_JQ"'[inputs] | length == 1 and (.[0] | em_version_file_ok)' "$f" >/dev/null 2>&1 || {
-            command echo "evidence_matrix: unreadable published evidence for $tool: $f (needs a string .version and an array .tested)" >&2
+            command echo "evidence_matrix: unreadable published evidence for $tool: $f (must be one JSON object with a string .version and, if present, an array .tested)" >&2
+            command rm -f "$out.err"
             return 1
         }
     done
     command echo "evidence_matrix: unreadable published evidence for $tool in $EVIDENCE_TESTED_SOURCE" >&2
+    command cat "$out.err" >&2
+    command rm -f "$out.err"
     return 1
 }
 

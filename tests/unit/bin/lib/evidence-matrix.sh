@@ -463,7 +463,7 @@ test_unreadable_published_source_is_an_error() {
 }
 
 _malformed_msg() {
-    command echo "evidence_matrix: unreadable published evidence for rust: $1 (needs a string .version and an array .tested)"
+    command echo "evidence_matrix: unreadable published evidence for rust: $1 (must be one JSON object with a string .version and, if present, an array .tested)"
 }
 
 # _malformed_fails <source> <bad_file> <what> — evidence_matrix over a
@@ -479,11 +479,17 @@ _malformed_fails() {
     assert_equals "$(_malformed_msg "$bad")" "$(command cat "$err")" "$what is named in the error"
 }
 
-# _mutate <file> <jq filter> — rewrites a version file in place.
+# _mutate <file> <jq filter> — rewrites a version file in place. A failed
+# rewrite fails the test: chained cases would otherwise pass on the previous
+# case's malformed content.
 _mutate() {
     local tmp
     tmp="$(command mktemp "$TEST_TEMP_DIR/mut.XXXXXX")"
-    command jq "$2" "$1" >"$tmp" && command mv "$tmp" "$1"
+    if command jq "$2" "$1" >"$tmp"; then
+        command mv "$tmp" "$1"
+    else
+        fail_test "_mutate: jq '$2' failed on $1"
+    fi
 }
 
 test_malformed_published_file_is_named() {
@@ -549,7 +555,10 @@ test_unnamed_evidence_failure_names_the_sources() {
     assert_equals "1" "$rc" "a bad row in a well-shaped file is exit 1"
     assert_equals "" "$out" "and prints no matrix"
     assert_equals "evidence_matrix: unreadable published evidence for rust in $db" \
-        "$(command cat "$err")" "and names the source list"
+        "$(command sed -n 1p "$err")" "and names the source list"
+    # jq's own cause follows, so the fallback still says what broke.
+    assert_equals "2" "$(command wc -l <"$err" | command tr -d ' ')" "and jq's error on one more line"
+    assert_contains "$(command sed -n 2p "$err")" "Cannot index number" "which is jq's cause"
 }
 
 test_published_file_without_tested_is_valid() {
