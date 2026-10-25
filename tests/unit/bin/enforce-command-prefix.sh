@@ -677,19 +677,53 @@ test_unwritable_file_exits_2() {
         "Unwritable original should be unchanged"
 }
 
-# Test: a symlinked operand stays a symlink and its target is rewritten
-# (the old mv path replaced the link with a regular file)
-test_symlink_operand_rewrites_target() {
-    write_fixture "$TEST_TEMP_DIR/target.sh" 'grep x' # enforce-command-prefix: off
-    /usr/bin/ln -s target.sh "$TEST_TEMP_DIR/link.sh"
+# Test: a symlinked operand is skipped — the link survives and its target,
+# which may lie outside the repo, is never rewritten (#1439)
+test_symlink_operand_skipped() {
+    /usr/bin/mkdir -p "$TEST_TEMP_DIR/outside" "$TEST_TEMP_DIR/repo"
+    write_fixture "$TEST_TEMP_DIR/outside/target.sh" 'grep x' # enforce-command-prefix: off
+    /usr/bin/ln -s ../outside/target.sh "$TEST_TEMP_DIR/repo/link.sh"
+    local exit_code=0 out
+    out=$("$SCRIPT" "$TEST_TEMP_DIR/repo/link.sh") || exit_code=$?
+    assert_equals "0" "$exit_code" "A symlink operand should be skipped (exit 0)"
+    assert_equals "" "$out" "A skipped symlink should not be reported as fixed"
+    assert_true "[ -L '$TEST_TEMP_DIR/repo/link.sh' ]" "Operand should still be a symlink"
+    assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/outside/target.sh")" \
+        "Symlink target should be untouched"
+}
+
+# Test: the fix replaces the file by rename, not by truncate-and-rewrite —
+# a new inode, and a hard link to the old one still holds the old bytes
+test_fixed_file_replaced_atomically() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
+    /usr/bin/ln "$TEST_TEMP_DIR/test.sh" "$TEST_TEMP_DIR/old.sh"
     local exit_code=0
-    "$SCRIPT" "$TEST_TEMP_DIR/link.sh" >/dev/null || exit_code=$?
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
     assert_equals "1" "$exit_code" "Should exit 1 when changes made"
-    assert_true "[ -L '$TEST_TEMP_DIR/link.sh' ]" "Operand should still be a symlink"
-    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/target.sh")" \
-        "Symlink target should hold the fixed content"
+    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" \
+        "Fixed content should be in place"
+    assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/old.sh")" \
+        "The old inode should be untouched (rename, not in-place write)"
+}
+
+# Test: when no stat form can read the mode → exit 2, original untouched,
+# no tmpfile left (never a silent 0600 script). BASH_ENV is cleared so
+# /etc/bash_env can't rebuild PATH and drop the stub.
+test_mode_unreadable_exits_2() {
+    /usr/bin/mkdir -p "$TEST_TEMP_DIR/stub"
+    printf '#!/bin/sh\nexit 1\n' >"$TEST_TEMP_DIR/stub/stat"
+    /bin/chmod 755 "$TEST_TEMP_DIR/stub/stat"
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
+    local exit_code=0 err
+    err=$(env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" \
+        "$SCRIPT" "$TEST_TEMP_DIR/test.sh" 2>&1 >/dev/null) || exit_code=$?
+    assert_equals "2" "$exit_code" "An unreadable mode should exit 2"
+    assert_contains "$err" "could not read the mode of $TEST_TEMP_DIR/test.sh" \
+        "Stderr should name the file whose mode could not be read"
+    assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" \
+        "Original should be unchanged"
     assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
-        "No tmpfile should be left after a successful write"
+        "No tmpfile should be left behind"
 }
 
 # Test: a write failure stops the run — earlier fixes stand, later files
@@ -792,7 +826,9 @@ run_test test_consecutive_pipe_matches "Consecutive piped commands are all prefi
 run_test test_fixed_file_keeps_mode "Fixed file keeps its mode"
 run_test test_fixed_file_keeps_mode_without_gnu_chmod "Fixed file keeps its mode without GNU chmod"
 run_test test_unwritable_file_exits_2 "Unwritable file exits 2 and keeps the tmpfile"
-run_test test_symlink_operand_rewrites_target "Symlinked operand keeps the link and rewrites its target"
+run_test test_symlink_operand_skipped "Symlinked operand is skipped, target untouched"
+run_test test_fixed_file_replaced_atomically "Fix replaces the file by rename, not in place"
+run_test test_mode_unreadable_exits_2 "Unreadable mode exits 2 and leaves the original"
 run_test test_unwritable_file_stops_batch "Write failure stops the batch with exit 2"
 run_test test_awk_failure_exits_2 "awk failure exits 2 and cleans up"
 run_test test_filename_with_equals "File name containing = is processed as a file"

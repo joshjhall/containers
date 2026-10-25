@@ -2,7 +2,13 @@
 # Pre-commit hook: enforce 'command' prefix on common shell commands.
 # Prevents alias interference in interactive shells (grep→rg, cat→bat, etc.).
 # Also deduplicates 'command command X' → 'command X'.
-# Auto-fixes files in-place. Exit 1 = changes made, exit 0 = clean.
+# Auto-fixes files in-place. Exit 1 = changes made, exit 0 = clean,
+# exit 2 = a file could not be processed (the run stops there).
+#
+# Fixes are written to a tmpfile beside the original and mv'd over it, so an
+# interrupted run never leaves a truncated script (#1439). Symlink operands
+# are skipped: git tracks the link, not its target's bytes, and the target
+# may lie outside the repo.
 #
 # Each file is processed by a single awk program (one process per file, not
 # ~15 per line — #1424). The awk rules mirror the original grep/sed pipeline
@@ -134,11 +140,28 @@ AWK
 
 fixed=0
 
+# Remove an in-flight tmpfile if the run is interrupted. The deliberate
+# keep-the-tmpfile exits clear it first.
+tmpfile=""
+trap '[ -z "$tmpfile" ] || /usr/bin/rm -f "$tmpfile"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# keep_and_fail FILE: report that FILE could not be replaced and exit 2,
+# leaving the tmpfile (the only copy of the fixed content) in place.
+keep_and_fail() {
+    printf 'enforce-command-prefix: could not write %s; fixed content kept at %s\n' \
+        "$1" "$tmpfile" >&2
+    tmpfile=""
+    exit 2
+}
+
 for file in "$@"; do
     [ -f "$file" ] || continue
+    [ -L "$file" ] && continue
 
     # Keep awk from reading an operand like 'a=b.sh' as a variable assignment,
-    # and mktemp/cat from reading '-x.sh' as an option.
+    # and mktemp/chmod/mv from reading '-x.sh' as an option.
     case "$file" in
         /*) path="$file" ;;
         *) path="./$file" ;;
@@ -152,24 +175,39 @@ for file in "$@"; do
     case "$rc" in
         0)
             /usr/bin/rm -f "$tmpfile"
+            tmpfile=""
             ;;
         1)
-            # Write back through the original inode rather than mv'ing the
-            # 0600 tmpfile over it: that keeps mode/owner without needing
-            # GNU-only `chmod --reference` (#1429). On failure the original
-            # may already be truncated, so the tmpfile is kept as the only
-            # good copy.
-            if ! command cat "$tmpfile" >"$path"; then
-                printf 'enforce-command-prefix: could not write %s; fixed content kept at %s\n' \
-                    "$file" "$tmpfile" >&2
-                exit 2
-            fi
-            /usr/bin/rm -f "$tmpfile"
+            # Copy the mode onto the 0600 tmpfile, then mv it over the
+            # original: rename is atomic, so an interrupt leaves either the
+            # old file or the new one, never a truncated one (#1439). The
+            # mode comes from GNU `stat -c` or BSD `stat -f` (no GNU-only
+            # `chmod --reference`, #1429); if neither works, stop rather than
+            # ship a 0600 script. The owner becomes the hook runner and hard
+            # links are split, which is fine for tracked scripts.
+            mode=$(command stat -c '%a' "$path" 2>/dev/null ||
+                command stat -f '%Lp' "$path" 2>/dev/null) || mode=""
+            # GNU %a drops leading zeros (mode 044 prints "44"), so accept
+            # any non-empty run of octal digits.
+            case "$mode" in
+                '' | *[!0-7]*)
+                    printf 'enforce-command-prefix: could not read the mode of %s; left unchanged\n' \
+                        "$file" >&2
+                    exit 2
+                    ;;
+            esac
+            # mv would replace a read-only file in a writable directory, so
+            # keep the old refusal for files the user cannot write.
+            [ -w "$path" ] || keep_and_fail "$file"
+            command chmod "$mode" "$tmpfile" || keep_and_fail "$file"
+            command mv -f "$tmpfile" "$path" || keep_and_fail "$file"
+            tmpfile=""
             printf 'Fixed: %s\n' "$file"
             fixed=1
             ;;
         *)
             /usr/bin/rm -f "$tmpfile"
+            tmpfile=""
             printf 'enforce-command-prefix: awk failed (exit %s) on %s\n' "$rc" "$file" >&2
             exit 2
             ;;
