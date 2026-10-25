@@ -123,6 +123,24 @@ test_runtime_lib_installed() {
         "Every installed /opt/container-runtime/lib reference should resolve"
 }
 
+# Test: check-installed-versions.sh is on PATH (#1416). The Dockerfile symlink
+# step is guarded by [ -f ], so a moved source silently skips it at build time.
+test_check_installed_versions_on_path() {
+    local image="${IMAGE_TO_TEST:-test-minimal-base-$$}"
+
+    # Non-login base PATH: the /usr/local/bin symlink must be what resolves it,
+    # not a bashrc.d PATH edit.
+    assert_executable_in_base_path "$image" "check-installed-versions.sh"
+
+    # Must run via the symlink (it resolves lib/version-api.sh from its real
+    # location) and emit parseable JSON — exit 0 alone could pass on garbage.
+    # pipefail makes a non-zero script exit fail the pipeline on its own.
+    assert_command_in_container "$image" \
+        "set -o pipefail; check-installed-versions.sh --json | jq -e '.results | type == \"array\"' >/dev/null && command echo civ-json-ok" \
+        "civ-json-ok" \
+        "check-installed-versions.sh --json should exit 0 and emit valid JSON"
+}
+
 # Test: User permissions and environment
 test_user_environment() {
     local image="${IMAGE_TO_TEST:-test-minimal-base-$$}"
@@ -166,6 +184,7 @@ run_test test_base_container_only "Base container builds with no features"
 run_test test_cache_directories "Cache directories are configured"
 run_test test_runtime_initialization "Runtime initialization completes"
 run_test test_runtime_lib_installed "Runtime lib fragments installed at /opt/container-runtime/lib"
+run_test test_check_installed_versions_on_path "check-installed-versions.sh is on PATH and runs"
 run_test test_user_environment "User environment is properly configured"
 run_test test_essential_utilities "Essential utilities are available"
 
