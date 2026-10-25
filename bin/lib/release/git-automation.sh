@@ -18,7 +18,8 @@ perform_git_automation() {
     local new_version="$1"
 
     # Check if we're in a git repository
-    if [ ! -d .git ]; then
+    # -e, not -d: in a linked worktree .git is a file, not a directory.
+    if [ ! -e .git ]; then
         echo -e "${YELLOW}Not a git repository - manual commit required${NC}"
         return 0
     fi
