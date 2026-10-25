@@ -301,7 +301,9 @@ test_verification_after_auth() {
 # to $TEST_TEMP_DIR/glab.calls. `auth status` fails until a login succeeds (or
 # glab.loggedin is pre-created); `auth login` reads the token from stdin;
 # `config get token` prints a stored token distinct from the env one.
+# $1=fail makes every login fail.
 _install_stub_glab() {
+    local mode="${1:-ok}"
     mkdir -p "$TEST_TEMP_DIR/bin"
     command cat >"$TEST_TEMP_DIR/bin/glab" <<STUB
 #!/bin/bash
@@ -313,7 +315,13 @@ case "$*" in
     *"auth status"*) [ -f "$state/glab.loggedin" ] ;;
     *"auth login"*)
         command cat >"$state/glab.stdin"
-        touch "$state/glab.loggedin" ;;
+STUB
+    if [ "$mode" = "fail" ]; then
+        printf '        echo "401 Unauthorized" >&2\n        exit 1 ;;\n' >>"$TEST_TEMP_DIR/bin/glab"
+    else
+        printf '        touch "$state/glab.loggedin" ;;\n' >>"$TEST_TEMP_DIR/bin/glab"
+    fi
+    command cat >>"$TEST_TEMP_DIR/bin/glab" <<'STUB'
     *"config get token"*) echo "fake-gitlab-stored-token-5555" ;;
     *) exit 0 ;;
 esac
@@ -362,6 +370,38 @@ test_xtrace_no_stored_token_leak() {
     assert_contains "$output" "+ _persist_token" "xtrace should be restored before _persist_token"
     assert_not_contains "$output" "fake-gitlab-stored-token-5555" \
         "Stored token must not appear anywhere in the xtrace"
+}
+
+# Failed login: glab's exit aborts the script under `set -e` (the exit code is
+# not checked yet), so only assert the token never reaches the trace.
+test_xtrace_no_token_leak_on_login_failure() {
+    _install_stub_glab fail
+    local output rc=0
+    output=$(_run_setup_glab_traced GITLAB_TOKEN="fake-gitlab-token-for-testing-1234") || rc=$?
+    assert_file_contains "$TEST_TEMP_DIR/glab.calls" "auth login --hostname gitlab.com --stdin" \
+        "Stub glab auth login must have been called"
+    assert_not_equals "0" "$rc" "A failed glab login should not exit 0"
+    assert_contains "$output" "+ main" "Trace should be non-empty and enter main"
+    assert_not_contains "$output" "fake-gitlab-token-for-testing-1234" \
+        "Token must not appear anywhere in the xtrace on login failure"
+}
+
+# The no-token and invalid-token returns must restore xtrace too. Without the
+# restore the trace ends at the `_xt=` save; with it, the traced `_info` (no
+# token) or `return 0` (invalid token) follows.
+test_xtrace_restored_on_early_returns() {
+    _install_stub_glab
+    local output last
+    output=$(_run_setup_glab_traced -u GITLAB_TOKEN) || true
+    assert_contains "$output" "+ _info 'GITLAB_TOKEN not set" \
+        "[no-token] xtrace should be restored before the help message"
+
+    # Sanitizes to "zq9" (too short), so _validate_token rejects it
+    output=$(_run_setup_glab_traced GITLAB_TOKEN="zq9 ") || true
+    assert_contains "$output" "GITLAB_TOKEN is too short" "[invalid] should take the validate-fail path"
+    assert_not_contains "$output" "zq9" "[invalid] token must not appear anywhere in the xtrace"
+    last=$(printf '%s\n' "$output" | command tail -n 1)
+    assert_equals "+ return 0" "$last" "[invalid] xtrace should be restored before the return"
 }
 
 # ---------------------------------------------------------------------------
@@ -547,6 +587,8 @@ run_test_with_setup test_no_inline_op_cache "No inline OP cache block (regressio
 run_test_with_setup test_auth_no_token_leak "Auth block does not leak token in xtrace"
 run_test_with_setup test_xtrace_no_token_leak "Whole xtrace is token-free on the login path"
 run_test_with_setup test_xtrace_no_stored_token_leak "Already-authenticated path keeps stored token out of xtrace"
+run_test_with_setup test_xtrace_no_token_leak_on_login_failure "Failed glab login keeps token out of xtrace"
+run_test_with_setup test_xtrace_restored_on_early_returns "No-token and invalid-token returns restore xtrace"
 run_test_with_setup test_verification_after_auth "Verification step after authentication"
 
 # Generate test report
