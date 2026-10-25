@@ -560,6 +560,10 @@ test_fixed_file_keeps_mode_without_gnu_chmod() {
     assert_equals "1" "$exit_code" "Should exit 1 when changes made"
     assert_equals "755" "$(stat -c '%a' "$TEST_TEMP_DIR/test.sh")" \
         "Fixed file should keep 755 without GNU chmod --reference"
+    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" \
+        "Fixed content should be written back"
+    assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
+        "No tmpfile should be left after a successful write"
 }
 
 # Test: a fixable but unwritable file → exit 2, and the tmpfile holding the
