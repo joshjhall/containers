@@ -341,6 +341,98 @@ test_main_validates_token() {
         "main should validate token before authenticating"
 }
 
+# ---------------------------------------------------------------------------
+# Behavioral tests: login runs with GITHUB_TOKEN/GH_TOKEN cleared (#1457)
+# ---------------------------------------------------------------------------
+
+# Install a stub gh in $TEST_TEMP_DIR/bin. Every invocation appends one line to
+# $TEST_TEMP_DIR/gh.calls: argv plus whether GITHUB_TOKEN/GH_TOKEN were set in
+# its env. Like real gh, `auth login` is refused while either token is set.
+# `auth status` fails until a login succeeds. $1=fail makes every login fail.
+_install_stub_gh() {
+    local mode="${1:-ok}"
+    mkdir -p "$TEST_TEMP_DIR/bin"
+    command cat >"$TEST_TEMP_DIR/bin/gh" <<STUB
+#!/bin/bash
+state="$TEST_TEMP_DIR"
+STUB
+    command cat >>"$TEST_TEMP_DIR/bin/gh" <<'STUB'
+printf '%s GITHUB_TOKEN=%s GH_TOKEN=%s\n' "$*" \
+    "${GITHUB_TOKEN:+set}" "${GH_TOKEN:+set}" >>"$state/gh.calls"
+case "$*" in
+    *"auth status"*) [ -f "$state/gh.loggedin" ] ;;
+    *"auth login"*)
+        command cat >"$state/gh.stdin"
+        if [ -n "${GITHUB_TOKEN:-}" ] || [ -n "${GH_TOKEN:-}" ]; then
+            echo "The value of the GITHUB_TOKEN environment variable is being used for authentication." >&2
+            exit 1
+        fi
+STUB
+    if [ "$mode" = "fail" ]; then
+        printf '        echo "error validating token" >&2\n        exit 1 ;;\n' >>"$TEST_TEMP_DIR/bin/gh"
+    else
+        printf '        touch "$state/gh.loggedin"\n        exit 0 ;;\n' >>"$TEST_TEMP_DIR/bin/gh"
+    fi
+    command cat >>"$TEST_TEMP_DIR/bin/gh" <<'STUB'
+    *) exit 0 ;;
+esac
+STUB
+    chmod +x "$TEST_TEMP_DIR/bin/gh"
+}
+
+# Run setup-gh against the stub. BASH_ENV is unset (it rebuilds PATH on
+# non-interactive bash and would bypass the stub); the loaded flags keep the
+# host's .env.secrets / OP cache out of the run.
+_run_setup_gh() {
+    command env -u BASH_ENV -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" \
+        bash "$SETUP_GH_SCRIPT" 2>&1
+}
+
+# Guard every behavioral test: the stub must have been the gh that ran, and the
+# login must have reached it with no token in its env. A stub bypassed via PATH,
+# or a fall-through to the real gh, leaves the log empty and fails here.
+_assert_stub_login_without_env_token() {
+    local calls=""
+    [ -f "$TEST_TEMP_DIR/gh.calls" ] && calls=$(command cat "$TEST_TEMP_DIR/gh.calls")
+    assert_not_empty "$calls" "Stub gh call log must be non-empty (stub was invoked)"
+    assert_contains "$calls" "auth login --with-token GITHUB_TOKEN= GH_TOKEN=" \
+        "gh auth login --with-token must run with GITHUB_TOKEN and GH_TOKEN cleared"
+}
+
+test_login_clears_env_token() {
+    _install_stub_gh ok
+
+    local output rc=0
+    output=$(_run_setup_gh) || rc=$?
+
+    _assert_stub_login_without_env_token
+    assert_equals "0" "$rc" "setup-gh should succeed when login runs without env token"
+    assert_contains "$output" "gh authenticated" "Post-login verify should pass"
+    assert_not_contains "$output" "environment variable is being used" "gh must not refuse login"
+    assert_equals "ghp_fake_token_for_testing_1234567890" "$(command cat "$TEST_TEMP_DIR/gh.stdin")" \
+        "Token should be piped to gh on stdin"
+    assert_file_contains "$TEST_HOME/.bashrc" "# setup-gh: GITHUB_TOKEN" \
+        "_persist_token should run on the login path"
+}
+
+test_login_failure_reported() {
+    _install_stub_gh fail
+
+    local output rc=0
+    output=$(_run_setup_gh) || rc=$?
+
+    _assert_stub_login_without_env_token
+    assert_not_equals "0" "$rc" "setup-gh should exit non-zero when gh rejects the token"
+    assert_contains "$output" "gh auth login failed" "Login failure should be reported"
+    assert_not_contains "$output" "gh authenticated" "Must not claim success after a failed login"
+}
+
+run_test_with_setup test_login_clears_env_token "Login runs with env tokens cleared and persists"
+run_test_with_setup test_login_failure_reported "Failed login is reported with non-zero exit"
+
 run_test_with_setup test_warn_defined "_warn helper is defined"
 run_test_with_setup test_validate_token_defined "_validate_token function is defined"
 run_test_with_setup test_validate_token_accepts_valid "_validate_token accepts valid token"
