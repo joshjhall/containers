@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: f2ff0bfa-031a-4bc5-9965-69b4fad4cea8
+  modified: 2026-10-23T16:14:37.403Z
 ---
 
 **RESOLVED 2026-06-30** (commit `09491eb7`, `fix(deps)`): the `anyhow 1.0.102`
@@ -23,6 +24,12 @@ flagged by the osv-scanner **pre-push** hook (`lefthook.yml` pre-push,
 
 **Why:** the gate scans the whole lockfile, not the diff. A real but
 pre-existing advisory blocks unrelated work (e.g. a CI-YAML/docs PR).
+
+**Check main first (2026-10-23, #1374):** the advisory may already be fixed on
+`origin/main` after your branch was cut (tokio RUSTSEC-2026-0386 → #1376 landed
+minutes earlier). `gh issue list --search "<RUSTSEC id>" --state all` + `git
+show origin/main:Cargo.lock`; if fixed, `git rebase origin/main` and push — no
+`--no-verify`, no deps PR.
 
 **Proper fix (do this, not `--no-verify`):** a standalone `fix(deps)` lockfile
 refresh. Run `cargo update -p <crate>` (or full `cargo update` to also shed

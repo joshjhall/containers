@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: a30c922e-b5ff-4d13-8ad8-2315f0d9cbbe
-  modified: 2026-09-28T19:43:26.077Z
+  modified: 2026-10-24T03:06:24.141Z
 ---
 
 Per-feature PR builds (`test-pr.yml`) are opt-in: they only run when the PR has the `ci/full-build`
@@ -22,6 +22,14 @@ at #993 it was `rust-dev|java-dev`) filters both the per-feature path and the fo
 fallback cluster. That cluster names `rust-dev` but not `rust`. So a `rust-dev.sh` change never
 builds on the PR tier, and with a foundational file in the diff `rust.sh` doesn't either. The
 merge tier covers them only after merge.
+
+**Multi-label PR create races PR Tier into a false red (#1407, 2026-10-23).** `gh pr create
+--label a --label b --label c` fires an `opened` run plus one `labeled` run per label in a single
+concurrency group. The `opened` run, which does the real detection, gets cancelled. Each
+`labeled` run for a non-`ci/full-build` label only *mirrors* the last PR Tier verdict, so it
+copies the cancellation as `failure`. `gh run rerun` on a mirror run just mirrors again. The fix
+is the same as above: push an empty `ci(ci): …` commit, which fires `synchronize`. To avoid it,
+label after creation or use a single label.
 
 **Why:** on #984 (Node 26 corepack), the first green CI didn't include `Build node` at all. The
 label-and-rerun attempt burned a cycle and still skipped it.

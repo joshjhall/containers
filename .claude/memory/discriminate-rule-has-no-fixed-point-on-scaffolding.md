@@ -1,8 +1,11 @@
 ---
 name: discriminate-rule-has-no-fixed-point-on-scaffolding
-description: Applied to test scaffolding, "assertions must discriminate" is self-feeding — each round's guards become the next round's undriven branches; break it by deleting machinery, not by driving one more layer
+description: "Applied to test scaffolding, \"assertions must discriminate\" is self-feeding — each round's guards become the next round's undriven branches; break it by deleting machinery, not by driving one more layer"
 metadata:
+  node_type: memory
   type: feedback
+  originSessionId: 42f943a0-dc56-4ae1-9cc1-cd28112a92f9
+  modified: 2026-10-23T21:51:26.691Z
 ---
 
 The `#900 → #903 → #907 → #913` chain on `tests/unit/features/claude-code-setup.sh`
@@ -41,5 +44,11 @@ is never barred by this limit — apply it. #913's review produced exactly one
 such finding, and it was real: three branch tests asserted *contains* plus one
 negative, so a false positive on either unnamed sibling doc passed all three.
 Asserting the whole report by **equality** was both stronger and shorter.
+
+Recurred on #1388 (PR #1389): a 4-line `paths:` fix grew a ~120-line glob
+translator + YAML parser across 5 review cycles, each blocking finding born of
+the previous fix. Ended at `C1-cap` with a clean full cycle; the parser-fixture
+layer went to #1392 rather than a sixth round. A one-line trigger change may
+not need a semantics-faithful matcher at all — weigh a literal assertion first.
 
 See [[fixture-state-hides-vectors]], [[skips-render-as-passes]].

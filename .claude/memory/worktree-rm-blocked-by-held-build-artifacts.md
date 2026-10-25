@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 70fff190-ee3f-408b-b8e8-d31247eeaa88
-  modified: 2026-10-07T00:00:00.000Z
+  modified: 2026-10-25T14:14:07.744Z
 ---
 
 Post-merge teardown of a golem worktree can leave `.worktrees/issue-N/` behind
@@ -49,6 +49,16 @@ shell (~200M). That "expected" message does **not** rule out a killable holder.
    wrong: on PR #878 `lsof +D` listed all 23 fds as `DEL REG` against the one
    PID directly. The `/proc/*/cwd` scan is a useful *confirmation* that the
    process belongs to the worktree, not the primary way to find it.
+
+   **The holder may be another live Claude session's LSP, not an editor**
+   (observed 2026-10-25, `.wedged-issue-1408-*`). `ps -o ppid=` on the
+   `rust-analyzer` showed a `claude` parent from a different, still-running
+   session. Kill only the `rust-analyzer-proc-macro-srv` children (`lsof +D`
+   names them), not the `rust-analyzer` itself: they go `<defunct>`, `lsof`
+   drops to 0, `rm -rf` succeeds, and the session's LSP respawns a helper when it
+   needs one. Ask first, because the process belongs to someone else's session.
+   Plain `sudo lsof +D` works here; reading `/proc/<pid>/cwd` is denied even
+   under sudo, so don't rely on the cwd scan to confirm.
 
    Teardown still does not name the holding PIDs — find them yourself. Related: [[stale-symlink-attrs-virtiofs]].
 

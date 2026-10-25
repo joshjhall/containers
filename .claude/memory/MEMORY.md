@@ -23,7 +23,7 @@
 - [Auto-patch inline checksums](auto-patch-inline-checksums.md) — inline *_SHA256 pins in setup.sh need TOOL_CHECKSUM_REGISTRY_INLINE
 - [check-versions scrape pins nonexistent](check-versions-scrape-pins-nonexistent.md) — read downloadable artifact filenames, not scraped HTML
 - [Luggage vendored catalog](luggage-vendored-catalog.md) — builds read vendored snapshot (crates/luggage/testdata/catalog), not sibling…
-- [Rust split triage by production LOC](rust-split-triage-by-production-loc.md) — rank .rs split candidates by production LOC (loc_engine.py)
+- [Rust split triage by production LOC](rust-split-triage-by-production-loc.md) — rank .rs split candidates by production LOC; check test_excluded first (#874 miscount)
 - [Luggage release deferred until v5](luggage-release-deferred-until-v5.md) — no apt/Homebrew/cargo release for luggage until v5 substantially
 - [Auto-merge needs explicit consent](feedback_auto_merge_consent.md) — gh pr merge --auto needs per-turn authorization, separate from default-ship
 - [Golem autonomy contract](feedback_golem_autonomy_contract.md) — auto-approve push/PR-create + auto-merge green PRs
@@ -148,3 +148,5 @@
 - [Refusal tests reach real gh](refusal-tests-reach-real-gh.md) — a guard that silently misses falls through to real `gh` (#424)
 - [Readdir order CI-only failure](readdir-order-ci-only-failure.md) — deterministic CI-only fail in an untouched suite can be find order (mutate-while-walking)
 - [Heuristic scanner: union of views](heuristic-scanner-union-of-views.md) — patching a lossy transform has no fixed point
+- [Review-fix commit scope](review-fix-commit-scope.md) — conform rejects `fix(review)`; use the component scope (e.g. `test(luggage)`)
+- [git-cliff in a worktree empties CHANGELOG](git-cliff-worktree-empty-changelog.md) — pass --workdir; fixed in release.sh by #1423

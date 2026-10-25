@@ -1,8 +1,11 @@
 ---
 name: rust-split-triage-by-production-loc
-description: Triage Rust split candidates by production LOC (loc_engine.py), not total lines — co-located tests inflate totals and cause false split candidates
+description: "Triage Rust split candidates by production LOC (loc_engine.py), not total lines — co-located tests inflate totals and cause false split candidates"
 metadata:
+  node_type: memory
   type: project
+  originSessionId: 23bf7b4b-2611-4880-9624-580517b17a71
+  modified: 2026-10-23T05:02:37.201Z
 ---
 
 Rank `.rs` split candidates by **production LOC**, not total lines. The #832
@@ -60,10 +63,19 @@ tests are standard Rust and this repo's dominant convention (~30 files). The two
 files that do use `#[path]` earned it with 480–759-line suites over genuinely
 large production bodies.
 
-Note the interaction with `tests/unit/file-size-ceiling.sh`: that ratchet
-measures **total** lines on purpose ("did this file grow?"), so a
-declined-but-large file must **stay** in `GRANDFATHERED` — removing its entry
-fails `test_no_ungrandfathered_file_over_ceiling`. Such an entry is a
-measurement artifact, not tracked debt; say so in its comment.
+**Check that the production figure is real before assessing.** Both
+`loc_engine.py` and the ceiling's awk port matched only the literal
+`#[cfg(test)]`, so a test module gated `#[cfg(all(test, unix))]` counted as
+production in full. #874's "617 production LOC, `test_excluded: 0`, single
+cohesive unit" was really 45 LOC plus a 650-line test module. **`test_excluded:
+0` on a file with a big `mod tests` is the tell** — read the gate attribute
+before planning anything. The ceiling now accepts `cfg(all(…, test, …))`
+(#874); the engine fix is joshjhall/librarian#1221 — until it lands the audit
+lens still over-counts those files.
+
+Note the interaction with `tests/unit/file-size-ceiling.sh`: since #873 that
+ratchet measures **production LOC** too (500 ceiling), and `GRANDFATHERED` is
+empty as of #874. An entry belongs only to a genuine offender with a tracked
+issue — never to a counting artifact; fix the metric instead.
 
 Related: [[luggage-tooldb-design]], [[v5-architecture]]
