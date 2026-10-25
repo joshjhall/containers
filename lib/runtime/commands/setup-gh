@@ -92,7 +92,7 @@ main() {
     printf '%s' "$token" | command env -u GITHUB_TOKEN -u GH_TOKEN gh auth login --with-token 2>&1 || rc=$?
     eval "$_xt"
     if [ "$rc" -ne 0 ]; then
-        _warn "gh auth login failed (exit ${rc}) — GITHUB_TOKEN may be invalid or expired"
+        _warn "gh auth login failed (exit ${rc}) — GITHUB_TOKEN may be invalid or expired, or github.com unreachable"
         return "$rc"
     fi
 

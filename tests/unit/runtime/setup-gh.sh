@@ -435,8 +435,34 @@ test_login_failure_reported() {
     assert_not_contains "$output" "gh authenticated" "Must not claim success after a failed login"
 }
 
+# Under bash -x the login block must keep the token out of the trace, and the
+# failure path must restore xtrace before it warns. (Lines before the block,
+# e.g. the sanitize step, are out of scope here.)
+test_login_block_xtrace_safe() {
+    local mode output block
+    for mode in ok fail; do
+        command rm -rf "$TEST_TEMP_DIR/bin" "$TEST_TEMP_DIR"/gh.*
+        _install_stub_gh "$mode"
+        output=$(command env -u BASH_ENV \
+            HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+            _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+            GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" \
+            bash -x "$SETUP_GH_SCRIPT" 2>&1) || true
+        _assert_stub_login_without_env_token
+        block=$(printf '%s\n' "$output" | command sed -n '/authenticating gh CLI/,$p')
+        assert_not_empty "$block" "[$mode] trace should reach the login block"
+        assert_not_contains "$block" "ghp_fake_token_for_testing_1234567890" \
+            "[$mode] token must not appear in xtrace from the login block on"
+        if [ "$mode" = "fail" ]; then
+            assert_contains "$block" "+ _warn 'gh auth login failed" \
+                "[fail] xtrace should be restored before the failure warning"
+        fi
+    done
+}
+
 run_test_with_setup test_login_clears_env_token "Login runs with env tokens cleared and persists"
 run_test_with_setup test_login_failure_reported "Failed login is reported with non-zero exit"
+run_test_with_setup test_login_block_xtrace_safe "Login block keeps token out of xtrace, restores it on failure"
 
 run_test_with_setup test_warn_defined "_warn helper is defined"
 run_test_with_setup test_validate_token_defined "_validate_token function is defined"
