@@ -166,22 +166,12 @@ jobs:
           sparse-checkout: tools
 
       # A previous run's ingest PR (evidence/batch/<run-id>) is often still
-      # awaiting auto-merge when the next push resolves its matrix, so its rows
-      # are not on main yet. The rows each open one ADDS over its merge-base
-      # (evidence_pr_rows) join the evidence source, so those cells count as
-      # covered instead of being re-queued. Not its whole tools/ tree: that
-      # carries main's rows as of its branch point, so a pass row since
-      # removed on main would be re-asserted (#1327).
-      # evidence_open_prs keeps only same-repo PRs by the ingest identity
-      # under 24h old. The PRs are listed BEFORE main is re-fetched, so a PR
-      # that merges in between is on the main read rather than in neither.
-      # refs/pull/N/head survives a close, so each PR's state is re-read after
-      # its fetch and a CLOSED one is skipped. A MERGED one counts only while
-      # its merge commit is not yet in the main read. A close after that
-      # re-read still counts for this one run; that seconds-wide window is
-      # accepted.
-      # A failed listing, state read, or fetch fails the job, like the
-      # checkout above.
+      # awaiting auto-merge when the next push resolves its matrix, so the
+      # rows each open one ADDS over its merge-base join the evidence source
+      # (#1327). evidence_db_sources (bin/lib/evidence-sources.sh) holds the
+      # listing, the per-PR state re-read, and the fail-closed guards; each
+      # network call is retried before a failure fails the job (#1328), like
+      # the checkout above.
       - name: Collect open evidence PRs (containers-db)
         id: db_sources
         if: github.event_name != 'workflow_dispatch'
@@ -189,57 +179,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # shellcheck source=bin/lib/evidence-matrix.sh
-          source bin/lib/evidence-matrix.sh
-          LIST=$(gh pr list --repo joshjhall/containers-db --state open --limit 1000 \
-            --json number,headRefName,isCrossRepository,author,createdAt)
-          if [ "$(jq length <<<"$LIST")" -ge 1000 ]; then
-            echo "containers-db has 1000+ open PRs; the listing may be truncated" >&2
-            exit 1
-          fi
-          PRS=$(evidence_open_prs "$(date -u +%s)" <<<"$LIST")
-          git -C _db fetch --quiet --depth 1 origin main
-          git -C _db checkout --quiet --detach FETCH_HEAD
-          # Merge-bases are taken against THIS main, not the moving ref: a PR
-          # that merged after this fetch has its head on live main, so a live
-          # merge-base would equal its head and its rows would be in neither.
-          MAIN_SHA=$(git -C _db rev-parse HEAD)
-          SOURCES="$PWD/_db"
-          for n in $PRS; do
-            git -C _db fetch --quiet --depth 1 origin "refs/pull/$n/head:refs/evidence-pr/$n"
-            PR_STATE=$(gh pr view "$n" --repo joshjhall/containers-db \
-              --json state,mergeCommit -q '"\(.state) \(.mergeCommit.oid // "-")"')
-            read -r STATE MERGE_SHA <<<"$PR_STATE"
-            if [ "$STATE" = CLOSED ]; then
-              echo "containers-db#$n closed without merging since it was listed; its rows do not count"
-              continue
-            fi
-            # Merged before the main fetch: its rows are on MAIN_SHA already. A
-            # squash's head is not an ancestor of main, so its merge-base is the
-            # old branch point and its stale copies would be re-asserted.
-            if [ "$STATE" = MERGED ]; then
-              IN_MAIN=$(gh api "repos/joshjhall/containers-db/compare/$MERGE_SHA...$MAIN_SHA" -q .status)
-              if [ "$IN_MAIN" = ahead ] || [ "$IN_MAIN" = identical ]; then
-                echo "containers-db#$n merged into the main read; its rows come from main"
-                continue
-              fi
-            fi
-            HEAD_SHA=$(git -C _db rev-parse "refs/evidence-pr/$n")
-            BASE_SHA=$(gh api "repos/joshjhall/containers-db/compare/$MAIN_SHA...$HEAD_SHA" -q .merge_base_commit.sha)
-            git -C _db fetch --quiet --depth 1 origin "$BASE_SHA"
-            for side in head base; do
-              mkdir -p "_db_pr/$n/$side"
-              if [ "$side" = head ]; then REV="$HEAD_SHA"; else REV="$BASE_SHA"; fi
-              git -C _db archive "$REV" tools | tar -x --no-same-owner -C "_db_pr/$n/$side"
-              if [ -n "$(find "_db_pr/$n/$side" -type l -print -quit)" ]; then
-                echo "containers-db#$n tools/ ($side) contains symlinks; refusing it" >&2
-                exit 1
-              fi
-            done
-            evidence_pr_rows "_db_pr/$n/base" "_db_pr/$n/head" "_db_pr/$n/rows"
-            SOURCES="$SOURCES:$PWD/_db_pr/$n/rows"
-            echo "Counting the rows open evidence PR joshjhall/containers-db#$n adds as published evidence"
-          done
+          # shellcheck source=bin/lib/evidence-sources.sh
+          source bin/lib/evidence-sources.sh
+          SOURCES=$(evidence_db_sources "$PWD/_db" "$PWD" "$(date -u +%s)")
           echo "sources=$SOURCES" >> "$GITHUB_OUTPUT"
 
       - name: Generate matrix and dry-run flag
@@ -301,8 +243,9 @@ jobs:
             # (#1326). One cap across all tools, under GitHub's 256-job limit;
             # the backlog drains over successive pushes, never-tested cells
             # before failure retries, tools interleaved, oldest versions first.
-            # shellcheck source=bin/lib/evidence-matrix.sh
-            source bin/lib/evidence-matrix.sh
+            # evidence-sources.sh sources evidence-matrix.sh.
+            # shellcheck source=bin/lib/evidence-sources.sh
+            source bin/lib/evidence-sources.sh
             rc=0
             AVAILABLE_ROOT="$PWD"
             if [ "$EVENT" = "pull_request" ] && [ -d _base/base-images ]; then
@@ -317,7 +260,7 @@ jobs:
             export EVIDENCE_PUBLISHED_CHECK=image_published
             # containers-db main plus each open evidence PR (colon-separated).
             # Never empty here: an empty value would read the vendored rows.
-            [ -n "$DB_SOURCES" ] || { echo "No published evidence source resolved" >&2; exit 1; }
+            evidence_require_sources "$DB_SOURCES" || exit 1
             export EVIDENCE_TESTED_SOURCE="$DB_SOURCES"
             MATRIX=$(evidence_matrix_all crates/luggage/testdata/catalog "$AVAILABLE_ROOT" latest 200) || rc=$?
             case "$rc" in

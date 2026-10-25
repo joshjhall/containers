@@ -305,6 +305,64 @@ test_pr_rows_unreadable_is_an_error() {
     assert_dir_not_exists "$rows" "and writes no rows tree"
 }
 
+test_pr_rows_head_without_rows_writes_nothing() {
+    # A head version file with no tested key, or tested: [], adds no rows, so
+    # no file is written for it (#1446).
+    local base head rows f
+    base="$(command mktemp -d "$TEST_TEMP_DIR/base.XXXXXX")"
+    head="$(command mktemp -d "$TEST_TEMP_DIR/head.XXXXXX")"
+    rows="$TEST_TEMP_DIR/rows.$$.$RANDOM"
+    _db_version "$base" 1.90.0 debian-13-amd64
+    _db_version "$head" 1.90.0 debian-13-amd64
+    command mkdir -p "$head/tools/rust/versions"
+    command printf '{"schemaVersion":1,"tool":"rust","version":"1.91.0"}\n' \
+        >"$head/tools/rust/versions/1.91.0.json"
+    command printf '{"schemaVersion":1,"tool":"rust","version":"1.92.0","tested":[]}\n' \
+        >"$head/tools/rust/versions/1.92.0.json"
+    evidence_pr_rows "$base" "$head" "$rows"
+    f="$(cd "$rows" && command find tools -type f | command sort)"
+    assert_equals "" "$f" "no tested key and tested: [] each write nothing"
+    assert_dir_exists "$rows/tools" "and out is still a readable tools/ tree"
+}
+
+test_pr_rows_head_dropping_a_row_writes_nothing() {
+    # A head that is a subset of its base (the PR removed a row) asserts
+    # nothing new: no file is written, and the removed row is not re-asserted.
+    local base head rows
+    base="$(command mktemp -d "$TEST_TEMP_DIR/base.XXXXXX")"
+    head="$(command mktemp -d "$TEST_TEMP_DIR/head.XXXXXX")"
+    rows="$TEST_TEMP_DIR/rows.$$.$RANDOM"
+    _db_version "$base" 1.90.0 debian-13-amd64,debian-13-arm64
+    _db_version "$head" 1.90.0 debian-13-amd64
+    evidence_pr_rows "$base" "$head" "$rows"
+    assert_file_not_exists "$rows/tools/rust/versions/1.90.0.json" "a head that only drops a row writes no file"
+    assert_equals "" "$(cd "$rows" && command find tools -type f)" "nor any other"
+}
+
+test_pr_skip_decision() {
+    # Every state/status the per-PR re-read can produce (#1446). A merge
+    # commit counts as landed only when main as read contains it.
+    local cases case_ state merge in_main want rc_want out rc
+    cases=(
+        "OPEN|-|-|count|0"
+        "CLOSED|-|-|skip closed|0"
+        "MERGED|abc|ahead|skip landed|0"
+        "MERGED|abc|identical|skip landed|0"
+        "MERGED|abc|behind|count|0"
+        "MERGED|abc|diverged|count|0"
+        "MERGED|-|-|evidence_pr_skip: MERGED with no merge commit|1"
+        "MERGED||ahead|evidence_pr_skip: MERGED with no merge commit|1"
+        "MERGED|abc||evidence_pr_skip: unknown compare status '' for abc|1"
+        "DRAFT|-|-|evidence_pr_skip: unknown PR state 'DRAFT'|1"
+    )
+    for case_ in "${cases[@]}"; do
+        IFS='|' read -r state merge in_main want rc_want <<<"$case_"
+        rc=0
+        out="$(evidence_pr_skip "$state" "$merge" "$in_main" 2>&1)" || rc=$?
+        assert_equals "$rc_want $want" "$rc $out" "state=$state merge=$merge compare=$in_main"
+    done
+}
+
 test_open_prs_filters_trust_and_age() {
     # Only same-repo ingest branches by the ingest identity, under the age
     # bound, count. A fork can name a branch evidence/batch/* too.
@@ -689,6 +747,9 @@ run_test test_pr_rows_drop_inherited_rows "an open PR counts only the rows it ad
 run_test test_pr_rows_new_file_and_untouched_tool "PR rows: new files count whole, untouched tools are absent"
 run_test test_pr_rows_changed_row_counts "PR rows: a rewritten row counts as the PR's"
 run_test test_pr_rows_unreadable_is_an_error "PR rows: an unreadable side is an error"
+run_test test_pr_rows_head_without_rows_writes_nothing "PR rows: a head file with no or empty tested[] writes nothing"
+run_test test_pr_rows_head_dropping_a_row_writes_nothing "PR rows: a head that drops a base row writes nothing"
+run_test test_pr_skip_decision "open evidence PRs: skip decision per state and compare status"
 run_test test_open_prs_filters_trust_and_age "open evidence PRs: trust and age filter"
 run_test test_open_prs_unparsable_listing_is_an_error "open evidence PRs: unparsable listing is an error"
 run_test test_fully_published_coverage_exits_3 "full published coverage exits 3"
