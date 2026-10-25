@@ -455,9 +455,179 @@ test_unreadable_published_source_is_an_error() {
 
     command echo '{not json' >"$db/tools/rust/versions/1.90.0.json"
     rc=0
-    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>/dev/null)" || rc=$?
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
     assert_equals "1" "$rc" "an unparsable source is exit 1"
     assert_equals "" "$out" "and prints no matrix"
+    assert_equals "$(_malformed_msg "$db/tools/rust/versions/1.90.0.json")" \
+        "$(command cat "$err")" "and names the unparsable file (#1329)"
+}
+
+_malformed_msg() {
+    command echo "evidence_matrix: unreadable published evidence for rust: $1 (must be one JSON object with a string .version and, if present, an array .tested)"
+}
+
+# _malformed_fails <source> <bad_file> <what> — evidence_matrix over a
+# 1.90.0 catalog exits 1, prints no matrix, and names exactly bad_file.
+_malformed_fails() {
+    local src="$1" bad="$2" what="$3" r out err rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(EVIDENCE_TESTED_SOURCE="$src" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
+    assert_equals "1" "$rc" "$what is exit 1"
+    assert_equals "" "$out" "$what prints no matrix"
+    assert_equals "$(_malformed_msg "$bad")" "$(command cat "$err")" "$what is named in the error"
+}
+
+# _mutate <file> <jq filter> — rewrites a version file in place. A failed
+# rewrite fails the test: chained cases would otherwise pass on the previous
+# case's malformed content.
+_mutate() {
+    local tmp
+    tmp="$(command mktemp "$TEST_TEMP_DIR/mut.XXXXXX")"
+    if command jq "$2" "$1" >"$tmp"; then
+        command mv "$tmp" "$1"
+    else
+        fail_test "_mutate: jq '$2' failed on $1"
+    fi
+}
+
+test_malformed_published_file_is_named() {
+    # #1329: a version file with a bad shape stays fatal (skipping it would
+    # make its cells pending again, #1319), and the message names the file
+    # rather than only the source list. 1.80.0 is valid, so the culprit is
+    # not just "the only file there is".
+    local db pr f
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.80.0 debian-13-amd64
+    _db_version "$db" 1.90.0 debian-13-amd64
+    f="$db/tools/rust/versions/1.90.0.json"
+
+    _mutate "$f" 'del(.version)'
+    _malformed_fails "$db" "$f" "a file with no version key"
+
+    _mutate "$f" '.version = null'
+    _malformed_fails "$db" "$f" "a null version"
+
+    _mutate "$f" '.version = "1.90.0" | .tested = "x"'
+    _malformed_fails "$db" "$f" "a non-array tested"
+
+    # Without the explicit check jq iterates an object's values as rows and
+    # exits 0, so this is the case only the shape check catches.
+    _mutate "$f" '.tested = {a: {os: "debian", os_version: "13", arch: "amd64", result: "pass"}}'
+    _malformed_fails "$db" "$f" "an object tested"
+
+    _mutate "$f" '.tested = null'
+    _malformed_fails "$db" "$f" "a null tested"
+
+    _mutate "$f" '[.]'
+    _malformed_fails "$db" "$f" "a top-level array"
+
+    # Slurping drops an empty file and splits a two-document one, so only
+    # the value-count check sees these.
+    : >"$f"
+    _malformed_fails "$db" "$f" "an empty file"
+    _db_version "$db" 1.90.0 debian-13-amd64
+    command cat "$f" "$f" >"$f.two" && command mv "$f.two" "$f"
+    _malformed_fails "$db" "$f" "a file with two documents"
+
+    # Together they keep the total value count equal to the file count, so
+    # only a per-file count stops the batch passing. Both files are bad; the
+    # culprit loop names the first in glob order, the empty 1.80.0.
+    : >"$db/tools/rust/versions/1.80.0.json"
+    _malformed_fails "$db" "$db/tools/rust/versions/1.80.0.json" "an empty file beside a two-document one"
+    _db_version "$db" 1.80.0 debian-13-amd64
+    _db_version "$db" 1.90.0 debian-13-amd64
+
+    # The culprit sits in a later source (an open PR's rows): main is fine.
+    _mutate "$f" '.tested = []'
+    pr="$(command mktemp -d "$TEST_TEMP_DIR/pr.XXXXXX")"
+    _db_version "$pr" 1.90.0 debian-13-amd64
+    _mutate "$pr/tools/rust/versions/1.90.0.json" 'del(.version)'
+    _malformed_fails "$db:$pr" "$pr/tools/rust/versions/1.90.0.json" "a bad file in a PR-rows source"
+}
+
+test_unnamed_evidence_failure_names_the_sources() {
+    # Every file has the right shape but a row is not an object, so the
+    # evidence step fails where no per-file check can point: the message
+    # falls back to the source list, still exit 1 (#1329).
+    local r db out err rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 ""
+    _mutate "$db/tools/rust/versions/1.90.0.json" '.tested = [1]'
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
+    assert_equals "1" "$rc" "a bad row in a well-shaped file is exit 1"
+    assert_equals "" "$out" "and prints no matrix"
+    assert_equals "evidence_matrix: unreadable published evidence for rust in $db" \
+        "$(command sed -n 1p "$err")" "and names the source list"
+    # jq's own cause follows, so the fallback still says what broke. Its
+    # wording belongs to the jq release, so only its presence is pinned.
+    assert_not_equals "" "$(command sed -n 2p "$err")" "and jq's error follows it"
+    # The batch's own shape error is our string, not jq's: it must not be the
+    # cause here, or the shape gate rejected a file the culprit check passed.
+    assert_not_contains "$(command cat "$err")" "malformed version file" "and the shape gate did not fire"
+}
+
+test_evidence_scratch_is_removed() {
+    # The batch jq's stderr sidecar sits next to evidence_matrix's mktemp
+    # output; every exit path (success, a named file, the fallback) removes
+    # both, so a scratch TMPDIR is empty afterwards.
+    # Each case pins its exit code and first stderr line, so the three
+    # cases cannot quietly collapse onto one path.
+    local r db tmp f err case rc want_rc want_err
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    f="$db/tools/rust/versions/1.90.0.json"
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    for case in ok named fallback; do
+        _db_version "$db" 1.90.0 ""
+        case "$case" in
+            ok) want_rc=0 want_err="" ;;
+            named)
+                _mutate "$f" 'del(.version)'
+                want_rc=1 want_err="$(_malformed_msg "$f")"
+                ;;
+            fallback)
+                _mutate "$f" '.tested = [1]'
+                want_rc=1 want_err="evidence_matrix: unreadable published evidence for rust in $db"
+                ;;
+        esac
+        tmp="$(command mktemp -d "$TEST_TEMP_DIR/tmp.XXXXXX")"
+        rc=0
+        TMPDIR="$tmp" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" >/dev/null 2>"$err" || rc=$?
+        assert_equals "$want_rc" "$rc" "the $case path exits $want_rc"
+        assert_equals "$want_err" "$(command sed -n 1p "$err")" "the $case path is the one taken"
+        assert_equals "" "$(command ls -A "$tmp")" "no scratch left after the $case path"
+    done
+}
+
+test_repeated_source_is_not_two_documents() {
+    # The per-file count must not read a source listed twice as one file
+    # holding two documents: the repeat adds the same rows, nothing more.
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 debian-13-amd64
+    out="$(EVIDENCE_TESTED_SOURCE="$db:$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-arm64" "$(_cells "$out")" "a repeated source counts once"
+}
+
+test_published_file_without_tested_is_valid() {
+    # A version file with no tested key has no rows: its cells are pending,
+    # not an error (the #1329 shape check must not reject it).
+    local r db out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 ""
+    _mutate "$db/tools/rust/versions/1.90.0.json" 'del(.tested)'
+    out="$(EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "1.90.0 debian-13-amd64" "$(_cells "$out")" "no tested key means pending"
 }
 
 test_recent_fail_is_not_pending() {
@@ -754,6 +924,11 @@ run_test test_open_prs_filters_trust_and_age "open evidence PRs: trust and age f
 run_test test_open_prs_unparsable_listing_is_an_error "open evidence PRs: unparsable listing is an error"
 run_test test_fully_published_coverage_exits_3 "full published coverage exits 3"
 run_test test_unreadable_published_source_is_an_error "an unreadable evidence source is an error, not a full matrix"
+run_test test_malformed_published_file_is_named "a malformed published version file is fatal and named"
+run_test test_unnamed_evidence_failure_names_the_sources "a failure no file check explains falls back to the source list"
+run_test test_evidence_scratch_is_removed "published-evidence scratch is removed on every exit path"
+run_test test_repeated_source_is_not_two_documents "a source listed twice is not a two-document file"
+run_test test_published_file_without_tested_is_valid "a published version file without tested is pending, not an error"
 run_test test_recent_fail_is_not_pending "a recently failed cell is not pending"
 run_test test_only_recent_failures_exits_3 "only recent failures exits 3"
 run_test test_stale_fail_sorts_after_untested "stale failures retry after never-tested cells"

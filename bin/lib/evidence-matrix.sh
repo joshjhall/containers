@@ -127,15 +127,27 @@ def em_evidence($now):
 # order. That failure gets its own message naming the tool and the fix
 # (#1365), because it fails every tool's matrix, not just that tool's.
 #
+# A version file that is not exactly one JSON object with a string .version
+# and a .tested that is absent or an array (so an empty file, or a null
+# .tested) fails too (#1329), and the message names the file.
+# Skipping it would make that version's cells pending, which is the same
+# re-test loop. The check is explicit, so it does not depend on how a given
+# jq release handles a null object key.
+#
 # A file, not a jq argument: the map grows with containers-db and one argv
 # string is capped at 128 KiB.
+_EM_VERSION_FILE_OK_JQ='
+def em_version_file_ok:
+    type == "object" and (.version | type) == "string"
+    and ((has("tested") | not) or (.tested | type) == "array");
+'
 _em_published_evidence() {
     local tool="$1" out="$2" now="$3"
     if [ -z "${EVIDENCE_TESTED_SOURCE:-}" ]; then
         command echo null >"$out"
         return 0
     fi
-    local src dir files=() found srcs i
+    local src dir files=() found srcs i f
     IFS=: read -r -a srcs <<<"$EVIDENCE_TESTED_SOURCE"
     for i in "${!srcs[@]}"; do
         src="${srcs[$i]}"
@@ -155,14 +167,45 @@ _em_published_evidence() {
         fi
         files+=("${found[@]}")
     done
-    command jq -cs --argjson now "$now" "$_EM_EVIDENCE_JQ"'
-        group_by(.version)
-        | map({key: .[0].version, value: ([ .[].tested[]? ] | em_evidence($now))})
+    # A source listed twice names the same file twice, which the per-file
+    # count below would read as two documents in one file. Its rows union
+    # to the same evidence anyway, so drop the repeat.
+    local -A seen=()
+    local -a uniq=()
+    for f in "${files[@]}"; do
+        [ -n "${seen[$f]:-}" ] && continue
+        seen[$f]=1
+        uniq+=("$f")
+    done
+    files=("${uniq[@]}")
+    # Slurping drops an empty file and splits one holding two documents, so
+    # values are counted per file (input_filename): a total count would let
+    # an empty file and a two-document one cancel out.
+    command jq -cn --argjson now "$now" --argjson n "${#files[@]}" "$_EM_EVIDENCE_JQ$_EM_VERSION_FILE_OK_JQ"'
+        [inputs | {f: input_filename, v: .}] | group_by(.f)
+        | if length == $n and all(length == 1 and (.[0].v | em_version_file_ok))
+          then map(.[0].v) else error("malformed version file") end
+        | group_by(.version)
+        | map({key: .[0].version, value: ([ .[].tested // [] | .[] ] | em_evidence($now))})
         | from_entries
-    ' "${files[@]}" >"$out" || {
-        command echo "evidence_matrix: unreadable published evidence for $tool in $EVIDENCE_TESTED_SOURCE" >&2
-        return 1
+    ' "${files[@]}" >"$out" 2>"$out.err" && {
+        command rm -f "$out.err"
+        return 0
     }
+
+    # Failure path only: one jq per file to name the culprit (#1329). jq's
+    # own message is kept for the case no file check explains.
+    for f in "${files[@]}"; do
+        command jq -ne "$_EM_VERSION_FILE_OK_JQ"'[inputs] | length == 1 and (.[0] | em_version_file_ok)' "$f" >/dev/null 2>&1 || {
+            command echo "evidence_matrix: unreadable published evidence for $tool: $f (must be one JSON object with a string .version and, if present, an array .tested)" >&2
+            command rm -f "$out.err"
+            return 1
+        }
+    done
+    command echo "evidence_matrix: unreadable published evidence for $tool in $EVIDENCE_TESTED_SOURCE" >&2
+    command cat "$out.err" >&2
+    command rm -f "$out.err"
+    return 1
 }
 
 # evidence_pr_rows <base_dir> <head_dir> <out_dir> — writes to out_dir the
