@@ -17,7 +17,7 @@ test_suite "Bin Lib Evidence Merge Tests"
 # shellcheck source=bin/lib/evidence-merge.sh
 source "$PROJECT_ROOT/bin/lib/evidence-merge.sh"
 
-# Pinned well after every fixture stamp, so none reads as future-skewed.
+# Pinned after every fixture stamp except the deliberate 2030 future ones.
 export EVIDENCE_NOW=1793491200 # 2026-11-01T00:00:00Z
 
 FAIL_ROW='{"os":"debian","os_version":"13","arch":"amd64","image_digest":"sha256:aa","result":"fail","error_class":"verify"}'
@@ -34,7 +34,7 @@ _stamp() {
 # later no-op merge compares equal under cmp.
 _version_file() {
     local f row
-    f=$(command mktemp)
+    f=$(command mktemp "$TEST_SCRATCH_BASE/evidence-merge.XXXXXX")
     command echo '{"tested": []}' >"$f"
     for row in "$@"; do
         merge_evidence_row "$f" "$row"
@@ -50,7 +50,7 @@ STORED_AT="2026-10-01T01:00:00+02:00"
 _assert_noop() {
     local f before
     f=$(_version_file "$(_stamp "$PASS_ROW" 2026-09-29T00:00:00Z)" "$(_stamp "$FAIL_ROW" "$STORED_AT")")
-    before=$(command mktemp)
+    before=$(command mktemp "$TEST_SCRATCH_BASE/evidence-merge.XXXXXX")
     command cp "$f" "$before"
     merge_evidence_row "$f" "$(_stamp "$FAIL_ROW" "$1")"
     if command cmp -s "$before" "$f"; then
@@ -85,7 +85,7 @@ test_newer_pass_repeat_is_noop() {
     # The refresh is fail-only: a pass repeat carries no cooldown timestamp.
     local f before
     f=$(_version_file "$(_stamp "$PASS_ROW" 2026-09-29T00:00:00Z)")
-    before=$(command mktemp)
+    before=$(command mktemp "$TEST_SCRATCH_BASE/evidence-merge.XXXXXX")
     command cp "$f" "$before"
     merge_evidence_row "$f" "$(_stamp "$PASS_ROW" 2026-10-15T00:00:00Z)"
     if command cmp -s "$before" "$f"; then
@@ -96,9 +96,36 @@ test_newer_pass_repeat_is_noop() {
     command rm -f "$f" "$before"
 }
 
+test_changed_core_replaces_even_when_older() {
+    # A different non-volatile field is fresh signal: the row is replaced
+    # whatever its tested_at, which the ordering branch would have no-op'd.
+    local f out
+    f=$(_version_file "$(_stamp "$FAIL_ROW" "$STORED_AT")")
+    merge_evidence_row "$f" "$(command jq -c '. + {error_class: "build", tested_at: "2026-09-01T00:00:00Z"}' <<<"$FAIL_ROW")"
+    out=$(command jq -c '[.tested[] | [.error_class, .tested_at]]' "$f")
+    command rm -f "$f"
+    assert_equals '[["build","2026-09-01T00:00:00Z"]]' "$out" \
+        "a repeat with a changed error_class replaces the row"
+}
+
+test_future_stamp_reads_as_stale() {
+    # #1356: a stored stamp past EVIDENCE_NOW + skew reads as 0, so a genuine
+    # repeat refreshes it; an incoming future stamp reads as 0 and is a no-op.
+    local f out
+    f=$(_version_file "$(_stamp "$FAIL_ROW" 2030-01-01T00:00:00Z)")
+    merge_evidence_row "$f" "$(_stamp "$FAIL_ROW" 2026-10-20T00:00:00Z)"
+    out=$(command jq -c '[.tested[].tested_at]' "$f")
+    command rm -f "$f"
+    assert_equals '["2026-10-20T00:00:00Z"]' "$out" "a stored future stamp is refreshed by a real repeat"
+
+    _assert_noop "2030-01-01T00:00:00Z" "an incoming future stamp must not pin the row"
+}
+
 run_test test_older_repeat_is_noop "an older repeated failure is a byte-identical no-op"
 run_test test_equal_epoch_repeat_is_noop "an equal-epoch repeated failure is a no-op (the <= boundary)"
 run_test test_newer_repeat_refreshes_in_place "a newer repeated failure refreshes its row in place"
 run_test test_newer_pass_repeat_is_noop "a newer repeated pass is a no-op"
+run_test test_changed_core_replaces_even_when_older "a changed non-volatile field replaces the row"
+run_test test_future_stamp_reads_as_stale "a future tested_at on either side reads as stale"
 
 generate_report
