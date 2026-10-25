@@ -251,7 +251,7 @@ test_civ_summary_every_counter_branch() {
     assert_file_contains "$TEST_TEMP_DIR/out" "Outdated: .*m1[^0-9]" "one outdated tool (rg)"
     assert_file_contains "$TEST_TEMP_DIR/out" "Newer: .*m1[^0-9]" "one newer tool (bat)"
     assert_file_contains "$TEST_TEMP_DIR/out" "Installed: .*m1[^0-9]" "one installed-only tool (aws)"
-    assert_file_contains "$TEST_TEMP_DIR/out" "Unknown: .*m1[^0-9]" "one unparseable tool (gh)"
+    assert_file_contains "$TEST_TEMP_DIR/out" "Unknown: .*m1[^0-9]" "one unparsable tool (gh)"
     assert_file_contains "$TEST_TEMP_DIR/out" "Missing: .*m[1-9][0-9]*[^0-9]" "the rest are missing"
 }
 
