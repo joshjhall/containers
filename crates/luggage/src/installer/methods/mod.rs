@@ -18,7 +18,7 @@
 //! two cannot drift apart.
 
 use std::collections::{BTreeMap, VecDeque};
-use std::io::{BufRead as _, BufReader, Read};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, mpsc};
@@ -142,25 +142,68 @@ enum Pipe {
     Stderr,
 }
 
+/// Longest line [`pump`] forwards; anything past it is dropped up to the
+/// next newline and the line is marked truncated.
+///
+/// A step that writes a huge newline-free stream would otherwise grow one
+/// line buffer without limit — the stderr tail bounds how many lines are
+/// kept, not how long each is.
+pub const MAX_LINE_BYTES: usize = 64 * 1024;
+
+/// Suffix appended to a line [`pump`] cut at [`MAX_LINE_BYTES`].
+pub const TRUNCATED_MARKER: &str = " [line truncated]";
+
 /// Forward every line of `pipe` to `tx`, tagged with `which`.
 ///
 /// Lossy UTF-8: a compiler printing a non-UTF-8 byte must not stall the
-/// stream or abort the build's log.
+/// stream or abort the build's log. A final line with no trailing newline
+/// is still forwarded.
 fn pump(pipe: impl Read, which: Pipe, tx: &mpsc::Sender<(Pipe, String)>) {
     let mut reader = BufReader::new(pipe);
     let mut buf = Vec::new();
     loop {
         buf.clear();
-        match reader.read_until(b'\n', &mut buf) {
+        // `take` caps how much one read can buffer; one byte over the cap
+        // is what tells a cut line from one that fits exactly.
+        let limit = u64::try_from(MAX_LINE_BYTES).unwrap_or(u64::MAX) + 1;
+        match (&mut reader).take(limit).read_until(b'\n', &mut buf) {
             Ok(0) | Err(_) => return,
-            Ok(_) => {
-                let line = String::from_utf8_lossy(&buf);
-                let line = line.trim_end_matches(['\n', '\r']).to_owned();
-                if tx.send((which, line)).is_err() {
-                    return;
-                }
+            Ok(_) => {}
+        }
+        let truncated = buf.len() > MAX_LINE_BYTES && buf.last() != Some(&b'\n');
+        if truncated {
+            buf.truncate(MAX_LINE_BYTES);
+            // Discard the rest of the oversized line, a bounded chunk at a
+            // time, so the next forwarded line starts on a real boundary.
+            if discard_through_newline(&mut reader).is_err() {
+                return;
             }
         }
+        let text = String::from_utf8_lossy(&buf);
+        let mut line = text.trim_end_matches(['\n', '\r']).to_owned();
+        if truncated {
+            line.push_str(TRUNCATED_MARKER);
+        }
+        if tx.send((which, line)).is_err() {
+            return;
+        }
+    }
+}
+
+/// Consume `reader` up to and including the next newline (or EOF) without
+/// buffering more than one internal chunk.
+fn discard_through_newline(reader: &mut impl BufRead) -> std::io::Result<()> {
+    loop {
+        let chunk = reader.fill_buf()?;
+        if chunk.is_empty() {
+            return Ok(());
+        }
+        if let Some(pos) = chunk.iter().position(|&b| b == b'\n') {
+            reader.consume(pos + 1);
+            return Ok(());
+        }
+        let len = chunk.len();
+        reader.consume(len);
     }
 }
 

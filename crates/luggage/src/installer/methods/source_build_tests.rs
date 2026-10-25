@@ -463,7 +463,8 @@ fn binaries_are_symlinked_from_the_prefix() {
 }
 
 /// Binaries with no `bin_source_dir` are a catalog defect — but one only
-/// detectable after the build, so it must not mask a step failure either.
+/// detectable after the build, so the build runs first and a step failure
+/// is what gets reported when both are wrong.
 #[test]
 fn binaries_without_bin_source_dir_is_a_catalog_error() {
     let f = Fixture::python();
@@ -472,6 +473,69 @@ fn binaries_without_bin_source_dir_is_a_catalog_error() {
         .run_full(&python_steps(), 1, &binaries, None, &BTreeMap::new(), &BTreeMap::new())
         .unwrap_err();
     assert!(matches!(err, LuggageError::Catalog(_)), "{err:?}");
+    assert_eq!(f.runner.streaming_calls().len(), 3, "every step runs before linking");
+
+    let g = Fixture::python();
+    g.runner.set_outcome("make", failure("boom"));
+    let err = g
+        .run_full(&python_steps(), 1, &binaries, None, &BTreeMap::new(), &BTreeMap::new())
+        .unwrap_err();
+    assert!(matches!(err, LuggageError::BuildStepFailed { step: 2, .. }), "{err:?}");
+}
+
+/// The #809 progress requirement: with a feature log open, each step's
+/// banner and every streamed line land in it — not just in `tracing`.
+#[test]
+fn steps_stream_banner_and_output_into_the_feature_log() {
+    let f = Fixture::python();
+    f.runner.set_outcome(
+        "make",
+        CommandOutcome {
+            status: Some(0),
+            stdout: b"gcc -c Python/ceval.c\n".to_vec(),
+            stderr: b"warning: unused variable\n".to_vec(),
+        },
+    );
+    let log_dir = tempdir().unwrap();
+    let logger =
+        crate::installer::logging::FeatureLogger::open(log_dir.path(), "python", "3.13.1").unwrap();
+    let args: Vec<String> = vec![];
+    let env = BTreeMap::new();
+    let cache_dirs = BTreeMap::new();
+    let steps = python_steps();
+    run(&MethodContext {
+        artifact: &f.artifact,
+        args: &args,
+        env: &env,
+        user: "root",
+        cache_root: f.cache.path(),
+        bin_root: f.bin.path(),
+        binaries: &[],
+        bin_source_dir: None,
+        cache_dirs: &cache_dirs,
+        prefix: None,
+        strip_components: 1,
+        max_extract_bytes: DEFAULT_MAX_EXTRACT_BYTES,
+        build_steps: &steps,
+        log: Some(&logger),
+        runner: &f.runner,
+    })
+    .unwrap();
+
+    let log = fs::read_to_string(logger.path()).unwrap();
+    let nproc = std::thread::available_parallelism().unwrap().get();
+    for needle in [
+        "build step 1/3: ./configure",
+        &format!("build step 2/3: make -j{nproc}"),
+        "build step 3/3: make install",
+        "gcc -c Python/ceval.c",
+        "warning: unused variable",
+    ] {
+        assert!(log.contains(needle), "log missing {needle:?}:\n{log}");
+    }
+    // Order matters: step 2's output follows step 2's banner.
+    let banner = log.find("build step 2/3").unwrap();
+    assert!(log.find("gcc -c Python/ceval.c").unwrap() > banner, "{log}");
 }
 
 // ---- streaming ---------------------------------------------------------
@@ -547,4 +611,67 @@ fn process_runner_spawn_failure_is_install_stage_failed() {
         }
         other => panic!("expected InstallStageFailed, got {other:?}"),
     }
+}
+
+/// Run `script` under the real runner, returning (outcome, streamed lines).
+fn sh_stream(script: &str) -> (CommandOutcome, Vec<String>) {
+    let dir = tempdir().unwrap();
+    let env = BTreeMap::new();
+    let args = vec!["-c".to_owned(), script.to_owned()];
+    let cmd = StreamingCommand { program: "sh", args: &args, cwd: dir.path(), env: &env };
+    let mut seen = Vec::new();
+    let outcome = ProcessRunner.run_streaming(&cmd, &mut |l| seen.push(l.to_owned())).unwrap();
+    (outcome, seen)
+}
+
+/// A step killed by a signal has no exit code; that reaches the error as
+/// `status: None` (rendered "exit signal"), never a made-up number.
+#[test]
+fn process_runner_reports_signal_death_as_no_status() {
+    let (outcome, _) = sh_stream("kill -9 $$");
+    assert_eq!(outcome.status, None);
+    assert!(!outcome.success());
+}
+
+/// The last line of output often has no trailing newline (a `printf`, a
+/// crashed compiler); it must still be forwarded, and CRLF is trimmed.
+#[test]
+fn process_runner_forwards_unterminated_and_crlf_lines() {
+    let (_, seen) = sh_stream("printf 'dos\\r\\nlast'");
+    assert_eq!(seen, ["dos", "last"]);
+}
+
+/// Non-UTF-8 output is replaced, not dropped and not fatal.
+#[test]
+fn process_runner_survives_non_utf8_output() {
+    let (outcome, seen) = sh_stream("printf 'a\\377b\\nnext\\n'");
+    assert!(outcome.success());
+    assert_eq!(seen, ["a\u{FFFD}b", "next"]);
+}
+
+/// A newline-free stream larger than the line cap is cut to the cap and
+/// marked, and the line after it still arrives intact — memory stays
+/// bounded by `MAX_LINE_BYTES`, not by the child's output.
+#[test]
+fn process_runner_truncates_oversized_lines() {
+    use super::super::{MAX_LINE_BYTES, TRUNCATED_MARKER};
+    // 200 KiB of 'x' with no newline, then a normal line.
+    let (outcome, seen) = sh_stream("head -c 204800 /dev/zero | tr '\\0' x; printf '\\nafter\\n'");
+    assert!(outcome.success());
+    assert_eq!(seen.len(), 2, "one truncated line then `after`: {:?}", seen.len());
+    assert!(seen[0].ends_with(TRUNCATED_MARKER));
+    assert_eq!(seen[0].len(), MAX_LINE_BYTES + TRUNCATED_MARKER.len());
+    assert_eq!(seen[1], "after");
+}
+
+/// A line of exactly the cap is not truncated — the cut is strictly for
+/// lines that exceed it.
+#[test]
+fn process_runner_keeps_a_line_of_exactly_the_cap() {
+    use super::super::{MAX_LINE_BYTES, TRUNCATED_MARKER};
+    let (_, seen) =
+        sh_stream(&format!("head -c {MAX_LINE_BYTES} /dev/zero | tr '\\0' y; printf '\\n'"));
+    assert_eq!(seen.len(), 1);
+    assert_eq!(seen[0].len(), MAX_LINE_BYTES);
+    assert!(!seen[0].ends_with(TRUNCATED_MARKER));
 }

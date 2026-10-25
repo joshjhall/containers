@@ -422,6 +422,65 @@ mod tests {
         assert_eq!(m.method_kind, Some(InstallMethodKind::ScriptInstaller));
     }
 
+    /// The python shape (#809): ordered steps, `args` optional per step,
+    /// and an arg carrying spaces kept as one element.
+    #[test]
+    fn parses_source_build_steps() {
+        let json = r#"{
+            "name": "python-source",
+            "method_kind": "source-build",
+            "verification": { "tier": 4, "tofu": true },
+            "build_steps": [
+                { "command": "./configure", "args": ["LDFLAGS=-Wl,-rpath /usr/local/lib"] },
+                { "command": "make", "args": ["-j{nproc}"] },
+                { "command": "make" }
+            ]
+        }"#;
+        let m: InstallMethod = serde_json::from_str(json).unwrap();
+        assert_eq!(m.method_kind, Some(InstallMethodKind::SourceBuild));
+        let steps = m.build_steps.unwrap();
+        assert_eq!(
+            steps,
+            vec![
+                BuildStep {
+                    command: "./configure".into(),
+                    args: Some(vec!["LDFLAGS=-Wl,-rpath /usr/local/lib".into()]),
+                },
+                BuildStep { command: "make".into(), args: Some(vec!["-j{nproc}".into()]) },
+                BuildStep { command: "make".into(), args: None },
+            ]
+        );
+    }
+
+    /// Every other kind omits the field, and it stays out of the emitted
+    /// JSON — a round-tripped non-source entry must not grow a
+    /// `"build_steps": null` the closed schema would reject.
+    #[test]
+    fn absent_build_steps_is_none_and_not_serialized() {
+        let json = r#"{
+            "name": "rustup-init",
+            "method_kind": "script-installer",
+            "verification": { "tier": 4, "tofu": true }
+        }"#;
+        let m: InstallMethod = serde_json::from_str(json).unwrap();
+        assert!(m.build_steps.is_none());
+        let out = serde_json::to_string(&m).unwrap();
+        assert!(!out.contains("build_steps"), "{out}");
+
+        let step = BuildStep { command: "make".into(), args: None };
+        assert_eq!(serde_json::to_string(&step).unwrap(), r#"{"command":"make"}"#);
+    }
+
+    /// `deny_unknown_fields` on a step mirrors the schema's
+    /// `additionalProperties: false`: a misspelt key (`arg`) must fail
+    /// rather than silently drop the step's arguments.
+    #[test]
+    fn build_step_rejects_unknown_keys() {
+        let err = serde_json::from_str::<BuildStep>(r#"{ "command": "make", "arg": ["x"] }"#)
+            .unwrap_err();
+        assert!(err.to_string().contains("arg"), "{err}");
+    }
+
     /// The containers-db schema ships `method_kind` optional while the
     /// vendored catalog is backfilled, so an entry without it must still
     /// deserialize — luggage reports the gap at dispatch instead.

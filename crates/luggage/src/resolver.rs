@@ -591,6 +591,33 @@ mod tests {
         assert_eq!(r.method_name, "rustup-init", "name must survive independently of kind");
     }
 
+    /// `build_steps` must come from the *chosen* method (#809). A first
+    /// method that loses on platform carries different steps, so taking the
+    /// array head instead would surface here as the wrong argv.
+    #[test]
+    fn resolve_carries_the_chosen_methods_build_steps() {
+        let mut alpine_only = make_method(vec!["alpine"]);
+        alpine_only.build_steps = Some(vec![BuildStep { command: "wrong".into(), args: None }]);
+        let mut debian_source = make_method(vec!["debian"]);
+        debian_source.method_kind = Some(InstallMethodKind::SourceBuild);
+        let steps = vec![
+            BuildStep {
+                command: "./configure".into(),
+                args: Some(vec!["--prefix=/usr/local".into()]),
+            },
+            BuildStep { command: "make".into(), args: Some(vec!["-j{nproc}".into()]) },
+        ];
+        debian_source.build_steps = Some(steps.clone());
+        let entry = entry_with(vec![(
+            "1.95.0",
+            make_version("1.95.0", vec![], vec![alpine_only, debian_source]),
+        )]);
+
+        let r = resolve(&entry, &VersionSpec::Latest, &debian_amd64()).unwrap();
+        assert_eq!(r.method_kind, Some(InstallMethodKind::SourceBuild));
+        assert_eq!(r.build_steps, Some(steps));
+    }
+
     /// The resolver picks the method, so the kind it reports must be the
     /// chosen one — not the first in the array.
     #[test]
