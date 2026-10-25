@@ -100,7 +100,8 @@ test_mise_install_runtime() {
     #
     # `mise install` downloads deno from the internet, and this suite gates the
     # merge tier (#1083). The bounded retry absorbs a transient network flake:
-    # 3 attempts, each capped at 120s, with 5s/10s backoff (~6.25 min worst case,
+    # 3 attempts, each capped at 120s (SIGKILL 10s later if mise ignores TERM),
+    # with 5s/10s backoff (~6.75 min worst case,
     # inside the 30-min integration job).
     # A persistent outage or a real install break still fails every attempt,
     # and `mise which deno` then fails the test.
@@ -108,7 +109,7 @@ test_mise_install_runtime() {
         && printf "[tools]\ndeno = \"1\"\n" > .mise.toml \
         && mise trust >/dev/null 2>&1 \
         && for attempt in 1 2 3; do
-               timeout 120 mise install >/dev/null 2>&1 && break
+               timeout -k 10 120 mise install >/dev/null 2>&1 && break
                [ "$attempt" -lt 3 ] && sleep $((attempt * 5))
            done; mise which deno >/dev/null 2>&1 && echo install-ok'
     # $script must stay free of single quotes: it is wrapped in bash -ic '...'.

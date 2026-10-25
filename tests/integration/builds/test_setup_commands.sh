@@ -386,7 +386,7 @@ test_setup_gh_attempts_auth() {
     local output rc=0
     output=$(docker exec "$c" bash -c 'export GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" && setup-gh 2>&1') || rc=$?
     assert_contains "$output" "authenticating gh CLI" "Should attempt authentication"
-    assert_equals "1" "$rc" "setup-gh exits 1 when gh refuses login (real gh behavior)"
+    assert_equals "1" "$rc" "setup-gh exits 1 when gh refuses login (real gh behavior; flip to 0 when #1457 is fixed)"
 
     local argv stdin
     argv=$(docker exec "$c" cat /tmp/gh-mock.argv 2>&1)
