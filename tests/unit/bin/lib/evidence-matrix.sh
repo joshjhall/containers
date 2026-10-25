@@ -556,26 +556,41 @@ test_unnamed_evidence_failure_names_the_sources() {
     assert_equals "" "$out" "and prints no matrix"
     assert_equals "evidence_matrix: unreadable published evidence for rust in $db" \
         "$(command sed -n 1p "$err")" "and names the source list"
-    # jq's own cause follows, so the fallback still says what broke.
-    assert_equals "2" "$(command wc -l <"$err" | command tr -d ' ')" "and jq's error on one more line"
-    assert_contains "$(command sed -n 2p "$err")" "Cannot index number" "which is jq's cause"
+    # jq's own cause follows, so the fallback still says what broke. Its
+    # wording belongs to the jq release, so only its presence is pinned.
+    assert_not_equals "" "$(command sed -n 2p "$err")" "and jq's error follows it"
 }
 
 test_evidence_scratch_is_removed() {
     # The batch jq's stderr sidecar sits next to evidence_matrix's mktemp
     # output; every exit path (success, a named file, the fallback) removes
     # both, so a scratch TMPDIR is empty afterwards.
-    local r db tmp f case
+    # Each case pins its exit code and first stderr line, so the three
+    # cases cannot quietly collapse onto one path.
+    local r db tmp f err case rc want_rc want_err
     r="$(_fixture 1.0.0)"
     _version "$r/catalog" 1.90.0 debian-13-amd64
     db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
     f="$db/tools/rust/versions/1.90.0.json"
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
     for case in ok named fallback; do
         _db_version "$db" 1.90.0 ""
-        [ "$case" = named ] && _mutate "$f" 'del(.version)'
-        [ "$case" = fallback ] && _mutate "$f" '.tested = [1]'
+        case "$case" in
+            ok) want_rc=0 want_err="" ;;
+            named)
+                _mutate "$f" 'del(.version)'
+                want_rc=1 want_err="$(_malformed_msg "$f")"
+                ;;
+            fallback)
+                _mutate "$f" '.tested = [1]'
+                want_rc=1 want_err="evidence_matrix: unreadable published evidence for rust in $db"
+                ;;
+        esac
         tmp="$(command mktemp -d "$TEST_TEMP_DIR/tmp.XXXXXX")"
-        TMPDIR="$tmp" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" >/dev/null 2>&1 || true
+        rc=0
+        TMPDIR="$tmp" EVIDENCE_TESTED_SOURCE="$db" evidence_matrix "$r/catalog" rust "$r" >/dev/null 2>"$err" || rc=$?
+        assert_equals "$want_rc" "$rc" "the $case path exits $want_rc"
+        assert_equals "$want_err" "$(command sed -n 1p "$err")" "the $case path is the one taken"
         assert_equals "" "$(command ls -A "$tmp")" "no scratch left after the $case path"
     done
 }
