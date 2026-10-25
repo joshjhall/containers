@@ -532,7 +532,8 @@ test_malformed_published_file_is_named() {
     _malformed_fails "$db" "$f" "a file with two documents"
 
     # Together they keep the total value count equal to the file count, so
-    # only a per-file count sees them: the empty 1.80.0 is the culprit.
+    # only a per-file count stops the batch passing. Both files are bad; the
+    # culprit loop names the first in glob order, the empty 1.80.0.
     : >"$db/tools/rust/versions/1.80.0.json"
     _malformed_fails "$db" "$db/tools/rust/versions/1.80.0.json" "an empty file beside a two-document one"
     _db_version "$db" 1.80.0 debian-13-amd64
