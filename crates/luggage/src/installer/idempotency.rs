@@ -150,10 +150,11 @@ pub(crate) fn run_version_check<S: AsRef<OsStr>>(
 /// [`super::interrupt`] until the probe is reaped, and a binary that called
 /// [`crate::install_interrupt_handler`] (the `luggage` CLI does) kills it on
 /// SIGINT/SIGTERM before exiting (#1370). A library caller that skips that
-/// call keeps the gap. Two gaps remain regardless. A probe that exits on its
-/// own is not group-killed, so a descendant it backgrounded outlives it. And
-/// a descendant that moved itself to another group or session escapes, as
-/// with any `killpg`.
+/// call keeps the gap. A probe that exits on its own has its group killed
+/// too, before the leader is reaped, so a descendant it backgrounded (a JVM
+/// launcher's daemon, a script's `cmd &`) does not outlive it (#1371). One gap
+/// remains regardless: a descendant that moved itself to another group or
+/// session escapes, as with any `killpg`.
 /// Its stdout/stderr go to anonymous tempfiles rather than pipes, so
 /// polling never deadlocks on a full pipe buffer, and a grandchild that
 /// inherited the write end cannot block us after the kill. stdin is null,
@@ -269,7 +270,11 @@ struct TrackedChild<'a> {
 #[cfg(unix)]
 impl ProbeChild for TrackedChild<'_> {
     fn poll(&mut self) -> io::Result<Option<ExitStatus>> {
-        self.tracked.reap_locked(|| self.child.try_wait())
+        self.tracked.reap_locked(|| {
+            #[cfg(not(any(target_os = "openbsd", target_os = "cygwin")))]
+            kill_group_if_exited(self.child)?;
+            self.child.try_wait()
+        })
     }
 
     fn kill_all(&mut self) {
@@ -282,6 +287,24 @@ impl ProbeChild for TrackedChild<'_> {
             Ok(Some(()))
         });
     }
+}
+
+/// If the probe leader has exited, SIGKILL its process group so a descendant
+/// it backgrounded does not outlive the probe (#1371). Must run before the
+/// reap: `WNOWAIT` leaves the leader a zombie, which keeps its pid — and so
+/// the pgid — reserved through the `killpg`. Killing after the reap could
+/// signal an unrelated group that was handed the recycled pid. The kill fails
+/// with ESRCH when the group is already empty, the usual case.
+#[cfg(all(unix, not(any(target_os = "openbsd", target_os = "cygwin"))))]
+fn kill_group_if_exited(child: &Child) -> io::Result<()> {
+    use rustix::process::{WaitId, WaitIdOptions};
+
+    let pid = rustix::process::Pid::from_child(child);
+    let peek = WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT;
+    if rustix::process::waitid(WaitId::Pid(pid), peek)?.is_some() {
+        let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
+    }
+    Ok(())
 }
 
 /// Poll `child` until it exits or `timeout` elapses. On timeout, or if a poll
