@@ -268,6 +268,97 @@ test_swap_install_failure_restores() {
     assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left"
 }
 
+test_swap_move_aside_failure_keeps_existing() {
+    require_gpg || return 0
+    make_src "$TEST_TEMP_DIR/src"
+    local dest="$TEST_TEMP_DIR/keys/keyring"
+    make_dest "$dest"
+    command mkdir -p "$TEST_TEMP_DIR/work"
+
+    local output rc=0
+    # shellcheck disable=SC2329 # invoked by the child via export -f
+    output=$(
+        mv() {
+            # shellcheck disable=SC2053 # glob match on purpose
+            [[ "${!#}" == */keyring.old.*/keyring ]] && return 1
+            command mv "$@"
+        }
+        export -f mv
+        run_swap "$TEST_TEMP_DIR/src" "$dest" "$TEST_TEMP_DIR/work"
+    ) || rc=$?
+
+    assert_equals "1" "$rc" "swap returns 1 when the existing keyring cannot be moved aside"
+    assert_contains "$output" "Could not move the existing keyring aside" "names the move-aside failure"
+    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "existing keyring untouched"
+    assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left"
+}
+
+# assert_swap_mktemp_guard <pattern> <expected-message>
+# Fail exactly the mktemp whose template contains <pattern>; every other
+# mktemp runs for real. cp/chmod refuse (and record) an empty, `/`, or
+# top-level target, so a regressed guard cannot touch the root filesystem.
+assert_swap_mktemp_guard() {
+    local pattern="$1" expected="$2"
+    make_src "$TEST_TEMP_DIR/src"
+    local dest="$TEST_TEMP_DIR/keys/keyring"
+    make_dest "$dest"
+    command mkdir -p "$TEST_TEMP_DIR/work"
+    local trip="$TEST_TEMP_DIR/tripwire.log"
+    : >"$trip"
+
+    local output rc=0
+    # shellcheck disable=SC2329 # invoked by the child via export -f
+    output=$(
+        mktemp() {
+            case "${!#}" in *"$MKTEMP_FAIL"*) return 1 ;; esac
+            command mktemp "$@"
+        }
+        guard_path() {
+            local a
+            for a in "$@"; do
+                case "$a" in
+                    -*) ;;
+                    "" | /)
+                        printf '<%s>\n' "${a:-empty}" >>"$TRIPWIRE_LOG"
+                        return 1
+                        ;;
+                    /*/*) ;;
+                    /*)
+                        printf '%s\n' "$a" >>"$TRIPWIRE_LOG"
+                        return 1
+                        ;;
+                esac
+            done
+        }
+        cp() { guard_path "$@" && command cp "$@"; }
+        chmod() { guard_path "$@" && command chmod "$@"; }
+        export -f mktemp guard_path cp chmod
+        export MKTEMP_FAIL="$pattern" TRIPWIRE_LOG="$trip"
+        run_swap "$TEST_TEMP_DIR/src" "$dest" "$TEST_TEMP_DIR/work"
+    ) || rc=$?
+
+    assert_equals "1" "$rc" "swap returns 1 when the $pattern mktemp fails"
+    assert_contains "$output" "$expected" "names the $pattern mktemp failure"
+    assert_equals "" "$(command cat "$trip")" "no cp/chmod may target an empty, /, or top-level path"
+    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "existing keyring untouched"
+    assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left"
+}
+
+test_swap_staging_mktemp_failure() {
+    require_gpg || return 0
+    assert_swap_mktemp_guard ".new." "Could not create a staging directory"
+}
+
+test_swap_holder_mktemp_failure() {
+    require_gpg || return 0
+    assert_swap_mktemp_guard ".old." "Could not create a directory to move the existing keyring aside"
+}
+
+test_swap_scratch_mktemp_failure() {
+    require_gpg || return 0
+    assert_swap_mktemp_guard "keyring-check." "Could not create a scratch directory"
+}
+
 test_swap_failed_restore_reports_stranded() {
     require_gpg || return 0
     make_src "$TEST_TEMP_DIR/src"
@@ -422,6 +513,10 @@ run_test_with_setup test_swap_first_install "swap: installs where no keyring exi
 run_test_with_setup test_swap_mirrors_source_without_trustdb "swap: no stale trustdb.gpg when the source ships none"
 run_test_with_setup test_swap_unreadable_source_keeps_existing "swap: unreadable source keeps the existing keyring"
 run_test_with_setup test_swap_install_failure_restores "swap: install failure restores the existing keyring"
+run_test_with_setup test_swap_move_aside_failure_keeps_existing "swap: move-aside failure keeps the existing keyring"
+run_test_with_setup test_swap_staging_mktemp_failure "swap: staging mktemp failure fails closed"
+run_test_with_setup test_swap_holder_mktemp_failure "swap: move-aside holder mktemp failure fails closed"
+run_test_with_setup test_swap_scratch_mktemp_failure "swap: count scratch mktemp failure fails closed"
 run_test_with_setup test_swap_failed_restore_reports_stranded "swap: failed restore reports the stranded path"
 run_test_with_setup test_swap_term_during_staging "swap: SIGTERM during staging keeps the existing keyring"
 run_test_with_setup test_swap_int_during_staging "swap: SIGINT during staging keeps the existing keyring"
