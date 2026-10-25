@@ -13,6 +13,8 @@
 
 pub mod download;
 pub mod idempotency;
+#[cfg(unix)]
+pub(crate) mod interrupt;
 pub mod logging;
 pub mod methods;
 pub mod post_install;

@@ -142,7 +142,7 @@ fn proc_stat_state(stat: &str) -> Option<&str> {
 /// gone — any other read error (no `/proc`, `hidepid`) or an unparsable stat
 /// line panics, so an unobservable pid can never pass as a dead one.
 #[cfg(unix)]
-fn pid_is_running(pid: &str) -> bool {
+pub fn pid_is_running(pid: &str) -> bool {
     #[cfg(target_os = "linux")]
     {
         let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
@@ -635,7 +635,7 @@ fn run_version_check_captures_output_larger_than_a_pipe_buffer() {
 /// leak the shim's `sleep 30`. Never asserts: a panic in `drop` while
 /// already unwinding would abort the test binary.
 #[cfg(unix)]
-struct KillOnDrop(rustix::process::Pid);
+pub struct KillOnDrop(pub rustix::process::Pid);
 
 #[cfg(unix)]
 impl Drop for KillOnDrop {

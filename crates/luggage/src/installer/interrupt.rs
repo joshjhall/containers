@@ -1,0 +1,148 @@
+//! Kill live version-probe process groups when luggage is interrupted (#1370).
+//!
+//! Each probe leads its own process group so the timeout can `killpg` it
+//! (#1352). The cost is that a terminal Ctrl-C, sent to the foreground group,
+//! reaches luggage but not the probe. Without this module luggage would die
+//! on the default action and leave the probe and everything it forked
+//! running with no deadline.
+//!
+//! [`run_version_check_within`](super::idempotency::run_version_check_within)
+//! spawns through [`spawn_tracked`], which records the child's pgid in a
+//! process-wide registry until the returned [`Tracked`] guard drops. Once
+//! [`install_handler`] has run, a watcher thread catches the first SIGINT or
+//! SIGTERM, kills every recorded group, and then lets the default action
+//! terminate luggage. The shell still sees "killed by SIGINT" (130) or
+//! "killed by SIGTERM" (143), not a normal exit.
+//!
+//! The library never installs the handler by itself: taking over process-wide
+//! signals is the embedding binary's decision. The `luggage` CLI opts in from
+//! `main`. A library caller that skips it keeps the gap described on
+//! `run_version_check_within`.
+
+use std::io;
+use std::process::{Child, Command};
+use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::thread;
+
+use rustix::process::{Pid, Signal, kill_process_group};
+use signal_hook::consts::{SIGINT, SIGTERM};
+use signal_hook::iterator::Signals;
+
+/// Process groups of in-flight probes, and whether an interrupt has already
+/// emptied them.
+#[derive(Debug, Default)]
+pub struct Registry {
+    pgids: Vec<Pid>,
+    interrupted: bool,
+}
+
+impl Registry {
+    pub const fn new() -> Self {
+        Self { pgids: Vec::new(), interrupted: false }
+    }
+}
+
+/// The registry every production probe spawns through.
+static LIVE: Mutex<Registry> = Mutex::new(Registry::new());
+
+/// Lock `registry`, ignoring poison. A thread that panicked while holding the
+/// lock leaves only a pid list behind, which is still correct to read, and the
+/// interrupt path must never give up because of an unrelated panic.
+fn lock(registry: &Mutex<Registry>) -> MutexGuard<'_, Registry> {
+    registry.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Deregisters its process group on drop. Keep it alive until the child has
+/// been reaped, so an interrupt during the wait still finds the group.
+#[derive(Debug)]
+#[must_use = "dropping the guard deregisters the probe group immediately"]
+pub struct Tracked {
+    registry: &'static Mutex<Registry>,
+    pgid: Pid,
+}
+
+impl Drop for Tracked {
+    fn drop(&mut self) {
+        let mut live = lock(self.registry);
+        if let Some(i) = live.pgids.iter().position(|p| *p == self.pgid) {
+            live.pgids.swap_remove(i);
+        }
+    }
+}
+
+/// Spawn `command`, which must lead its own process group, and record that
+/// group in the production registry. See [`spawn_tracked_in`].
+pub fn spawn_tracked(command: &mut Command) -> io::Result<(Child, Tracked)> {
+    spawn_tracked_in(&LIVE, command)
+}
+
+/// Spawn `command` and record its pgid in `registry`. The pgid equals the
+/// child's pid, because the caller set `process_group(0)`.
+///
+/// The lock is held from before the spawn until after the registration, so an
+/// interrupt that arrives between them waits for the lock and then still sees
+/// the group. Once an interrupt has been handled this refuses to spawn, with
+/// [`io::ErrorKind::Interrupted`], rather than start a probe nothing would
+/// kill.
+pub fn spawn_tracked_in(
+    registry: &'static Mutex<Registry>,
+    command: &mut Command,
+) -> io::Result<(Child, Tracked)> {
+    let mut live = lock(registry);
+    if live.interrupted {
+        return Err(io::Error::new(
+            io::ErrorKind::Interrupted,
+            "luggage is shutting down on an interrupt; not starting the version probe",
+        ));
+    }
+    let child = command.spawn()?;
+    let pgid = Pid::from_child(&child);
+    live.pgids.push(pgid);
+    drop(live);
+    Ok((child, Tracked { registry, pgid }))
+}
+
+/// Mark `registry` interrupted and SIGKILL every recorded group. A group whose
+/// members have all exited makes `killpg` fail with ESRCH, which is ignored.
+/// The pids are not removed here, because each one still belongs to a
+/// [`Tracked`] guard that will deregister it.
+pub fn interrupt_all(registry: &Mutex<Registry>) {
+    let mut live = lock(registry);
+    live.interrupted = true;
+    for pgid in &live.pgids {
+        let _ = kill_process_group(*pgid, Signal::KILL);
+    }
+}
+
+/// Install the SIGINT/SIGTERM watcher. Idempotent.
+///
+/// # Errors
+///
+/// Returns the OS error if the signal handlers cannot be registered or the
+/// watcher thread cannot be spawned.
+pub fn install_handler() -> io::Result<()> {
+    static INSTALLED: Mutex<bool> = Mutex::new(false);
+
+    let mut installed = INSTALLED.lock().unwrap_or_else(PoisonError::into_inner);
+    if *installed {
+        return Ok(());
+    }
+    let mut signals = Signals::new([SIGINT, SIGTERM])?;
+    thread::Builder::new().name("luggage-interrupt".into()).spawn(move || {
+        if let Some(sig) = signals.forever().next() {
+            interrupt_all(&LIVE);
+            // Restores the default action and re-raises, so luggage dies by
+            // the signal itself. The exit is a fallback for a signal missing
+            // from signal-hook's table, which SIGINT and SIGTERM are not.
+            let _ = signal_hook::low_level::emulate_default_handler(sig);
+            std::process::exit(128 + sig);
+        }
+    })?;
+    *installed = true;
+    drop(installed);
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "interrupt_tests.rs"]
+mod tests;

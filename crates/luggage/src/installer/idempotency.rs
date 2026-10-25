@@ -145,13 +145,15 @@ pub(crate) fn run_version_check<S: AsRef<OsStr>>(
 /// own process group, and on that timeout path the whole group is killed, so
 /// a non-exec wrapper (shell script, JVM launcher) that hangs cannot leave
 /// forked descendants running (#1352); elsewhere only the direct child is
-/// killed. Two gaps remain. A probe that exits on its own is not group-killed,
-/// so a descendant it backgrounded outlives it. And because the group is not
-/// luggage's, a terminal Ctrl-C reaches luggage but not the probe: luggage
-/// installs no signal handler, so an interactive interrupt mid-probe leaves the
-/// probe running unbounded. Under `docker build` (no TTY; cancelling tears down
-/// the whole container) neither applies. A descendant that moved itself to
-/// another group or session escapes, as with any `killpg`.
+/// killed. Because the group is not luggage's, a terminal Ctrl-C reaches
+/// luggage but not the probe. The group is therefore registered with
+/// [`super::interrupt`] until the probe is reaped, and a binary that called
+/// [`crate::install_interrupt_handler`] (the `luggage` CLI does) kills it on
+/// SIGINT/SIGTERM before exiting (#1370). A library caller that skips that
+/// call keeps the gap. Two gaps remain regardless. A probe that exits on its
+/// own is not group-killed, so a descendant it backgrounded outlives it. And
+/// a descendant that moved itself to another group or session escapes, as
+/// with any `killpg`.
 /// Its stdout/stderr go to anonymous tempfiles rather than pipes, so
 /// polling never deadlocks on a full pipe buffer, and a grandchild that
 /// inherited the write end cannot block us after the kill. stdin is null,
@@ -175,7 +177,9 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
     let mut stdout = capture_file()?;
     let mut stderr = capture_file()?;
     let mut attempt = 0;
-    let mut child = loop {
+    // On unix the guard keeps the probe's group registered for the interrupt
+    // handler until the probe is reaped; it drops at the end of this fn.
+    let (mut child, _tracked) = loop {
         let mut command = Command::new(binary);
         command
             .args(args)
@@ -189,7 +193,10 @@ pub(crate) fn run_version_check_within<S: AsRef<OsStr>>(
         std::os::unix::process::CommandExt::process_group(&mut command, 0);
         #[cfg(test)]
         SPAWN_ATTEMPTS.set(SPAWN_ATTEMPTS.get() + 1);
-        let spawned = command.spawn();
+        #[cfg(unix)]
+        let spawned = super::interrupt::spawn_tracked(&mut command);
+        #[cfg(not(unix))]
+        let spawned = command.spawn().map(|child| (child, ()));
         match spawned {
             Err(e) if e.raw_os_error() == Some(ETXTBSY) && attempt < ETXTBSY_RETRIES => {
                 attempt += 1;

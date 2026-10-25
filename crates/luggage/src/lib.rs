@@ -48,3 +48,23 @@ pub use reconcile::{
     CellReport, CellStatus, VersionReconciliation, reconcile_version, reconcile_version_with,
 };
 pub use resolver::{ResolutionWarning, ResolvedInstall, VersionSpec};
+
+/// Kill in-flight version probes when this process gets SIGINT or SIGTERM,
+/// then let the signal's default action terminate it (#1370).
+///
+/// Every probe leads its own process group so its timeout can kill the
+/// whole tree, which also puts it outside the group a terminal Ctrl-C reaches.
+/// A binary embedding the installer should call this once at startup, or an
+/// interrupt mid-probe leaves the probe running. A library never installs
+/// signal handlers by itself. Idempotent. On non-unix targets it does nothing.
+///
+/// # Errors
+///
+/// Returns the OS error if the handlers or the watcher thread cannot be set
+/// up.
+pub fn install_interrupt_handler() -> std::io::Result<()> {
+    #[cfg(unix)]
+    return installer::interrupt::install_handler();
+    #[cfg(not(unix))]
+    Ok(())
+}
