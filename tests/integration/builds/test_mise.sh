@@ -97,9 +97,23 @@ test_mise_install_runtime() {
     # activate has set up shims. Use printf for a multi-line .mise.toml.
     # `mise trust` is required because /tmp isn't under the default
     # MISE_TRUSTED_CONFIG_PATHS (/workspace).
-    assert_command_in_container "$image" \
-        "bash -ic 'cd /tmp && mkdir -p mise-test && cd mise-test && printf \"[tools]\\ndeno = \\\"1\\\"\\n\" > .mise.toml && mise trust >/dev/null 2>&1 && mise install >/dev/null 2>&1 && mise which deno >/dev/null 2>&1 && echo install-ok'" \
-        "install-ok"
+    #
+    # `mise install` downloads deno from the internet, and this suite gates the
+    # merge tier (#1083). The bounded retry absorbs a transient network flake:
+    # 3 attempts, each capped at 120s (SIGKILL 10s later if mise ignores TERM),
+    # with 5s/10s backoff (~6.75 min worst case,
+    # inside the 30-min integration job).
+    # A persistent outage or a real install break still fails every attempt,
+    # and `mise which deno` then fails the test.
+    local script='cd /tmp && mkdir -p mise-test && cd mise-test \
+        && printf "[tools]\ndeno = \"1\"\n" > .mise.toml \
+        && mise trust >/dev/null 2>&1 \
+        && for attempt in 1 2 3; do
+               timeout -k 10 120 mise install >/dev/null 2>&1 && break
+               [ "$attempt" -lt 3 ] && sleep $((attempt * 5))
+           done; mise which deno >/dev/null 2>&1 && echo install-ok'
+    # $script must stay free of single quotes: it is wrapped in bash -ic '...'.
+    assert_command_in_container "$image" "bash -ic '$script'" "install-ok"
 }
 
 # Test: Build without the mise flag does not include it
