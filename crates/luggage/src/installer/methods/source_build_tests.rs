@@ -664,6 +664,37 @@ fn process_runner_truncates_oversized_lines() {
     assert_eq!(seen[1], "after");
 }
 
+/// A pipe that fails mid-stream must not end the log silently: the bytes
+/// read so far are forwarded, then a marker naming the error (the repo's
+/// "degradation must be loud" rule).
+#[test]
+fn pump_reports_a_read_error_instead_of_ending_silently() {
+    use super::super::{Pipe, READ_ERROR_MARKER, pump};
+
+    /// Yields `data` once, then fails every read.
+    struct FailsAfter(Option<&'static [u8]>);
+    impl std::io::Read for FailsAfter {
+        fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+            let Some(data) = self.0.take() else {
+                return Err(std::io::Error::other("pipe went away"));
+            };
+            out[..data.len()].copy_from_slice(data);
+            Ok(data.len())
+        }
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    pump(FailsAfter(Some(b"configure: ok\npartial")), Pipe::Stderr, &tx);
+    drop(tx);
+    let lines: Vec<String> = rx.into_iter().map(|(_, l)| l).collect();
+
+    assert_eq!(lines.len(), 3, "{lines:?}");
+    assert_eq!(lines[0], "configure: ok");
+    assert_eq!(lines[1], "partial", "bytes read before the error are kept");
+    assert!(lines[2].starts_with(READ_ERROR_MARKER), "{lines:?}");
+    assert!(lines[2].contains("pipe went away"), "{lines:?}");
+}
+
 /// A line of exactly the cap is not truncated — the cut is strictly for
 /// lines that exceed it.
 #[test]

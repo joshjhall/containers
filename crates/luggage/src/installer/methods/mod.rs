@@ -153,11 +153,18 @@ pub const MAX_LINE_BYTES: usize = 64 * 1024;
 /// Suffix appended to a line [`pump`] cut at [`MAX_LINE_BYTES`].
 pub const TRUNCATED_MARKER: &str = " [line truncated]";
 
+/// Prefix of the line [`pump`] forwards when reading a pipe fails.
+pub const READ_ERROR_MARKER: &str = "[luggage: failed reading build output:";
+
 /// Forward every line of `pipe` to `tx`, tagged with `which`.
 ///
 /// Lossy UTF-8: a compiler printing a non-UTF-8 byte must not stall the
 /// stream or abort the build's log. A final line with no trailing newline
 /// is still forwarded.
+///
+/// A read error ends the stream, but never silently: whatever was already
+/// read is forwarded, then a [`READ_ERROR_MARKER`] line naming the error, so
+/// a log that stops short says why rather than looking like a quiet build.
 fn pump(pipe: impl Read, which: Pipe, tx: &mpsc::Sender<(Pipe, String)>) {
     let mut reader = BufReader::new(pipe);
     let mut buf = Vec::new();
@@ -166,25 +173,32 @@ fn pump(pipe: impl Read, which: Pipe, tx: &mpsc::Sender<(Pipe, String)>) {
         // `take` caps how much one read can buffer; one byte over the cap
         // is what tells a cut line from one that fits exactly.
         let limit = u64::try_from(MAX_LINE_BYTES).unwrap_or(u64::MAX) + 1;
-        match (&mut reader).take(limit).read_until(b'\n', &mut buf) {
-            Ok(0) | Err(_) => return,
-            Ok(_) => {}
-        }
-        let truncated = buf.len() > MAX_LINE_BYTES && buf.last() != Some(&b'\n');
+        let mut failure = match (&mut reader).take(limit).read_until(b'\n', &mut buf) {
+            Ok(0) => return,
+            Ok(_) => None,
+            Err(e) => Some(e),
+        };
+        let truncated =
+            failure.is_none() && buf.len() > MAX_LINE_BYTES && buf.last() != Some(&b'\n');
         if truncated {
             buf.truncate(MAX_LINE_BYTES);
             // Discard the rest of the oversized line, a bounded chunk at a
             // time, so the next forwarded line starts on a real boundary.
-            if discard_through_newline(&mut reader).is_err() {
+            failure = discard_through_newline(&mut reader).err();
+        }
+        if !buf.is_empty() {
+            let text = String::from_utf8_lossy(&buf);
+            let mut line = text.trim_end_matches(['\n', '\r']).to_owned();
+            if truncated {
+                line.push_str(TRUNCATED_MARKER);
+            }
+            if tx.send((which, line)).is_err() {
                 return;
             }
         }
-        let text = String::from_utf8_lossy(&buf);
-        let mut line = text.trim_end_matches(['\n', '\r']).to_owned();
-        if truncated {
-            line.push_str(TRUNCATED_MARKER);
-        }
-        if tx.send((which, line)).is_err() {
+        if let Some(e) = failure {
+            tracing::warn!("failed reading build step {which:?}: {e}");
+            let _ = tx.send((which, format!("{READ_ERROR_MARKER} {e}]")));
             return;
         }
     }

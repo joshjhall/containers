@@ -98,7 +98,9 @@ pub struct InstallMethod {
     /// root; the first non-zero exit aborts the install. Args accept the
     /// `{nproc}` placeholder (host CPU count), so build parallelism is the
     /// catalog's call rather than luggage's; any other placeholder is an
-    /// error. Only meaningful for `method_kind: source-build`.
+    /// error. There is no brace escape, so an arg containing a literal
+    /// `{name}` cannot be expressed. Only meaningful for
+    /// `method_kind: source-build`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build_steps: Option<Vec<BuildStep>>,
 }
