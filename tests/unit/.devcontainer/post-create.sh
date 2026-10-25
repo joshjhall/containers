@@ -286,19 +286,46 @@ test_gitignore_skipped_outside_work_tree() {
     assert_file_not_exists "$sb/.gitignore" "No .gitignore is created"
 }
 
-# Inside a bare repo (or a .git dir), rev-parse --is-inside-work-tree exits 0
+# Inside a bare repo or a .git dir, rev-parse --is-inside-work-tree exits 0
 # but prints "false", and check-ignore then exits 128. Gating on the exit
 # status alone would read that as "not ignored" and append to .gitignore.
-test_gitignore_skipped_in_bare_repo() {
-    local sb="$TEST_TEMP_DIR/sb" rc=0 out
-    _make_sandbox "$sb" --bare
+#
+# Precondition: git, run the way _run_post_create runs it, really sees the
+# sandbox root in that state. If discovery failed instead (exit 128), the old
+# exit-status gate would skip too and these tests would pass on buggy code.
+_assert_rev_parse_prints_false() {
+    local sandbox=$1 rc=0 got
+    _hermetic_git_env
+    got=$(cd "$sandbox" && command env -u XDG_CONFIG_HOME "${HERMETIC_GIT_ENV[@]}" \
+        GIT_CEILING_DIRECTORIES="$(command dirname "$sandbox")" \
+        git rev-parse --is-inside-work-tree 2>/dev/null) || rc=$?
+    assert_equals "0|false" "$rc|$got" "Fixture: rev-parse exits 0 and prints false"
+}
 
-    out=$(_run_post_create "$sb" 2>&1) || rc=$?
+_assert_gitignore_skipped() {
+    local sandbox=$1 rc=0 out
+    out=$(_run_post_create "$sandbox" 2>&1) || rc=$?
 
-    assert_equals "0" "$rc" "post-create.sh exits 0 in a bare repo"
+    assert_equals "0" "$rc" "post-create.sh exits 0"
     assert_contains "$out" "Not inside a git work tree" "Skip note is printed"
     assert_not_contains "$out" "NOT ignored" "No false 'not ignored' report"
-    assert_file_not_exists "$sb/.gitignore" "No .gitignore is created"
+    assert_file_not_exists "$sandbox/.gitignore" "No .gitignore is created"
+}
+
+test_gitignore_skipped_in_bare_repo() {
+    local sb="$TEST_TEMP_DIR/sb"
+    _make_sandbox "$sb" --bare
+    _assert_rev_parse_prints_false "$sb"
+    _assert_gitignore_skipped "$sb"
+}
+
+# The sandbox root is a normal repo's .git directory.
+test_gitignore_skipped_in_git_dir() {
+    local outer="$TEST_TEMP_DIR/outer"
+    _hermetic_git init -q "$outer"
+    _make_sandbox "$outer/.git" --no-git
+    _assert_rev_parse_prints_false "$outer/.git"
+    _assert_gitignore_skipped "$outer/.git"
 }
 
 # --- image/compose drift check ---------------------------------------------
@@ -545,6 +572,7 @@ run_test test_gitignore_append_without_trailing_newline ".env appended to .gitig
 run_test test_gitignore_write_failure_is_non_fatal "Unwritable .gitignore does not fail post-create"
 run_test test_gitignore_skipped_outside_work_tree ".gitignore check skipped outside a git work tree"
 run_test test_gitignore_skipped_in_bare_repo ".gitignore check skipped in a bare repo"
+run_test test_gitignore_skipped_in_git_dir ".gitignore check skipped inside a .git dir"
 run_test test_drift_clean_when_image_matches "Drift check: matching image is clean"
 run_test test_drift_warns_on_mismatch "Drift check: mismatch warns and names the key"
 run_test test_drift_parses_single_quoted_values "Drift check: single-quoted compose values are parsed"

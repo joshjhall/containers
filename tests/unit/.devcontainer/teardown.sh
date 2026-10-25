@@ -91,6 +91,8 @@ test_help_exits_zero() {
         assert_contains "$out" "If the container is already gone" "$flag documents the already-torn-down case"
         assert_contains "$out" "the refusal prints the explicit command" "$flag prints the whole note"
         assert_not_contains "$out" "set -euo pipefail" "$flag stops at the end of the header"
+        assert_not_contains "$out" "After it finishes" "$flag excludes the sentinel line itself"
+        assert_not_contains "$out" "/usr/bin/env bash" "$flag skips the shebang"
         assert_equals "" "$err" "$flag writes nothing to stderr"
         assert_not_contains "$out" "unknown option" "$flag is not treated as unknown"
     done
