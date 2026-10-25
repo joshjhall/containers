@@ -75,44 +75,71 @@ _db_sources_run() {
     ' "$WF" | /usr/bin/grep -vE '^[[:space:]]*#'
 }
 
+# _db_sources_fn — the executable lines of evidence_db_sources, which holds
+# the step's logic since #1328 (its behavior is unit-tested in
+# tests/unit/bin/lib/evidence-sources.sh; these pins keep its shape).
+_db_sources_fn() {
+    /usr/bin/awk '/^evidence_db_sources\(\) \{/ { on = 1 } on { print } on && /^\}$/ { exit }' \
+        "$PROJECT_ROOT/bin/lib/evidence-sources.sh" | /usr/bin/grep -vE '^[[:space:]]*#'
+}
+
+test_open_pr_sources_step_calls_the_lib() {
+    # The step is a call, so the fail-closed guards stay where tests reach them.
+    local run
+    run="$(_db_sources_run)"
+    assert_contains "$run" 'source bin/lib/evidence-sources.sh' "the step sources the lib"
+    assert_contains "$run" 'SOURCES=$(evidence_db_sources "$PWD/_db" "$PWD" "$(date -u +%s)")' \
+        "and resolves its sources through evidence_db_sources"
+    assert_not_contains "$run" 'gh pr list' "no inline listing is left in the step"
+    # The setup job's checkout is sparse: a lib it sources but does not list
+    # is missing on the runner, and the step fails before resolving anything.
+    local lib sparse
+    sparse="$(/usr/bin/awk '
+        /- name: Checkout catalog and base-image tree/ { on = 1; next }
+        on && /- name: / { exit }
+        on { print }
+    ' "$WF")"
+    for lib in evidence-sources.sh evidence-matrix.sh evidence-epoch.sh; do
+        assert_contains "$sparse" "bin/lib/$lib" "the setup checkout lists bin/lib/$lib"
+    done
+}
+
 test_open_pr_sources_count_only_added_rows() {
     # #1327: an open PR's whole head tree re-asserted rows main had since
     # revoked; only the rows it adds over its merge-base may count.
-    local run
-    run="$(_db_sources_run)"
-    assert_contains "$run" 'evidence_pr_rows "_db_pr/$n/base" "_db_pr/$n/head" "_db_pr/$n/rows"' \
+    local fn
+    fn="$(_db_sources_fn)"
+    assert_contains "$fn" 'evidence_pr_rows "$work/_db_pr/$n/base" "$work/_db_pr/$n/head" "$work/_db_pr/$n/rows"' \
         "each PR is reduced to its added rows, base before head"
-    assert_contains "$run" 'SOURCES="$SOURCES:$PWD/_db_pr/$n/rows"' "the rows tree joins SOURCES"
-    assert_not_contains "$run" 'SOURCES="$SOURCES:$PWD/_db_pr/$n/head"' "the head tree itself never joins SOURCES"
-    assert_not_contains "$run" 'SOURCES="$SOURCES:$PWD/_db_pr/$n"' "nor the old whole-PR tree"
+    assert_contains "$fn" 'sources="$sources:$work/_db_pr/$n/rows"' "the rows tree joins the sources"
+    assert_not_contains "$fn" 'sources="$sources:$work/_db_pr/$n/head"' "the head tree itself never joins them"
 }
 
 test_open_pr_sources_pin_the_main_read() {
     # Merge-bases and the merged check use the fetched main SHA, not the
     # moving ref, or a PR that merges mid-step lands in neither source.
-    local run
-    run="$(_db_sources_run)"
-    assert_contains "$run" 'MAIN_SHA=$(git -C _db rev-parse HEAD)' "the main read's SHA is captured"
-    assert_contains "$run" 'compare/$MAIN_SHA...$HEAD_SHA' "the merge-base is taken against it"
-    assert_contains "$run" 'compare/$MERGE_SHA...$MAIN_SHA' "the merged check is too"
-    assert_not_contains "$run" 'compare/main...' "never against live main"
+    local fn
+    fn="$(_db_sources_fn)"
+    assert_contains "$fn" 'main_sha="$(command git -C "$db" rev-parse HEAD)"' "the main read's SHA is captured"
+    assert_contains "$fn" 'compare/$main_sha...$head_sha' "the merge-base is taken against it"
+    assert_contains "$fn" 'compare/$merge...$main_sha' "the merged check is too"
+    assert_not_contains "$fn" 'compare/main...' "never against live main"
 }
 
-test_open_pr_sources_skip_closed_and_landed() {
-    # refs/pull/N/head survives a close; a PR merged into the main read has
-    # its rows there already. Both are skipped after the head fetch.
-    local run fetch_line state_line
-    run="$(_db_sources_run)"
-    assert_contains "$run" '--json state,mergeCommit' "each PR's state is re-read"
-    assert_contains "$run" 'if [ "$STATE" = CLOSED ]; then' "a closed PR is detected"
-    assert_contains "$run" 'if [ "$IN_MAIN" = ahead ] || [ "$IN_MAIN" = identical ]; then' \
-        "a merged PR already in the main read is detected"
-    assert_equals "2" "$(/usr/bin/grep -c '^[[:space:]]*continue$' <<<"$run")" \
-        "and both are skipped"
-    fetch_line="$(/usr/bin/grep -n 'refs/pull/$n/head' <<<"$run" | /usr/bin/cut -d: -f1)"
-    state_line="$(/usr/bin/grep -n 'json state,mergeCommit' <<<"$run" | /usr/bin/cut -d: -f1)"
-    assert_true "[ ${fetch_line:-0} -gt 0 ] && [ ${state_line:-0} -gt ${fetch_line:-0} ]" \
-        "the state is read after the head fetch"
+test_open_pr_sources_skip_via_the_decision() {
+    # The skip rules themselves are evidence_pr_skip's, behavior-tested in
+    # tests/unit/bin/lib/evidence-matrix.sh (#1446). Here: the loop asks it,
+    # after the head fetch, with the re-read state.
+    local fn fetch_line state_line skip_line
+    fn="$(_db_sources_fn)"
+    assert_contains "$fn" '--json state,mergeCommit' "each PR's state is re-read"
+    assert_contains "$fn" 'verdict="$(evidence_pr_skip "$state" "$merge" "$in_main")" || return 1' \
+        "the skip decision is evidence_pr_skip's, and its failure is fatal"
+    fetch_line="$(/usr/bin/grep -n 'refs/pull/$n/head' <<<"$fn" | /usr/bin/cut -d: -f1)"
+    state_line="$(/usr/bin/grep -n 'json state,mergeCommit' <<<"$fn" | /usr/bin/cut -d: -f1)"
+    skip_line="$(/usr/bin/grep -n 'evidence_pr_skip "' <<<"$fn" | /usr/bin/cut -d: -f1)"
+    assert_true "[ ${fetch_line:-0} -gt 0 ] && [ ${state_line:-0} -gt ${fetch_line:-0} ] && [ ${skip_line:-0} -gt ${state_line:-0} ]" \
+        "the state is read after the head fetch, and decided on after that"
 }
 
 test_cells_install_from_the_vendored_catalog() {
@@ -387,9 +414,10 @@ run_test test_cells_install_as_the_container_user "cells install as the containe
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
 run_test test_artifact_name_is_per_cell "artifact name is per cell"
+run_test test_open_pr_sources_step_calls_the_lib "open-PR sources step calls evidence_db_sources (#1328)"
 run_test test_open_pr_sources_count_only_added_rows "open-PR sources count only the rows each PR adds (#1327)"
 run_test test_open_pr_sources_pin_the_main_read "open-PR sources take merge-bases against the fetched main"
-run_test test_open_pr_sources_skip_closed_and_landed "open-PR sources skip closed and already-landed PRs"
+run_test test_open_pr_sources_skip_via_the_decision "open-PR sources skip through evidence_pr_skip (#1446)"
 run_test test_cells_install_from_the_vendored_catalog "cells install from the vendored catalog"
 run_test test_trigger_paths_cover_evidence_scripts "trigger paths cover every evidence lib and script"
 run_test test_trigger_paths_parser_fixtures "paths: parser fails closed on fixture workflows"

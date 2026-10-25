@@ -212,6 +212,43 @@ evidence_pr_rows() {
     done
 }
 
+# evidence_pr_skip <state> <merge_sha> <in_main> — whether an open-listed
+# ingest PR's rows still count, from its re-read state, its merge commit
+# (`-` when none), and GitHub's compare status of <merge_sha>...<main read>
+# (`-` when not asked). Prints `count`, `skip closed`, or `skip landed` (#1446).
+#
+# refs/pull/N/head survives a close, so a CLOSED PR is skipped. A MERGED one
+# is skipped only when its merge commit is in the main read (`ahead`: main is
+# past it; `identical`: main is it). `behind`/`diverged` mean it merged after
+# the main fetch: its rows are not on that read, so they still count. A MERGED
+# PR with no merge commit or an unknown status is exit 1, as is any other
+# state: guessing either way would drop or double-count its rows.
+evidence_pr_skip() {
+    local state="$1" merge="$2" in_main="$3"
+    case "$state" in
+        OPEN) command echo count ;;
+        CLOSED) command echo "skip closed" ;;
+        MERGED)
+            if [ -z "$merge" ] || [ "$merge" = - ]; then
+                command echo "evidence_pr_skip: MERGED with no merge commit" >&2
+                return 1
+            fi
+            case "$in_main" in
+                ahead | identical) command echo "skip landed" ;;
+                behind | diverged) command echo count ;;
+                *)
+                    command echo "evidence_pr_skip: unknown compare status '$in_main' for $merge" >&2
+                    return 1
+                    ;;
+            esac
+            ;;
+        *)
+            command echo "evidence_pr_skip: unknown PR state '$state'" >&2
+            return 1
+            ;;
+    esac
+}
+
 # evidence_open_prs <now_epoch> [owner] [max_age_hours] — reads
 # `gh pr list --json number,headRefName,isCrossRepository,author,createdAt` on
 # stdin and prints the numbers of the open ingest PRs whose rows count as
