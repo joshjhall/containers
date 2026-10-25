@@ -199,6 +199,10 @@ jobs:
           PRS=$(evidence_open_prs "$(date -u +%s)" <<<"$LIST")
           git -C _db fetch --quiet --depth 1 origin main
           git -C _db checkout --quiet --detach FETCH_HEAD
+          # Merge-bases are taken against THIS main, not the moving ref: a PR
+          # that merged after this fetch has its head on live main, so a live
+          # merge-base would equal its head and its rows would be in neither.
+          MAIN_SHA=$(git -C _db rev-parse HEAD)
           SOURCES="$PWD/_db"
           for n in $PRS; do
             git -C _db fetch --quiet --depth 1 origin "refs/pull/$n/head:refs/evidence-pr/$n"
@@ -208,7 +212,7 @@ jobs:
               continue
             fi
             HEAD_SHA=$(git -C _db rev-parse "refs/evidence-pr/$n")
-            BASE_SHA=$(gh api "repos/joshjhall/containers-db/compare/main...$HEAD_SHA" -q .merge_base_commit.sha)
+            BASE_SHA=$(gh api "repos/joshjhall/containers-db/compare/$MAIN_SHA...$HEAD_SHA" -q .merge_base_commit.sha)
             git -C _db fetch --quiet --depth 1 origin "$BASE_SHA"
             for side in head base; do
               mkdir -p "_db_pr/$n/$side"

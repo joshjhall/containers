@@ -232,6 +232,21 @@ test_pr_rows_new_file_and_untouched_tool() {
     assert_dir_not_exists "$rows/tools/go" "with no tools/go for the untouched tool"
 }
 
+test_pr_rows_changed_row_counts() {
+    # A row the PR rewrites (a fail superseded by a pass) is the PR's
+    # assertion, so it counts; the base's old copy is not carried over.
+    local base head rows
+    base="$(command mktemp -d "$TEST_TEMP_DIR/base.XXXXXX")"
+    head="$(command mktemp -d "$TEST_TEMP_DIR/head.XXXXXX")"
+    rows="$TEST_TEMP_DIR/rows.$$.$RANDOM"
+    _db_version "$base" 1.90.0 "" debian-13-amd64
+    _db_version "$head" 1.90.0 debian-13-amd64
+    evidence_pr_rows "$base" "$head" "$rows"
+    assert_equals '[{"os":"debian","os_version":"13","arch":"amd64","result":"pass"}]' \
+        "$(command jq -c .tested "$rows/tools/rust/versions/1.90.0.json")" \
+        "the rewritten row is kept as the PR's own"
+}
+
 test_pr_rows_unreadable_is_an_error() {
     local base head rc=0
     base="$(command mktemp -d "$TEST_TEMP_DIR/base.XXXXXX")"
@@ -635,6 +650,7 @@ run_test test_version_missing_from_published_is_pending "a version absent from p
 run_test test_open_ingest_pr_rows_count_as_covered "open ingest PR rows count as covered"
 run_test test_pr_rows_drop_inherited_rows "an open PR counts only the rows it adds, not main's stale ones"
 run_test test_pr_rows_new_file_and_untouched_tool "PR rows: new files count whole, untouched tools are absent"
+run_test test_pr_rows_changed_row_counts "PR rows: a rewritten row counts as the PR's"
 run_test test_pr_rows_unreadable_is_an_error "PR rows: an unreadable side is an error"
 run_test test_open_prs_filters_trust_and_age "open evidence PRs: trust and age filter"
 run_test test_open_prs_unparsable_listing_is_an_error "open evidence PRs: unparsable listing is an error"
