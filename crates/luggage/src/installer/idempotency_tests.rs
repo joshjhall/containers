@@ -59,12 +59,27 @@ pub fn write_sleeping_shim(dir: &Path, name: &str) {
 /// [`assert_forked_descendant_gone`] the descendant.
 #[cfg(unix)]
 pub fn write_forking_shim(dir: &Path, name: &str) {
+    write_forking_shim_ending(dir, name, "wait");
+}
+
+/// Like [`write_forking_shim`], but the shim exits with `code` right after
+/// printing instead of `wait`ing, so the background `sleep` outlives a probe
+/// that finished on its own (#1371).
+#[cfg(unix)]
+fn write_backgrounding_shim(dir: &Path, name: &str, code: i32) {
+    write_forking_shim_ending(dir, name, &format!("exit {code}"));
+}
+
+#[cfg(unix)]
+fn write_forking_shim_ending(dir: &Path, name: &str, last: &str) {
     use std::os::unix::fs::PermissionsExt as _;
 
     let path = dir.join(name);
     std::fs::write(
         &path,
-        "#!/bin/sh\necho $$ > \"$0.pid\"\nsleep 30 &\necho $! > \"$0.bgpid\"\necho 'tool 1.0.0'\nwait\n",
+        format!(
+            "#!/bin/sh\necho $$ > \"$0.pid\"\nsleep 30 &\necho $! > \"$0.bgpid\"\necho 'tool 1.0.0'\n{last}\n",
+        ),
     )
     .unwrap();
     let mut perms = std::fs::metadata(&path).unwrap().permissions();
@@ -417,6 +432,46 @@ fn run_version_check_timeout_kills_forked_descendants() {
     assert_eq!(err.kind(), io::ErrorKind::TimedOut, "got: {err}");
     assert_probe_child_gone(dir.path(), "tool");
     assert_forked_descendant_gone(dir.path(), "tool");
+}
+
+/// A probe that prints its version and exits on its own while a backgrounded
+/// child keeps running still has its group killed (#1371): the probe returns
+/// its output and status unchanged, and nothing it forked survives the
+/// return. A failing exit takes the same path, so both codes are pinned.
+#[cfg(unix)]
+#[test]
+#[serial_test::serial]
+fn run_version_check_kills_descendants_left_by_a_normal_exit() {
+    for code in [0, 3] {
+        let dir = tempdir().unwrap();
+        write_backgrounding_shim(dir.path(), "tool", code);
+
+        let out = run_version_check_within(
+            &dir.path().join("tool"),
+            VERSION_ARGS,
+            &BTreeMap::new(),
+            VERSION_PROBE_TIMEOUT,
+        )
+        .expect("a probe that exits on its own must return its output");
+
+        assert_eq!(out.status.code(), Some(code), "status must be the probe's own");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "tool 1.0.0\n");
+        assert_eq!(String::from_utf8_lossy(&out.stderr), "");
+        assert_probe_child_gone(dir.path(), "tool");
+        assert_forked_descendant_gone(dir.path(), "tool");
+    }
+}
+
+/// ECHILD from the `WNOWAIT` peek (a child already reaped) is tolerated, so
+/// `try_wait` reports the reaped state rather than the poll failing (#1371).
+/// Unreachable through the poll loop, so it is driven on the helper directly.
+#[cfg(all(unix, not(any(target_os = "openbsd", target_os = "cygwin"))))]
+#[test]
+fn kill_group_if_exited_tolerates_an_already_reaped_child() {
+    let mut child = Command::new("true").spawn().unwrap();
+    child.wait().unwrap();
+
+    kill_group_if_exited(&child).expect("ECHILD must not fail the poll");
 }
 
 /// `proc_stat_state` takes the field after the LAST `)`, so a `comm` with
