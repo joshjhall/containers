@@ -564,8 +564,10 @@ fn run_version_check_within_gives_the_probe_a_null_stdin() {
         .spawn()
         .unwrap();
     // Data on the pipe makes an inherited stdin visible to the shim's
-    // `read` too, not just to its `-ef` check.
-    child.stdin.take().unwrap().write_all(b"from-parent\n").unwrap();
+    // `read` too, not just to its `-ef` check. The write result is ignored:
+    // a child that already died fails it with EPIPE, and the assertion below
+    // reports that child's output, which an `unwrap` here would swallow.
+    let _ = child.stdin.take().unwrap().write_all(b"from-parent\n");
     let out = child.wait_with_output().unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
