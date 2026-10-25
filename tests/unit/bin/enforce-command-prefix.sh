@@ -626,19 +626,25 @@ test_fixed_file_keeps_mode() {
     assert_equals "755" "$mode" "Fixed file should keep its 755 mode"
 }
 
-# Test: mode survives a BSD-style chmod that rejects GNU --reference (#1429).
-# The stub is first on PATH; BASH_ENV is cleared so /etc/bash_env can't
-# rebuild PATH and drop it.
-test_fixed_file_keeps_mode_without_gnu_chmod() {
+# Helper: run the hook on test.sh ('grep x', mode $3 or 644) with a PATH
+# stub named $2 whose body is $1; sets exit_code and err (stderr). BASH_ENV
+# is cleared so /etc/bash_env can't rebuild PATH and drop the stub.
+run_with_stub() {
     /usr/bin/mkdir -p "$TEST_TEMP_DIR/stub"
-    printf '#!/bin/sh\ncase "$1" in --reference*) exit 1 ;; esac\nexec /bin/chmod "$@"\n' \
-        >"$TEST_TEMP_DIR/stub/chmod"
-    /bin/chmod 755 "$TEST_TEMP_DIR/stub/chmod"
+    printf '#!/bin/sh\n%s\n' "$1" >"$TEST_TEMP_DIR/stub/$2"
+    /bin/chmod 755 "$TEST_TEMP_DIR/stub/$2"
     write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
-    chmod 755 "$TEST_TEMP_DIR/test.sh"
-    local exit_code=0
-    env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" \
-        "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    /bin/chmod "${3:-644}" "$TEST_TEMP_DIR/test.sh"
+    exit_code=0
+    err=$(env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" \
+        "$SCRIPT" "$TEST_TEMP_DIR/test.sh" 2>&1 >/dev/null) || exit_code=$?
+}
+
+# Test: mode survives a BSD-style chmod that rejects GNU --reference (#1429)
+test_fixed_file_keeps_mode_without_gnu_chmod() {
+    local exit_code err
+    run_with_stub 'case "$1" in --reference*) exit 1 ;; esac
+exec /bin/chmod "$@"' chmod 755
     assert_equals "1" "$exit_code" "Should exit 1 when changes made"
     assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" \
         "Fixed content should be written back"
@@ -707,16 +713,10 @@ test_fixed_file_replaced_atomically() {
 }
 
 # Test: when no stat form can read the mode → exit 2, original untouched,
-# no tmpfile left (never a silent 0600 script). BASH_ENV is cleared so
-# /etc/bash_env can't rebuild PATH and drop the stub.
+# no tmpfile left (never a silent 0600 script)
 test_mode_unreadable_exits_2() {
-    /usr/bin/mkdir -p "$TEST_TEMP_DIR/stub"
-    printf '#!/bin/sh\nexit 1\n' >"$TEST_TEMP_DIR/stub/stat"
-    /bin/chmod 755 "$TEST_TEMP_DIR/stub/stat"
-    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
-    local exit_code=0 err
-    err=$(env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" \
-        "$SCRIPT" "$TEST_TEMP_DIR/test.sh" 2>&1 >/dev/null) || exit_code=$?
+    local exit_code err
+    run_with_stub 'exit 1' stat
     assert_equals "2" "$exit_code" "An unreadable mode should exit 2"
     assert_contains "$err" "could not read the mode of $TEST_TEMP_DIR/test.sh" \
         "Stderr should name the file whose mode could not be read"
@@ -726,21 +726,9 @@ test_mode_unreadable_exits_2() {
         "No tmpfile should be left behind"
 }
 
-# Helper: run the hook on test.sh ('grep x') with $1 as the
-# body of a stub named $2; sets exit_code
-run_with_stub() {
-    /usr/bin/mkdir -p "$TEST_TEMP_DIR/stub"
-    printf '#!/bin/sh\n%s\n' "$1" >"$TEST_TEMP_DIR/stub/$2"
-    /bin/chmod 755 "$TEST_TEMP_DIR/stub/$2"
-    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
-    exit_code=0
-    env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" \
-        "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null 2>&1 || exit_code=$?
-}
-
 # Test: a BSD stat (no -c) still supplies the mode via 'stat -f %Lp'
 test_mode_from_bsd_stat() {
-    local exit_code
+    local exit_code err
     run_with_stub 'case "$1" in -f) printf "750\n" ;; *) exit 1 ;; esac' stat
     assert_equals "1" "$exit_code" "Should exit 1 when changes made"
     assert_equals "750" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Mode should come from stat -f"
@@ -749,7 +737,7 @@ test_mode_from_bsd_stat() {
 # Test: SIGTERM mid-rewrite (sent by a chmod stub while the tmpfile exists)
 # exits 143, leaves the original intact and removes the tmpfile
 test_sigterm_removes_tmpfile() {
-    local exit_code
+    local exit_code err
     run_with_stub 'kill -TERM "$PPID"; exit 1' chmod
     assert_equals "143" "$exit_code" "SIGTERM should exit 143"
     assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" "Original should be intact"
