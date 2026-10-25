@@ -511,6 +511,21 @@ test_malformed_published_file_is_named() {
     _mutate "$f" '.tested = {a: {os: "debian", os_version: "13", arch: "amd64", result: "pass"}}'
     _malformed_fails "$db" "$f" "an object tested"
 
+    _mutate "$f" '.tested = null'
+    _malformed_fails "$db" "$f" "a null tested"
+
+    _mutate "$f" '[.]'
+    _malformed_fails "$db" "$f" "a top-level array"
+
+    # Slurping drops an empty file and splits a two-document one, so only
+    # the value-count check sees these.
+    : >"$f"
+    _malformed_fails "$db" "$f" "an empty file"
+    _db_version "$db" 1.90.0 debian-13-amd64
+    command cat "$f" "$f" >"$f.two" && command mv "$f.two" "$f"
+    _malformed_fails "$db" "$f" "a file with two documents"
+    _db_version "$db" 1.90.0 debian-13-amd64
+
     # The culprit sits in a later source (an open PR's rows): main is fine.
     _mutate "$f" '.tested = []'
     pr="$(command mktemp -d "$TEST_TEMP_DIR/pr.XXXXXX")"

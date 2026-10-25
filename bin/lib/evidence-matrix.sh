@@ -127,8 +127,9 @@ def em_evidence($now):
 # order. That failure gets its own message naming the tool and the fix
 # (#1365), because it fails every tool's matrix, not just that tool's.
 #
-# A version file without a string .version, or with a .tested that is neither
-# absent nor an array, fails too (#1329), and the message names the file.
+# A version file that is not exactly one JSON object with a string .version
+# and a .tested that is absent or an array (so an empty file, or a null
+# .tested) fails too (#1329), and the message names the file.
 # Skipping it would make that version's cells pending, which is the same
 # re-test loop. The check is explicit, so it does not depend on how a given
 # jq release handles a null object key.
@@ -138,7 +139,7 @@ def em_evidence($now):
 _EM_VERSION_FILE_OK_JQ='
 def em_version_file_ok:
     type == "object" and (.version | type) == "string"
-    and ((.tested // []) | type) == "array";
+    and ((has("tested") | not) or (.tested | type) == "array");
 '
 _em_published_evidence() {
     local tool="$1" out="$2" now="$3"
@@ -166,8 +167,10 @@ _em_published_evidence() {
         fi
         files+=("${found[@]}")
     done
-    command jq -cs --argjson now "$now" "$_EM_EVIDENCE_JQ$_EM_VERSION_FILE_OK_JQ"'
-        if all(em_version_file_ok) then . else error("malformed version file") end
+    # Slurping drops an empty file and splits one holding two documents, so
+    # the value count must match the file count as well as each value's shape.
+    command jq -cs --argjson now "$now" --argjson n "${#files[@]}" "$_EM_EVIDENCE_JQ$_EM_VERSION_FILE_OK_JQ"'
+        if length == $n and all(em_version_file_ok) then . else error("malformed version file") end
         | group_by(.version)
         | map({key: .[0].version, value: ([ .[].tested // [] | .[] ] | em_evidence($now))})
         | from_entries
@@ -176,7 +179,7 @@ _em_published_evidence() {
     # Failure path only: one jq per file to name the culprit (#1329).
     local f
     for f in "${files[@]}"; do
-        command jq -e "$_EM_VERSION_FILE_OK_JQ"'em_version_file_ok' "$f" >/dev/null 2>&1 || {
+        command jq -ne "$_EM_VERSION_FILE_OK_JQ"'[inputs] | length == 1 and (.[0] | em_version_file_ok)' "$f" >/dev/null 2>&1 || {
             command echo "evidence_matrix: unreadable published evidence for $tool: $f (needs a string .version and an array .tested)" >&2
             return 1
         }
