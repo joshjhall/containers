@@ -290,15 +290,28 @@ test_gpg_nodejs_readable_keyring_succeeds() {
     require_gpg || return 0
     make_fixture_repo "$TEST_TEMP_DIR/repo"
 
+    # Replace an existing keyring, as in production (one is always committed),
+    # so the move-aside / swap / cleanup path is exercised on success too
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest"
+    printf 'previous-pubring' >"$dest/pubring.kbx"
+    printf 'previous-trustdb' >"$dest/trustdb.gpg"
+
     local output rc=0
     output=$(run_update "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys") || rc=$?
 
     assert_equals "0" "$rc" "update should succeed for a readable keyring (output: $output)"
-    if command cmp -s "$COMMITTED_NODEJS_KEYRING/pubring.kbx" "$TEST_TEMP_DIR/keys/nodejs/keyring/pubring.kbx"; then
-        assert_true true "written pubring.kbx is byte-identical to the source"
-    else
-        assert_true false "written pubring.kbx differs from the source"
-    fi
+    local f
+    for f in pubring.kbx trustdb.gpg; do
+        if command cmp -s "$COMMITTED_NODEJS_KEYRING/$f" "$dest/$f"; then
+            assert_true true "written $f is byte-identical to the source"
+        else
+            assert_true false "written $f differs from the source (or is missing)"
+        fi
+    done
+    local leftovers
+    leftovers=$(command find "$TEST_TEMP_DIR/keys/nodejs" -mindepth 1 -maxdepth 1 -name 'keyring.*' | command wc -l)
+    assert_equals "0" "$leftovers" "a successful swap leaves no keyring.new.*/keyring.old.* behind"
     assert_contains "$output" "Total keys in keyring: " "should report the key count"
 }
 
@@ -478,6 +491,72 @@ test_gpg_nodejs_failed_restore_reports_stranded_keyring() {
         "the reported path holds the previous keyring"
 }
 
+# Test: if a scratch/staging mktemp fails, the update fails closed without
+# running cp/chmod on an empty path (which would expand to `chmod 600 /*`).
+# Safety: cp and chmod are exported tripwires that refuse — and record — any
+# call outside this test's scratch tree, so a regressed guard cannot touch /.
+test_gpg_nodejs_mktemp_failure_fails_closed() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo"
+
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest"
+    printf 'previous-pubring' >"$dest/pubring.kbx"
+
+    local trip="$TEST_TEMP_DIR/tripwire.log"
+    : >"$trip"
+    local output rc=0
+    # shellcheck disable=SC2329 # invoked by the child script via export -f
+    output=$(
+        # Fail only the scratch and staging mktemps (they take a template);
+        # the plain `mktemp -d` for the clone dir still works
+        mktemp() {
+            if [ "$#" -ge 2 ]; then return 1; fi
+            command mktemp "$@"
+        }
+        # Trip on exactly the hazard an empty $scratch/$staging creates: an
+        # empty target, `/` itself, or a direct child of `/` (`chmod 600 /*`
+        # expands to /bin, /etc, ...). Anything deeper is allowed, so the
+        # container's own shell-init chmods (BASH_ENV) are not mistaken for
+        # the script's.
+        guard_path() {
+            local a
+            for a in "$@"; do
+                case "$a" in
+                    -*) continue ;;
+                    "" | / | /*/*) ;;
+                    /*)
+                        printf '%s\n' "$a" >>"$TRIPWIRE_LOG"
+                        return 1
+                        ;;
+                    *) continue ;;
+                esac
+                if [ -z "$a" ] || [ "$a" = / ]; then
+                    printf '<%s>\n' "${a:-empty}" >>"$TRIPWIRE_LOG"
+                    return 1
+                fi
+            done
+        }
+        cp() {
+            guard_path "$@" || return 1
+            command cp "$@"
+        }
+        chmod() {
+            guard_path "$@" || return 1
+            command chmod "$@"
+        }
+        export -f mktemp guard_path cp chmod
+        export TRIPWIRE_LOG="$trip" TEST_TEMP_DIR
+        run_update "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys"
+    ) || rc=$?
+
+    assert_not_equals "0" "$rc" "update must exit non-zero when a scratch mktemp fails"
+    assert_contains "$output" "Could not create a scratch directory" \
+        "should name the mktemp failure"
+    assert_equals "" "$(command cat "$trip")" "no cp/chmod may target a path outside the test scratch"
+    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "existing keyring untouched"
+}
+
 # Test: when upstream drops trustdb.gpg, the previous one does not linger
 # beside the new pubring.kbx
 test_gpg_nodejs_dropped_trustdb_not_left_stale() {
@@ -535,6 +614,7 @@ run_test_with_setup test_gpg_nodejs_empty_keyring_rejected "Node.js: keyring wit
 run_test_with_setup test_gpg_nodejs_move_aside_failure_keeps_existing "Node.js: move-aside failure keeps existing keyring"
 run_test_with_setup test_gpg_nodejs_install_failure_restores_existing "Node.js: install failure restores existing keyring"
 run_test_with_setup test_gpg_nodejs_failed_restore_reports_stranded_keyring "Node.js: failed restore reports the stranded keyring path"
+run_test_with_setup test_gpg_nodejs_mktemp_failure_fails_closed "Node.js: scratch mktemp failure fails closed, touches nothing outside scratch"
 run_test_with_setup test_gpg_nodejs_dropped_trustdb_not_left_stale "Node.js: dropped upstream trustdb.gpg is not left stale"
 
 # Generate test report

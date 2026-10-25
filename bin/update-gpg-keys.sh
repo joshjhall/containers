@@ -65,7 +65,12 @@ count_keyring_keys() {
     local src_dir="$1"
     local scratch_parent="${2:-${TMPDIR:-/tmp}}"
     local scratch output count
-    scratch=$(mktemp -d "$scratch_parent/keyring-check.XXXXXX")
+    # Every caller runs this with set -e suspended, so check mktemp explicitly:
+    # an empty $scratch would turn `chmod 600 "$scratch"/*` into `chmod 600 /*`
+    if ! scratch=$(mktemp -d "$scratch_parent/keyring-check.XXXXXX") || [ ! -d "$scratch" ]; then
+        log_error "Could not create a scratch directory under $scratch_parent"
+        return 1
+    fi
     cp "$src_dir"/pubring.kbx "$scratch"/ || {
         rm -rf "$scratch"
         return 1
@@ -172,7 +177,12 @@ update_nodejs_keys() {
     local keyring_dir="${GPG_KEYS_DIR}/nodejs/keyring"
     local metadata_file="${GPG_KEYS_DIR}/nodejs/keyring-metadata.json"
     local temp_dir
-    temp_dir=$(mktemp -d)
+    # Checked explicitly: main runs this with set -e suspended, and an empty
+    # $temp_dir would aim the clone, scratch checks, and cleanup at /
+    if ! temp_dir=$(mktemp -d) || [ ! -d "$temp_dir" ]; then
+        log_error "Could not create a temporary directory"
+        return 1
+    fi
 
     # Clone the official release-keys repository
     log_info "Fetching latest release-keys from GitHub..."
@@ -214,7 +224,12 @@ update_nodejs_keys() {
     # so no failure or interruption can leave it empty or half-written.
     mkdir -p "$(dirname "$keyring_dir")"
     local staging previous="${keyring_dir}.old.$$"
-    staging=$(mktemp -d "${keyring_dir}.new.XXXXXX")
+    if ! staging=$(mktemp -d "${keyring_dir}.new.XXXXXX") || [ ! -d "$staging" ]; then
+        log_error "Could not create a staging directory beside $keyring_dir — keeping existing keyring"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
     # On interrupt: drop the staging dir and the temp clone; if the swap below
     # had moved the existing keyring aside, put it back, otherwise drop the
     # moved-aside copy so nothing stray is left under lib/gpg-keys to commit.
