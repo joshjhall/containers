@@ -566,6 +566,9 @@ test_unnamed_evidence_failure_names_the_sources() {
     # jq's own cause follows, so the fallback still says what broke. Its
     # wording belongs to the jq release, so only its presence is pinned.
     assert_not_equals "" "$(command sed -n 2p "$err")" "and jq's error follows it"
+    # The batch's own shape error is our string, not jq's: it must not be the
+    # cause here, or the shape gate rejected a file the culprit check passed.
+    assert_not_contains "$(command cat "$err")" "malformed version file" "and the shape gate did not fire"
 }
 
 test_evidence_scratch_is_removed() {
