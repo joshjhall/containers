@@ -23,7 +23,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-GPG_KEYS_DIR="${REPO_ROOT}/lib/gpg-keys"
+GPG_KEYS_DIR="${GPG_KEYS_DIR:-${REPO_ROOT}/lib/gpg-keys}"
+NODEJS_RELEASE_KEYS_REPO="${NODEJS_RELEASE_KEYS_REPO:-https://github.com/nodejs/release-keys.git}"
 
 # Track success/failure for final summary
 UPDATED_LANGUAGES=()
@@ -47,6 +48,42 @@ log_warning() {
 
 log_error() {
     echo -e "\033[0;31m✗ $1\033[0m" >&2
+}
+
+# ============================================================================
+# count_keyring_keys - Print the number of public keys in a keyring directory
+#
+# Reads a scratch copy so gpg never writes into the source directory, and
+# fails (return 1) when gpg exits non-zero or lists no keys. gpg can print
+# most of a keyring's keys before failing on a damaged record, so the exit
+# status must be checked, not just the `pub` count (#1410).
+# ============================================================================
+count_keyring_keys() {
+    local src_dir="$1"
+    local scratch output count
+    scratch=$(mktemp -d)
+    cp "$src_dir"/pubring.kbx "$scratch"/ || {
+        rm -rf "$scratch"
+        return 1
+    }
+    [ -f "$src_dir/trustdb.gpg" ] && cp "$src_dir/trustdb.gpg" "$scratch"/
+    chmod 700 "$scratch"
+    chmod 600 "$scratch"/*
+
+    if ! output=$(GNUPGHOME="$scratch" gpg --batch --list-keys 2>&1); then
+        rm -rf "$scratch"
+        log_error "gpg cannot read keyring in $src_dir:"
+        printf '%s\n' "$output" | command grep '^gpg:' >&2 || true
+        return 1
+    fi
+    rm -rf "$scratch"
+
+    count=$(printf '%s\n' "$output" | command grep -c '^pub' || true)
+    if [ "${count:-0}" -eq 0 ]; then
+        log_error "Keyring in $src_dir contains no public keys"
+        return 1
+    fi
+    echo "$count"
 }
 
 # ============================================================================
@@ -135,7 +172,7 @@ update_nodejs_keys() {
 
     # Clone the official release-keys repository
     log_info "Fetching latest release-keys from GitHub..."
-    if ! git clone --depth=1 https://github.com/nodejs/release-keys.git "$temp_dir/release-keys" &>/dev/null; then
+    if ! git clone --depth=1 "$NODEJS_RELEASE_KEYS_REPO" "$temp_dir/release-keys" &>/dev/null; then
         log_error "Failed to clone nodejs/release-keys repository"
         rm -rf "$temp_dir"
         return 1
@@ -154,6 +191,16 @@ update_nodejs_keys() {
     log_info "  Commit date: $commit_date"
     echo ""
 
+    # Validate the upstream keyring BEFORE touching the committed one, so an
+    # unreadable keyring can never replace a working one (#1410)
+    local total_keys
+    if ! total_keys=$(count_keyring_keys "$temp_dir/release-keys/gpg"); then
+        log_error "Upstream Node.js keyring is unreadable — keeping existing keyring"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
     # Copy the full keyring (including historical keys)
     log_info "Copying keyring files..."
     mkdir -p "$keyring_dir"
@@ -164,9 +211,16 @@ update_nodejs_keys() {
     chmod 700 "$keyring_dir"
     chmod 600 "$keyring_dir"/*
 
-    # Count keys
-    local total_keys
-    total_keys=$(GNUPGHOME="$temp_dir/release-keys/gpg" gpg --list-keys 2>/dev/null | command grep -c "^pub" || echo "0")
+    # Re-check the written copy: it must be byte-identical to upstream and readable
+    if ! cmp -s gpg/pubring.kbx "$keyring_dir/pubring.kbx" ||
+        ! cmp -s gpg/trustdb.gpg "$keyring_dir/trustdb.gpg" ||
+        ! count_keyring_keys "$keyring_dir" >/dev/null; then
+        log_error "Written Node.js keyring does not match upstream or is unreadable"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
     log_info "  Total keys in keyring: $total_keys"
     echo ""
 

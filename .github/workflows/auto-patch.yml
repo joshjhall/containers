@@ -244,7 +244,9 @@ jobs:
           # entries are untracked, so `git diff --name-only` never saw them,
           # and the old add-only loop could not strip an extra blank line
           # (the 2026-10-25 failure on a mirrored go@1.27.3 entry). Excludes
-          # mirror the hook's. Exit 1 only means "fixed something".
+          # mirror the hook's. Exit 1 only means "fixed something". Keep the
+          # lib/gpg-keys exclusion: the old loop appended "\n" to the binary
+          # Node.js pubring.kbx, which gpg then refused to read (#1410).
           mapfile -t EOF_FILES < <(git ls-files --modified --others --exclude-standard \
             | grep -vE '^(tests/results|lib/gpg-keys)/' || true)
           if [ "${#EOF_FILES[@]}" -gt 0 ]; then

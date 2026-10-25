@@ -234,6 +234,98 @@ test_gpg_script_syntax() {
 }
 
 # ---------------------------------------------------------------------------
+# Behavioral tests: update_nodejs_keys validates the keyring (#1410)
+#
+# The script is run for real against a local fixture "release-keys" repo
+# (NODEJS_RELEASE_KEYS_REPO) and a scratch GPG_KEYS_DIR, so no network is used
+# and the committed keyring is never touched.
+# ---------------------------------------------------------------------------
+
+COMMITTED_NODEJS_KEYRING="$PROJECT_ROOT/lib/gpg-keys/nodejs/keyring"
+
+# Returns 0 when gpg is usable; otherwise skips locally and fails in CI, so a
+# missing gpg can never make these tests pass by skipping.
+require_gpg() {
+    if command -v gpg >/dev/null 2>&1; then
+        return 0
+    fi
+    if [ "${CI:-false}" = "true" ]; then
+        assert_true false "gpg is required in CI — keyring tests cannot silently skip"
+    else
+        skip_test "gpg not available — skipping locally"
+    fi
+    return 1
+}
+
+# make_fixture_repo <dir> [corrupt]
+# Build a one-commit git repo shaped like nodejs/release-keys from the
+# committed keyring. With "corrupt", append one newline to pubring.kbx — the
+# exact damage auto-patch's trailing-newline fixer did (#1410).
+make_fixture_repo() {
+    local repo="$1"
+    local mode="${2:-}"
+    command mkdir -p "$repo/gpg" "$repo/gpg-only-active-keys"
+    command cp "$COMMITTED_NODEJS_KEYRING/pubring.kbx" "$COMMITTED_NODEJS_KEYRING/trustdb.gpg" "$repo/gpg/"
+    command cp "$COMMITTED_NODEJS_KEYRING/pubring.kbx" "$COMMITTED_NODEJS_KEYRING/trustdb.gpg" "$repo/gpg-only-active-keys/"
+    if [ "$mode" = "corrupt" ]; then
+        printf '\n' >>"$repo/gpg/pubring.kbx"
+    fi
+    git -C "$repo" init -q
+    git -C "$repo" add -A
+    git -C "$repo" -c user.name=test -c user.email=test@example.com \
+        -c commit.gpgsign=false commit -q -m "fixture keyring"
+}
+
+# run_update <repo> <keys_dir> — run the real script for nodejs; prints combined output
+run_update() {
+    NODEJS_RELEASE_KEYS_REPO="$1" GPG_KEYS_DIR="$2" \
+        bash "$SOURCE_FILE" nodejs 2>&1
+}
+
+# Test: a readable upstream keyring is copied byte-for-byte and the script exits 0
+test_gpg_nodejs_readable_keyring_succeeds() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo"
+
+    local output rc=0
+    output=$(run_update "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys") || rc=$?
+
+    assert_equals "0" "$rc" "update should succeed for a readable keyring (output: $output)"
+    if command cmp -s "$COMMITTED_NODEJS_KEYRING/pubring.kbx" "$TEST_TEMP_DIR/keys/nodejs/keyring/pubring.kbx"; then
+        assert_true true "written pubring.kbx is byte-identical to the source"
+    else
+        assert_true false "written pubring.kbx differs from the source"
+    fi
+    assert_contains "$output" "Total keys in keyring: " "should report the key count"
+}
+
+# Test: an unreadable upstream keyring fails the script and keeps the old keyring
+test_gpg_nodejs_unreadable_keyring_fails_closed() {
+    require_gpg || return 0
+    make_fixture_repo "$TEST_TEMP_DIR/repo" corrupt
+
+    # Pre-existing (good) keyring that must survive the failed update
+    local dest="$TEST_TEMP_DIR/keys/nodejs/keyring"
+    command mkdir -p "$dest"
+    command cp "$COMMITTED_NODEJS_KEYRING/pubring.kbx" "$COMMITTED_NODEJS_KEYRING/trustdb.gpg" "$dest/"
+
+    local output rc=0
+    output=$(run_update "$TEST_TEMP_DIR/repo" "$TEST_TEMP_DIR/keys") || rc=$?
+
+    assert_not_equals "0" "$rc" "update must exit non-zero for an unreadable keyring"
+    assert_contains "$output" "Upstream Node.js keyring is unreadable" \
+        "should name the unreadable keyring as the failure"
+    if command cmp -s "$COMMITTED_NODEJS_KEYRING/pubring.kbx" "$dest/pubring.kbx"; then
+        assert_true true "existing keyring left untouched"
+    else
+        assert_true false "existing keyring was overwritten by an unreadable one"
+    fi
+    if [ -e "$TEST_TEMP_DIR/keys/nodejs/keyring-metadata.json" ]; then
+        assert_true false "metadata must not be written when the keyring is rejected"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 run_test_with_setup test_gpg_strict_mode "Script uses set -euo pipefail"
@@ -262,6 +354,8 @@ run_test_with_setup test_gpg_chmod_600_files "Uses chmod 600 for key files"
 run_test_with_setup test_gpg_uses_mktemp "Uses mktemp -d for temporary directories"
 run_test_with_setup test_gpg_main_defaults_to_all "main() defaults to all languages when no args"
 run_test_with_setup test_gpg_script_syntax "Script has valid bash syntax"
+run_test_with_setup test_gpg_nodejs_readable_keyring_succeeds "Node.js: readable keyring is copied byte-exact"
+run_test_with_setup test_gpg_nodejs_unreadable_keyring_fails_closed "Node.js: unreadable keyring fails closed"
 
 # Generate test report
 generate_report
