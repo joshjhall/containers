@@ -266,15 +266,18 @@ _source_target() {
 
 # _workflow_entry_scripts [workflow] — the repo-relative scripts the workflow's
 # run: lines source or execute. Two sweeps over the non-comment lines, both
-# printed. First, every literal `bin/....sh` path mentioned in any form: with
-# `./` or $GITHUB_WORKSPACE/ in front, quoted, after `bash`. Second, every
-# source target per _source_target. A target that is not a literal path once
-# $GITHUB_WORKSPACE/ is dropped prints `UNRESOLVED: <line>`, which the caller
-# fails on. So a form this cannot read never drops a file silently.
+# printed. First, every literal repo-root `bin/....sh` path mentioned in any
+# form: bare, quoted, after `bash`, `./`, or $GITHUB_WORKSPACE/ (but not
+# /usr/bin/x.sh). That deliberately over-reads: the paths: and sparse-checkout
+# lists name scripts too, which only widens the checked set, and a stale entry
+# there then fails as `missing`. Second, every source target per
+# _source_target. A target that is not a literal path once $GITHUB_WORKSPACE/
+# is dropped prints `UNRESOLVED: <line>`, which the caller fails on. So a form
+# this cannot read never drops a file silently.
 _workflow_entry_scripts() {
     local line target
     /usr/bin/grep -vE '^[[:space:]]*#' "${1:-$WF}" |
-        /usr/bin/grep -oE '(^|[[:space:]"'"'"'=/])bin/[A-Za-z0-9_./-]+\.sh' |
+        /usr/bin/grep -oE '(^|[[:space:]"'"'"'=]|\./|WORKSPACE\}?/)bin/[A-Za-z0-9_./-]+\.sh' |
         /usr/bin/sed -E 's#^[^b]*##' |
         while IFS= read -r line; do _normalize_path "$line"; done
     while IFS= read -r line; do
@@ -503,6 +506,11 @@ test_derivation_edge_forms() {
         printf '%s\n' 'jobs:' '  j:' '    steps:' '      - run: |' \
             '          . "${GITHUB_WORKSPACE}/bin/lib/a.sh"' '          bash bin/lib/noscriptdir.sh' \
             '          x=1; source "bin/lib/dangling.sh"' '          ./bin/lib/../../../out.sh' >"$dir/forms.yml"
+        printf '%s\n' 'jobs:' '  j:' '    steps:' '      - run: |' \
+            '          run "./bin/q1.sh"' "          bash 'bin/q2.sh'" '          x="$GITHUB_WORKSPACE/bin/q3.sh"' \
+            '          /usr/bin/ignored.sh' '          true | source bin/s1.sh' \
+            '          if true; then source bin/s2.sh' '          for i in 1; do source bin/s3.sh; done' \
+            '          else source bin/s4.sh' >"$dir/seps.yml"
         printf '%s\n' 'on:' '  push:' '    branches: [main]' 'jobs:' >"$dir/nopaths.yml"
         printf '%s\n' 'on:' '  push:' '    paths: ["a"]' 'jobs:' >"$dir/flow.yml"
     }
@@ -520,10 +528,18 @@ test_derivation_edge_forms() {
         'bin/lib/dangling.sh' \
         'UNRESOLVED: escapes the repo: bin/lib/../../../out.sh' \
         'bin/lib/b.sh' \
-        'UNRESOLVED: noscriptdir.sh: source "$SCRIPT_DIR/lib/a.sh"' \
+        'UNRESOLVED: bin/lib/noscriptdir.sh: source "$SCRIPT_DIR/lib/a.sh"' \
         'UNRESOLVED: missing bin/lib/gone.sh')" \
-        "$(_derived_scripts "$dir/forms.yml" "$dir" | /usr/bin/sed 's#UNRESOLVED: bin/lib/#UNRESOLVED: #')" \
+        "$(_derived_scripts "$dir/forms.yml" "$dir")" \
         "braced \$GITHUB_WORKSPACE, '. ', bash, chained source, cycles, missing files, and unset SCRIPT_DIR"
+    # Literal sweep: double- and single-quoted, unbraced $GITHUB_WORKSPACE/,
+    # never /usr/bin/. Source sweep: after |, then, do, and else. The last
+    # target swallows `; done`, so it fails to resolve rather than misread.
+    # The literal sweep has already caught s3, so nothing is dropped.
+    assert_equals "$(printf '%s\n' bin/q1.sh bin/q2.sh bin/q3.sh bin/s1.sh bin/s2.sh bin/s3.sh bin/s4.sh \
+        bin/s1.sh bin/s2.sh 'UNRESOLVED:           for i in 1; do source bin/s3.sh; done' bin/s4.sh)" \
+        "$(_workflow_entry_scripts "$dir/seps.yml")" \
+        "quoted and workspace-prefixed paths, and source after | then do else, are all read"
     assert_equals "NOPATHS" "$(_uncovered push "$dir/nopaths.yml" bin/lib/a.sh)" "a trigger without paths: is NOPATHS"
     assert_equals 'UNPARSED:     paths: ["a"]' "$(_uncovered push "$dir/flow.yml" bin/lib/a.sh)" \
         "an unreadable paths: entry is passed through"
