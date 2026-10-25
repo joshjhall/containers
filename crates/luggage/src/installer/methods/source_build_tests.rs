@@ -215,6 +215,69 @@ fn each_step_sees_the_extracted_tree_in_its_cwd() {
     assert_eq!(*runner.0.lock().unwrap(), [true, true, true]);
 }
 
+/// A relative artifact path (`luggage install --tmp-root ./scratch`) must
+/// still hand each step an absolute cwd and an absolute `./configure`:
+/// a relative root would be applied once by the join and again by the
+/// child's chdir. Built relative to the process cwd rather than by
+/// changing it, which would race the other tests.
+///
+/// This pins the end-to-end property, not one line: `tempfile` absolutises
+/// its base dir as well, so removing `source_build`'s own `absolute()`
+/// alone does not fail this test. It guards against both layers regressing
+/// together — e.g. a `tempfile` upgrade that stops absolutising.
+#[test]
+fn relative_artifact_path_still_yields_absolute_cwd_and_command() {
+    let f = Fixture::python();
+    let cwd = std::env::current_dir().unwrap();
+    let rel = pathdiff_rel(&cwd, &f.artifact);
+    assert!(rel.is_relative(), "fixture setup: {}", rel.display());
+
+    let args: Vec<String> = vec![];
+    let env = BTreeMap::new();
+    let cache_dirs = BTreeMap::new();
+    let steps = python_steps();
+    run(&MethodContext {
+        artifact: &rel,
+        args: &args,
+        env: &env,
+        user: "root",
+        cache_root: f.cache.path(),
+        bin_root: f.bin.path(),
+        binaries: &[],
+        bin_source_dir: None,
+        cache_dirs: &cache_dirs,
+        prefix: None,
+        strip_components: 1,
+        max_extract_bytes: DEFAULT_MAX_EXTRACT_BYTES,
+        build_steps: &steps,
+        log: None,
+        runner: &f.runner,
+    })
+    .unwrap();
+
+    let calls = f.runner.streaming_calls();
+    assert!(calls[0].cwd.is_absolute(), "cwd must be absolute: {}", calls[0].cwd.display());
+    let configure = Path::new(&calls[0].program);
+    assert!(configure.is_absolute(), "{}", configure.display());
+    assert_eq!(configure, calls[0].cwd.join("configure"));
+}
+
+/// `to`, expressed relative to `from` with `..` segments — the minimal
+/// `pathdiff` both arguments here need (two absolute paths).
+fn pathdiff_rel(from: &Path, to: &Path) -> PathBuf {
+    let from: Vec<_> = from.components().collect();
+    let to: Vec<_> = to.components().collect();
+    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let mut out = PathBuf::new();
+    for _ in common..from.len() {
+        out.push("..");
+    }
+    for c in &to[common..] {
+        out.push(c.as_os_str());
+    }
+    out
+}
+
 /// At strip 0 the archive keeps its `Python-3.13.1/` root inside the build
 /// dir, and a relative-with-separator command still anchors to the build
 /// dir rather than the process cwd.

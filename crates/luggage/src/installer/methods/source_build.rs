@@ -111,9 +111,23 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
 
     // 2. Extract into a scratch dir. Bound for the rest of the function, so
     //    its Drop removes the source tree on success and on every `?` below.
+    //
+    //    The root must be absolute because it is used twice per step: as the
+    //    child's cwd AND as the anchor for `./configure`. A relative root
+    //    (`luggage install --tmp-root ./scratch`) would be applied once by the
+    //    join and again by the chdir. `tempfile` already absolutises its base
+    //    dir today; this makes the requirement explicit here rather than
+    //    leaving it to that crate's internals. A bare-filename artifact has
+    //    parent `Some("")`, which means ".".
+    let parent = match ctx.artifact.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
+    let parent = std::path::absolute(parent)
+        .map_err(|e| LuggageError::Io { path: parent.to_owned(), source: e })?;
     let scratch = tempfile::Builder::new()
         .prefix(BUILD_DIR_PREFIX)
-        .tempdir_in(ctx.artifact.parent().unwrap_or_else(|| Path::new(".")))
+        .tempdir_in(&parent)
         .map_err(|e| LuggageError::Io { path: ctx.artifact.to_owned(), source: e })?;
     let source_root = scratch.path();
     extract(
