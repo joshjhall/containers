@@ -194,6 +194,59 @@ test_ensure_git_cliff_function_defined() {
     assert_function_exists "ensure_git_cliff" "ensure_git_cliff function is defined"
 }
 
+# ============================================================================
+# run_git_cliff_changelog: worktree-safe invocation + empty-output guard
+# ============================================================================
+
+# _stub_git_cliff <changelog-body> - put a git-cliff stub on a fresh bin dir
+# (echoed) that logs its argv to $TEST_TEMP_DIR/cliff_args and writes
+# <changelog-body> to its -o target.
+_stub_git_cliff() {
+    local mock_bin="$TEST_TEMP_DIR/cliffbin"
+    command mkdir -p "$mock_bin"
+    printf '%s' "$1" >"$TEST_TEMP_DIR/cliff_body"
+    {
+        echo '#!/bin/bash'
+        echo "printf '%s\n' \"\$@\" >'$TEST_TEMP_DIR/cliff_args'"
+        echo 'out=""; prev=""'
+        echo 'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done'
+        echo "cat '$TEST_TEMP_DIR/cliff_body' >\"\$out\""
+    } >"$mock_bin/git-cliff"
+    command chmod +x "$mock_bin/git-cliff"
+    echo "$mock_bin"
+}
+
+test_run_git_cliff_changelog_passes_workdir() {
+    # Without --workdir, git-cliff 2.8.0 in a linked worktree matches no
+    # commits and writes a header-only CHANGELOG (the 2026-10-25 re-release).
+    setup_cliff_env
+    source "$PROJECT_ROOT/bin/lib/release/git-cliff.sh"
+    local root="$TEST_TEMP_DIR/root" mock_bin rc=0
+    command mkdir -p "$root"
+    mock_bin="$(_stub_git_cliff $'# Changelog\n\n## [9.9.9] - 2026-10-25\n')"
+    PATH="$mock_bin:$PATH" run_git_cliff_changelog 9.9.9 "$root" >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "returns 0 when releases were generated"
+    assert_equals "--workdir" "$(command sed -n 1p "$TEST_TEMP_DIR/cliff_args")" \
+        "first git-cliff arg is --workdir"
+    assert_equals "$root" "$(command sed -n 2p "$TEST_TEMP_DIR/cliff_args")" \
+        "--workdir is the project root"
+    assert_file_contains "$root/CHANGELOG.md" "^## .9.9.9. - 2026-10-25" \
+        "CHANGELOG.md holds the generated output"
+}
+
+test_run_git_cliff_changelog_refuses_empty_output() {
+    setup_cliff_env
+    source "$PROJECT_ROOT/bin/lib/release/git-cliff.sh"
+    local root="$TEST_TEMP_DIR/root" mock_bin rc=0
+    command mkdir -p "$root"
+    printf '# Changelog\n\n## [1.0.0] - 2026-01-01\n' >"$root/CHANGELOG.md"
+    mock_bin="$(_stub_git_cliff $'# Changelog\n\nheader only\n')"
+    PATH="$mock_bin:$PATH" run_git_cliff_changelog 9.9.9 "$root" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "returns 1 when git-cliff emitted no release section"
+    assert_file_contains "$root/CHANGELOG.md" "^## .1.0.0. - 2026-01-01" \
+        "existing CHANGELOG.md is left intact"
+}
+
 # Run tests
 run_test test_ensure_git_cliff_already_installed "Returns 0 when git-cliff already installed"
 run_test test_ensure_git_cliff_installs_via_cargo "Tries cargo install when cargo available"
@@ -203,6 +256,8 @@ run_test test_ensure_git_cliff_unsupported_arch "Returns error for unsupported a
 run_test test_ensure_git_cliff_unsupported_os "Returns error for unsupported OS"
 run_test test_ensure_git_cliff_download_failure "Returns error when download fails"
 run_test test_ensure_git_cliff_function_defined "Function is defined after sourcing"
+run_test test_run_git_cliff_changelog_passes_workdir "run_git_cliff_changelog passes --workdir"
+run_test test_run_git_cliff_changelog_refuses_empty_output "run_git_cliff_changelog keeps CHANGELOG.md on empty output"
 
 # Generate test report
 generate_report

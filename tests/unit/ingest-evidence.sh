@@ -91,6 +91,17 @@ test_appends_row_on_clean_file() {
     cleanup_db
 }
 
+test_rewrite_ends_in_exactly_one_newline() {
+    # jq already terminates its output; a second newline left every ingested
+    # containers-db file ending in a blank line, which end-of-file-fixer
+    # rejects once auto-patch mirrors the file into the vendored catalog
+    # (the 2026-10-25 auto-patch failure on go@1.27.3).
+    run_ingest "$SAMPLE_ROW"
+    assert_equals "7d0a" "$(command tail -c 2 "$RESULT_FILE" | command od -An -tx1 | command tr -d ' \n')" \
+        "rewritten version file ends in '}\\n', not a trailing blank line"
+    cleanup_db
+}
+
 test_branch_name_is_stable_per_tuple() {
     # GITHUB_RUN_ID is set the way CI sets it: it must NOT reach the branch
     # name, or every run opens its own PR (45 duplicates of rust@1.95.0).
@@ -685,6 +696,7 @@ test_rejects_missing_version_file() {
 # --- Run -------------------------------------------------------------------
 
 run_test test_appends_row_on_clean_file "appends row to empty tested[]"
+run_test test_rewrite_ends_in_exactly_one_newline "rewritten file ends in exactly one newline"
 run_test test_branch_name_is_stable_per_tuple "branch name is stable per tuple (no run-id suffix)"
 run_test test_explicit_branch_suffix_is_honored "--branch-suffix opts into a separate branch"
 run_test test_reingest_updates_open_pr_instead_of_duplicating "re-ingest updates the open PR, never duplicates it"

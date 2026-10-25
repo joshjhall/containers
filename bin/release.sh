@@ -181,7 +181,7 @@ generate_changelog() {
     fi
 
     # Generate changelog
-    if git-cliff -o CHANGELOG.md --tag "v$new_version"; then
+    if run_git_cliff_changelog "$new_version" "$PROJECT_ROOT"; then
         # Remove trailing blank lines to pass markdown lint (MD012)
         # This creates a temp file, removes trailing newlines, then moves it back
         local tmp_file

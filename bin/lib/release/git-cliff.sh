@@ -67,3 +67,27 @@ ensure_git_cliff() {
         return 1
     fi
 }
+
+# run_git_cliff_changelog <version> <project-root> - regenerate CHANGELOG.md
+#
+# --workdir is mandatory: git-cliff 2.8.0 run from a linked worktree (where
+# .git is a file) resolves the main checkout instead, treats the worktree
+# path as an include filter, matches no commits, and writes a header-only
+# CHANGELOG — every past release erased while the caller printed success.
+# The output is also checked for at least one release section before it
+# replaces CHANGELOG.md, so any other empty generation fails loudly instead.
+run_git_cliff_changelog() {
+    local new_version="$1" root="$2" tmp
+    tmp="$(command mktemp)" || return 1
+    if ! git-cliff --workdir "$root" -o "$tmp" --tag "v$new_version"; then
+        command rm -f "$tmp"
+        return 1
+    fi
+    if ! command grep -q '^## ' "$tmp"; then
+        echo -e "${RED}git-cliff produced no release sections; CHANGELOG.md left unchanged${NC}" >&2
+        command rm -f "$tmp"
+        return 1
+    fi
+    command cat "$tmp" >"$root/CHANGELOG.md"
+    command rm -f "$tmp"
+}

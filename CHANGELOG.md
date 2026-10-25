@@ -5,6 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.21.3] - 2026-10-25
+
+### Added
+
+- Add {arch} URL placeholder and catalog-declared version_args (#1345)
+- Make the version-probe timeout overridable and name both timeout causes (#1397)
+
+### CI/CD
+
+- Build the evidence matrix for every luggage tool, not just rust (#1364)
+- Trigger evidence-run on the evidence libs it sources (#1389)
+
+### Changed
+
+- Refuse a malformed tier-2 pin before download (#1310)
+- Refuse a wrong-length tier-2 pin before download (#1317)
+- Port golang.sh to luggage (binary-tarball) (#1347)
+- Share one tested_at epoch parse across evidence matrix and ingest (#1385)
+- Move idempotency.rs's inline test module into idempotency_tests.rs (#1406)
+
+### Fixed
+
+- Flag upstream-only catalog versions as drift (#1321)
+- Judge evidence-matrix pending-ness against published containers-db (#1325)
+- Make CLAUDE_*=none opt out of defaults; empty means unset (#1330) [**BREAKING**]
+- Log codegraph startup sync as skipped when the daemon owns the index (#1340)
+- Bump webpki crates for RUSTSEC-2026-0381/0382/0383 (#1343)
+- Cool down failing evidence cells and retry them after untested ones (#1348)
+- Parse numeric-offset tested_at in the evidence fail cooldown (#1351)
+- Bound the version-probe exec with a timeout (#1350)
+- Exclude cfg-all-test modules from production LOC (#874) (#1362)
+- Bump ctutils 0.4.3 -> 0.4.5 for RUSTSEC-2026-0385 (#1368)
+- Cargo update to clear RUSTSEC-2026-0386 (tokio 1.53.2) (#1376)
+- Kill the version-probe's whole process group on timeout (#1369)
+- Cap captured version-probe output (#1379)
+- Read a future-dated evidence tested_at as stale (#1390)
+- Make check-installed-versions.sh runnable and accurate (#1413)
+- Strip v prefix from displayed latest version in check-installed-versions (#1418)
+- Stop evidence ingest writing a trailing blank line that broke auto-patch
+- Stop release.sh wiping CHANGELOG.md when run from a worktree
+
+### Miscellaneous
+
+- Automated version updates
+
+### Testing
+
+- Close grep -q pipefail guard scanner gaps (#1313)
+- Assert persist_feature_flags output behaviorally (#1315)
+- Flag grep -q behind prefix words and group openers (#1324)
+- Close remaining tier-2 pin-guard test gaps (#1332)
+- Track quotes and piped-group depth in grep -q pipefail guard (#1333)
+- Cover upstream-only drift with no vendored versions dir (#1336)
+- See grep -q inside a piped while/until/for/select body (#1337)
+- Pin override-resolver edge cases deferred from #1330 (#1339)
+- Flag grep -q in a piped if; fix order-dependent librarian symlink prune (#1338)
+- Pin ratchet message parsing and cfg_test limits on fixtures (#1366)
+- Run golang.sh's real config and version code in its tests (#1367)
+- Drop golang tests that only grep golang.sh's source text (#1377)
+- Harden evidence-matrix multi-tool assertions (#1380)
+- Assert golang.sh forwards a non-default USERNAME to luggage --user (#1382)
+- Drive the try_wait-error reap branch in run_version_check_within (#1383)
+- Name the right decoy in golang's top-level version assertion (#1384)
+- Fail the golang version-block extractor when its end fi is missing (#1387)
+- Treat only ESRCH as gone in assert_probe_child_gone (#1394)
+- Drive the paths: parser's fail-closed rules with fixtures (#1395)
+- Report unreadable paths: shapes as UNPARSED, not empty (#1400)
+- Pin that a version probe returns while an fd-inheriting grandchild lives (#1402)
+- Cover vendored future-fail retry and EVIDENCE_NOW edges (#1401)
+- Pin the capture-file error context in run_version_check_within (#1405)
+- Harden version-probe timeout tests (#1407)
+- Give bin/lib/evidence-merge.sh its own suite (#1412)
+- Split evidence-matrix multi-tool tests into a sibling suite (#1417)
+- Count spawn attempts in the non-ETXTBSY no-retry test (#1420)
+- Cover no-v and failed-lookup tags in the latest-version strip (#1421)
+- Make the null-stdin probe test discriminate when the runner's stdin is /dev/null (#1422)
+
 ## [4.21.2] - 2026-10-18
 
 ### Added
@@ -42,6 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Record evidence batching, catalog deps, virtiofs lock findings (#1254)
 - Record /tmp-clone workaround for persistent index.lock (#1258)
 - Remove dead CLAUDE_AGENTS plumbing (#1307)
+- Automated version updates to v4.21.2
+- Update compatibility matrix with passing test results
 
 ### Testing
 
@@ -1058,12 +1137,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add Cargo workspace with stibbons and containers-common crates
-- Port feature registry and dependency resolution from Go to Rust
-- Port .igor.yml config parsing from Go to Rust
-- Port template rendering and golden file tests from Go to Rust
-- Port TUI wizard from charmbracelet/huh to Rust with inquire
-- Wire up stibbons init file generation and remove Go codebase
 - Update octarine to v0.3.0-beta.1 and require Windows CI
 - Add lefthook + gitleaks, migrate git hooks from pre-commit (#366)
 - Add cspell spell checker
@@ -1071,8 +1144,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI/CD
 
-- Add Rust CI job, pre-commit hooks, and editor integration
-- Add v5 branch to CI triggers
 - Remove Go test job and fix Rust CI for octarine dependency
 - Fix octarine fetch in test job and allow Windows failure
 - Install mado and dprint so lefthook lint step passes in CI
@@ -1082,21 +1153,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrate markdown hooks to mado + dprint (#377)
 - Replace pre-commit-hooks uvx shims with native equivalents (#382)
 
-### Documentation
-
-- Rewrite README and CLAUDE.md for v5 architecture
-- Add claude memory files for v5 architecture decisions
-
 ### Fixed
 
-- Use HTTPS URL for octarine git dependency
 - Widen curl retry window for tool downloads
 - Gunzip install path produced gzipped binaries; add nmap (#378)
 
 ### Miscellaneous
 
-- Add Rust tooling config and update ignore files
-- Fix cspell dictionary ordering and add ratatui
 - Skip Go tests when cmd/igor/ no longer exists
 - Update Trivy image ref and add memory entries
 - Refresh Cargo lockfile and bump inquire 0.7 → 0.9
@@ -1209,9 +1272,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.15.11] - 2026-03-25
 
+### Added
+
+- Add Cargo workspace with stibbons and containers-common crates
+- Port feature registry and dependency resolution from Go to Rust
+- Port .igor.yml config parsing from Go to Rust
+- Port template rendering and golden file tests from Go to Rust
+- Port TUI wizard from charmbracelet/huh to Rust with inquire
+- Wire up stibbons init file generation and remove Go codebase
+
+### CI/CD
+
+- Add Rust CI job, pre-commit hooks, and editor integration
+- Add v5 branch to CI triggers
+
+### Documentation
+
+- Rewrite README and CLAUDE.md for v5 architecture
+- Add claude memory files for v5 architecture decisions
+
 ### Fixed
 
 - Add MEMORY_FILE_PATH env var and fix comment indentation
+- Use HTTPS URL for octarine git dependency
 - Skip issues with status/on-hold label
 - Measure production code only for file-length thresholds
 - Exclude git submodules from codebase-audit scans
@@ -1219,6 +1302,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 
 - Parallelize op read calls and background claude-setup
+
+### Miscellaneous
+
+- Add Rust tooling config and update ignore files
+- Fix cspell dictionary ordering and add ratatui
 
 ## [4.15.10] - 2026-03-23
 
@@ -1935,10 +2023,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.12.8] - 2025-12-28
 
-### Fixed
-
-- Ignore devcontainer.json and remove invalid linter key
-
 ### Miscellaneous
 
 - Sync extension recommendations across configs
@@ -1950,6 +2034,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Filter out Go pre-release versions
+- Ignore devcontainer.json and remove invalid linter key
 
 ### Miscellaneous
 
@@ -2668,6 +2753,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.21.3]: https://github.com/joshjhall/containers/compare/v4.21.2...v4.21.3
 [4.21.2]: https://github.com/joshjhall/containers/compare/v4.21.1...v4.21.2
 [4.21.1]: https://github.com/joshjhall/containers/compare/v4.21.0...v4.21.1
 [4.21.0]: https://github.com/joshjhall/containers/compare/v4.20.3...v4.21.0

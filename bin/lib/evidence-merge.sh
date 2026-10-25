@@ -98,8 +98,10 @@ merge_evidence_row() {
         command rm -f "$tmp"
         return 1
     fi
+    # jq already ends its output with exactly one newline; appending another
+    # left every ingested file ending in a blank line, which end-of-file-fixer
+    # rejects once auto-patch mirrors the file into the vendored catalog.
     command cp "$tmp" "$file"
-    command echo "" >>"$file"
     command rm -f "$tmp"
 }
 
