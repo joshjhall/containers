@@ -262,6 +262,7 @@ test_civ_fd_reports_fdfind_version() {
     row=$(command grep -E '^fd +' "$TEST_TEMP_DIR/out" || true)
     assert_contains "$row" "10.2.0" "fd row shows the fdfind version"
     assert_contains "$row" "up-to-date" "fd 10.2.0 vs latest v10.2.0 is up-to-date"
+    assert_not_contains "$row" "v10.2.0" "latest column drops the release tag's v prefix"
 }
 
 test_civ_fd_reports_upstream_version() {
@@ -301,7 +302,8 @@ STUB
     _civ_run "$TEST_TEMP_DIR/bin/check-installed-versions.sh"
     local row
     row=$(command grep -E '^fd +' "$TEST_TEMP_DIR/out" || true)
-    assert_contains "$row" "v99.0.0" "token from the real script's .env reached the GitHub lookup"
+    assert_contains "$row" "99.0.0" "token from the real script's .env reached the GitHub lookup"
+    assert_not_contains "$row" "v99.0.0" "latest column drops the release tag's v prefix"
     assert_contains "$row" "outdated" "fd 10.2.0 vs token-gated v99.0.0 is outdated"
 }
 
@@ -310,7 +312,7 @@ test_civ_json_completes() {
     _civ_run "$CIV_SCRIPT" --json
     assert_equals "0" "$CIV_RC" "--json exits 0"
     assert_file_contains "$TEST_TEMP_DIR/out" \
-        '"tool": "fd", "installed": "10.2.0", "latest": "v10.2.0", "status": "up-to-date"' \
+        '"tool": "fd", "installed": "10.2.0", "latest": "10.2.0", "status": "up-to-date"' \
         "--json reports fd's fdfind version as up-to-date"
 }
 
