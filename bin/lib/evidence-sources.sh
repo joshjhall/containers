@@ -75,7 +75,10 @@ evidence_db_sources() {
         command echo "evidence_db_sources: cannot list open PRs of $repo" >&2
         return 1
     }
-    count="$(command jq length <<<"$list")" || {
+    # Exactly one JSON array: an empty listing gives jq no input, so it would
+    # print nothing, exit 0, and resolve to main alone.
+    count="$(command jq -se 'if length == 1 and (.[0] | type) == "array"
+        then .[0] | length else error("not one array") end' <<<"$list" 2>/dev/null)" || {
         command echo "evidence_db_sources: unparsable PR listing" >&2
         return 1
     }

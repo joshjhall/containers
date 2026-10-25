@@ -367,13 +367,18 @@ test_unparsable_listing_fails() {
     # A listing jq cannot read must not pass as "no open PRs", which would
     # re-queue every cell those PRs cover.
     _setup
-    command printf 'not json\n' >"$GH_STUB_DIR/list.json"
-    _collect
-    _assert_stubbed
-    assert_equals "1" "$RC" "an unparsable listing fails the job"
-    assert_equals "evidence_db_sources: unparsable PR listing" "$(command tail -n1 <<<"$ERR")" \
-        "with the listing named"
-    assert_equals "" "$OUT" "and no sources"
+    # An empty listing and one that is not a single array (jq would print
+    # nothing, or several lengths) fail the same way.
+    local listing
+    for listing in 'not json' '' '[] []' '{}'; do
+        command printf '%s' "$listing" >"$GH_STUB_DIR/list.json"
+        _collect
+        _assert_stubbed
+        assert_equals "1" "$RC" "listing '$listing' fails the job"
+        assert_equals "evidence_db_sources: unparsable PR listing" "$(command tail -n1 <<<"$ERR")" \
+            "listing '$listing' is named unparsable"
+        assert_equals "" "$OUT" "listing '$listing' yields no sources"
+    done
 }
 
 test_unreadable_pr_rows_fail() {
