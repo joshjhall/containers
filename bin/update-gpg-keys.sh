@@ -228,23 +228,39 @@ update_nodejs_keys() {
     # The committed keyring is not touched until the staged copy has passed,
     # so no failure or interruption can leave it empty or half-written.
     mkdir -p "$(dirname "$keyring_dir")"
-    local staging previous="${keyring_dir}.old.$$"
+    local staging previous_dir previous
     if ! staging=$(mktemp -d "${keyring_dir}.new.XXXXXX") || [ ! -d "$staging" ]; then
         log_error "Could not create a staging directory beside $keyring_dir — keeping existing keyring"
         cd "$REPO_ROOT"
         rm -rf "$temp_dir"
         return 1
     fi
+    # The existing keyring is moved aside into a fresh, empty holder dir rather
+    # than to a fixed name: a leftover keyring.old.<pid> from a SIGKILLed run
+    # would make the move-aside a move INTO it, and a restore would then
+    # install the stale copy (#1436). Inside a new mktemp dir the target
+    # cannot already exist, so the move-aside is always a rename.
+    if ! previous_dir=$(mktemp -d "${keyring_dir}.old.XXXXXX") || [ ! -d "$previous_dir" ]; then
+        log_error "Could not create a directory to move the existing keyring aside — keeping existing keyring"
+        rm -rf "$staging"
+        cd "$REPO_ROOT"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    previous="$previous_dir/keyring"
     # On interrupt: drop the staging dir and the temp clone; if the swap below
     # had moved the existing keyring aside, put it back, otherwise drop the
     # moved-aside copy so nothing stray is left under lib/gpg-keys to commit.
+    # The holder dir is kept only when a restore fails, since it then holds
+    # the sole copy of the previous keyring.
     # Paths are %q-quoted because the trap string is evaluated later.
-    local q_staging q_previous q_keyring q_temp
+    local q_staging q_previous_dir q_previous q_keyring q_temp
     q_staging=$(printf '%q' "$staging")
+    q_previous_dir=$(printf '%q' "$previous_dir")
     q_previous=$(printf '%q' "$previous")
     q_keyring=$(printf '%q' "$keyring_dir")
     q_temp=$(printf '%q' "$temp_dir")
-    local on_interrupt="rm -rf $q_staging; if [ -d $q_keyring ]; then rm -rf $q_previous; elif [ -d $q_previous ]; then mv $q_previous $q_keyring; fi; rm -rf $q_temp"
+    local on_interrupt="rm -rf $q_staging; if [ -d $q_keyring ]; then rm -rf $q_previous_dir; elif [ -d $q_previous ]; then mv $q_previous $q_keyring && rm -rf $q_previous_dir; else rm -rf $q_previous_dir; fi; rm -rf $q_temp"
     # Separate traps so the exit status names the signal (128+2 / 128+15)
     # shellcheck disable=SC2064 # expand paths now; the trap outlives this scope
     trap "$on_interrupt; exit 130" INT
@@ -271,7 +287,7 @@ update_nodejs_keys() {
     if [ "$staged_ok" != true ]; then
         log_error "Staged Node.js keyring does not match upstream or is unreadable — keeping existing keyring"
         trap - INT TERM
-        rm -rf "$staging"
+        rm -rf "$staging" "$previous_dir"
         cd "$REPO_ROOT"
         rm -rf "$temp_dir"
         return 1
@@ -281,7 +297,7 @@ update_nodejs_keys() {
     if [ -d "$keyring_dir" ] && ! mv "$keyring_dir" "$previous"; then
         log_error "Could not move the existing keyring aside — keeping it"
         trap - INT TERM
-        rm -rf "$staging"
+        rm -rf "$staging" "$previous_dir"
         cd "$REPO_ROOT"
         rm -rf "$temp_dir"
         return 1
@@ -290,6 +306,8 @@ update_nodejs_keys() {
         log_error "Could not install the new keyring — restoring the existing one"
         if [ -d "$previous" ] && ! mv "$previous" "$keyring_dir"; then
             log_error "Restore failed — the previous keyring is at $previous; move it back to $keyring_dir by hand"
+        else
+            rm -rf "$previous_dir"
         fi
         trap - INT TERM
         rm -rf "$staging"
@@ -299,7 +317,7 @@ update_nodejs_keys() {
     fi
     # Clear the moved-aside copy BEFORE dropping the trap, so an interrupt
     # here still removes it rather than leaving it under lib/gpg-keys
-    rm -rf "$previous"
+    rm -rf "$previous_dir"
     trap - INT TERM
 
     log_info "  Total keys in keyring: $total_keys"
