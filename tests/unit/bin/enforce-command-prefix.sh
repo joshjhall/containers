@@ -461,6 +461,47 @@ test_fixed_no_trailing_newline_gains_one() {
     assert_equals "15" "$size" "'command grep x' plus a trailing newline"
 }
 
+# Test: with two heredocs on one line, the LAST delimiter governs the body
+# (the original sed extraction used a greedy '.*')
+test_heredoc_last_delim_wins() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        'command cat <<A - <<B' \
+        'A' \
+        'sed still-body' \
+        'B' \
+        'sort after' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 for the line after the heredoc"
+    local expected
+    expected=$(printf 'command cat <<A - <<B\nA\nsed still-body\nB\ncommand sort after')
+    assert_equals "$expected" "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "Body runs to B, not A"
+}
+
+# Test: a heredoc opened on a comment line still suppresses its body
+test_heredoc_on_comment_line() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        '# usage: cat <<EOF' \
+        'ls inside' \
+        'EOF' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "0" "$exit_code" "Body after a comment-line heredoc is not rewritten"
+    assert_contains "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" "$(printf '\nls inside\n')" \
+        "ls inside stays bare"
+}
+
+# Test: consecutive pipe matches on one line are all rewritten (sed /g rescan)
+test_consecutive_pipe_matches() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'x | ls | ls | ls' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals 'x | command ls | command ls | command ls' "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "Every piped ls is prefixed"
+}
+
 # Test: a rewritten file keeps its mode (the tmpfile is created 0600)
 test_fixed_file_keeps_mode() {
     write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
@@ -537,6 +578,9 @@ run_test test_dedup_mid_line "command command collapsed mid-line"
 run_test test_dedup_requires_word_boundary "foo-command command is not collapsed"
 run_test test_clean_no_trailing_newline_untouched "Clean file without trailing newline is untouched"
 run_test test_fixed_no_trailing_newline_gains_one "Fixed file without trailing newline gains one"
+run_test test_heredoc_last_delim_wins "Last heredoc delimiter on a line governs the body"
+run_test test_heredoc_on_comment_line "Heredoc opened on a comment line suppresses its body"
+run_test test_consecutive_pipe_matches "Consecutive piped commands are all prefixed"
 run_test test_fixed_file_keeps_mode "Fixed file keeps its mode"
 run_test test_awk_failure_exits_2 "awk failure exits 2 and cleans up"
 run_test test_filename_with_equals "File name containing = is processed as a file"
