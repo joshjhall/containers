@@ -266,6 +266,18 @@ require_gpg() {
     return 1
 }
 
+# make_empty_keybox <home> <kbx> — create a keybox holding no keys without
+# relying on gpg's homedir defaults: an explicit empty common.conf keeps
+# use-keyboxd off (GnuPG 2.4.1+ would otherwise write public-keys.d/ and no
+# .kbx), and the keyring path is named rather than inferred (#1433)
+make_empty_keybox() {
+    command mkdir -p "$1"
+    command chmod 700 "$1"
+    : >"$1/common.conf"
+    GNUPGHOME="$1" gpg --batch --no-default-keyring --keyring "$2" --list-keys >/dev/null 2>&1
+    [ -f "$2" ]
+}
+
 # make_fixture_repo <dir> [corrupt|no-trustdb]
 # Build a one-commit git repo shaped like nodejs/release-keys from the
 # committed keyring. With "corrupt", append one newline to pubring.kbx — the
@@ -413,9 +425,10 @@ test_gpg_nodejs_empty_keyring_rejected() {
 
     # Replace the fixture's keyring with an empty keybox gpg creates itself
     local empty_home="$TEST_TEMP_DIR/empty-home"
-    command mkdir -p "$empty_home"
-    command chmod 700 "$empty_home"
-    GNUPGHOME="$empty_home" gpg --batch --list-keys >/dev/null 2>&1
+    if ! make_empty_keybox "$empty_home" "$empty_home/pubring.kbx"; then
+        assert_true false "could not build an empty keybox fixture (is use-keyboxd set system-wide?)"
+        return 0
+    fi
     command cp "$empty_home/pubring.kbx" "$TEST_TEMP_DIR/repo/gpg/pubring.kbx"
     git -C "$TEST_TEMP_DIR/repo" -c user.name=test -c user.email=test@example.com \
         -c commit.gpgsign=false commit -q -am "empty keyring"
