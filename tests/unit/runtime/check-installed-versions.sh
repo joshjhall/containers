@@ -316,6 +316,43 @@ test_civ_json_completes() {
         "--json reports fd's fdfind version as up-to-date"
 }
 
+# The github arm strips one leading "v" from the latest tag (#1418). These
+# stubs answer with values the strip must leave alone. Each assertion pins the
+# whole fd row, so a strip that eats any first character fails too.
+_civ_stub_curl() {
+    printf '#!/bin/sh\necho '\''%s'\''\n' "$1" >"$TEST_TEMP_DIR/bin/curl"
+}
+
+test_civ_latest_without_v_passes_through() {
+    _civ_make_hermetic_bin
+    _civ_stub_curl '{"tag_name": "10.2.0"}'
+    _civ_run "$CIV_SCRIPT" --json
+    assert_equals "0" "$CIV_RC" "--json exits 0 with a tag that has no v"
+    assert_file_contains "$TEST_TEMP_DIR/out" \
+        '"tool": "fd", "installed": "10.2.0", "latest": "10.2.0", "status": "up-to-date"' \
+        "a tag without a v prefix passes through unchanged"
+}
+
+test_civ_latest_missing_tag_is_unknown() {
+    _civ_make_hermetic_bin
+    _civ_stub_curl '{}'
+    _civ_run "$CIV_SCRIPT" --json
+    assert_equals "0" "$CIV_RC" "--json exits 0 when the release has no tag_name"
+    assert_file_contains "$TEST_TEMP_DIR/out" \
+        '"tool": "fd", "installed": "10.2.0", "latest": "unknown", "status": "unknown"' \
+        "a failed tag lookup stays unknown"
+}
+
+test_civ_latest_rate_limited_kept() {
+    _civ_make_hermetic_bin
+    _civ_stub_curl '{"message": "API rate limit exceeded"}'
+    _civ_run "$CIV_SCRIPT" --json
+    assert_equals "0" "$CIV_RC" "--json exits 0 when GitHub rate-limits the lookup"
+    assert_file_contains "$TEST_TEMP_DIR/out" \
+        '"tool": "fd", "installed": "10.2.0", "latest": "rate-limited", "status": "unknown"' \
+        "a rate-limited lookup stays rate-limited"
+}
+
 run_test_with_setup test_civ_summary_completes "Summary completes and exits 0 with counters starting at 0"
 run_test_with_setup test_civ_summary_every_counter_branch "Summary survives every counter branch from 0 under set -e"
 run_test_with_setup test_civ_fd_reports_fdfind_version "fd version parsed from fdfind output"
@@ -323,6 +360,9 @@ run_test_with_setup test_civ_fd_reports_upstream_version "fd version parsed from
 run_test_with_setup test_civ_runs_through_symlink "Script runs through a PATH symlink"
 run_test_with_setup test_civ_symlink_loads_sibling_env "Symlinked script loads the .env next to its real location"
 run_test_with_setup test_civ_json_completes "--json output completes and exits 0"
+run_test_with_setup test_civ_latest_without_v_passes_through "Latest tag without a v prefix passes through"
+run_test_with_setup test_civ_latest_missing_tag_is_unknown "Missing latest tag stays unknown"
+run_test_with_setup test_civ_latest_rate_limited_kept "Rate-limited latest lookup stays rate-limited"
 
 run_test test_civ_print_section_results_func "Defines _print_section_results helper"
 run_test test_civ_strict_mode "check-installed-versions.sh uses set -euo pipefail"
