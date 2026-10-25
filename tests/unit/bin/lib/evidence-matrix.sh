@@ -259,45 +259,49 @@ test_pr_rows_changed_row_counts() {
 }
 
 test_pr_rows_unreadable_is_an_error() {
-    local base head rc=0
+    # Each failure is pinned by its message, so a case cannot pass because a
+    # different guard happened to return 1.
+    local base head err rel=tools/rust/versions/1.90.0.json
     base="$(command mktemp -d "$TEST_TEMP_DIR/base.XXXXXX")"
     head="$(command mktemp -d "$TEST_TEMP_DIR/head.XXXXXX")"
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    _pr_rows_fails() {
+        local rc=0
+        evidence_pr_rows "$1" "$2" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>"$err" || rc=$?
+        assert_equals "1" "$rc" "$4 is exit 1"
+        # Last line: jq's own diagnostic may precede ours, and is kept.
+        assert_equals "$3" "$(command tail -n 1 "$err")" "$4 names its guard"
+    }
+
     _db_version "$base" 1.90.0 ""
     command mkdir -p "$head/tools/rust/versions"
-    command echo '{not json' >"$head/tools/rust/versions/1.90.0.json"
-    evidence_pr_rows "$base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
-    assert_equals "1" "$rc" "an unparsable head file is exit 1"
+    command echo '{not json' >"$head/$rel"
+    _pr_rows_fails "$base" "$head" "evidence_pr_rows: unreadable $rel in $head or $base" "an unparsable head file"
 
     _db_version "$head" 1.90.0 ""
-    command echo '{not json' >"$base/tools/rust/versions/1.90.0.json"
-    rc=0
-    evidence_pr_rows "$base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
-    assert_equals "1" "$rc" "an unparsable base file is exit 1"
+    command echo '{not json' >"$base/$rel"
+    _pr_rows_fails "$base" "$head" "evidence_pr_rows: unreadable $rel in $head or $base" "an unparsable base file"
 
     # Zero-byte files are no jq input, not "no rows": an empty base would
     # re-assert every inherited row, an empty head would drop silently.
-    : >"$base/tools/rust/versions/1.90.0.json"
+    : >"$base/$rel"
     _db_version "$head" 1.90.0 debian-13-amd64
-    rc=0
-    evidence_pr_rows "$base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
-    assert_equals "1" "$rc" "a zero-byte base file is exit 1"
+    _pr_rows_fails "$base" "$head" "evidence_pr_rows: empty $rel in $head or $base" "a zero-byte base file"
 
     _db_version "$base" 1.90.0 ""
-    : >"$head/tools/rust/versions/1.90.0.json"
-    rc=0
-    evidence_pr_rows "$base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
-    assert_equals "1" "$rc" "a zero-byte head file is exit 1"
+    : >"$head/$rel"
+    _pr_rows_fails "$base" "$head" "evidence_pr_rows: empty $rel in $head or $base" "a zero-byte head file"
 
-    rc=0
-    evidence_pr_rows "$TEST_TEMP_DIR/no-such-base" "$head" "$TEST_TEMP_DIR/rows.$$.$RANDOM" 2>/dev/null || rc=$?
-    assert_equals "1" "$rc" "a base with no tools/ tree is exit 1"
+    _pr_rows_fails "$TEST_TEMP_DIR/no-such-base" "$head" \
+        "evidence_pr_rows: $TEST_TEMP_DIR/no-such-base and $head must both hold a tools/ tree" "a base with no tools/ tree"
 
     # A head with no tools/ must not yield an empty-but-readable rows tree,
     # which _em_published_evidence would read as "no rows" (#1319).
-    local rows="$TEST_TEMP_DIR/rows.$$.$RANDOM"
-    rc=0
-    evidence_pr_rows "$base" "$TEST_TEMP_DIR/no-such-head" "$rows" 2>/dev/null || rc=$?
+    local rows="$TEST_TEMP_DIR/rows.$$.$RANDOM" rc=0
+    evidence_pr_rows "$base" "$TEST_TEMP_DIR/no-such-head" "$rows" 2>"$err" || rc=$?
     assert_equals "1" "$rc" "a head with no tools/ tree is exit 1"
+    assert_equals "evidence_pr_rows: $base and $TEST_TEMP_DIR/no-such-head must both hold a tools/ tree" \
+        "$(command cat "$err")" "and names its guard"
     assert_dir_not_exists "$rows" "and writes no rows tree"
 }
 

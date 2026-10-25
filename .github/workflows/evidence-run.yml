@@ -176,9 +176,10 @@ jobs:
       # under 24h old. The PRs are listed BEFORE main is re-fetched, so a PR
       # that merges in between is on the main read rather than in neither.
       # refs/pull/N/head survives a close, so each PR's state is re-read after
-      # its fetch and a CLOSED one is skipped (MERGED still counts: main may
-      # predate the merge). A close after that re-read still counts for this
-      # one run; that seconds-wide window is accepted.
+      # its fetch and a CLOSED one is skipped. A MERGED one counts only while
+      # its merge commit is not yet in the main read. A close after that
+      # re-read still counts for this one run; that seconds-wide window is
+      # accepted.
       # A failed listing, state read, or fetch fails the job, like the
       # checkout above.
       - name: Collect open evidence PRs (containers-db)
@@ -206,10 +207,22 @@ jobs:
           SOURCES="$PWD/_db"
           for n in $PRS; do
             git -C _db fetch --quiet --depth 1 origin "refs/pull/$n/head:refs/evidence-pr/$n"
-            STATE=$(gh pr view "$n" --repo joshjhall/containers-db --json state -q .state)
+            PR_STATE=$(gh pr view "$n" --repo joshjhall/containers-db \
+              --json state,mergeCommit -q '"\(.state) \(.mergeCommit.oid // "-")"')
+            read -r STATE MERGE_SHA <<<"$PR_STATE"
             if [ "$STATE" = CLOSED ]; then
               echo "containers-db#$n closed without merging since it was listed; its rows do not count"
               continue
+            fi
+            # Merged before the main fetch: its rows are on MAIN_SHA already. A
+            # squash's head is not an ancestor of main, so its merge-base is the
+            # old branch point and its stale copies would be re-asserted.
+            if [ "$STATE" = MERGED ]; then
+              IN_MAIN=$(gh api "repos/joshjhall/containers-db/compare/$MERGE_SHA...$MAIN_SHA" -q .status)
+              if [ "$IN_MAIN" = ahead ] || [ "$IN_MAIN" = identical ]; then
+                echo "containers-db#$n merged into the main read; its rows come from main"
+                continue
+              fi
             fi
             HEAD_SHA=$(git -C _db rev-parse "refs/evidence-pr/$n")
             BASE_SHA=$(gh api "repos/joshjhall/containers-db/compare/$MAIN_SHA...$HEAD_SHA" -q .merge_base_commit.sha)
