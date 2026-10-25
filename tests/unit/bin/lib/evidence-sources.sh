@@ -47,6 +47,7 @@ set -u
 d="$GH_STUB_DIR"
 printf '%s\n' "$*" >>"$d/calls"
 op="$1-$2"
+case "$op" in api-*/compare/*) op=api-compare ;; esac
 q=""
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
@@ -64,7 +65,7 @@ fi
 case "$op" in
     pr-list) cat "$d/list.json" ;;
     pr-view) /usr/bin/jq -r "$q" "$d/pr-$3.json" ;;
-    api-*)
+    api-compare)
         spec="${2##*/compare/}"
         a="${spec%%...*}" b="${spec##*...}"
         g() { /usr/local/bin/git -C "$d/repo" "$@"; }
@@ -337,6 +338,24 @@ test_persistent_fetch_failure_fails() {
     assert_equals "evidence_db_sources: cannot fetch owner/db main" "$(command tail -n1 <<<"$ERR")" "naming main"
 }
 
+test_persistent_compare_failure_fails() {
+    # The merge-base lookup is a gh api compare call; when it keeps failing
+    # the PR's rows cannot be isolated, so the job fails rather than count
+    # its whole tree or drop it.
+    _setup
+    _open_pr 7 >/dev/null
+    _listing 7
+    _pr_state 7 OPEN
+    echo 99 >"$GH_STUB_DIR/fail_api-compare"
+    _collect
+    _assert_stubbed
+    assert_equals "1" "$RC" "a merge-base that cannot be resolved fails the job"
+    assert_equals "3" "$(_calls 'compare/')" "after exactly three attempts"
+    assert_equals "evidence_db_sources: cannot resolve containers-db#7's merge-base" "$(command tail -n1 <<<"$ERR")" \
+        "naming the PR"
+    assert_equals "" "$OUT" "and no sources"
+}
+
 test_retry_discards_a_failed_attempts_output() {
     local n="$TEST_TEMP_DIR/flaky.$$.$RANDOM" out
     echo 0 >"$n"
@@ -380,6 +399,7 @@ run_test test_transient_listing_failure_is_retried "a transient listing failure 
 run_test test_persistent_listing_failure_fails "a persistent listing failure fails after 3 attempts"
 run_test test_persistent_state_failure_fails "a persistent state-read failure fails after 3 attempts"
 run_test test_persistent_fetch_failure_fails "a persistent fetch failure fails after 3 attempts"
+run_test test_persistent_compare_failure_fails "a persistent merge-base lookup failure fails after 3 attempts"
 run_test test_retry_discards_a_failed_attempts_output "a failed attempt's partial output is discarded"
 run_test test_empty_source_list_is_refused "an empty source list is refused"
 
