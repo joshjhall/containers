@@ -284,6 +284,27 @@ test_civ_runs_through_symlink() {
         "symlinked script still finds lib/version-api.sh"
 }
 
+test_civ_symlink_loads_sibling_env() {
+    _civ_make_hermetic_bin
+    # The real script's .env supplies GITHUB_TOKEN. This curl stub answers a
+    # newer tag only when the token reaches it, so the fd row shows whether the
+    # .env next to the REAL script was loaded through the PATH symlink.
+    printf 'GITHUB_TOKEN=sentinel\n' >"$TEST_TEMP_DIR/rt/.env"
+    command cat >"$TEST_TEMP_DIR/bin/curl" <<'STUB'
+#!/bin/sh
+case "$*" in
+    *"Authorization: token sentinel"*) echo '{"tag_name": "v99.0.0"}' ;;
+    *) echo '{"tag_name": "v10.2.0"}' ;;
+esac
+STUB
+    command ln -s "$CIV_SCRIPT" "$TEST_TEMP_DIR/bin/check-installed-versions.sh"
+    _civ_run "$TEST_TEMP_DIR/bin/check-installed-versions.sh"
+    local row
+    row=$(command grep -E '^fd +' "$TEST_TEMP_DIR/out" || true)
+    assert_contains "$row" "v99.0.0" "token from the real script's .env reached the GitHub lookup"
+    assert_contains "$row" "outdated" "fd 10.2.0 vs token-gated v99.0.0 is outdated"
+}
+
 test_civ_json_completes() {
     _civ_make_hermetic_bin
     _civ_run "$CIV_SCRIPT" --json
@@ -298,6 +319,7 @@ run_test_with_setup test_civ_summary_every_counter_branch "Summary survives ever
 run_test_with_setup test_civ_fd_reports_fdfind_version "fd version parsed from fdfind output"
 run_test_with_setup test_civ_fd_reports_upstream_version "fd version parsed from upstream fd output"
 run_test_with_setup test_civ_runs_through_symlink "Script runs through a PATH symlink"
+run_test_with_setup test_civ_symlink_loads_sibling_env "Symlinked script loads the .env next to its real location"
 run_test_with_setup test_civ_json_completes "--json output completes and exits 0"
 
 run_test test_civ_print_section_results_func "Defines _print_section_results helper"
