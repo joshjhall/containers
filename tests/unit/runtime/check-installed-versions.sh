@@ -198,6 +198,17 @@ _civ_make_hermetic_bin() {
     chmod +x "$bin/fd" "$bin/curl"
 }
 
+# Add stubs that land in each remaining counter branch: rg is behind the
+# stubbed latest (outdated), bat is ahead of it (newer), and aws has no
+# latest-version getter (installed). Each counter's first increment is from 0.
+_civ_add_branch_stubs() {
+    local bin="$TEST_TEMP_DIR/bin"
+    printf '#!/bin/sh\necho "ripgrep 1.0.0"\n' >"$bin/rg"
+    printf '#!/bin/sh\necho "bat 99.0.0"\n' >"$bin/bat"
+    printf '#!/bin/sh\necho "aws-cli/2.0.0 Python/3.11"\n' >"$bin/aws"
+    chmod +x "$bin/rg" "$bin/bat" "$bin/aws"
+}
+
 # Run the script (or a symlink to it) under the hermetic PATH.
 # Captures stdout+stderr in $TEST_TEMP_DIR/out and the exit code in CIV_RC.
 _civ_run() {
@@ -218,6 +229,18 @@ test_civ_summary_completes() {
     # The stub fd is the only installed tool; the value sits inside color codes
     assert_file_contains "$TEST_TEMP_DIR/out" "Up-to-date: .*m1[^0-9]" \
         "Summary counts exactly one up-to-date tool"
+}
+
+test_civ_summary_every_counter_branch() {
+    _civ_make_hermetic_bin
+    _civ_add_branch_stubs
+    _civ_run "$SOURCE_FILE" --all
+    assert_equals "0" "$CIV_RC" "script exits 0 with every counter branch taken"
+    assert_file_contains "$TEST_TEMP_DIR/out" "Up-to-date: .*m1[^0-9]" "one up-to-date tool (fd)"
+    assert_file_contains "$TEST_TEMP_DIR/out" "Outdated: .*m1[^0-9]" "one outdated tool (rg)"
+    assert_file_contains "$TEST_TEMP_DIR/out" "Newer: .*m1[^0-9]" "one newer tool (bat)"
+    assert_file_contains "$TEST_TEMP_DIR/out" "Installed: .*m1[^0-9]" "one installed-only tool (aws)"
+    assert_file_contains "$TEST_TEMP_DIR/out" "Missing: .*m[1-9][0-9]*[^0-9]" "the rest are missing"
 }
 
 test_civ_fd_reports_fdfind_version() {
@@ -246,6 +269,7 @@ test_civ_json_completes() {
 }
 
 run_test_with_setup test_civ_summary_completes "Summary completes and exits 0 with counters starting at 0"
+run_test_with_setup test_civ_summary_every_counter_branch "Summary survives every counter branch from 0 under set -e"
 run_test_with_setup test_civ_fd_reports_fdfind_version "fd version parsed from fdfind output"
 run_test_with_setup test_civ_runs_through_symlink "Script runs through a PATH symlink"
 run_test_with_setup test_civ_json_completes "--json output completes and exits 0"
