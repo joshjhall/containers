@@ -30,8 +30,12 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 # Safe `kill_process_group` for the version-probe timeout (#1352) — the
 # workspace forbids unsafe_code, so `libc::killpg` is unavailable.
+# signal-hook kills live probe groups on SIGINT/SIGTERM (#1370) through a safe
+# API. It adds no crate to the tree: stibbons already pulls the same version
+# in through crossterm.
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true }
+signal-hook = { version = "0.3", default-features = false, features = ["iterator"] }
 
 [dev-dependencies]
 serial_test = "4"

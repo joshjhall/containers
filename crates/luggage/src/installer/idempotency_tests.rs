@@ -138,16 +138,22 @@ fn proc_stat_state(stat: &str) -> Option<&str> {
 /// and whether it is reaped depends on the reparenting ancestor (no init in
 /// a bare `docker run` reaps nothing), which is not what the test pins. Linux
 /// reads the state field of `/proc/<pid>/stat`; other unixes fall back to
-/// [`pid_exists`], which cannot tell a zombie apart. Only a missing stat file means
-/// gone — any other read error (no `/proc`, `hidepid`) or an unparsable stat
-/// line panics, so an unobservable pid can never pass as a dead one.
+/// [`pid_exists`], which cannot tell a zombie apart. A missing stat file means
+/// gone, and so does ESRCH: a process that exits between the `/proc` lookup
+/// and the read fails the read with ESRCH, not ENOENT, so a poll racing a
+/// kill sees it (#1370). Any other read error (no `/proc`, `hidepid`) or an
+/// unparsable stat line panics, so an unobservable pid can never pass as a
+/// dead one.
 #[cfg(unix)]
-fn pid_is_running(pid: &str) -> bool {
+pub fn pid_is_running(pid: &str) -> bool {
     #[cfg(target_os = "linux")]
     {
         let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
             Ok(stat) => stat,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return false,
+            Err(e) if e.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error()) => {
+                return false;
+            }
             Err(e) => panic!("cannot observe pid {pid} via /proc ({e})"),
         };
         let state = proc_stat_state(&stat)
@@ -635,7 +641,7 @@ fn run_version_check_captures_output_larger_than_a_pipe_buffer() {
 /// leak the shim's `sleep 30`. Never asserts: a panic in `drop` while
 /// already unwinding would abort the test binary.
 #[cfg(unix)]
-struct KillOnDrop(rustix::process::Pid);
+pub struct KillOnDrop(pub rustix::process::Pid);
 
 #[cfg(unix)]
 impl Drop for KillOnDrop {

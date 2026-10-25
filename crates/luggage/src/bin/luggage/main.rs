@@ -56,6 +56,14 @@ fn main() -> ExitCode {
         .with_writer(io::stderr)
         .init();
 
+    // Version probes run in their own process groups, out of reach of a
+    // terminal Ctrl-C, so luggage kills them itself on an interrupt (#1370).
+    if let Err(e) = luggage::install_interrupt_handler() {
+        tracing::warn!(
+            "cannot install the interrupt handler; an interrupted probe may outlive luggage: {e}"
+        );
+    }
+
     match cli.command {
         Commands::Resolve(args) => match cmd_resolve(&args) {
             Ok(()) => ExitCode::SUCCESS,
