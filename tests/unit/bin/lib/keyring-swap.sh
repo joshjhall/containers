@@ -134,6 +134,20 @@ test_count_corrupt_keyring_fails() {
     assert_contains "$output" "gpg cannot read keyring" "names the unreadable keyring"
 }
 
+test_count_missing_pubring_fails() {
+    command mkdir -p "$TEST_TEMP_DIR/src" "$TEST_TEMP_DIR/scratch-parent"
+    local rc=0
+    # shellcheck disable=SC2016 # expands in the child shell
+    bash -c '
+        log_error() { :; }
+        source "$1"
+        count_keyring_keys "$2" "$3"
+    ' _ "$LIB_FILE" "$TEST_TEMP_DIR/src" "$TEST_TEMP_DIR/scratch-parent" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "count fails when the keyring has no pubring.kbx"
+    assert_equals "0" "$(command find "$TEST_TEMP_DIR/scratch-parent" -mindepth 1 | command wc -l)" \
+        "no keyring-check.* scratch dir left behind"
+}
+
 test_count_empty_keyring_fails() {
     require_gpg || return 0
     local home="$TEST_TEMP_DIR/empty-home"
@@ -507,6 +521,7 @@ test_lib_syntax() {
 # ---------------------------------------------------------------------------
 run_test_with_setup test_count_good_keyring "count_keyring_keys: counts a readable keyring without writing to it"
 run_test_with_setup test_count_corrupt_keyring_fails "count_keyring_keys: corrupt keyring fails"
+run_test_with_setup test_count_missing_pubring_fails "count_keyring_keys: missing pubring.kbx fails and leaves no scratch"
 run_test_with_setup test_count_empty_keyring_fails "count_keyring_keys: keyring with no keys fails"
 run_test_with_setup test_swap_replaces_existing "swap: replaces an existing keyring byte-exact"
 run_test_with_setup test_swap_first_install "swap: installs where no keyring exists yet"
