@@ -203,6 +203,10 @@ test_heredoc_content_unchanged() {
     result=$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")
     assert_contains "$result" "grep -q \"pattern\" file" "Heredoc body should not be modified"
     assert_contains "$result" "find /tmp" "Heredoc body find should not be modified"
+    # The two checks above are substrings of the rewritten forms too; these can fail
+    assert_equals "1" "$exit_code" "Opening 'cat' line is fixed"
+    assert_not_contains "$result" "command grep" "Heredoc body grep must stay bare"
+    assert_not_contains "$result" "command find" "Heredoc body find must stay bare"
 }
 
 # Test: Heredoc with quoted delimiter → unchanged body
@@ -381,6 +385,193 @@ test_subshell_cmd_at_eol() {
     assert_contains "$result" "command wc" "Should fix subshell cmd"
 }
 
+# Test: bare command at end of line after && || ; and directly after $(
+test_list_and_subst_cmd_at_eol() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        'true && sort' \
+        'false || tr' \
+        'x; wc' \
+        'y=$(ls' \
+        ')' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    local expected
+    expected=$(printf 'true && command sort\nfalse || command tr\nx; command wc\ny=$(command ls\n)')
+    assert_equals "$expected" "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "EOL forms after && || ; and \$( are all prefixed"
+}
+
+# Test: a file name starting with '-' is not read as an option
+test_filename_leading_dash() {
+    write_fixture "$TEST_TEMP_DIR/-t.sh" 'grep x' # enforce-command-prefix: off
+    local exit_code=0
+    (cd "$TEST_TEMP_DIR" && "$SCRIPT" "-t.sh" >/dev/null 2>&1) || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals 'command grep x' "$(/usr/bin/cat "$TEST_TEMP_DIR/-t.sh")" \
+        "Relative -t.sh should be fixed in place"
+}
+
+# Test: <<- heredoc ends at a tab-indented delimiter; enforcement resumes after it
+test_heredoc_dash_tab_delim() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        'command cat <<-EOF' \
+        "$(printf '\tgrep inside')" \
+        "$(printf '\tEOF')" \
+        'grep after' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 once the heredoc has closed"
+    local expected
+    expected=$(printf 'command cat <<-EOF\n\tgrep inside\n\tEOF\ncommand grep after')
+    assert_equals "$expected" "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "Body kept, line after tab-indented delimiter fixed"
+}
+
+# Test: double-quoted and backslash-escaped heredoc delimiters
+test_heredoc_dquote_and_backslash_delim() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        'command cat <<"DQ"' \
+        'sed dq-body' \
+        'DQ' \
+        'command cat <<\BS' \
+        'awk bs-body' \
+        'BS' \
+        'sort after' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 for the line after both heredocs"
+    local result
+    result=$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")
+    assert_contains "$result" "$(printf '\nsed dq-body\n')" "Double-quoted heredoc body untouched"
+    assert_contains "$result" "$(printf '\nawk bs-body\n')" "Backslash heredoc body untouched"
+    assert_contains "$result" "command sort after" "Line after heredocs is fixed"
+}
+
+# Test: 'command command' collapse mid-line (after ;), not just at line start
+test_dedup_mid_line() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'x; command command grep y' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals 'x; command grep y' "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "Mid-line command command collapsed"
+}
+
+# Test: 'command command' preceded by a word character is not a duplicate
+test_dedup_requires_word_boundary() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'foo-command command grep x' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "0" "$exit_code" "Should exit 0 — nothing to collapse"
+    assert_equals 'foo-command command grep x' "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "foo-command command left alone"
+}
+
+# Test: a clean file without a trailing newline is left byte-for-byte untouched
+test_clean_no_trailing_newline_untouched() {
+    printf 'echo clean' >"$TEST_TEMP_DIR/test.sh"
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "0" "$exit_code" "Should exit 0 for a clean file"
+    local size
+    size=$(/usr/bin/wc -c <"$TEST_TEMP_DIR/test.sh")
+    assert_equals "10" "$size" "No trailing newline should be added to a clean file"
+}
+
+# Test: a fixed file without a trailing newline is rewritten WITH one
+# (every rewritten line is newline-terminated — pinned from the original
+# per-line implementation, so the output stays byte-identical)
+test_fixed_no_trailing_newline_gains_one() {
+    printf 'grep x' >"$TEST_TEMP_DIR/test.sh"
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    local size
+    size=$(/usr/bin/wc -c <"$TEST_TEMP_DIR/test.sh")
+    assert_equals "15" "$size" "'command grep x' plus a trailing newline"
+}
+
+# Test: with two heredocs on one line, the LAST delimiter governs the body
+# (the original sed extraction used a greedy '.*')
+test_heredoc_last_delim_wins() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        'command cat <<A - <<B' \
+        'A' \
+        'sed still-body' \
+        'B' \
+        'sort after' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 for the line after the heredoc"
+    local expected
+    expected=$(printf 'command cat <<A - <<B\nA\nsed still-body\nB\ncommand sort after')
+    assert_equals "$expected" "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "Body runs to B, not A"
+}
+
+# Test: a heredoc opened on a comment line still suppresses its body
+test_heredoc_on_comment_line() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" \
+        '# usage: cat <<EOF' \
+        'ls inside' \
+        'EOF' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" || exit_code=$?
+    assert_equals "0" "$exit_code" "Body after a comment-line heredoc is not rewritten"
+    assert_contains "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" "$(printf '\nls inside\n')" \
+        "ls inside stays bare"
+}
+
+# Test: consecutive pipe matches on one line are all rewritten (sed /g rescan)
+test_consecutive_pipe_matches() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'x | ls | ls | ls' # enforce-command-prefix: off
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals 'x | command ls | command ls | command ls' "$(/usr/bin/cat "$TEST_TEMP_DIR/test.sh")" \
+        "Every piped ls is prefixed"
+}
+
+# Test: a rewritten file keeps its mode (the tmpfile is created 0600)
+test_fixed_file_keeps_mode() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
+    chmod 755 "$TEST_TEMP_DIR/test.sh"
+    local exit_code=0
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals "755" "$(stat -c '%a' "$TEST_TEMP_DIR/test.sh")" \
+        "Fixed file should keep its 755 mode"
+}
+
+# Test: an unreadable file makes awk fail → exit 2, message, no tmpfile left
+test_awk_failure_exits_2() {
+    if [ "$(id -u)" -eq 0 ]; then
+        skip_test "root can read a mode-000 file"
+        return
+    fi
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
+    chmod 000 "$TEST_TEMP_DIR/test.sh"
+    local exit_code=0 err
+    err=$("$SCRIPT" "$TEST_TEMP_DIR/test.sh" 2>&1 >/dev/null) || exit_code=$?
+    chmod 644 "$TEST_TEMP_DIR/test.sh"
+    assert_equals "2" "$exit_code" "awk failure should exit 2, not 0 or 1"
+    assert_contains "$err" "awk failed" "Failure should be reported on stderr"
+    local leftovers
+    leftovers=$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*' | /usr/bin/wc -l)
+    assert_equals "0" "$leftovers" "No tmpfile should be left behind"
+}
+
+# Test: a file name containing '=' is read as a file, not an awk assignment
+test_filename_with_equals() {
+    write_fixture "$TEST_TEMP_DIR/a=b.sh" 'grep x' # enforce-command-prefix: off
+    local exit_code=0
+    (cd "$TEST_TEMP_DIR" && "$SCRIPT" "a=b.sh" >/dev/null) || exit_code=$?
+    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals 'command grep x' "$(/usr/bin/cat "$TEST_TEMP_DIR/a=b.sh")" \
+        "Relative a=b.sh should be fixed in place"
+}
+
 # Run all tests
 run_test test_script_exists "Script exists and is executable"
 run_test test_valid_syntax "Valid bash syntax"
@@ -412,6 +603,20 @@ run_test test_multiple_files "Multiple files with mixed state"
 run_test test_all_target_commands "All 13 target commands are handled"
 run_test test_pipe_cmd_at_eol "Pipe command at end of line"
 run_test test_subshell_cmd_at_eol "Subshell command at end of line"
+run_test test_list_and_subst_cmd_at_eol "EOL command after && || ; and \$( is fixed"
+run_test test_filename_leading_dash "File name starting with - is processed as a file"
+run_test test_heredoc_dash_tab_delim "<<- heredoc ends at tab-indented delimiter"
+run_test test_heredoc_dquote_and_backslash_delim "Double-quoted and backslash heredoc delimiters"
+run_test test_dedup_mid_line "command command collapsed mid-line"
+run_test test_dedup_requires_word_boundary "foo-command command is not collapsed"
+run_test test_clean_no_trailing_newline_untouched "Clean file without trailing newline is untouched"
+run_test test_fixed_no_trailing_newline_gains_one "Fixed file without trailing newline gains one"
+run_test test_heredoc_last_delim_wins "Last heredoc delimiter on a line governs the body"
+run_test test_heredoc_on_comment_line "Heredoc opened on a comment line suppresses its body"
+run_test test_consecutive_pipe_matches "Consecutive piped commands are all prefixed"
+run_test test_fixed_file_keeps_mode "Fixed file keeps its mode"
+run_test test_awk_failure_exits_2 "awk failure exits 2 and cleans up"
+run_test test_filename_with_equals "File name containing = is processed as a file"
 
 # Generate test report
 generate_report
