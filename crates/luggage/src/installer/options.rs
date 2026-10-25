@@ -179,7 +179,9 @@ mod tests {
     }
 
     /// The check is wired into both constructors, not just available as a
-    /// helper: a zero deadline handed to either one is refused up front.
+    /// helper: a degenerate value handed to either one is refused up front,
+    /// and the refusal is `validate`'s own (it names the field), not some
+    /// other `Catalog` error raised earlier.
     #[test]
     fn both_constructors_refuse_invalid_options() {
         use std::sync::Arc;
@@ -188,13 +190,63 @@ mod tests {
         use crate::installer::download::UreqClient;
         use crate::installer::methods::ProcessRunner;
 
-        let bad = with_timeout(Duration::ZERO);
-        assert!(matches!(Installer::with_options(bad.clone()), Err(LuggageError::Catalog(_))));
-        let via_runners =
-            Installer::with_runners(bad, Arc::new(UreqClient::default()), Arc::new(ProcessRunner));
-        assert!(matches!(via_runners, Err(LuggageError::Catalog(_))));
+        let cases = [
+            (with_timeout(Duration::ZERO), "version_probe_timeout"),
+            (
+                InstallerOptions { max_extract_bytes: 0, ..InstallerOptions::default() },
+                "max_extract_bytes",
+            ),
+        ];
+        for (bad, field) in cases {
+            let via_options = Installer::with_options(bad.clone()).map(|_| ());
+            let via_runners = Installer::with_runners(
+                bad,
+                Arc::new(UreqClient::default()),
+                Arc::new(ProcessRunner),
+            )
+            .map(|_| ());
+            for (ctor, got) in [("with_options", via_options), ("with_runners", via_runners)] {
+                match got {
+                    Err(LuggageError::Catalog(msg)) => {
+                        assert!(msg.contains(field), "{ctor} must name {field}, got: {msg}");
+                    }
+                    other => panic!("{ctor} with bad {field}: expected Catalog, got {other:?}"),
+                }
+            }
+        }
+    }
 
-        let zero_cap = InstallerOptions { max_extract_bytes: 0, ..InstallerOptions::default() };
-        assert!(matches!(Installer::with_options(zero_cap), Err(LuggageError::Catalog(_))));
+    /// The library bounds and the CLI env parsers accept exactly the same
+    /// values (#1399): every value a parser accepts validates, and the
+    /// parsers refuse the values just outside `validate`'s range. Without
+    /// this the two could drift — a parser-accepted value would then fail
+    /// later at the constructor with an error naming the struct field rather
+    /// than the env var the operator actually set.
+    #[test]
+    fn validate_accepts_exactly_what_the_env_parsers_accept() {
+        use crate::installer::idempotency::{
+            MAX_VERSION_PROBE_TIMEOUT, MIN_VERSION_PROBE_TIMEOUT, parse_version_probe_timeout,
+        };
+        use crate::installer::methods::archive_limit::parse_max_extract_bytes;
+
+        let min = MIN_VERSION_PROBE_TIMEOUT.as_secs().to_string();
+        let max = MAX_VERSION_PROBE_TIMEOUT.as_secs().to_string();
+        for raw in [None, Some(min.as_str()), Some(max.as_str())] {
+            let parsed = parse_version_probe_timeout(raw).unwrap();
+            with_timeout(parsed).validate().unwrap();
+        }
+        let below = (MIN_VERSION_PROBE_TIMEOUT.as_secs() - 1).to_string();
+        let above = (MAX_VERSION_PROBE_TIMEOUT.as_secs() + 1).to_string();
+        for raw in [below.as_str(), above.as_str()] {
+            assert!(parse_version_probe_timeout(Some(raw)).is_err(), "parser accepted {raw}");
+        }
+
+        for raw in [None, Some("1")] {
+            let max_extract_bytes = parse_max_extract_bytes(raw).unwrap();
+            InstallerOptions { max_extract_bytes, ..InstallerOptions::default() }
+                .validate()
+                .unwrap();
+        }
+        assert!(parse_max_extract_bytes(Some("0")).is_err());
     }
 }

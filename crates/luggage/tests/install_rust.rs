@@ -626,3 +626,25 @@ fn write_version_shim_impl(path: &Path, line: &str, to_stderr: bool) {
     perms.set_mode(0o755);
     fs::set_permissions(path, perms).unwrap();
 }
+
+/// A library caller who hand-builds degenerate options gets a clean refusal
+/// from the public constructor, naming the field, rather than an installer
+/// whose every version probe times out on its first poll (#1399).
+#[test]
+fn public_constructor_refuses_a_zero_version_probe_timeout() {
+    let roots = TempDir::new().unwrap();
+    let opts =
+        InstallerOptions { version_probe_timeout: std::time::Duration::ZERO, ..options_in(&roots) };
+    let result = Installer::with_runners(
+        opts,
+        Arc::new(MockHttpClient::new()) as Arc<dyn HttpClient>,
+        Arc::new(RecordingRunner::new()) as Arc<dyn luggage::installer::methods::CommandRunner>,
+    );
+    match result {
+        Err(LuggageError::Catalog(msg)) => {
+            assert!(msg.contains("version_probe_timeout"), "got: {msg}");
+        }
+        Err(other) => panic!("expected Catalog, got {other:?}"),
+        Ok(_) => panic!("a zero version_probe_timeout must be refused"),
+    }
+}

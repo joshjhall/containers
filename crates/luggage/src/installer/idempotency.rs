@@ -118,11 +118,13 @@ pub fn parse_version_probe_timeout(raw: Option<&str>) -> crate::error::Result<Du
         return Ok(VERSION_PROBE_TIMEOUT);
     }
     match trimmed.parse::<u64>() {
-        Ok(0) => Err(crate::error::LuggageError::Catalog(format!(
-            "{VERSION_PROBE_TIMEOUT_ENV} is `0`, which would time out every version probe; \
+        Ok(n) if n < MIN_VERSION_PROBE_TIMEOUT.as_secs() => {
+            Err(crate::error::LuggageError::Catalog(format!(
+                "{VERSION_PROBE_TIMEOUT_ENV} is `{n}`, which would time out every version probe; \
              unset it to use the default of {}s",
-            VERSION_PROBE_TIMEOUT.as_secs(),
-        ))),
+                VERSION_PROBE_TIMEOUT.as_secs(),
+            )))
+        }
         Ok(n) if n > MAX_VERSION_PROBE_TIMEOUT_SECS => {
             Err(crate::error::LuggageError::Catalog(format!(
                 "{VERSION_PROBE_TIMEOUT_ENV} is `{trimmed}`, above the {MAX_VERSION_PROBE_TIMEOUT_SECS}s \
