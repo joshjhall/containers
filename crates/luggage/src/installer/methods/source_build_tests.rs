@@ -754,6 +754,25 @@ fn process_runner_returns_when_a_background_child_holds_the_pipes() {
     );
 }
 
+/// The child was launched and ran, so a failure collecting its status is
+/// stage `"wait"`, never `"spawn"` — for both ways it can fail.
+#[test]
+fn wait_failures_are_reported_as_the_wait_stage() {
+    use super::super::resolve_exit;
+
+    let failed_wait = resolve_exit("make", Ok(Err(std::io::Error::other("ECHILD"))));
+    let lost_waiter = resolve_exit("make", Err(std::sync::mpsc::RecvError));
+    for (err, needle) in [(failed_wait, "ECHILD"), (lost_waiter, "waiter thread")] {
+        match err {
+            Err(LuggageError::InstallStageFailed { stage, message }) => {
+                assert_eq!(stage, "wait");
+                assert!(message.contains("`make`") && message.contains(needle), "{message}");
+            }
+            other => panic!("expected wait-stage failure, got {other:?}"),
+        }
+    }
+}
+
 /// A normal step whose pipes close with it does not wait out the grace
 /// period and does not emit the held-pipes marker.
 #[test]

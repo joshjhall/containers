@@ -208,10 +208,13 @@ mod tests {
         }
     }
 
+    /// What `make -j{nproc}` needs: a bare positive integer. Checked as a
+    /// property of the output rather than by re-deriving the value, which
+    /// would only prove the function equals its own body.
     #[test]
-    fn host_nproc_matches_available_parallelism() {
-        let expected = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
-        assert_eq!(host_nproc(), expected.to_string());
-        assert!(expected >= 1);
+    fn host_nproc_is_a_bare_positive_integer() {
+        let n = host_nproc();
+        assert!(!n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()), "{n:?}");
+        assert!(n.parse::<usize>().unwrap() >= 1, "{n:?}");
     }
 }

@@ -306,12 +306,7 @@ impl CommandRunner for ProcessRunner {
                 break Ok(status);
             }
         };
-        let status = status
-            .unwrap_or_else(|_| Err(std::io::Error::other("waiter thread exited without a status")))
-            .map_err(|e| LuggageError::InstallStageFailed {
-                stage: "wait",
-                message: format!("failed to wait for `{program}`: {e}"),
-            })?;
+        let status = resolve_exit(program, status)?;
 
         // The step has exited. Drain what is left, but only for a bounded
         // grace period: past it, whatever still holds the pipes is not the
@@ -337,6 +332,23 @@ impl CommandRunner for ProcessRunner {
 
         Ok(CommandOutcome { status: status.code(), stdout: Vec::new(), stderr: tail.into_bytes() })
     }
+}
+
+/// Turn what the waiter thread delivered into the step's exit status.
+///
+/// Both failure shapes — `wait()` itself erroring, and the waiter thread
+/// dying before it could report — are stage `"wait"`: the child was
+/// launched and ran, so `"spawn"` would point at the wrong problem.
+fn resolve_exit(
+    program: &str,
+    delivered: std::result::Result<std::io::Result<std::process::ExitStatus>, mpsc::RecvError>,
+) -> Result<std::process::ExitStatus> {
+    delivered
+        .unwrap_or_else(|_| Err(std::io::Error::other("waiter thread exited without a status")))
+        .map_err(|e| LuggageError::InstallStageFailed {
+            stage: "wait",
+            message: format!("failed to wait for `{program}`: {e}"),
+        })
 }
 
 /// How often [`ProcessRunner::run_streaming`] checks whether the child has
