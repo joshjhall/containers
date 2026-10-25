@@ -3,6 +3,8 @@
 //! Catalog `source_url_template` and `verification.checksum_url_template`
 //! values carry placeholders like `{rustup_target}`, `{arch}`, and
 //! `{version}`. This module fills them in from a [`Substitutions`] table.
+//! `source-build` step args reuse the same syntax, adding `{nproc}` so a
+//! catalog can write `make -j{nproc}` without luggage hardcoding parallelism.
 //!
 //! Unknown placeholders return [`crate::LuggageError::TemplateMissingKey`]
 //! rather than silently leaving them in the output, so a misconfigured
@@ -25,13 +27,17 @@ pub struct Substitutions<'a> {
     /// Debian-style arch (go's `go{version}.linux-{arch}.tar.gz`) use it
     /// directly; anything needing a different spelling gets its own key.
     pub arch: Option<&'a str>,
+    /// Substituted for `{nproc}` — the host's available parallelism, see
+    /// [`host_nproc`]. Only `source-build` step args populate it; a URL
+    /// template referencing it fails as a missing key.
+    pub nproc: Option<&'a str>,
 }
 
 impl<'a> Substitutions<'a> {
     /// Build a substitution table with `version` and `rustup_target` set.
     #[must_use]
     pub const fn new(version: &'a str, rustup_target: &'a str) -> Self {
-        Self { version: Some(version), rustup_target: Some(rustup_target), arch: None }
+        Self { version: Some(version), rustup_target: Some(rustup_target), arch: None, nproc: None }
     }
 
     /// Look up the value for a placeholder name.
@@ -40,6 +46,7 @@ impl<'a> Substitutions<'a> {
             "version" => self.version,
             "rustup_target" => self.rustup_target,
             "arch" => self.arch,
+            "nproc" => self.nproc,
             _ => None,
         }
     }
@@ -76,6 +83,18 @@ pub fn substitute_url(template: &str, subs: &Substitutions<'_>) -> Result<String
     }
     out.push_str(rest);
     Ok(out)
+}
+
+/// The host CPU count `{nproc}` expands to, as a string.
+///
+/// `available_parallelism` honours cgroup CPU quotas and affinity masks, so
+/// a build container capped at 4 CPUs gets `4` rather than the host's full
+/// count — the same answer `nproc(1)` gives inside that container. Falls
+/// back to `1` when the count cannot be determined: a slow serial build is
+/// a better failure mode than a refused one.
+#[must_use]
+pub fn host_nproc() -> String {
+    std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get).to_string()
 }
 
 #[cfg(test)]
@@ -167,5 +186,35 @@ mod tests {
         let subs = Substitutions::new("1.95.0", "x86_64-unknown-linux-gnu");
         let s = substitute_url("{version}{rustup_target}", &subs).unwrap();
         assert_eq!(s, "1.95.0x86_64-unknown-linux-gnu");
+    }
+
+    /// `make -j{nproc}` is the motivating catalog shape (#809).
+    #[test]
+    fn substitutes_nproc() {
+        let subs = Substitutions { nproc: Some("8"), ..Substitutions::default() };
+        let s = substitute_url("-j{nproc}", &subs).unwrap();
+        assert_eq!(s, "-j8");
+    }
+
+    /// URL call sites never populate `nproc`, so a URL template naming it
+    /// fails loudly instead of baking a host CPU count into a download.
+    #[test]
+    fn nproc_missing_returns_template_missing_key() {
+        let subs = Substitutions::new("1.0.0", "x86_64-unknown-linux-gnu");
+        let err = substitute_url("-j{nproc}", &subs).unwrap_err();
+        match err {
+            LuggageError::TemplateMissingKey(key) => assert_eq!(key, "nproc"),
+            other => panic!("expected TemplateMissingKey, got {other:?}"),
+        }
+    }
+
+    /// What `make -j{nproc}` needs: a bare positive integer. Checked as a
+    /// property of the output rather than by re-deriving the value, which
+    /// would only prove the function equals its own body.
+    #[test]
+    fn host_nproc_is_a_bare_positive_integer() {
+        let n = host_nproc();
+        assert!(!n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()), "{n:?}");
+        assert!(n.parse::<usize>().unwrap() >= 1, "{n:?}");
     }
 }

@@ -178,6 +178,8 @@ impl Fixture {
             prefix: Some(&prefix),
             strip_components: strip,
             max_extract_bytes,
+            build_steps: &[],
+            log: None,
             runner: &self.runner,
         })
     }

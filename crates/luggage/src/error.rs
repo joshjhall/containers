@@ -76,7 +76,8 @@ impl From<&LuggageError> for ErrorClass {
             | LuggageError::UnsupportedArchiveFormat { .. }
             | LuggageError::UnsafeArchiveEntry { .. }
             | LuggageError::ArchiveTooLarge { .. }
-            | LuggageError::ArchiveExtractionFailed { .. } => Self::InstallMethod,
+            | LuggageError::ArchiveExtractionFailed { .. }
+            | LuggageError::BuildStepFailed { .. } => Self::InstallMethod,
             LuggageError::Io { .. }
             | LuggageError::Parse { .. }
             | LuggageError::ToolNotFound(_)
@@ -365,6 +366,30 @@ pub enum LuggageError {
         message: String,
     },
 
+    /// A `source-build` step exited non-zero.
+    ///
+    /// Names the step by position and argv rather than dumping the build's
+    /// output: a PGO python build emits tens of thousands of lines, and the
+    /// actionable part is which step died plus the last few lines of its
+    /// stderr. The full output is already in the per-feature log, streamed
+    /// as it ran.
+    #[error(
+        "build step {step}/{total} `{argv}` failed (exit {status}): {stderr_tail}",
+        status = status.map_or_else(|| "signal".to_owned(), |c| c.to_string()),
+    )]
+    BuildStepFailed {
+        /// 1-based index of the failing step.
+        step: usize,
+        /// Number of steps the method declares.
+        total: usize,
+        /// The step's argv after placeholder substitution, shell-quoted.
+        argv: String,
+        /// Exit code, or `None` when the process was killed by a signal.
+        status: Option<i32>,
+        /// Last lines of the step's stderr.
+        stderr_tail: String,
+    },
+
     /// One or more catalog dependency ids had no system-package mapping in
     /// this build of luggage, and strict mode (the default) refused to
     /// proceed. Pass `--allow-unknown-deps` to downgrade to a warn-and-skip.
@@ -597,6 +622,32 @@ mod tests {
     }
 
     #[test]
+    fn build_step_failed_names_step_argv_and_tail() {
+        let err = LuggageError::BuildStepFailed {
+            step: 2,
+            total: 3,
+            argv: "make -j8".into(),
+            status: Some(2),
+            stderr_tail: "Error 1".into(),
+        };
+        assert_eq!(err.exit_code(), 1);
+        let msg = format!("{err}");
+        assert!(msg.contains("build step 2/3"), "{msg}");
+        assert!(msg.contains("`make -j8`"), "{msg}");
+        assert!(msg.contains("exit 2"), "{msg}");
+        assert!(msg.contains("Error 1"), "{msg}");
+
+        let killed = LuggageError::BuildStepFailed {
+            step: 1,
+            total: 1,
+            argv: "make".into(),
+            status: None,
+            stderr_tail: String::new(),
+        };
+        assert!(format!("{killed}").contains("exit signal"));
+    }
+
+    #[test]
     fn template_missing_key_exit_code_is_one() {
         let err = LuggageError::TemplateMissingKey("rustup_target".into());
         assert_eq!(err.exit_code(), 1);
@@ -644,6 +695,18 @@ mod tests {
             (
                 LuggageError::PostInstallFailed { step: "x".into(), message: "x".into() },
                 ErrorClass::PostInstall,
+            ),
+            // A failing source-build step is that method running its
+            // installer, not a post-install step.
+            (
+                LuggageError::BuildStepFailed {
+                    step: 1,
+                    total: 1,
+                    argv: "make".into(),
+                    status: Some(2),
+                    stderr_tail: String::new(),
+                },
+                ErrorClass::InstallMethod,
             ),
             (
                 LuggageError::ValidationFailed {

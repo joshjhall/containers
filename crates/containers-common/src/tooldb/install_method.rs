@@ -90,6 +90,36 @@ pub struct InstallMethod {
     /// `<prefix>/bin/node`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strip_components: Option<u32>,
+    /// Ordered build commands a `source-build` method runs inside the
+    /// extracted source tree (python: `./configure …`, `make -j{nproc}`,
+    /// `make install`).
+    ///
+    /// Each step runs with its working directory set to the extracted source
+    /// root; the first non-zero exit aborts the install. Args accept the
+    /// `{nproc}` placeholder (host CPU count), so build parallelism is the
+    /// catalog's call rather than luggage's; any other placeholder is an
+    /// error. There is no brace escape, so an arg containing a literal
+    /// `{name}` cannot be expressed. Only meaningful for
+    /// `method_kind: source-build`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_steps: Option<Vec<BuildStep>>,
+}
+
+/// One command in a `source-build` method's [`InstallMethod::build_steps`].
+///
+/// An argv rather than a shell line: nothing is word-split or globbed, so a
+/// configure flag carrying spaces (`LDFLAGS=-Wl,-rpath /usr/local/lib`) is a
+/// single arg exactly as written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BuildStep {
+    /// Program to run. A relative path containing `/` (`./configure`) is
+    /// resolved against the extracted source root; a bare name (`make`) is
+    /// looked up on `PATH`.
+    pub command: String,
+    /// Argument vector, after placeholder substitution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Vec<String>>,
 }
 
 /// The install *shape* of an [`InstallMethod`] — which installer
@@ -392,6 +422,65 @@ mod tests {
         }"#;
         let m: InstallMethod = serde_json::from_str(json).unwrap();
         assert_eq!(m.method_kind, Some(InstallMethodKind::ScriptInstaller));
+    }
+
+    /// The python shape (#809): ordered steps, `args` optional per step,
+    /// and an arg carrying spaces kept as one element.
+    #[test]
+    fn parses_source_build_steps() {
+        let json = r#"{
+            "name": "python-source",
+            "method_kind": "source-build",
+            "verification": { "tier": 4, "tofu": true },
+            "build_steps": [
+                { "command": "./configure", "args": ["LDFLAGS=-Wl,-rpath /usr/local/lib"] },
+                { "command": "make", "args": ["-j{nproc}"] },
+                { "command": "make" }
+            ]
+        }"#;
+        let m: InstallMethod = serde_json::from_str(json).unwrap();
+        assert_eq!(m.method_kind, Some(InstallMethodKind::SourceBuild));
+        let steps = m.build_steps.unwrap();
+        assert_eq!(
+            steps,
+            vec![
+                BuildStep {
+                    command: "./configure".into(),
+                    args: Some(vec!["LDFLAGS=-Wl,-rpath /usr/local/lib".into()]),
+                },
+                BuildStep { command: "make".into(), args: Some(vec!["-j{nproc}".into()]) },
+                BuildStep { command: "make".into(), args: None },
+            ]
+        );
+    }
+
+    /// Every other kind omits the field, and it stays out of the emitted
+    /// JSON — a round-tripped non-source entry must not grow a
+    /// `"build_steps": null` the closed schema would reject.
+    #[test]
+    fn absent_build_steps_is_none_and_not_serialized() {
+        let json = r#"{
+            "name": "rustup-init",
+            "method_kind": "script-installer",
+            "verification": { "tier": 4, "tofu": true }
+        }"#;
+        let m: InstallMethod = serde_json::from_str(json).unwrap();
+        assert!(m.build_steps.is_none());
+        let out = serde_json::to_string(&m).unwrap();
+        assert!(!out.contains("build_steps"), "{out}");
+
+        let step = BuildStep { command: "make".into(), args: None };
+        assert_eq!(serde_json::to_string(&step).unwrap(), r#"{"command":"make"}"#);
+    }
+
+    /// `deny_unknown_fields` on a step mirrors the schema's
+    /// `additionalProperties: false`: a misspelt key (`arg`) must fail
+    /// rather than silently drop the step's arguments.
+    #[test]
+    fn build_step_rejects_unknown_keys() {
+        let err = serde_json::from_str::<BuildStep>(r#"{ "command": "make", "arg": ["x"] }"#)
+            .unwrap_err();
+        assert!(err.to_string().contains("arg"), "{err}");
     }
 
     /// The containers-db schema ships `method_kind` optional while the

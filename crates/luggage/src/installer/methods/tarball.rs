@@ -66,7 +66,7 @@ use crate::error::{LuggageError, Result};
 
 /// Compression wrapping the tar stream, inferred from the artifact filename.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Compression {
+pub(super) enum Compression {
     /// `.tar.gz` / `.tgz` — go's shape.
     Gzip,
     /// `.tar.xz` / `.txz` — node's shape.
@@ -137,7 +137,7 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
 /// to run from, scattering a tool's files somewhere unintended instead of
 /// failing. Reported as a catalog defect, mirroring how `install_binaries`
 /// treats a missing `bin_source_dir`.
-fn resolve_prefix(prefix: Option<&str>) -> Result<PathBuf> {
+pub(super) fn resolve_prefix(prefix: Option<&str>) -> Result<PathBuf> {
     let Some(raw) = prefix else { return Ok(PathBuf::from(DEFAULT_PREFIX)) };
     let path = PathBuf::from(raw);
     if !path.is_absolute() {
@@ -149,7 +149,7 @@ fn resolve_prefix(prefix: Option<&str>) -> Result<PathBuf> {
 }
 
 /// The artifact's filename, for error messages and format detection.
-fn artifact_name(artifact: &Path) -> String {
+pub(super) fn artifact_name(artifact: &Path) -> String {
     artifact
         .file_name()
         .map_or_else(|| artifact.display().to_string(), |n| n.to_string_lossy().into_owned())
@@ -161,7 +161,7 @@ fn artifact_name(artifact: &Path) -> String {
 /// controls and what the publisher names the artifact; sniffing magic bytes
 /// would accept an archive whose name and contents disagree, which is a
 /// signal worth failing on rather than papering over.
-fn detect_compression(name: &str) -> Result<Compression> {
+pub(super) fn detect_compression(name: &str) -> Result<Compression> {
     /// Recognised suffixes, longest-first so `.tar.gz` is never shadowed by
     /// a shorter match. Compared against an already-lowercased filename.
     const SUFFIXES: [(&str, Compression); 4] = [
@@ -183,7 +183,7 @@ fn detect_compression(name: &str) -> Result<Compression> {
 
 /// Decompress and unpack `artifact` into `dest`, stripping `strip` leading
 /// path components from every entry.
-fn extract(
+pub(super) fn extract(
     artifact: &Path,
     artifact_name: &str,
     compression: Compression,

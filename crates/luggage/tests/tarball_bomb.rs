@@ -85,6 +85,8 @@ fn real_scale_bomb_is_refused_without_materialising_it() {
         prefix: Some(&prefix_str),
         strip_components: 0,
         max_extract_bytes: CEILING,
+        build_steps: &[],
+        log: None,
         runner: &runner,
     });
     let elapsed = started.elapsed();

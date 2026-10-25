@@ -7,29 +7,67 @@
 //! catalog entry using an already-implemented shape needs no code here at
 //! all.
 //!
-//! [`InstallMethodKind::ScriptInstaller`] and
-//! [`InstallMethodKind::BinaryTarball`] are wired up; `source-build` and
-//! `package-manager` return [`crate::LuggageError::NotImplemented`] and ship
-//! in follow-up issues per #405's decomposition note.
+//! [`InstallMethodKind::ScriptInstaller`],
+//! [`InstallMethodKind::BinaryTarball`], and
+//! [`InstallMethodKind::SourceBuild`] are wired up; `package-manager`
+//! returns [`crate::LuggageError::NotImplemented`] and ships in a follow-up
+//! issue per #405's decomposition note.
 //!
 //! The catalog-driven layout the methods share — cache dirs, env, `bin_root`
 //! symlinks (#806) — lives in [`layout`] rather than in either method, so the
 //! two cannot drift apart.
 
-use std::collections::BTreeMap;
-use std::path::Path;
-use std::process::Command;
-use std::sync::Mutex;
+use std::collections::{BTreeMap, VecDeque};
+use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::{Mutex, mpsc};
 
-use containers_common::tooldb::InstallMethodKind;
+use containers_common::tooldb::{BuildStep, InstallMethodKind};
 
+use super::logging::FeatureLogger;
 use crate::error::{LuggageError, Result};
 
 pub mod archive_limit;
 pub mod archive_path;
 pub mod layout;
 pub mod script_installer;
+pub mod source_build;
 pub mod tarball;
+
+/// Stderr lines a streamed command keeps for its error report.
+///
+/// Everything is forwarded to the log as it arrives; only this tail is held
+/// in memory, because a PGO python build writes far more stderr than is
+/// worth buffering and the cause of a failure is almost always at the end.
+pub const STDERR_TAIL_LINES: usize = 40;
+
+/// A command run through [`CommandRunner::run_streaming`].
+#[derive(Debug, Clone, Copy)]
+pub struct StreamingCommand<'a> {
+    /// Program to execute — an absolute path or a bare name looked up on
+    /// `PATH`.
+    pub program: &'a str,
+    /// Argument vector.
+    pub args: &'a [String],
+    /// Working directory for the child.
+    pub cwd: &'a Path,
+    /// Variables added to the inherited environment.
+    pub env: &'a BTreeMap<String, String>,
+}
+
+/// One [`CommandRunner::run_streaming`] call as [`RecordingRunner`] saw it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StreamingCall {
+    /// Program executed.
+    pub program: String,
+    /// Argument vector.
+    pub args: Vec<String>,
+    /// Working directory the child was given.
+    pub cwd: PathBuf,
+    /// Environment additions the child was given.
+    pub env: BTreeMap<String, String>,
+}
 
 /// Outcome of running a child process.
 #[derive(Debug, Clone)]
@@ -61,6 +99,126 @@ pub trait CommandRunner: Send + Sync {
     /// - [`LuggageError::InstallStageFailed`] when the runner could not
     ///   even spawn the child process.
     fn run(&self, program: &str, args: &[String]) -> Result<CommandOutcome>;
+
+    /// Run `cmd`, handing each output line to `on_line` as it is produced.
+    ///
+    /// For long-running steps (a source build's `make`) that must show
+    /// progress rather than buffer silently for minutes. The returned
+    /// outcome's `stderr` holds only the last [`STDERR_TAIL_LINES`] lines;
+    /// `stdout` is empty, since every line already went to `on_line`.
+    ///
+    /// # Errors
+    ///
+    /// - [`LuggageError::InstallStageFailed`] when the child could not be
+    ///   spawned or waited on.
+    fn run_streaming(
+        &self,
+        cmd: &StreamingCommand<'_>,
+        on_line: &mut dyn FnMut(&str),
+    ) -> Result<CommandOutcome>;
+}
+
+/// Keeps the last [`STDERR_TAIL_LINES`] lines of a stream.
+#[derive(Debug, Default)]
+struct Tail(VecDeque<String>);
+
+impl Tail {
+    fn push(&mut self, line: &str) {
+        if self.0.len() == STDERR_TAIL_LINES {
+            self.0.pop_front();
+        }
+        self.0.push_back(line.to_owned());
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        Vec::from(self.0).join("\n").into_bytes()
+    }
+}
+
+/// Which pipe a streamed line came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Pipe {
+    Stdout,
+    Stderr,
+}
+
+/// Longest line [`pump`] forwards; anything past it is dropped up to the
+/// next newline and the line is marked truncated.
+///
+/// A step that writes a huge newline-free stream would otherwise grow one
+/// line buffer without limit — the stderr tail bounds how many lines are
+/// kept, not how long each is.
+pub const MAX_LINE_BYTES: usize = 64 * 1024;
+
+/// Suffix appended to a line [`pump`] cut at [`MAX_LINE_BYTES`].
+pub const TRUNCATED_MARKER: &str = " [line truncated]";
+
+/// Prefix of the line [`pump`] forwards when reading a pipe fails.
+pub const READ_ERROR_MARKER: &str = "[luggage: failed reading build output:";
+
+/// Forward every line of `pipe` to `tx`, tagged with `which`.
+///
+/// Lossy UTF-8: a compiler printing a non-UTF-8 byte must not stall the
+/// stream or abort the build's log. A final line with no trailing newline
+/// is still forwarded.
+///
+/// A read error ends the stream, but never silently: whatever was already
+/// read is forwarded, then a [`READ_ERROR_MARKER`] line naming the error, so
+/// a log that stops short says why rather than looking like a quiet build.
+fn pump(pipe: impl Read, which: Pipe, tx: &mpsc::Sender<(Pipe, String)>) {
+    let mut reader = BufReader::new(pipe);
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        // `take` caps how much one read can buffer; one byte over the cap
+        // is what tells a cut line from one that fits exactly.
+        let limit = u64::try_from(MAX_LINE_BYTES).unwrap_or(u64::MAX) + 1;
+        let mut failure = match (&mut reader).take(limit).read_until(b'\n', &mut buf) {
+            Ok(0) => return,
+            Ok(_) => None,
+            Err(e) => Some(e),
+        };
+        let truncated =
+            failure.is_none() && buf.len() > MAX_LINE_BYTES && buf.last() != Some(&b'\n');
+        if truncated {
+            buf.truncate(MAX_LINE_BYTES);
+            // Discard the rest of the oversized line, a bounded chunk at a
+            // time, so the next forwarded line starts on a real boundary.
+            failure = discard_through_newline(&mut reader).err();
+        }
+        if !buf.is_empty() {
+            let text = String::from_utf8_lossy(&buf);
+            let mut line = text.trim_end_matches(['\n', '\r']).to_owned();
+            if truncated {
+                line.push_str(TRUNCATED_MARKER);
+            }
+            if tx.send((which, line)).is_err() {
+                return;
+            }
+        }
+        if let Some(e) = failure {
+            tracing::warn!("failed reading build step {which:?}: {e}");
+            let _ = tx.send((which, format!("{READ_ERROR_MARKER} {e}]")));
+            return;
+        }
+    }
+}
+
+/// Consume `reader` up to and including the next newline (or EOF) without
+/// buffering more than one internal chunk.
+fn discard_through_newline(reader: &mut impl BufRead) -> std::io::Result<()> {
+    loop {
+        let chunk = reader.fill_buf()?;
+        if chunk.is_empty() {
+            return Ok(());
+        }
+        if let Some(pos) = chunk.iter().position(|&b| b == b'\n') {
+            reader.consume(pos + 1);
+            return Ok(());
+        }
+        let len = chunk.len();
+        reader.consume(len);
+    }
 }
 
 /// Production [`CommandRunner`] backed by `std::process::Command`.
@@ -81,7 +239,128 @@ impl CommandRunner for ProcessRunner {
             stderr: output.stderr,
         })
     }
+
+    fn run_streaming(
+        &self,
+        cmd: &StreamingCommand<'_>,
+        on_line: &mut dyn FnMut(&str),
+    ) -> Result<CommandOutcome> {
+        let program = cmd.program;
+        let mut child = Command::new(program)
+            .args(cmd.args)
+            .current_dir(cmd.cwd)
+            .envs(cmd.env)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| LuggageError::InstallStageFailed {
+                stage: "spawn",
+                message: format!("failed to launch `{program}` in {}: {e}", cmd.cwd.display()),
+            })?;
+
+        // Both pipes are drained concurrently: reading one to EOF before the
+        // other deadlocks once the unread pipe's buffer fills and the child
+        // blocks writing to it. Lines from both arrive on one channel, so the
+        // log interleaves them in roughly the order they were written.
+        //
+        // The child is waited on by its own thread rather than after the
+        // pipes reach EOF. EOF only arrives once *every* holder of the write
+        // ends closes them, and a step that backgrounds a daemon (a ccache
+        // server, a build-tool daemon) leaves a grandchild holding them after
+        // the step itself has exited — waiting for EOF first would hang the
+        // build forever. Pump threads are detached for the same reason: one
+        // stuck on a held pipe must not keep this call from returning.
+        let (tx, rx) = mpsc::channel();
+        if let Some(pipe) = child.stdout.take() {
+            let tx = tx.clone();
+            std::thread::spawn(move || pump(pipe, Pipe::Stdout, &tx));
+        }
+        if let Some(pipe) = child.stderr.take() {
+            let tx = tx.clone();
+            std::thread::spawn(move || pump(pipe, Pipe::Stderr, &tx));
+        }
+        let (exit_tx, exit_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = exit_tx.send(child.wait());
+        });
+        drop(tx);
+
+        let mut tail = Tail::default();
+        let mut forward = |which: Pipe, line: String| {
+            if which == Pipe::Stderr {
+                tail.push(&line);
+            }
+            on_line(&line);
+        };
+        let status = loop {
+            // Poll the exit at a short interval while forwarding output, so
+            // a child that exits with its pipes still held is noticed.
+            match rx.recv_timeout(EXIT_POLL_INTERVAL) {
+                Ok((which, line)) => forward(which, line),
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                // Both pumps hit EOF: the exit is all that remains.
+                Err(mpsc::RecvTimeoutError::Disconnected) => break exit_rx.recv(),
+            }
+            if let Ok(status) = exit_rx.try_recv() {
+                break Ok(status);
+            }
+        };
+        let status = resolve_exit(program, status)?;
+
+        // The step has exited. Drain what is left, but only for a bounded
+        // grace period: past it, whatever still holds the pipes is not the
+        // step, and its output is not the step's to report.
+        let deadline = std::time::Instant::now() + PIPE_DRAIN_GRACE;
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            match rx.recv_timeout(remaining) {
+                Ok((which, line)) => forward(which, line),
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    let marker = format!(
+                        "{PIPES_HELD_MARKER} stopped reading {}s after `{program}` exited \
+                         (a background process it started still holds its output)]",
+                        PIPE_DRAIN_GRACE.as_secs(),
+                    );
+                    tracing::warn!("{marker}");
+                    forward(Pipe::Stderr, marker);
+                    break;
+                }
+            }
+        }
+
+        Ok(CommandOutcome { status: status.code(), stdout: Vec::new(), stderr: tail.into_bytes() })
+    }
 }
+
+/// Turn what the waiter thread delivered into the step's exit status.
+///
+/// Both failure shapes — `wait()` itself erroring, and the waiter thread
+/// dying before it could report — are stage `"wait"`: the child was
+/// launched and ran, so `"spawn"` would point at the wrong problem.
+fn resolve_exit(
+    program: &str,
+    delivered: std::result::Result<std::io::Result<std::process::ExitStatus>, mpsc::RecvError>,
+) -> Result<std::process::ExitStatus> {
+    delivered
+        .unwrap_or_else(|_| Err(std::io::Error::other("waiter thread exited without a status")))
+        .map_err(|e| LuggageError::InstallStageFailed {
+            stage: "wait",
+            message: format!("failed to wait for `{program}`: {e}"),
+        })
+}
+
+/// How often [`ProcessRunner::run_streaming`] checks whether the child has
+/// exited while forwarding its output.
+const EXIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// How long [`ProcessRunner::run_streaming`] keeps reading after the child
+/// exits, before concluding a background process is holding its pipes.
+pub const PIPE_DRAIN_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Prefix of the line forwarded when output pipes outlive the step.
+pub const PIPES_HELD_MARKER: &str = "[luggage: output pipes still open:";
 
 /// Recording [`CommandRunner`] for hermetic tests.
 ///
@@ -90,6 +369,7 @@ impl CommandRunner for ProcessRunner {
 #[derive(Debug, Default)]
 pub struct RecordingRunner {
     calls: Mutex<Vec<(String, Vec<String>)>>,
+    streaming_calls: Mutex<Vec<StreamingCall>>,
     outcomes: Mutex<Vec<(String, CommandOutcome)>>,
 }
 
@@ -121,20 +401,59 @@ impl RecordingRunner {
     pub fn calls(&self) -> Vec<(String, Vec<String>)> {
         self.calls.lock().unwrap().clone()
     }
-}
 
-impl CommandRunner for RecordingRunner {
-    fn run(&self, program: &str, args: &[String]) -> Result<CommandOutcome> {
+    /// Snapshot of [`CommandRunner::run_streaming`] calls, with the cwd and
+    /// env each was given, in invocation order. Streaming calls also appear
+    /// in [`Self::calls`], so ordering across both kinds stays observable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the inner mutex is poisoned.
+    #[must_use]
+    pub fn streaming_calls(&self) -> Vec<StreamingCall> {
+        self.streaming_calls.lock().unwrap().clone()
+    }
+
+    /// Record `(program, args)` and pop the pinned outcome for `program`.
+    fn record(&self, program: &str, args: &[String]) -> CommandOutcome {
         self.calls.lock().unwrap().push((program.to_owned(), args.to_vec()));
         let pinned = {
             let mut outcomes = self.outcomes.lock().unwrap();
             outcomes.iter().position(|(p, _)| p == program).map(|idx| outcomes.remove(idx).1)
         };
-        Ok(pinned.unwrap_or(CommandOutcome {
-            status: Some(0),
-            stdout: Vec::new(),
-            stderr: Vec::new(),
-        }))
+        pinned.unwrap_or(CommandOutcome { status: Some(0), stdout: Vec::new(), stderr: Vec::new() })
+    }
+}
+
+impl CommandRunner for RecordingRunner {
+    fn run(&self, program: &str, args: &[String]) -> Result<CommandOutcome> {
+        Ok(self.record(program, args))
+    }
+
+    /// Replays the pinned outcome's stdout then stderr through `on_line`, a
+    /// line at a time, and returns the stderr tail — the same contract
+    /// [`ProcessRunner`] honours, without spawning anything.
+    fn run_streaming(
+        &self,
+        cmd: &StreamingCommand<'_>,
+        on_line: &mut dyn FnMut(&str),
+    ) -> Result<CommandOutcome> {
+        let outcome = self.record(cmd.program, cmd.args);
+        self.streaming_calls.lock().unwrap().push(StreamingCall {
+            program: cmd.program.to_owned(),
+            args: cmd.args.to_vec(),
+            cwd: cmd.cwd.to_owned(),
+            env: cmd.env.clone(),
+        });
+        let mut tail = Tail::default();
+        for line in String::from_utf8_lossy(&outcome.stdout).lines() {
+            on_line(line);
+        }
+        for line in String::from_utf8_lossy(&outcome.stderr).lines() {
+            tail.push(line);
+            on_line(line);
+        }
+        Ok(CommandOutcome { status: outcome.status, stdout: Vec::new(), stderr: tail.into_bytes() })
     }
 }
 
@@ -177,6 +496,13 @@ pub struct MethodContext<'a> {
     /// guarding against decompression bombs. See
     /// [`archive_limit::DEFAULT_MAX_EXTRACT_BYTES`].
     pub max_extract_bytes: u64,
+    /// Catalog `build_steps` — the ordered commands a `source-build` runs in
+    /// the extracted source tree. Empty for every other kind.
+    pub build_steps: &'a [BuildStep],
+    /// Per-feature log that long-running steps stream their output into.
+    /// `None` when the log could not be opened; output then goes to
+    /// `tracing` only.
+    pub log: Option<&'a FeatureLogger>,
     /// Command runner (production: `ProcessRunner`; tests: `RecordingRunner`).
     pub runner: &'a dyn CommandRunner,
 }
@@ -189,7 +515,7 @@ pub struct MethodContext<'a> {
 /// # Errors
 ///
 /// - [`LuggageError::NotImplemented`] for a kind that is valid but not yet
-///   wired up (`package-manager`, `source-build`).
+///   wired up (`package-manager`).
 /// - [`LuggageError::Catalog`] when the entry carries no `method_kind`, or
 ///   one this build doesn't recognise. Both are catalog defects rather
 ///   than missing luggage features, and both are reported rather than
@@ -205,9 +531,7 @@ pub fn dispatch(
         Some(InstallMethodKind::PackageManager) => {
             Err(LuggageError::NotImplemented("install method kind `package-manager` not yet wired"))
         }
-        Some(InstallMethodKind::SourceBuild) => {
-            Err(LuggageError::NotImplemented("install method kind `source-build` not yet wired"))
-        }
+        Some(InstallMethodKind::SourceBuild) => source_build::run(ctx),
         Some(InstallMethodKind::Unknown) => Err(LuggageError::Catalog(format!(
             "install method `{method_name}` declares a `method_kind` this build of luggage \
              does not recognise — upgrade luggage or fix the catalog entry",
@@ -249,6 +573,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner,
         }
     }
@@ -256,14 +582,13 @@ mod tests {
     /// Every not-yet-wired kind must fail as a missing luggage feature,
     /// and must name itself so the message points at the right issue.
     ///
-    /// `binary-tarball` is deliberately absent: it is wired as of #808, and
-    /// its own dispatch coverage is `dispatch_routes_binary_tarball` below.
+    /// `binary-tarball` (#808) and `source-build` (#809) are deliberately
+    /// absent: both are wired, and each has its own `dispatch_routes_*`
+    /// coverage below.
     #[test]
     fn dispatch_unwired_kinds_return_not_implemented() {
-        for (kind, needle) in [
-            (InstallMethodKind::PackageManager, "package-manager"),
-            (InstallMethodKind::SourceBuild, "source-build"),
-        ] {
+        #[allow(clippy::single_element_loop)] // one unwired kind left; the next joins this list
+        for (kind, needle) in [(InstallMethodKind::PackageManager, "package-manager")] {
             let runner = RecordingRunner::new();
             let env = BTreeMap::new();
             let cache_dirs = BTreeMap::new();
@@ -364,6 +689,28 @@ mod tests {
             runner.calls().iter().any(|(p, _)| p == "su"),
             "script-installer should have run regardless of the method name"
         );
+    }
+
+    /// `source-build` must reach the source-build method rather than bailing
+    /// with `NotImplemented`. The test context carries no `build_steps`, and
+    /// only `source_build::run` raises a Catalog error naming that field.
+    #[test]
+    fn dispatch_routes_source_build() {
+        let runner = RecordingRunner::new();
+        let env = BTreeMap::new();
+        let cache_dirs = BTreeMap::new();
+        let args: Vec<String> = vec![];
+        let bin = Path::new("/tmp/bin");
+        let cache = Path::new("/tmp/cache");
+        let artifact = Path::new("/tmp/Python-3.13.1.tgz");
+        let c = ctx(artifact, &args, &env, cache, bin, &cache_dirs, &runner);
+
+        let err = dispatch(Some(InstallMethodKind::SourceBuild), "python-source", &c).unwrap_err();
+        match err {
+            LuggageError::Catalog(msg) => assert!(msg.contains("build_steps"), "{msg}"),
+            other => panic!("source-build should reach the source-build method, got {other:?}"),
+        }
+        assert_eq!(runner.calls(), []);
     }
 
     /// `binary-tarball` must now reach the tarball method rather than

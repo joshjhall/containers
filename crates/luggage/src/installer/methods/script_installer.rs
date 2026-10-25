@@ -157,6 +157,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -210,6 +212,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -263,6 +267,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -302,6 +308,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -333,6 +341,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -378,6 +388,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         let err = run(&ctx).unwrap_err();
@@ -425,6 +437,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         let err = run(&ctx).unwrap_err();
@@ -471,6 +485,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -517,6 +533,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -558,6 +576,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         match run(&ctx).unwrap_err() {
@@ -596,6 +616,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -644,6 +666,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         run(&ctx).unwrap();
@@ -694,6 +718,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         match run(&ctx).unwrap_err() {
@@ -741,6 +767,8 @@ mod tests {
             prefix: None,
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
+            build_steps: &[],
+            log: None,
             runner: &runner,
         };
         run(&ctx).unwrap();
