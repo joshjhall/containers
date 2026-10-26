@@ -628,6 +628,7 @@ run_with_stub() {
     /usr/bin/mkdir -p "$TEST_TEMP_DIR/stub"
     printf '#!/bin/sh\n%s\n' "$1" >"$TEST_TEMP_DIR/stub/$2"
     /bin/chmod 755 "$TEST_TEMP_DIR/stub/$2"
+    /usr/bin/rm -f "$TEST_TEMP_DIR/test.sh"         # a prior call may have left it read-only
     write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
     /bin/chmod "${3:-644}" "$TEST_TEMP_DIR/test.sh"
     exit_code=0
@@ -702,25 +703,22 @@ test_fixed_file_replaced_atomically() {
         "The old inode should be untouched (rename, not in-place write)"
 }
 
-# Test: when no stat form can read the mode → exit 2, original untouched,
-# no tmpfile left (never a silent 0600 script)
-test_mode_unreadable_exits_2() {
-    local exit_code err
-    run_with_stub 'exit 1' stat
-    assert_equals "2" "$exit_code" "An unreadable mode should exit 2"
-    assert_contains "$err" "could not read the mode of $TEST_TEMP_DIR/test.sh" \
-        "Stderr should name the file whose mode could not be read"
-    assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" \
-        "Original should be unchanged"
-    assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
-        "No tmpfile should be left behind"
-}
-
-# Test: a BSD stat (no -c) still supplies the mode via 'stat -f %Lp'
-test_mode_from_bsd_stat() {
-    local exit_code err
+# Test: how the hook reads the mode through stat. No usable answer, or a
+# non-octal one → exit 2, original untouched, no tmpfile (never a silent 0600
+# script). GNU's zero-stripped "44" (mode 044) and BSD 'stat -f %Lp' are applied.
+test_mode_read_via_stat() {
+    local exit_code err stub
+    for stub in 'exit 1' 'printf "abc\n"'; do
+        run_with_stub "$stub" stat
+        assert_equals "2" "$exit_code" "stat '$stub' should exit 2"
+        assert_contains "$err" "could not read the mode of $TEST_TEMP_DIR/test.sh" "Stderr names the file"
+        assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" "Original should be unchanged"
+        assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" "No tmpfile should be left"
+    done
+    run_with_stub 'printf "44\n"' stat
+    assert_equals "44" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Zero-stripped mode 044 should be applied"
     run_with_stub 'case "$1" in -f) printf "750\n" ;; *) exit 1 ;; esac' stat
-    assert_equals "1" "$exit_code" "Should exit 1 when changes made"
+    assert_equals "1" "$exit_code" "BSD stat -f should supply the mode"
     assert_equals "750" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Mode should come from stat -f"
 }
 
@@ -852,8 +850,7 @@ run_test test_fixed_file_keeps_mode_without_gnu_chmod "Fixed file keeps its mode
 run_test test_unwritable_file_exits_2 "Unwritable file exits 2 and keeps the tmpfile"
 run_test test_symlink_operand_skipped "Symlinked operand is skipped, target untouched"
 run_test test_fixed_file_replaced_atomically "Fix replaces the file by rename, not in place"
-run_test test_mode_unreadable_exits_2 "Unreadable mode exits 2 and leaves the original"
-run_test test_mode_from_bsd_stat "Mode is read via BSD stat -f when -c is rejected"
+run_test test_mode_read_via_stat "Mode via stat: unreadable/non-octal exit 2; zero-stripped and BSD -f applied"
 run_test test_signal_removes_tmpfile "SIGTERM/SIGINT mid-rewrite exit 143/130 and remove the tmpfile"
 run_test test_replace_failure_keeps_tmpfile "Failed chmod or mv exits 2 and keeps the named tmpfile"
 run_test test_unwritable_file_stops_batch "Write failure stops the batch with exit 2"
