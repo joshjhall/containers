@@ -24,8 +24,11 @@ init_test_framework
 
 test_suite "Pre-push network-test skip wiring (#615)"
 
+# RUNNER and the _load_* extractors, shared with the evidence sibling suite.
+# shellcheck source=tests/lib/run-changed-tests-loaders.sh
+source "$PROJECT_ROOT/tests/lib/run-changed-tests-loaders.sh"
+
 FRAMEWORK="$PROJECT_ROOT/tests/framework.sh"
-RUNNER="$PROJECT_ROOT/tests/run_changed_tests.sh"
 CHECK_VERSIONS_TEST="$PROJECT_ROOT/tests/unit/bin/check-versions.sh"
 VERSION_RESOLUTION_TEST="$PROJECT_ROOT/tests/unit/base/version-resolution.sh"
 
@@ -161,23 +164,6 @@ test_helper_ci_path_unset() {
 #
 # These call map_to_test directly rather than grepping the runner's source, so
 # they assert what it RESOLVES, not how it is spelled.
-
-# Extract map_to_test from the runner into this shell. The function is
-# self-contained (it reads only $TESTS_DIR/$PROJECT_ROOT and echoes paths), so
-# it can be evaluated without executing the runner's push-time side effects.
-#
-# SECURITY: this `eval`s text read from $RUNNER. That is safe ONLY because
-# $RUNNER is a fixed repo-local path ($PROJECT_ROOT/tests/run_changed_tests.sh)
-# with no env or CLI override — it is the same trust boundary as sourcing the
-# file. If $RUNNER ever becomes configurable, this becomes a code-injection
-# path into the test process and must be replaced by sourcing a dedicated
-# fragment instead of parsing one out.
-_load_map_to_test() {
-    local body
-    body=$(/usr/bin/awk '/^map_to_test\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$RUNNER")
-    [ -n "$body" ] || return 1
-    eval "$body"
-}
 
 test_runtime_mapping_strips_order_prefix() {
     local out
@@ -332,14 +318,6 @@ $TESTS_DIR/unit/bin/check-versions.sh" "$out" \
 # filter then dropped — so a split suite ran NOTHING at push time, and no test
 # noticed. Drive the loop with a changed bin script and a changed runtime
 # script and require every emitted line to be one real suite.
-_load_map_changed_files() {
-    local body
-    _load_map_to_test || return 1
-    body=$(/usr/bin/awk '/^map_changed_files\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$RUNNER")
-    [ -n "$body" ] || return 1
-    eval "$body"
-}
-
 test_collection_keeps_each_sibling_suite() {
     local out
     if ! _load_map_changed_files; then
@@ -520,16 +498,6 @@ $TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
         "the shared fixtures must map to the two suites that source them plus trigger-paths"
 }
 
-# Extract collect_test_files (the main block's dedupe / ALL / GO_TEST step).
-# Same trust boundary as _load_map_to_test above.
-_load_collect_test_files() {
-    local body
-    _load_map_changed_files || return 1
-    body=$(/usr/bin/awk '/^collect_test_files\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$RUNNER")
-    [ -n "$body" ] || return 1
-    eval "$body"
-}
-
 # A changed script plus its own changed suite map to the same path twice; the
 # runner must run each suite once.
 test_collect_dedupes_overlapping_inputs() {
@@ -632,131 +600,6 @@ test_lefthook_mapping_follows_glob() {
     assert_equals "$root/tests/unit/lefthook-a.sh
 $root/tests/unit/lefthook-b.sh" "$out" \
         "lefthook.yml must map to exactly the lefthook-*.sh suites present"
-
-    /usr/bin/rm -rf "$root"
-}
-
-# ============================================================================
-# evidence-run.yml → evidence-run-*.sh suites (#1467)
-# ============================================================================
-# The workflow's pins are split across the ingest-shape and trigger-paths
-# suites, neither named after it, so a workflow edit must collect both.
-
-test_evidence_run_mapping_emits_both_suites() {
-    local out
-    if ! _load_map_changed_files; then
-        fail_test "could not extract map_changed_files from $RUNNER"
-        return 0
-    fi
-
-    out=$(command printf '%s\n' .github/workflows/evidence-run.yml | map_changed_files | command sort)
-    assert_equals "$TESTS_DIR/unit/evidence-run-shape.sh
-$TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
-        "evidence-run.yml must collect both evidence-run suites, each as its own path"
-}
-
-# The arm globs tests/unit/evidence-run-*.sh: a new sibling is picked up, an
-# unrelated suite is not, and with none present the -f guard keeps the literal
-# unmatched glob out.
-test_evidence_run_mapping_follows_glob() {
-    local root out
-    if ! _load_map_to_test; then
-        fail_test "could not extract map_to_test from $RUNNER"
-        return 0
-    fi
-    root=$(/usr/bin/mktemp -d)
-    /usr/bin/mkdir -p "$root/tests/unit"
-
-    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test ".github/workflows/evidence-run.yml")
-    assert_empty "$out" "no evidence-run suites must map to no test path"
-
-    /usr/bin/touch "$root/tests/unit/evidence-run-a.sh" "$root/tests/unit/evidence-run-b.sh" \
-        "$root/tests/unit/evidence-issue.sh"
-    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test ".github/workflows/evidence-run.yml" | command sort)
-    assert_equals "$root/tests/unit/evidence-run-a.sh
-$root/tests/unit/evidence-run-b.sh" "$out" \
-        "evidence-run.yml must map to exactly the evidence-run-*.sh suites present"
-
-    /usr/bin/rm -rf "$root"
-}
-
-# ============================================================================
-# evidence-run.yml's bin scripts → trigger-paths suite (#1473)
-# ============================================================================
-# The trigger-paths suite derives the workflow's script set from these files'
-# `source` lines, so an edit confined to one of them must run it at push time,
-# not only in full CI.
-
-test_evidence_scripts_map_to_trigger_paths() {
-    local out f
-    if ! _load_map_to_test; then
-        fail_test "could not extract map_to_test from $RUNNER"
-        return 0
-    fi
-
-    # No own suite: trigger-paths is the whole push-time selection.
-    for f in bin/ingest-evidence.sh bin/ingest-evidence-batch.sh bin/lib/evidence-issue.sh; do
-        out=$(map_to_test "$f")
-        assert_equals "$TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
-            "$f must map to exactly the trigger-paths suite"
-    done
-
-    # Own suite plus trigger-paths, as an exact sorted set.
-    for f in evidence-epoch evidence-sources; do
-        out=$(map_to_test "bin/lib/$f.sh" | command sort)
-        assert_equals "$TESTS_DIR/unit/bin/lib/$f.sh
-$TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
-            "bin/lib/$f.sh must map to its own suite and trigger-paths"
-    done
-
-    # Scripts the workflow neither runs nor sources keep their own mapping.
-    out=$(map_to_test "bin/check-versions.sh" | command sort)
-    assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
-$TESTS_DIR/unit/bin/check-versions.sh" "$out" \
-        "a non-evidence bin script must not map to trigger-paths"
-
-    # The pattern's edge: these carry "evidence" in their names but sit outside
-    # the workflow's bin/ paths: filters, so a widened pattern (bin/*evidence*.sh)
-    # would wrongly collect trigger-paths for them. Neither has a suite.
-    for f in bin/dispatch-evidence.sh bin/dispatch-evidence-for-tuple.sh; do
-        out=$(map_to_test "$f")
-        assert_empty "$out" "$f is not an evidence-run.yml script and must map to nothing"
-    done
-}
-
-# The -f guard: with no trigger-paths suite present, an evidence lib maps to
-# only the suites that exist (nothing, or its own suite), never to a missing
-# path, and the guard does not cut the own-suite lookup short.
-test_evidence_scripts_trigger_paths_guarded() {
-    local root out
-    if ! _load_map_to_test; then
-        fail_test "could not extract map_to_test from $RUNNER"
-        return 0
-    fi
-    root=$(/usr/bin/mktemp -d)
-    /usr/bin/mkdir -p "$root/tests/unit" "$root/bin/lib"
-
-    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/lib/evidence-x.sh")
-    assert_empty "$out" "no trigger-paths suite must map to no test path"
-
-    /usr/bin/touch "$root/tests/unit/evidence-run-trigger-paths.sh"
-    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/lib/evidence-x.sh")
-    assert_equals "$root/tests/unit/evidence-run-trigger-paths.sh" "$out" \
-        "a present trigger-paths suite must be the evidence lib's selection"
-
-    # A missing trigger-paths suite must not cut the own-suite lookup short.
-    /usr/bin/rm -f "$root/tests/unit/evidence-run-trigger-paths.sh"
-    /usr/bin/mkdir -p "$root/tests/unit/bin/lib"
-    /usr/bin/touch "$root/tests/unit/bin/lib/evidence-x.sh"
-    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/lib/evidence-x.sh")
-    assert_equals "$root/tests/unit/bin/lib/evidence-x.sh" "$out" \
-        "with trigger-paths absent, an evidence lib must still map to its own suite"
-
-    /usr/bin/touch "$root/tests/unit/evidence-run-trigger-paths.sh"
-    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/lib/evidence-x.sh" | command sort)
-    assert_equals "$root/tests/unit/bin/lib/evidence-x.sh
-$root/tests/unit/evidence-run-trigger-paths.sh" "$out" \
-        "with both present, an evidence lib must map to exactly both"
 
     /usr/bin/rm -rf "$root"
 }
@@ -929,18 +772,68 @@ test_feature_lib_toplevel_file_has_no_mirror_glob() {
         "a top-level lib file maps to exactly its same-named mirrored suite"
 }
 
+# ============================================================================
+# The runner and its suites → every run-changed-tests*.sh suite (#1480)
+# ============================================================================
+# The runner's pins are split across run-changed-tests.sh and its
+# run-changed-tests-*.sh siblings, which share tests/lib's loaders. An edit to
+# the runner or the loaders must run every suite; an edit to one suite runs it.
+
+test_runner_mapping_emits_all_suites() {
+    local out f want
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+    want="$TESTS_DIR/unit/run-changed-tests-evidence.sh
+$TESTS_DIR/unit/run-changed-tests.sh"
+
+    for f in tests/run_changed_tests.sh tests/lib/run-changed-tests-loaders.sh; do
+        out=$(command printf '%s\n' "$f" | map_changed_files | command sort)
+        assert_equals "$want" "$out" "$f must collect exactly both runner suites"
+    done
+
+    for f in run-changed-tests.sh run-changed-tests-evidence.sh; do
+        out=$(command printf '%s\n' "tests/unit/$f" | map_changed_files)
+        assert_equals "$TESTS_DIR/unit/$f" "$out" "tests/unit/$f must collect only itself"
+    done
+}
+
+# The runner arm globs run-changed-tests-*.sh: a new sibling is picked up, a
+# lookalike is not, and with none present the -f guard keeps the literal
+# unmatched glob out.
+test_runner_mapping_follows_glob() {
+    local root out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+    root=$(/usr/bin/mktemp -d)
+    /usr/bin/mkdir -p "$root/tests/unit"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "tests/run_changed_tests.sh")
+    assert_empty "$out" "no runner suites must map to no test path"
+
+    /usr/bin/touch "$root/tests/unit/run-changed-tests.sh" "$root/tests/unit/run-changed-tests-a.sh" \
+        "$root/tests/unit/run-changed-x.sh"
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "tests/run_changed_tests.sh" | command sort)
+    assert_equals "$root/tests/unit/run-changed-tests-a.sh
+$root/tests/unit/run-changed-tests.sh" "$out" \
+        "the runner must map to exactly its suite and the run-changed-tests-*.sh siblings present"
+
+    /usr/bin/rm -rf "$root"
+}
+
 run_test test_feature_lib_mapping_emits_mirrored_suites "feature lib file maps to its mirrored lib/<subdir> suites (#1331)"
 run_test test_feature_lib_mapping_mirrors_a_second_subdir "feature lib mirror glob works for a second subdir (op-cli) (#1331)"
 run_test test_feature_lib_toplevel_file_has_no_mirror_glob "top-level feature lib file maps to its same-named mirror only (#1331)"
 run_test test_lefthook_mapping_follows_glob "lefthook.yml mapping follows the lefthook-*.sh glob (#1075)"
-run_test test_evidence_run_mapping_emits_both_suites "evidence-run.yml maps to both evidence-run suites (#1467)"
-run_test test_evidence_run_mapping_follows_glob "evidence-run.yml mapping follows the evidence-run-*.sh glob (#1467)"
-run_test test_evidence_scripts_map_to_trigger_paths "evidence-run.yml bin scripts map to the trigger-paths suite (#1473)"
-run_test test_evidence_scripts_trigger_paths_guarded "evidence script trigger-paths mapping is -f guarded (#1473)"
 run_test test_devcontainer_mapping_root_scripts "devcontainer root scripts map to their suites (#1067)"
 run_test test_devcontainer_mapping_unmatched_is_silent "uncovered devcontainer script maps to no test path (#1067)"
 run_test test_devcontainer_mapping_nested_by_path "nested devcontainer script maps by path, not basename (#1067)"
 run_test test_runtime_lib_scan_mapping "runtime-lib scan maps to its fixture suite (#1262)"
+run_test test_runner_mapping_emits_all_suites "runner and loaders map to every runner suite (#1480)"
+run_test test_runner_mapping_follows_glob "runner mapping follows the run-changed-tests-*.sh glob (#1480)"
 
 # Generate test report
 generate_report

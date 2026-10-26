@@ -58,12 +58,27 @@ map_to_test() {
 
         # This runner itself → its dedicated regression suite. Without this
         # arm a future edit to run_changed_tests.sh would not trigger the
-        # SKIP_NETWORK_TESTS wiring guard at push time (issue #615).
+        # SKIP_NETWORK_TESTS wiring guard at push time (issue #615). The
+        # mapping pins are split across run-changed-tests-*.sh siblings
+        # (#1480), so emit those too, globbed like lefthook.yml below.
         tests/run_changed_tests.sh)
-            local test_path="${TESTS_DIR}/unit/run-changed-tests.sh"
+            local test_path="${TESTS_DIR}/unit/run-changed-tests.sh" match
             if [ -f "$test_path" ]; then
                 echo "$test_path"
             fi
+            for match in "${TESTS_DIR}"/unit/run-changed-tests-*.sh; do
+                if [ -f "$match" ]; then
+                    echo "$match"
+                fi
+            done
+            return
+            ;;
+
+        # The loaders both runner suites source to extract map_to_test (#1480).
+        # Outside tests/unit/, so like the fixtures below it needs its own arm;
+        # its consumers are exactly the runner's suites.
+        tests/lib/run-changed-tests-loaders.sh)
+            map_to_test "tests/run_changed_tests.sh"
             return
             ;;
 
