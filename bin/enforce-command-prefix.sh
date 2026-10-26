@@ -6,7 +6,9 @@
 # exit 2 = a file could not be processed (the run stops there).
 #
 # Fixes are written to a tmpfile beside the original and mv'd over it, so an
-# interrupted run never leaves a truncated script (#1439). Symlink operands
+# interrupted run never leaves a truncated script (#1439). The mode is copied
+# across, so read-only files are fixed and stay read-only (#1440); only a file
+# in an unwritable directory exits 2. Symlink operands
 # are skipped: git tracks the link, not its target's bytes, and the target
 # may lie outside the repo.
 #
@@ -167,7 +169,12 @@ for file in "$@"; do
         *) path="./$file" ;;
     esac
 
-    tmpfile=$(/usr/bin/mktemp "${path}.enforce.XXXXXX")
+    # An unwritable directory is the one place a fix cannot land; without the
+    # explicit exit 2, set -e would exit with mktemp's 1, which means "fixed".
+    tmpfile=$(/usr/bin/mktemp "${path}.enforce.XXXXXX") || {
+        printf 'enforce-command-prefix: could not create a tmpfile beside %s\n' "$file" >&2
+        exit 2
+    }
     rc=0
     /usr/bin/awk -v cmds="$CMDS" -v marker="$SUPPRESS_MARKER" \
         "$ENFORCE_AWK" "$path" >"$tmpfile" || rc=$?
@@ -196,9 +203,9 @@ for file in "$@"; do
                     exit 2
                     ;;
             esac
-            # mv would replace a read-only file in a writable directory, so
-            # keep the old refusal for files the user cannot write.
-            [ -w "$path" ] || keep_and_fail "$file"
+            # Rename needs write access to the directory, not the file, so a
+            # read-only (e.g. 444/555) file is fixed too and keeps its mode
+            # (#1440).
             command chmod "$mode" "$tmpfile" || keep_and_fail "$file"
             command mv -f "$tmpfile" "$path" || keep_and_fail "$file"
             tmpfile=""
