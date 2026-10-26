@@ -23,6 +23,11 @@
 #
 # Optional $2: parent directory for the scratch copy, so a caller's interrupt
 # trap that removes that directory also removes the scratch.
+#
+# swap_keyring_atomic's interrupt trap reads its locals (staging, previous_dir,
+# previous, keyring_dir, work_dir) by name when it fires, and bash runs it in
+# whatever frame is current, so this function must not declare locals with
+# any of those names.
 count_keyring_keys() {
     local src_dir="$1"
     local scratch_parent="${2:-${TMPDIR:-/tmp}}"

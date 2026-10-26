@@ -555,6 +555,101 @@ test_swap_term_at_holder_mktemp_special_path() {
     assert_signal_at_mktemp TERM ".old." 143 "" "$TEST_TEMP_DIR/key s"'/$ring'
 }
 
+test_swap_term_at_staging_mktemp_first_install() {
+    require_gpg || return 0
+    assert_signal_at_mktemp TERM ".new." 143 first-install
+}
+
+# run_swap_signal_at_cleanup <src> <dest> <work> <SIG> <failure>
+# Force a failure return, then send <SIG> from that return's own cleanup
+# `rm -rf` of the staging dir, AFTER it runs: the trap still being installed
+# at that point is what removes the holder dir and the work dir. A return
+# that drops the trap before cleaning up exits by the default action instead,
+# leaving both behind.
+#   holder     - the holder-dir mktemp fails (only staging exists yet)
+#   staged     - corrupt source, so the staged check fails
+#   move-aside - the existing keyring cannot be moved aside
+#   install    - the install rename fails (the keyring is restored first)
+run_swap_signal_at_cleanup() {
+    local failure="$5"
+    (
+        # shellcheck disable=SC2329 # invoked by the child via export -f
+        rm() {
+            local a hit=false
+            for a in "$@"; do
+                [[ "$a" == */keyring.new.* ]] && hit=true
+            done
+            command rm "$@"
+            if [ "$hit" = true ] && [ ! -e "$SIG_FIRED" ]; then
+                : >"$SIG_FIRED"
+                kill -"$SIG_NAME" $$
+            fi
+        }
+        # shellcheck disable=SC2329 # invoked by the child via export -f
+        mv() {
+            case "$SIG_FAILURE" in
+                move-aside) [[ "${!#}" == */keyring.old.*/keyring ]] && return 1 ;;
+                install) [[ "$1" == */keyring.new.* && "${!#}" == "$SIG_DEST" ]] && return 1 ;;
+            esac
+            command mv "$@"
+        }
+        # shellcheck disable=SC2329 # invoked by the child via export -f
+        mktemp() {
+            [[ "$SIG_FAILURE" == holder && "${!#}" == *.old.* ]] && return 1
+            command mktemp "$@"
+        }
+        export -f rm mv mktemp
+        export SIG_NAME="$4" SIG_FAILURE="$failure" SIG_DEST="$2" SIG_FIRED="$TEST_TEMP_DIR/sig-fired"
+        run_swap "$1" "$2" "$3"
+    )
+}
+
+# assert_signal_at_cleanup <SIG> <failure> <expected-rc>
+# On a plain failure return the work dir is the caller's to remove, so its
+# absence proves the trap ran; the fired marker proves the signal was sent.
+assert_signal_at_cleanup() {
+    local sig="$1" failure="$2" expected_rc="$3"
+    if [ "$failure" = staged ]; then
+        make_src "$TEST_TEMP_DIR/src" corrupt
+    else
+        make_src "$TEST_TEMP_DIR/src"
+    fi
+    local dest="$TEST_TEMP_DIR/keys/keyring"
+    make_dest "$dest"
+    command mkdir -p "$TEST_TEMP_DIR/work"
+    printf 'x' >"$TEST_TEMP_DIR/work/clone-marker"
+
+    local output rc=0
+    output=$(run_swap_signal_at_cleanup "$TEST_TEMP_DIR/src" "$dest" "$TEST_TEMP_DIR/work" "$sig" "$failure") || rc=$?
+
+    assert_file_exists "$TEST_TEMP_DIR/sig-fired" "the $failure cleanup reached its staging rm"
+    assert_equals "$expected_rc" "$rc" "$sig during the $failure cleanup exits through its trap (output: $output)"
+    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx" 2>/dev/null)" \
+        "existing keyring in place after $sig during the $failure cleanup"
+    assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left after $sig during the $failure cleanup"
+    assert_dir_not_exists "$TEST_TEMP_DIR/work" "work dir removed by the trap"
+}
+
+test_swap_term_during_holder_failure_cleanup() {
+    require_gpg || return 0
+    assert_signal_at_cleanup TERM holder 143
+}
+
+test_swap_term_during_staged_failure_cleanup() {
+    require_gpg || return 0
+    assert_signal_at_cleanup TERM staged 143
+}
+
+test_swap_term_during_move_aside_failure_cleanup() {
+    require_gpg || return 0
+    assert_signal_at_cleanup TERM move-aside 143
+}
+
+test_swap_int_during_install_failure_cleanup() {
+    require_gpg || return 0
+    assert_signal_at_cleanup INT install 130
+}
+
 test_swap_term_during_staging() {
     require_gpg || return 0
     assert_signal TERM stage 143 previous
@@ -681,6 +776,11 @@ run_test_with_setup test_swap_term_at_holder_mktemp "swap: SIGTERM at the holder
 run_test_with_setup test_swap_int_at_holder_mktemp "swap: SIGINT at the holder mktemp leaves nothing behind"
 run_test_with_setup test_swap_term_at_holder_mktemp_first_install "swap: SIGTERM at the holder mktemp on first install leaves nothing behind"
 run_test_with_setup test_swap_term_at_holder_mktemp_special_path "swap: SIGTERM at the holder mktemp cleans up a path with a space and \$"
+run_test_with_setup test_swap_term_at_staging_mktemp_first_install "swap: SIGTERM at the staging mktemp on first install leaves nothing behind"
+run_test_with_setup test_swap_term_during_holder_failure_cleanup "swap: SIGTERM during the holder-mktemp failure cleanup still runs the trap"
+run_test_with_setup test_swap_term_during_staged_failure_cleanup "swap: SIGTERM during the staged-check failure cleanup still runs the trap"
+run_test_with_setup test_swap_term_during_move_aside_failure_cleanup "swap: SIGTERM during the move-aside failure cleanup still runs the trap"
+run_test_with_setup test_swap_int_during_install_failure_cleanup "swap: SIGINT during the install failure cleanup still runs the trap"
 run_test_with_setup test_swap_term_during_staging "swap: SIGTERM during staging keeps the existing keyring"
 run_test_with_setup test_swap_int_during_staging "swap: SIGINT during staging keeps the existing keyring"
 run_test_with_setup test_swap_term_mid_swap_restores "swap: SIGTERM mid-swap restores the existing keyring"
