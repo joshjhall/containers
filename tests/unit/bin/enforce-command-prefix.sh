@@ -27,9 +27,9 @@ write_fixture() {
 }
 
 # Helper: octal permission bits of a file, GNU (stat -c) or BSD (stat -f).
-# Prints nothing (and still returns 0, so set -e can't skip the caller's
-# skip_test) if neither form works. Bare 'stat' (not 'command stat') so an
-# exported stat() stub can stand in for a BSD userland.
+# Prints nothing (and still returns 0) if neither form works. Bare 'stat'
+# (not 'command stat') so an exported stat() stub can stand in for a BSD
+# userland.
 file_mode() {
     stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null || true
 }
@@ -617,13 +617,8 @@ test_fixed_file_keeps_mode() {
     local exit_code=0
     "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
     assert_equals "1" "$exit_code" "Should exit 1 when changes made"
-    local mode
-    mode=$(file_mode "$TEST_TEMP_DIR/test.sh")
-    if [ -z "$mode" ]; then
-        skip_test "Neither GNU nor BSD stat can report the file mode"
-        return
-    fi
-    assert_equals "755" "$mode" "Fixed file should keep its 755 mode"
+    # Exit 1 means the hook read the mode, so file_mode can too (#1439)
+    assert_equals "755" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Fixed file should keep its 755 mode"
 }
 
 # Helper: run the hook on test.sh ('grep x', mode $3 or 644) with a PATH
@@ -650,13 +645,8 @@ exec /bin/chmod "$@"' chmod 755
         "Fixed content should be written back"
     assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
         "No tmpfile should be left after a successful write"
-    local mode
-    mode=$(file_mode "$TEST_TEMP_DIR/test.sh")
-    if [ -z "$mode" ]; then
-        skip_test "Neither GNU nor BSD stat can report the file mode"
-        return
-    fi
-    assert_equals "755" "$mode" "Fixed file should keep 755 without GNU chmod --reference"
+    # Exit 1 means the hook read the mode, so file_mode can too (#1439)
+    assert_equals "755" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Fixed file should keep 755 without GNU chmod --reference"
 }
 
 # Test: a fixable but unwritable file → exit 2, and the tmpfile holding the
@@ -734,15 +724,26 @@ test_mode_from_bsd_stat() {
     assert_equals "750" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Mode should come from stat -f"
 }
 
-# Test: SIGTERM mid-rewrite (sent by a chmod stub while the tmpfile exists)
-# exits 143, leaves the original intact and removes the tmpfile
-test_sigterm_removes_tmpfile() {
+# Test: SIGTERM/SIGINT mid-rewrite (sent by a chmod stub while the tmpfile
+# exists) exits 143/130, leaves the original intact and removes the tmpfile
+test_signal_removes_tmpfile() {
+    local exit_code err sig
+    for sig in TERM:143 INT:130; do
+        run_with_stub "kill -${sig%:*} \"\$PPID\"; exit 1" chmod
+        assert_equals "${sig#*:}" "$exit_code" "SIG${sig%:*} should exit ${sig#*:}"
+        assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" "Original should be intact"
+        assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
+            "The SIG${sig%:*} trap should remove the in-flight tmpfile"
+    done
+}
+
+# Test: a failing mv → exit 2, the original intact, the tmpfile kept and named
+test_mv_failure_keeps_tmpfile() {
     local exit_code err
-    run_with_stub 'kill -TERM "$PPID"; exit 1' chmod
-    assert_equals "143" "$exit_code" "SIGTERM should exit 143"
+    run_with_stub 'exit 1' mv
+    assert_equals "2" "$exit_code" "A failed mv should exit 2"
+    assert_contains "$err" "fixed content kept at $TEST_TEMP_DIR/test.sh.enforce." "Stderr names the tmpfile"
     assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" "Original should be intact"
-    assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
-        "The trap should remove the in-flight tmpfile"
 }
 
 # Test: a write failure stops the run — earlier fixes stand, later files
@@ -849,7 +850,8 @@ run_test test_symlink_operand_skipped "Symlinked operand is skipped, target unto
 run_test test_fixed_file_replaced_atomically "Fix replaces the file by rename, not in place"
 run_test test_mode_unreadable_exits_2 "Unreadable mode exits 2 and leaves the original"
 run_test test_mode_from_bsd_stat "Mode is read via BSD stat -f when -c is rejected"
-run_test test_sigterm_removes_tmpfile "SIGTERM mid-rewrite exits 143 and removes the tmpfile"
+run_test test_signal_removes_tmpfile "SIGTERM/SIGINT mid-rewrite exit 143/130 and remove the tmpfile"
+run_test test_mv_failure_keeps_tmpfile "Failed mv exits 2 and keeps the named tmpfile"
 run_test test_unwritable_file_stops_batch "Write failure stops the batch with exit 2"
 run_test test_awk_failure_exits_2 "awk failure exits 2 and cleans up"
 run_test test_filename_with_equals "File name containing = is processed as a file"
