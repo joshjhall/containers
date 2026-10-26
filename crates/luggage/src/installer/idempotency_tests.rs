@@ -759,19 +759,24 @@ exit 0
         // than that still leaks; the shell's `$!` is no safer to kill here, as
         // it may already name a dead, reused pid.
         let deadline = Instant::now() + Duration::from_secs(2);
-        let late = loop {
-            if let Ok(pid) = fs::read_to_string(&gpid_file) {
-                break pid.trim().parse().ok().and_then(rustix::process::Pid::from_raw);
+        let raw = loop {
+            if let Ok(raw) = fs::read_to_string(&gpid_file) {
+                break Some(raw);
             }
             if Instant::now() >= deadline {
                 break None;
             }
             thread::sleep(Duration::from_millis(20));
         };
-        let late_note = late.map_or_else(
-            || "no late pid appeared within 2s".to_owned(),
-            |pid| format!("killed late pid {}", pid.as_raw_nonzero()),
-        );
+        let late = raw
+            .as_deref()
+            .and_then(|raw| raw.trim().parse().ok())
+            .and_then(rustix::process::Pid::from_raw);
+        let late_note = match (late, &raw) {
+            (Some(pid), _) => format!("killed late pid {}", pid.as_raw_nonzero()),
+            (None, Some(raw)) => format!("late pid file held no usable pid: {raw:?}"),
+            (None, None) => "no late pid appeared within 2s".to_owned(),
+        };
         let _late = late.map(KillOnDrop);
         let stderr = result.as_ref().map(|out| String::from_utf8_lossy(&out.stderr).into_owned());
         panic!(
