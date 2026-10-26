@@ -80,6 +80,20 @@ map_to_test() {
             return
             ;;
 
+        # evidence-run.yml → every tests/unit/evidence-run-*.sh suite (#1467).
+        # The workflow is pinned by more than one suite (ingest shape, trigger
+        # paths), none named after it, so without this arm a workflow edit runs
+        # neither at push time. Globbed like lefthook.yml above.
+        .github/workflows/evidence-run.yml)
+            local match
+            for match in "${TESTS_DIR}"/unit/evidence-run-*.sh; do
+                if [ -f "$match" ]; then
+                    echo "$match"
+                fi
+            done
+            return
+            ;;
+
         # The runtime-lib reference scan the minimal integration test runs in
         # the image → its fixture suite (#1262). It lives outside tests/unit/,
         # so without this arm an edit to it runs nothing at push time.

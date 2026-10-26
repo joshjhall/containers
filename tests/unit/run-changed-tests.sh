@@ -632,6 +632,50 @@ $root/tests/unit/lefthook-b.sh" "$out" \
 }
 
 # ============================================================================
+# evidence-run.yml → evidence-run-*.sh suites (#1467)
+# ============================================================================
+# The workflow's pins are split across the ingest-shape and trigger-paths
+# suites, neither named after it, so a workflow edit must collect both.
+
+test_evidence_run_mapping_emits_both_suites() {
+    local out
+    if ! _load_map_changed_files; then
+        fail_test "could not extract map_changed_files from $RUNNER"
+        return 0
+    fi
+
+    out=$(command printf '%s\n' .github/workflows/evidence-run.yml | map_changed_files | command sort)
+    assert_equals "$TESTS_DIR/unit/evidence-run-shape.sh
+$TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
+        "evidence-run.yml must collect both evidence-run suites, each as its own path"
+}
+
+# The arm globs tests/unit/evidence-run-*.sh: a new sibling is picked up, an
+# unrelated suite is not, and with none present the -f guard keeps the literal
+# unmatched glob out.
+test_evidence_run_mapping_follows_glob() {
+    local root out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+    root=$(/usr/bin/mktemp -d)
+    /usr/bin/mkdir -p "$root/tests/unit"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test ".github/workflows/evidence-run.yml")
+    assert_empty "$out" "no evidence-run suites must map to no test path"
+
+    /usr/bin/touch "$root/tests/unit/evidence-run-a.sh" "$root/tests/unit/evidence-run-b.sh" \
+        "$root/tests/unit/evidence-issue.sh"
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test ".github/workflows/evidence-run.yml" | command sort)
+    assert_equals "$root/tests/unit/evidence-run-a.sh
+$root/tests/unit/evidence-run-b.sh" "$out" \
+        "evidence-run.yml must map to exactly the evidence-run-*.sh suites present"
+
+    /usr/bin/rm -rf "$root"
+}
+
+# ============================================================================
 # .devcontainer/*.sh → tests/unit/.devcontainer/ (#1067)
 # ============================================================================
 # #1059 moved the devcontainer scripts from .devcontainer/bin/ to the
@@ -803,6 +847,8 @@ run_test test_feature_lib_mapping_emits_mirrored_suites "feature lib file maps t
 run_test test_feature_lib_mapping_mirrors_a_second_subdir "feature lib mirror glob works for a second subdir (op-cli) (#1331)"
 run_test test_feature_lib_toplevel_file_has_no_mirror_glob "top-level feature lib file maps to its same-named mirror only (#1331)"
 run_test test_lefthook_mapping_follows_glob "lefthook.yml mapping follows the lefthook-*.sh glob (#1075)"
+run_test test_evidence_run_mapping_emits_both_suites "evidence-run.yml maps to both evidence-run suites (#1467)"
+run_test test_evidence_run_mapping_follows_glob "evidence-run.yml mapping follows the evidence-run-*.sh glob (#1467)"
 run_test test_devcontainer_mapping_root_scripts "devcontainer root scripts map to their suites (#1067)"
 run_test test_devcontainer_mapping_unmatched_is_silent "uncovered devcontainer script maps to no test path (#1067)"
 run_test test_devcontainer_mapping_nested_by_path "nested devcontainer script maps by path, not basename (#1067)"
