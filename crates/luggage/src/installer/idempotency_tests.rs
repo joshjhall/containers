@@ -718,7 +718,9 @@ impl Drop for KillOnDrop {
 /// (#1497). An escaped descendant is the gap the group kill leaves, and the
 /// one where the tempfile capture still matters. The shim exits only once
 /// the pid file exists, which perl writes (renamed into place, never seen
-/// half-written) after `setpgrp`, so the group kill cannot reach it.
+/// half-written) after `setpgrp`, so the group kill cannot reach it. If the
+/// shim gives up first, the test re-polls for the late pid and kills it
+/// while failing, so a slow perl cannot leak its `sleep` (#1501).
 #[cfg(unix)]
 #[test]
 #[serial_test::serial]
@@ -748,10 +750,38 @@ exit 0
     let elapsed = start.elapsed();
 
     // perl's `die` text lands in the probe's captured stderr, so show it.
-    let gpid = fs::read_to_string(dir.path().join("tool.gpid")).unwrap_or_else(|e| {
+    let gpid_file = dir.path().join("tool.gpid");
+    let gpid = fs::read_to_string(&gpid_file).unwrap_or_else(|e| {
+        // A perl slow enough to outlast the shim's wait has already left the
+        // probe's group, so nothing else will kill it. Wait briefly for its
+        // late pid and arm the guard before panicking: the unwind then kills
+        // it, before or after its exec into `sleep 30` (#1501). A perl later
+        // than that still leaks; the shell's `$!` is no safer to kill here, as
+        // it may already name a dead, reused pid.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let raw = loop {
+            if let Ok(raw) = fs::read_to_string(&gpid_file) {
+                break Some(raw);
+            }
+            if Instant::now() >= deadline {
+                break None;
+            }
+            thread::sleep(Duration::from_millis(20));
+        };
+        let late = raw
+            .as_deref()
+            .and_then(|raw| raw.trim().parse().ok())
+            .and_then(rustix::process::Pid::from_raw);
+        let late_note = match (late, &raw) {
+            (Some(pid), _) => format!("killed late pid {}", pid.as_raw_nonzero()),
+            (None, Some(raw)) => format!("late pid file held no usable pid: {raw:?}"),
+            (None, None) => "no late pid appeared within 2s".to_owned(),
+        };
+        let _late = late.map(KillOnDrop);
         let stderr = result.as_ref().map(|out| String::from_utf8_lossy(&out.stderr).into_owned());
         panic!(
-            "the shim must record its background pid before exiting ({e}); probe stderr: {stderr:?}"
+            "the shim must record its background pid before exiting ({e}); {late_note}; \
+             probe stderr: {stderr:?}"
         )
     });
     let gpid = gpid.trim().to_owned();
