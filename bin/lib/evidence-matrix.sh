@@ -132,7 +132,10 @@ def em_evidence($now):
 # .tested) fails too (#1329), and the message names the file.
 # Skipping it would make that version's cells pending, which is the same
 # re-test loop. The check is explicit, so it does not depend on how a given
-# jq release handles a null object key.
+# jq release handles a null object key. A file that cannot be opened (EACCES,
+# a broken symlink) gets a "cannot read" message instead of the shape hint,
+# and a parse error's jq message (with its line and column) follows the named
+# line (#1463).
 #
 # A file, not a jq argument: the map grows with containers-db and one argv
 # string is capped at 128 KiB.
@@ -147,13 +150,15 @@ _em_published_evidence() {
         command echo null >"$out"
         return 0
     fi
-    local src dir files=() found srcs i f
+    local src dir files=() found srcs i f errf ferr
     IFS=: read -r -a srcs <<<"$EVIDENCE_TESTED_SOURCE"
     for i in "${!srcs[@]}"; do
         src="${srcs[$i]}"
         dir="$src/tools/$tool/versions"
         found=("$dir"/*.json)
-        if [ ! -e "${found[0]}" ]; then
+        # -e follows symlinks: a dangling first match is a file to name, not
+        # an empty directory (#1463).
+        if [ ! -e "${found[0]}" ] && [ ! -L "${found[0]}" ]; then
             if [ "$i" -gt 0 ] && [ -d "$src/tools" ] && [ ! -e "$src/tools/$tool" ]; then
                 command echo "evidence_matrix: $src has no tools/$tool; it adds no $tool evidence" >&2
                 continue
@@ -178,6 +183,13 @@ _em_published_evidence() {
         uniq+=("$f")
     done
     files=("${uniq[@]}")
+    # The batch's stderr sidecar is its own mktemp: a name derived from out
+    # could already exist (as a directory, say), and the failed redirect would
+    # read as an evidence failure (#1463).
+    errf="$(command mktemp)" || {
+        command echo "evidence_matrix: cannot create a scratch file for $tool evidence" >&2
+        return 1
+    }
     # Slurping drops an empty file and splits one holding two documents, so
     # values are counted per file (input_filename): a total count would let
     # an empty file and a two-document one cancel out.
@@ -188,23 +200,43 @@ _em_published_evidence() {
         | group_by(.version)
         | map({key: .[0].version, value: ([ .[].tested // [] | .[] ] | em_evidence($now))})
         | from_entries
-    ' "${files[@]}" >"$out" 2>"$out.err" && {
-        command rm -f "$out.err"
+    ' "${files[@]}" >"$out" 2>"$errf" && {
+        command rm -f "$errf"
         return 0
     }
 
     # Failure path only: one jq per file to name the culprit (#1329). jq's
     # own message is kept for the case no file check explains.
     for f in "${files[@]}"; do
-        command jq -ne "$_EM_VERSION_FILE_OK_JQ"'[inputs] | length == 1 and (.[0] | em_version_file_ok)' "$f" >/dev/null 2>&1 || {
+        # Access, not content: the shape hint would send the operator to the
+        # wrong place (#1463).
+        if [ ! -f "$f" ] || [ ! -r "$f" ]; then
+            command echo "evidence_matrix: cannot read published evidence for $tool: $f" >&2
+            command rm -f "$errf"
+            return 1
+        fi
+        # A shape failure is just -e false and writes nothing; a parse error
+        # leaves jq's message, which says where the file broke.
+        ferr="$(command jq -ne "$_EM_VERSION_FILE_OK_JQ"'[inputs] | length == 1 and (.[0] | em_version_file_ok)' "$f" 2>&1 >/dev/null)" || {
+            # test -r asks access(2); a FUSE overlay or a root-squashed mount
+            # can pass that and still refuse the open itself.
+            case "$ferr" in
+                *"Could not open"*)
+                    command echo "evidence_matrix: cannot read published evidence for $tool: $f" >&2
+                    command printf '%s\n' "$ferr" >&2
+                    command rm -f "$errf"
+                    return 1
+                    ;;
+            esac
             command echo "evidence_matrix: unreadable published evidence for $tool: $f (must be one JSON object with a string .version and, if present, an array .tested)" >&2
-            command rm -f "$out.err"
+            [ -z "$ferr" ] || command printf '%s\n' "$ferr" >&2
+            command rm -f "$errf"
             return 1
         }
     done
     command echo "evidence_matrix: unreadable published evidence for $tool in $EVIDENCE_TESTED_SOURCE" >&2
-    command cat "$out.err" >&2
-    command rm -f "$out.err"
+    command cat "$errf" >&2
+    command rm -f "$errf"
     return 1
 }
 
