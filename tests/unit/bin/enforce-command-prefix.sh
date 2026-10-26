@@ -691,6 +691,27 @@ test_unwritable_dir_exits_2() {
         "Original should be unchanged"
 }
 
+# Test: a clean file in an unwritable directory → exit 0, silent, no tmpfile:
+# nothing needs writing, so the directory's mode must not matter (#1484)
+test_unwritable_dir_clean_exits_0() {
+    if [ "$(id -u)" -eq 0 ]; then
+        skip_test "root can create files in a mode-555 directory"
+        return
+    fi
+    /usr/bin/mkdir -p "$TEST_TEMP_DIR/ro"
+    write_fixture "$TEST_TEMP_DIR/ro/test.sh" 'command grep x'
+    chmod 555 "$TEST_TEMP_DIR/ro"
+    local exit_code=0 out
+    out=$("$SCRIPT" "$TEST_TEMP_DIR/ro/test.sh" 2>&1) || exit_code=$?
+    chmod 755 "$TEST_TEMP_DIR/ro"
+    assert_equals "0" "$exit_code" "Clean file in an unwritable directory should exit 0"
+    assert_equals "" "$out" "Clean file should produce no output"
+    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/ro/test.sh")" \
+        "Clean file should be unchanged"
+    assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
+        "No tmpfile should be left"
+}
+
 # Test: a symlinked operand is skipped — the link survives and its target,
 # which may lie outside the repo, is never rewritten (#1439) — and the run
 # goes on to fix the regular file after it
@@ -870,6 +891,7 @@ run_test test_fixed_file_keeps_mode "Fixed file keeps its mode"
 run_test test_fixed_file_keeps_mode_without_gnu_chmod "Fixed file keeps its mode without GNU chmod"
 run_test test_readonly_file_fixed_keeps_mode "Read-only file is fixed and keeps its mode"
 run_test test_unwritable_dir_exits_2 "File in an unwritable directory exits 2"
+run_test test_unwritable_dir_clean_exits_0 "Clean file in an unwritable directory exits 0"
 run_test test_symlink_operand_skipped "Symlinked operand is skipped, target untouched"
 run_test test_fixed_file_replaced_atomically "Fix replaces the file by rename, not in place"
 run_test test_mode_read_via_stat "Mode via stat: unreadable/non-octal exit 2; zero-stripped and BSD -f applied"

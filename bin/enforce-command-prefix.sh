@@ -8,7 +8,8 @@
 # Fixes are written to a tmpfile beside the original and mv'd over it, so an
 # interrupted run never leaves a truncated script (#1439). The mode is copied
 # across, so read-only files are fixed and stay read-only (#1440); only a file
-# in an unwritable directory exits 2. Symlink operands
+# that needs a fix in an unwritable directory exits 2 — a clean one is checked
+# first and never needs the tmpfile (#1484). Symlink operands
 # are skipped: git tracks the link, not its target's bytes, and the target
 # may lie outside the repo.
 #
@@ -158,6 +159,17 @@ keep_and_fail() {
     exit 2
 }
 
+# run_awk PATH: the fixed content on stdout; exit 1 if anything changed.
+run_awk() {
+    /usr/bin/awk -v cmds="$CMDS" -v marker="$SUPPRESS_MARKER" "$ENFORCE_AWK" "$1"
+}
+
+# awk_failed RC FILE: report a non-0/1 awk exit and stop the run.
+awk_failed() {
+    printf 'enforce-command-prefix: awk failed (exit %s) on %s\n' "$1" "$2" >&2
+    exit 2
+}
+
 for file in "$@"; do
     [ -f "$file" ] || continue
     [ -L "$file" ] && continue
@@ -169,6 +181,16 @@ for file in "$@"; do
         *) path="./$file" ;;
     esac
 
+    # Check first, writing nothing: a clean file needs no tmpfile, so it
+    # passes even in a directory the hook cannot write to (#1484).
+    rc=0
+    run_awk "$path" >/dev/null || rc=$?
+    case "$rc" in
+        0) continue ;;
+        1) ;;
+        *) awk_failed "$rc" "$file" ;;
+    esac
+
     # An unwritable directory is the one place a fix cannot land; without the
     # explicit exit 2, set -e would exit with mktemp's 1, which means "fixed".
     tmpfile=$(/usr/bin/mktemp "${path}.enforce.XXXXXX") || {
@@ -176,11 +198,11 @@ for file in "$@"; do
         exit 2
     }
     rc=0
-    /usr/bin/awk -v cmds="$CMDS" -v marker="$SUPPRESS_MARKER" \
-        "$ENFORCE_AWK" "$path" >"$tmpfile" || rc=$?
+    run_awk "$path" >"$tmpfile" || rc=$?
 
     case "$rc" in
         0)
+            # The file became clean between the two passes.
             /usr/bin/rm -f "$tmpfile"
             tmpfile=""
             ;;
@@ -215,8 +237,7 @@ for file in "$@"; do
         *)
             /usr/bin/rm -f "$tmpfile"
             tmpfile=""
-            printf 'enforce-command-prefix: awk failed (exit %s) on %s\n' "$rc" "$file" >&2
-            exit 2
+            awk_failed "$rc" "$file"
             ;;
     esac
 done
