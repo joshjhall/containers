@@ -79,8 +79,11 @@ assert_node_endstate() {
         "../lib/node_modules/npm/bin/npm-cli.js"
     assert_command_in_container "$image" "readlink /usr/local/bin/npx" \
         "../lib/node_modules/npm/bin/npx-cli.js"
-    # Exit 0 is the assertion: npm runs through its symlink under node.
-    assert_command_in_container "$image" "npm --version" ""
+    # npm runs through its symlink under node and reports a semver — a
+    # bare exit-0 check would pass on any output.
+    assert_command_in_container "$image" \
+        "v=\$(npm --version) && [[ \$v =~ ^[0-9]+\.[0-9]+\.[0-9]+\$ ]] && echo npm-ok" \
+        "npm-ok"
     # The binary matches the host arch: the per-arch install method picked
     # the right tarball (amd64 -> x64, arm64 -> arm64). A swapped method
     # would fail `node --version` above with an exec-format error anyway;
@@ -90,7 +93,7 @@ assert_node_endstate() {
         "arch-match"
     # No versioned root left behind: the strip flattened it into the prefix.
     assert_command_in_container "$image" \
-        "ls -d /usr/local/node-v* 2>/dev/null | command wc -l" "0"
+        "command ls -d /usr/local/node-v* 2>/dev/null | command wc -l" "0"
 }
 
 test_luggage_path_endstate() {
