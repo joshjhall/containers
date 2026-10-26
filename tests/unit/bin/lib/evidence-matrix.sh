@@ -564,8 +564,38 @@ test_evidence_scratch_failure_is_an_error() {
     TMPDIR="$TEST_TEMP_DIR/no-such-tmp" EVIDENCE_TESTED_SOURCE="$db" \
         _em_published_evidence rust "$out" 0 2>"$err" || rc=$?
     assert_equals "1" "$rc" "a failed scratch mktemp is exit 1"
-    assert_contains "$(command cat "$err")" "evidence_matrix: cannot create a scratch file for rust evidence" \
-        "and says which step failed"
+    # mktemp's own diagnostic comes first and its wording is the platform's,
+    # so the step's message is pinned as the last line, alone.
+    assert_equals "evidence_matrix: cannot create a scratch file for rust evidence" \
+        "$(command tail -n 1 "$err")" "and says which step failed"
+    assert_not_contains "$(command cat "$err")" "unreadable published evidence" \
+        "and no later path ran"
+    assert_equals "" "$(command cat "$out")" "and writes no matrix"
+}
+
+test_open_refused_after_access_check_is_named() {
+    # #1463: test -r asks access(2), which a FUSE overlay or a root-squashed
+    # mount can answer yes while the open still fails. A jq stub stands in
+    # for that open: it fails every read the way jq 1.6/1.7 report it, so the
+    # culprit loop must name the file as unreadable, not misshapen.
+    local r db bin f out err rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 debian-13-amd64
+    f="$db/tools/rust/versions/1.90.0.json"
+    bin="$(command mktemp -d "$TEST_TEMP_DIR/bin.XXXXXX")"
+    command printf '#!/bin/sh\nfor a; do f=$a; done\nprintf "jq: error: Could not open file %%s: Permission denied\\n" "$f" >&2\nexit 2\n' >"$bin/jq"
+    command chmod +x "$bin/jq"
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(command mktemp "$TEST_TEMP_DIR/out.XXXXXX")"
+    PATH="$bin:$PATH" EVIDENCE_TESTED_SOURCE="$db" \
+        _em_published_evidence rust "$out" 0 2>"$err" || rc=$?
+    assert_equals "1" "$rc" "an open refused past access(2) is exit 1"
+    assert_equals "evidence_matrix: cannot read published evidence for rust: $f" \
+        "$(command sed -n 1p "$err")" "and is named as unreadable, not misshapen"
+    assert_equals "jq: error: Could not open file $f: Permission denied" \
+        "$(command sed -n '2,$p' "$err")" "and jq's open error follows it"
 }
 
 _malformed_msg() {
@@ -1050,6 +1080,7 @@ run_test test_unopenable_published_file_is_named "an unopenable published versio
 run_test test_unreadable_mode_published_file_is_named "a version file without read permission is named as unreadable"
 run_test test_unopenable_only_file_is_named "a lone dangling version file is named, not read as an empty source"
 run_test test_evidence_scratch_failure_is_an_error "a failed published-evidence scratch file is an error"
+run_test test_open_refused_after_access_check_is_named "an open refused past the access check is named as unreadable"
 run_test test_unnamed_evidence_failure_names_the_sources "a failure no file check explains falls back to the source list"
 run_test test_evidence_scratch_is_removed "published-evidence scratch is removed on every exit path"
 run_test test_repeated_source_is_not_two_documents "a source listed twice is not a two-document file"

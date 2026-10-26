@@ -218,6 +218,16 @@ _em_published_evidence() {
         # A shape failure is just -e false and writes nothing; a parse error
         # leaves jq's message, which says where the file broke.
         ferr="$(command jq -ne "$_EM_VERSION_FILE_OK_JQ"'[inputs] | length == 1 and (.[0] | em_version_file_ok)' "$f" 2>&1 >/dev/null)" || {
+            # test -r asks access(2); a FUSE overlay or a root-squashed mount
+            # can pass that and still refuse the open itself.
+            case "$ferr" in
+                *"Could not open"*)
+                    command echo "evidence_matrix: cannot read published evidence for $tool: $f" >&2
+                    command printf '%s\n' "$ferr" >&2
+                    command rm -f "$errf"
+                    return 1
+                    ;;
+            esac
             command echo "evidence_matrix: unreadable published evidence for $tool: $f (must be one JSON object with a string .version and, if present, an array .tested)" >&2
             [ -z "$ferr" ] || command printf '%s\n' "$ferr" >&2
             command rm -f "$errf"
