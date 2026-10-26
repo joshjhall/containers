@@ -198,9 +198,31 @@ test_compare_version_v_prefix_current_sentinels() {
 
 test_compare_version_v_leading_sentinel_latest() {
     local result
-    # Stripping one v turns "vunknown" into the "unknown" sentinel
+    # "vunknown" keeps its v (no digit follows) and is not a version (#1449)
     result=$(_run_vapi_subshell "compare_version 'v1.2.3' 'vunknown'")
-    assert_equals "unknown" "$result" "compare_version strips vunknown into the unknown sentinel"
+    assert_equals "unknown" "$result" "compare_version treats vunknown latest as not a version"
+}
+
+test_compare_version_v_leading_non_version_latest() {
+    local result
+    # A v-leading non-version must not be stripped into an "outdated" sort (#1449)
+    result=$(_run_vapi_subshell "compare_version 'v1.2.3' 'version-unknown'")
+    assert_equals "unknown" "$result" "compare_version returns unknown for version-unknown latest"
+    result=$(_run_vapi_subshell "compare_version 'v1.2.3' 'null'")
+    assert_equals "unknown" "$result" "compare_version returns unknown for jq null latest"
+    result=$(_run_vapi_subshell "compare_version 'v1.2.3' ''")
+    assert_equals "unknown" "$result" "compare_version returns unknown for an empty latest"
+    result=$(_run_vapi_subshell "compare_version 'v1.2.3' 'v'")
+    assert_equals "unknown" "$result" "compare_version returns unknown for a bare v latest"
+    # Equality is checked before the not-a-version rule
+    result=$(_run_vapi_subshell "compare_version 'unknown' 'unknown'")
+    assert_equals "up-to-date" "$result" "compare_version treats identical non-versions as up-to-date"
+}
+
+test_compare_version_v_prefix_both() {
+    local result
+    result=$(_run_vapi_subshell "compare_version 'v1.2.3' 'v1.3.0'")
+    assert_equals "outdated" "$result" "compare_version strips v before a digit on both sides"
 }
 
 test_compare_version_empty_current() {
@@ -282,7 +304,9 @@ run_test_with_setup test_compare_version_v_prefix_latest "compare_version: 2.38.
 run_test_with_setup test_compare_version_v_prefix_current "compare_version: v2.38.2 vs 2.38.2 is up-to-date"
 run_test_with_setup test_compare_version_v_prefix_ordering "compare_version: v prefix keeps newer/outdated ordering"
 run_test_with_setup test_compare_version_v_prefix_current_sentinels "compare_version: v-prefixed current vs sentinels returns unknown"
-run_test_with_setup test_compare_version_v_leading_sentinel_latest "compare_version: vunknown latest strips to the unknown sentinel"
+run_test_with_setup test_compare_version_v_leading_sentinel_latest "compare_version: vunknown latest is not a version"
+run_test_with_setup test_compare_version_v_leading_non_version_latest "compare_version: v-leading non-version latest returns unknown"
+run_test_with_setup test_compare_version_v_prefix_both "compare_version: v prefix on both sides keeps ordering"
 run_test_with_setup test_compare_version_empty_current "compare_version: empty current is outdated or unknown"
 
 # Registry functions with mock curl
