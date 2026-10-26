@@ -650,6 +650,43 @@ test_swap_int_during_install_failure_cleanup() {
     assert_signal_at_cleanup INT install 130
 }
 
+# Send <SIG> from gpg while swap_keyring_atomic is inside count_keyring_keys:
+# the trap then runs in count_keyring_keys's frame, so it reads the swap's
+# locals only as long as count_keyring_keys declares none with those names.
+test_swap_term_during_staged_validation() {
+    require_gpg || return 0
+    make_src "$TEST_TEMP_DIR/src"
+    local dest="$TEST_TEMP_DIR/keys/keyring"
+    make_dest "$dest"
+    command mkdir -p "$TEST_TEMP_DIR/work"
+    printf 'x' >"$TEST_TEMP_DIR/work/clone-marker"
+
+    local output rc=0
+    output=$(
+        # shellcheck disable=SC2329 # invoked by the child via export -f
+        gpg() {
+            kill -TERM "$SWAP_PID"
+            command gpg "$@"
+        }
+        export -f gpg
+        # The stub runs inside count_keyring_keys's command substitution, so
+        # it signals the child bash by its exported pid
+        # shellcheck disable=SC2016 # expands in the child shell
+        bash -c '
+            export SWAP_PID=$$
+            log_error() { printf "ERR: %s\n" "$1" >&2; }
+            source "$1"
+            swap_keyring_atomic "$2" "$3" "$4" "Test"
+        ' _ "$LIB_FILE" "$TEST_TEMP_DIR/src" "$dest" "$TEST_TEMP_DIR/work" 2>&1
+    ) || rc=$?
+
+    assert_equals "143" "$rc" "TERM during validation exits through its trap (output: $output)"
+    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx" 2>/dev/null)" \
+        "existing keyring untouched after TERM during validation"
+    assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left after TERM during validation"
+    assert_dir_not_exists "$TEST_TEMP_DIR/work" "work dir removed by the trap"
+}
+
 test_swap_term_during_staging() {
     require_gpg || return 0
     assert_signal TERM stage 143 previous
@@ -781,6 +818,7 @@ run_test_with_setup test_swap_term_during_holder_failure_cleanup "swap: SIGTERM 
 run_test_with_setup test_swap_term_during_staged_failure_cleanup "swap: SIGTERM during the staged-check failure cleanup still runs the trap"
 run_test_with_setup test_swap_term_during_move_aside_failure_cleanup "swap: SIGTERM during the move-aside failure cleanup still runs the trap"
 run_test_with_setup test_swap_int_during_install_failure_cleanup "swap: SIGINT during the install failure cleanup still runs the trap"
+run_test_with_setup test_swap_term_during_staged_validation "swap: SIGTERM inside count_keyring_keys still cleans up through the swap trap"
 run_test_with_setup test_swap_term_during_staging "swap: SIGTERM during staging keeps the existing keyring"
 run_test_with_setup test_swap_int_during_staging "swap: SIGINT during staging keeps the existing keyring"
 run_test_with_setup test_swap_term_mid_swap_restores "swap: SIGTERM mid-swap restores the existing keyring"
