@@ -979,6 +979,75 @@ test_luggage_install_honors_containers_db() {
         "--catalog /tmp/alt-containers-db " "CONTAINERS_DB override reaches --catalog"
 }
 
+# Test: a CONTAINERS_DB override reaches luggage resolve too — partials
+# must resolve against the same catalog the install reads
+test_resolve_honors_containers_db() {
+    local out rc=0 argv="$TEST_TEMP_DIR/resolve-argv"
+    command rm -f "$argv"
+    out=$(
+        export CONTAINERS_DB=/tmp/alt-containers-db
+        run_version_block "22" "printf '%s\n' \"\$*\" >'$argv'
+command cat <<'JSON'
+$NODE_RESOLVE_JSON
+JSON"
+    ) || rc=$?
+    assert_equals "0" "$rc" "major-only 22 resolves against the override catalog (exit 0)"
+    assert_equals "resolve node --version 22 --catalog /tmp/alt-containers-db --json" \
+        "$(command cat "$argv" 2>/dev/null)" "CONTAINERS_DB override reaches luggage resolve's --catalog"
+}
+
+# Test: the shared extractor refuses a script with no version block, rather
+# than emitting nothing for the fixture and unit suite to source as a no-op
+test_extractor_refuses_missing_block() {
+    local fake="$TEST_TEMP_DIR/no-block.sh" out rc=0
+    printf '#!/bin/bash\nNODE_VERSION=22\n' >"$fake"
+    out=$(bash "$PROJECT_ROOT/tests/integration/builds/luggage_node/extract-version-block.sh" \
+        "$fake" 2>&1) || rc=$?
+    assert_equals "1" "$rc" "extractor exits 1 when node.sh has no version block"
+    assert_contains "$out" "no version block found in $fake" "extractor names the script it could not parse"
+    assert_not_contains "$out" "never reaches its closing fi" "a blockless script is not reported as unterminated"
+}
+
+# Test: the shared extractor refuses a block that never reaches its second
+# top-level fi, rather than printing through EOF and handing the fixture and
+# unit suite unrelated install code to source as the version block
+test_extractor_refuses_unterminated_block() {
+    local fake="$TEST_TEMP_DIR/one-fi.sh" out rc=0
+    printf '#!/bin/bash\nvalidate_node_version "$NODE_VERSION" || {\n    exit 1\n}\nif true; then\n    :\nfi\nINSTALL_CODE_MARKER=1\n' >"$fake"
+    out=$(bash "$PROJECT_ROOT/tests/integration/builds/luggage_node/extract-version-block.sh" \
+        "$fake" 2>&1) || rc=$?
+    assert_equals "1" "$rc" "extractor exits 1 when the version block has only one top-level fi"
+    assert_contains "$out" "version block in $fake never reaches its closing fi" \
+        "extractor names the script whose block is unterminated"
+    assert_not_contains "$out" "INSTALL_CODE_MARKER" "extractor prints nothing past the partial block"
+    assert_not_contains "$out" "no version block found" "an unterminated block is not reported as missing"
+}
+
+# Test: an unreadable script is reported as unreadable, not blamed on its
+# content as a missing or unterminated block — awk's own fatal-error exit
+# must stay distinct from the END sentinel
+test_extractor_reports_unreadable_script() {
+    local missing="$TEST_TEMP_DIR/does-not-exist.sh" out rc=0
+    out=$(bash "$PROJECT_ROOT/tests/integration/builds/luggage_node/extract-version-block.sh" \
+        "$missing" 2>&1) || rc=$?
+    assert_equals "1" "$rc" "extractor exits 1 when node.sh cannot be read"
+    assert_contains "$out" "could not read $missing" "extractor names the unreadable script"
+    assert_not_contains "$out" "no version block found" "an unreadable script is not reported as blockless"
+    assert_not_contains "$out" "never reaches its closing fi" "an unreadable script is not reported as unterminated"
+}
+
+# Test: a luggage path carrying sed-special characters is substituted
+# literally, not read as the s### delimiter or the matched-text reference
+test_extractor_escapes_luggage_path() {
+    local fake="$TEST_TEMP_DIR/two-fi.sh" luggage="$TEST_TEMP_DIR/a&b#c\\d" out rc=0
+    printf '#!/bin/bash\nvalidate_node_version "$NODE_VERSION" || {\n    exit 1\n}\nif true; then\n    :\nfi\nif true; then\n    /usr/local/bin/luggage resolve\nfi\nAFTER_BLOCK=1\n' >"$fake"
+    out=$(bash "$PROJECT_ROOT/tests/integration/builds/luggage_node/extract-version-block.sh" \
+        "$fake" "$luggage" 2>&1) || rc=$?
+    assert_equals "0" "$rc" "extractor accepts a luggage path with sed-special characters"
+    assert_contains "$out" "    $luggage resolve" "luggage path is substituted verbatim"
+    assert_not_contains "$out" "AFTER_BLOCK" "extractor stops at the second top-level fi"
+}
+
 # Run security tests
 run_test test_no_curl_pipe_bash "node.sh does not use curl | bash pattern"
 run_test_with_setup test_node_sh_has_no_inline_install "node.sh has no inline download/verify/extract"
@@ -992,6 +1061,11 @@ run_test_with_setup test_invalid_version_rejected_by_validation "Malformed NODE_
 run_test_with_setup test_luggage_install_failure_aborts "Failing luggage install aborts node.sh"
 run_test_with_setup test_luggage_install_argv "luggage install receives the exact argv"
 run_test_with_setup test_luggage_install_honors_containers_db "CONTAINERS_DB reaches luggage --catalog"
+run_test_with_setup test_resolve_honors_containers_db "CONTAINERS_DB reaches luggage resolve --catalog"
+run_test_with_setup test_extractor_refuses_missing_block "Version-block extractor refuses a script without one"
+run_test_with_setup test_extractor_refuses_unterminated_block "Version-block extractor refuses a block missing its closing fi"
+run_test_with_setup test_extractor_reports_unreadable_script "Version-block extractor reports an unreadable script as unreadable"
+run_test_with_setup test_extractor_escapes_luggage_path "Version-block extractor substitutes a sed-special luggage path verbatim"
 
 # Generate test report
 generate_report
