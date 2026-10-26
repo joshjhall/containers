@@ -173,13 +173,17 @@ extract_version() {
 
 # Compare versions
 compare_version() {
-    # Strip one leading "v" so "2.38.2" and "v2.38.2" compare equal (#1411)
-    local current="${1#v}"
-    local latest="${2#v}"
+    # Strip one leading "v" so "2.38.2" and "v2.38.2" compare equal (#1411),
+    # but only before a digit so "version-unknown" isn't mangled (#1449)
+    local current="$1"
+    local latest="$2"
+    [[ $current =~ ^v[0-9] ]] && current="${current#v}"
+    [[ $latest =~ ^v[0-9] ]] && latest="${latest#v}"
 
     if [ "$current" = "$latest" ]; then
         echo "up-to-date"
-    elif [ "$latest" = "unknown" ] || [ "$latest" = "not found" ] || [ "$latest" = "rate-limited" ]; then
+    elif ! [[ $latest =~ ^[0-9] ]]; then
+        # Not a version: sentinels (unknown/not found/rate-limited), jq null, empty
         echo "unknown"
     else
         # Try to determine if current is newer than latest
