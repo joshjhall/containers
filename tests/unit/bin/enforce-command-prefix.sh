@@ -737,13 +737,17 @@ test_signal_removes_tmpfile() {
     done
 }
 
-# Test: a failing mv → exit 2, the original intact, the tmpfile kept and named
-test_mv_failure_keeps_tmpfile() {
-    local exit_code err
-    run_with_stub 'exit 1' mv
-    assert_equals "2" "$exit_code" "A failed mv should exit 2"
-    assert_contains "$err" "fixed content kept at $TEST_TEMP_DIR/test.sh.enforce." "Stderr names the tmpfile"
-    assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" "Original should be intact"
+# Test: a failing chmod or mv → exit 2, the original intact, the tmpfile
+# kept and named
+test_replace_failure_keeps_tmpfile() {
+    local exit_code err tool
+    for tool in chmod mv; do
+        run_with_stub 'exit 1' "$tool"
+        assert_equals "2" "$exit_code" "A failed $tool should exit 2"
+        assert_contains "$err" "fixed content kept at $TEST_TEMP_DIR/test.sh.enforce." "Stderr names the tmpfile"
+        assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" "Original should be intact"
+        /usr/bin/rm -rf "$TEST_TEMP_DIR/stub" "$TEST_TEMP_DIR"/test.sh.enforce.*
+    done
 }
 
 # Test: a write failure stops the run — earlier fixes stand, later files
@@ -851,7 +855,7 @@ run_test test_fixed_file_replaced_atomically "Fix replaces the file by rename, n
 run_test test_mode_unreadable_exits_2 "Unreadable mode exits 2 and leaves the original"
 run_test test_mode_from_bsd_stat "Mode is read via BSD stat -f when -c is rejected"
 run_test test_signal_removes_tmpfile "SIGTERM/SIGINT mid-rewrite exit 143/130 and remove the tmpfile"
-run_test test_mv_failure_keeps_tmpfile "Failed mv exits 2 and keeps the named tmpfile"
+run_test test_replace_failure_keeps_tmpfile "Failed chmod or mv exits 2 and keeps the named tmpfile"
 run_test test_unwritable_file_stops_batch "Write failure stops the batch with exit 2"
 run_test test_awk_failure_exits_2 "awk failure exits 2 and cleans up"
 run_test test_filename_with_equals "File name containing = is processed as a file"
