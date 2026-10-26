@@ -212,6 +212,11 @@ test_compare_version_v_leading_non_version_latest() {
     assert_equals "unknown" "$result" "compare_version returns unknown for jq null latest"
     result=$(_run_vapi_subshell "compare_version 'v1.2.3' ''")
     assert_equals "unknown" "$result" "compare_version returns unknown for an empty latest"
+    result=$(_run_vapi_subshell "compare_version 'v1.2.3' 'v'")
+    assert_equals "unknown" "$result" "compare_version returns unknown for a bare v latest"
+    # Equality is checked before the not-a-version rule
+    result=$(_run_vapi_subshell "compare_version 'unknown' 'unknown'")
+    assert_equals "up-to-date" "$result" "compare_version treats identical non-versions as up-to-date"
 }
 
 test_compare_version_v_prefix_both() {
