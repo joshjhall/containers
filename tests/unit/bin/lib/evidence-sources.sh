@@ -563,6 +563,24 @@ test_non_empty_extraction_dir_is_refused() {
     assert_file_not_exists "$T/_db_pr/7/head/tools" "and nothing is merged into it"
 }
 
+test_rerun_in_the_same_work_dir_is_refused() {
+    # The first call keeps the PR trees it extracted; a second call into the
+    # same work dir refuses them rather than merging two runs' trees.
+    _setup
+    _open_pr 7 >/dev/null
+    _listing 7
+    _pr_state 7 OPEN
+    _collect
+    _assert_stubbed
+    assert_equals "0" "$RC" "the first call resolves"
+    assert_equals "$T/_db:$T/_db_pr/7/rows" "$OUT" "with the PR's rows"
+    _collect
+    assert_equals "1" "$RC" "a second call into the same work dir fails the job"
+    assert_equals "evidence_db_sources: $T/_db_pr/7/head is not empty; refusing to extract into it" \
+        "$(command tail -n1 <<<"$ERR")" "naming the kept tree"
+    assert_equals "" "$OUT" "and no sources"
+}
+
 test_permanent_failure_is_not_retried() {
     _setup
     _open_pr 7 >/dev/null
@@ -589,6 +607,7 @@ test_retry_classifies_by_stderr() {
     }
     local msg
     for msg in "HTTP 401: Bad credentials" "HTTP 403: Resource not accessible" \
+        "fatal: unable to access 'https://x/': The requested URL returned error: 401" \
         "fatal: unable to access 'https://x/': The requested URL returned error: 404"; do
         echo 0 >"$n"
         rc=0
@@ -599,7 +618,8 @@ test_retry_classifies_by_stderr() {
     done
     for msg in "HTTP 502: Bad Gateway" \
         "HTTP 403: API rate limit exceeded for installation ID 1. (https://api.github.com/graphql)" \
-        "HTTP 403: You have exceeded a secondary rate limit. Please wait a few minutes before you try again."; do
+        "HTTP 403: You have exceeded a secondary rate limit. Please wait a few minutes before you try again." \
+        "fatal: unable to access 'https://x/': The requested URL returned error: 403"; do
         echo 0 >"$n"
         rc=0
         err="$(_es_retry _failing "$msg" 2>&1 >/dev/null)" || rc=$?
@@ -657,8 +677,9 @@ run_test test_merge_base_fetch_failure_fails "a merge-base the origin will not s
 run_test test_tar_extraction_failure_fails "a tools/ tree tar cannot extract fails the job"
 run_test test_archive_failure_removes_partial_tar "a failed git archive fails the job and removes its partial tar"
 run_test test_non_empty_extraction_dir_is_refused "a non-empty extraction dir is refused"
+run_test test_rerun_in_the_same_work_dir_is_refused "a second call into the same work dir is refused"
 run_test test_permanent_failure_is_not_retried "a 404 is not retried"
-run_test test_retry_classifies_by_stderr "401/403/404 are permanent; 5xx and rate-limit 403s are retried"
+run_test test_retry_classifies_by_stderr "gh 401/403/404 and git 401/404 are permanent; 5xx, rate-limit and git 403s are retried"
 run_test test_tar_link_listing "symlink and hardlink tar entries are found before extraction"
 
 generate_report

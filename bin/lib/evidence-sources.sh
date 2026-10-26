@@ -33,12 +33,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/evidence-matrix.sh"
 # 3), sleeping EVIDENCE_RETRY_DELAY seconds (default 2) between tries, doubled
 # each time. Stdout is captured and printed only from the attempt that
 # succeeds, so a listing cut off by a failed try is never parsed. A failure
-# whose stderr names HTTP 401, 403 or 404 (gh's "HTTP 404", git's "returned
-# error: 404") is permanent — a bad token or a missing ref or compare — so it
-# is not retried, unless it mentions a rate limit: GitHub answers both its
-# primary and secondary rate limits with a 403, and those clear on their own.
-# Any other failure is retried. Returns the last attempt's exit code either
-# way, so a permanent failure still fails the job.
+# is permanent — a bad token or a missing ref or compare — and not retried
+# when gh reports HTTP 401, 403 or 404 ("HTTP 404: ...") without naming a rate
+# limit (GitHub answers its primary and secondary rate limits with a 403, and
+# those clear on their own), or git reports a 401 or 404 ("returned error:
+# 404"). git's 403 carries no response body, so a throttled fetch cannot be
+# told from a refused one, and it is retried. Any other failure is retried.
+# Returns the last attempt's exit code either way, so a permanent failure
+# still fails the job.
 _es_retry() {
     local attempts="${EVIDENCE_RETRY_ATTEMPTS:-3}" delay="${EVIDENCE_RETRY_DELAY:-2}"
     local i=1 rc out errf
@@ -53,8 +55,8 @@ _es_retry() {
             return 0
         fi
         command echo "evidence_sources: attempt $i/$attempts failed (exit $rc): $*" >&2
-        if command grep -Eq 'HTTP 40[134]|returned error: 40[134]' "$errf" &&
-            ! command grep -iq 'rate limit' "$errf"; then
+        if command grep -Eq 'returned error: 40[14]' "$errf" ||
+            { command grep -Eq 'HTTP 40[134]' "$errf" && ! command grep -iq 'rate limit' "$errf"; }; then
             command echo "evidence_sources: not retrying a permanent failure (exit $rc): $*" >&2
             command rm -f "$errf"
             return "$rc"
@@ -93,7 +95,11 @@ evidence_require_sources() {
 # (db_dir, then <work_dir>/_db_pr/<n>/rows per counted PR), colon-separated.
 # db_dir is an absolute path to a containers-db checkout whose origin is the
 # repo (EVIDENCE_DB_REPO, default joshjhall/containers-db); it is moved to a
-# detached main. Progress goes to stderr. Exit 1 on any failure.
+# detached main. work_dir must hold no _db_pr/ from an earlier call: the PR
+# trees extracted there are kept (the rows are built from them), and a later
+# call refuses to extract over them rather than merge two runs' trees. CI
+# gives each job a fresh checkout. Progress goes to stderr. Exit 1 on any
+# failure.
 evidence_db_sources() {
     local db="$1" work="$2" now="$3" repo="${EVIDENCE_DB_REPO:-joshjhall/containers-db}"
     local list count prs n main_sha sources pr_state state merge in_main verdict
