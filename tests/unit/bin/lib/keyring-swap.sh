@@ -488,25 +488,32 @@ run_swap_signal_at_mktemp() {
     )
 }
 
-# assert_signal_at_mktemp <SIG> <pattern> <expected-rc>
+# assert_signal_at_mktemp <SIG> <pattern> <expected-rc> [first-install] [keys-dir]
 # The rc alone cannot discriminate (an untrapped INT/TERM also exits 130/143);
 # the leftovers count and the removed work dir are what prove the trap ran.
+# first-install: no keyring exists yet, so the trap's no-restore branch runs.
+# keys-dir: parent of the keyring (and work dir); the trap expands its paths
+# at fire time, so a name with a space and a `$` pins that quoting.
 assert_signal_at_mktemp() {
-    local sig="$1" pattern="$2" expected_rc="$3"
+    local sig="$1" pattern="$2" expected_rc="$3" mode="${4:-}" keys="${5:-$TEST_TEMP_DIR/keys}"
     make_src "$TEST_TEMP_DIR/src"
-    local dest="$TEST_TEMP_DIR/keys/keyring"
-    make_dest "$dest"
-    command mkdir -p "$TEST_TEMP_DIR/work"
-    printf 'x' >"$TEST_TEMP_DIR/work/clone-marker"
+    local dest="$keys/keyring" work="$keys/work"
+    command mkdir -p "$keys" "$work"
+    [ "$mode" = first-install ] || make_dest "$dest"
+    printf 'x' >"$work/clone-marker"
 
     local output rc=0
-    output=$(run_swap_signal_at_mktemp "$TEST_TEMP_DIR/src" "$dest" "$TEST_TEMP_DIR/work" "$sig" "$pattern") || rc=$?
+    output=$(run_swap_signal_at_mktemp "$TEST_TEMP_DIR/src" "$dest" "$work" "$sig" "$pattern") || rc=$?
 
     assert_equals "$expected_rc" "$rc" "$sig at the $pattern mktemp exits with the signal status (output: $output)"
-    assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx" 2>/dev/null)" \
-        "existing keyring untouched after $sig at the $pattern mktemp"
+    if [ "$mode" = first-install ]; then
+        assert_dir_not_exists "$dest" "no keyring created after $sig at the $pattern mktemp"
+    else
+        assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx" 2>/dev/null)" \
+            "existing keyring untouched after $sig at the $pattern mktemp"
+    fi
     assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left after $sig at the $pattern mktemp"
-    assert_dir_not_exists "$TEST_TEMP_DIR/work" "work dir removed by the trap"
+    assert_dir_not_exists "$work" "work dir removed by the trap"
 }
 
 test_swap_term_at_staging_mktemp() {
@@ -527,6 +534,17 @@ test_swap_term_at_holder_mktemp() {
 test_swap_int_at_holder_mktemp() {
     require_gpg || return 0
     assert_signal_at_mktemp INT ".old." 130
+}
+
+test_swap_term_at_holder_mktemp_first_install() {
+    require_gpg || return 0
+    assert_signal_at_mktemp TERM ".old." 143 first-install
+}
+
+test_swap_term_at_holder_mktemp_special_path() {
+    require_gpg || return 0
+    # shellcheck disable=SC2016 # a literal $ in the directory name
+    assert_signal_at_mktemp TERM ".old." 143 "" "$TEST_TEMP_DIR/key s"'/$ring'
 }
 
 test_swap_term_during_staging() {
@@ -570,27 +588,38 @@ test_swap_clears_traps_on_return() {
 }
 
 # The traps go in before either mktemp (#1443), so its failure returns must
-# clear them too
+# clear them too. The child reports its rc and the error line so each
+# iteration proves it took its own failure branch, not the success path or
+# the other mktemp's (both of which also leave no trap behind).
 test_swap_mktemp_failure_clears_traps() {
     require_gpg || return 0
     make_src "$TEST_TEMP_DIR/src"
     command mkdir -p "$TEST_TEMP_DIR/work"
-    local pattern traps
+    local dest="$TEST_TEMP_DIR/keys/keyring"
+    local pattern expected output
     for pattern in ".new." ".old."; do
-        # shellcheck disable=SC2016 # expands in the child shell
+        case "$pattern" in
+            .new.) expected="Could not create a staging directory" ;;
+            .old.) expected="Could not create a directory to move the existing keyring aside" ;;
+        esac
         # The pattern goes in via the environment: inside the stub, $5
         # would be the stub's own (empty) 5th argument, matching every mktemp
-        traps=$(MKTEMP_FAIL="$pattern" bash -c '
-            log_error() { :; }
+        # shellcheck disable=SC2016 # expands in the child shell
+        output=$(MKTEMP_FAIL="$pattern" bash -c '
+            log_error() { printf "ERR: %s\n" "$1"; }
             mktemp() {
                 case "${!#}" in *"$MKTEMP_FAIL"*) return 1 ;; esac
                 command mktemp "$@"
             }
             source "$1"
-            swap_keyring_atomic "$2" "$3" "$4" Test >/dev/null 2>&1
-            trap -p INT TERM
-        ' _ "$LIB_FILE" "$TEST_TEMP_DIR/src" "$TEST_TEMP_DIR/keys/keyring" "$TEST_TEMP_DIR/work")
-        assert_equals "" "$traps" "no INT/TERM trap outlives a failed $pattern mktemp"
+            swap_keyring_atomic "$2" "$3" "$4" Test 2>&1
+            printf "rc=%s\n" "$?"
+            printf "traps=<%s>\n" "$(trap -p INT TERM)"
+        ' _ "$LIB_FILE" "$TEST_TEMP_DIR/src" "$dest" "$TEST_TEMP_DIR/work")
+        assert_contains "$output" "rc=1" "a failed $pattern mktemp returns 1 (output: $output)"
+        assert_contains "$output" "ERR: $expected" "the $pattern iteration takes its own failure branch"
+        assert_contains "$output" "traps=<>" "no INT/TERM trap outlives a failed $pattern mktemp"
+        assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left after a failed $pattern mktemp"
     done
 }
 
@@ -634,6 +663,8 @@ run_test_with_setup test_swap_term_at_staging_mktemp "swap: SIGTERM at the stagi
 run_test_with_setup test_swap_int_at_staging_mktemp "swap: SIGINT at the staging mktemp leaves nothing behind"
 run_test_with_setup test_swap_term_at_holder_mktemp "swap: SIGTERM at the holder mktemp leaves nothing behind"
 run_test_with_setup test_swap_int_at_holder_mktemp "swap: SIGINT at the holder mktemp leaves nothing behind"
+run_test_with_setup test_swap_term_at_holder_mktemp_first_install "swap: SIGTERM at the holder mktemp on first install leaves nothing behind"
+run_test_with_setup test_swap_term_at_holder_mktemp_special_path "swap: SIGTERM at the holder mktemp cleans up a path with a space and \$"
 run_test_with_setup test_swap_term_during_staging "swap: SIGTERM during staging keeps the existing keyring"
 run_test_with_setup test_swap_int_during_staging "swap: SIGINT during staging keeps the existing keyring"
 run_test_with_setup test_swap_term_mid_swap_restores "swap: SIGTERM mid-swap restores the existing keyring"

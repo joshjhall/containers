@@ -89,8 +89,11 @@ swap_keyring_atomic() {
     # keyring.new.*/keyring.old.* dir (#1443). The paths do not exist yet, so
     # the trap reads these locals when it fires (every return clears it, so
     # it only fires in this scope) and skips any still empty. Bash defers a
-    # signal that arrives inside a mktemp command substitution until the
-    # assignment lands, so a created dir is always visible to the trap.
+    # signal sent to this shell during a mktemp command substitution until
+    # the assignment lands, so the trap sees the created dir. (A group-wide
+    # Ctrl-C can still kill mktemp itself between creating the dir and
+    # printing its name; that strands one empty dir, never the keyring.)
+    # Each failure return below removes its dirs BEFORE dropping the trap.
     local on_interrupt='[ -n "$staging" ] && rm -rf "$staging"
         if [ -n "$previous_dir" ]; then
             if [ -d "$keyring_dir" ]; then rm -rf "$previous_dir"
@@ -116,8 +119,8 @@ swap_keyring_atomic() {
     # cannot already exist, so the move-aside is always a rename.
     if ! previous_dir=$(mktemp -d "${keyring_dir}.old.XXXXXX") || [ ! -d "$previous_dir" ]; then
         log_error "Could not create a directory to move the existing keyring aside — keeping existing keyring"
-        trap - INT TERM
         rm -rf "$staging"
+        trap - INT TERM
         return 1
     fi
     previous="$previous_dir/keyring"
@@ -140,16 +143,16 @@ swap_keyring_atomic() {
     fi
     if [ "$staged_ok" != true ]; then
         log_error "Staged $label keyring does not match upstream or is unreadable — keeping existing keyring"
-        trap - INT TERM
         rm -rf "$staging" "$previous_dir"
+        trap - INT TERM
         return 1
     fi
 
     # Swap the validated keyring into place
     if [ -d "$keyring_dir" ] && ! mv "$keyring_dir" "$previous"; then
         log_error "Could not move the existing keyring aside — keeping it"
-        trap - INT TERM
         rm -rf "$staging" "$previous_dir"
+        trap - INT TERM
         return 1
     fi
     if ! mv "$staging" "$keyring_dir"; then
@@ -159,8 +162,8 @@ swap_keyring_atomic() {
         else
             rm -rf "$previous_dir"
         fi
-        trap - INT TERM
         rm -rf "$staging"
+        trap - INT TERM
         return 1
     fi
     # Clear the moved-aside copy BEFORE dropping the trap, so an interrupt
