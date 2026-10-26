@@ -734,7 +734,7 @@ open my $f, ">", "$ARGV[0].tmp" or die "open: $!"; print $f "$$\n"; close $f or 
 rename "$ARGV[0].tmp", $ARGV[0] or die "rename: $!";
 exec "sleep", "30" or die "exec: $!"' "$0.gpid" &
 i=0
-while [ ! -s "$0.gpid" ] && [ "$i" -lt 200 ]; do sleep 0.01; i=$((i + 1)); done
+while [ ! -s "$0.gpid" ] && [ "$i" -lt 500 ]; do sleep 0.01; i=$((i + 1)); done
 exit 0
 "#,
     )
@@ -747,7 +747,7 @@ exit 0
     let elapsed = start.elapsed();
 
     let gpid = fs::read_to_string(dir.path().join("tool.gpid"))
-        .expect("the shim must record its background pid before exiting");
+        .expect("the shim must record its background pid before exiting (is perl on PATH?)");
     let gpid = gpid.trim().to_owned();
     let raw: i32 = gpid.parse().unwrap_or_else(|e| panic!("unparsable pid {gpid:?} ({e})"));
     let guard = KillOnDrop(
