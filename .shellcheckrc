@@ -1,9 +1,10 @@
 # ShellCheck configuration for container build system
 # See https://github.com/koalaman/shellcheck/wiki/Directive for details
 
-# Minimum severity level to report (error, warning, info, style)
-# Changed to 'info' to enforce SC2086 (unquoted variable expansion)
-severity=info
+# Severity is NOT configurable here: shellcheck reads it only from the command
+# line and silently ignores a `severity=` key in this file. Every gate
+# (lefthook shellcheck + actionlint hooks, justfile) passes --severity=warning,
+# so info-level codes such as SC2086 (unquoted expansion) are not enforced.
 
 # Shell dialect
 shell=bash
@@ -13,6 +14,8 @@ shell=bash
 # SC1090/SC1091: Can't follow non-constant source paths
 # We source files with dynamic paths (e.g., runtime loading of features)
 # This is by design and unavoidable in our modular architecture
+# (source-path=SCRIPTDIR + external-sources=true was measured in #1494: SC1091
+# rows only drop 603 -> 251, so the disable stays.)
 
 # SC2016: Expressions don't expand in single quotes
 # We intentionally use single quotes when writing shell code to files or when
