@@ -503,6 +503,12 @@ test_unopenable_published_file_is_named() {
     command ln -s nowhere.json "$f"
     _unopenable_fails "$db" "$f" "a broken symlink that sorts first"
     command rm -f "$f"
+
+    # A directory the glob matched is not a regular file either.
+    f="$db/tools/rust/versions/1.95.0.json"
+    command mkdir "$f"
+    _unopenable_fails "$db" "$f" "a directory named like a version file"
+    command rmdir "$f"
 }
 
 test_unreadable_mode_published_file_is_named() {
