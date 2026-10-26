@@ -729,6 +729,7 @@ fn run_version_check_returns_while_a_grandchild_holds_the_capture_fds() {
         &path,
         r#"#!/bin/sh
 echo 'tool 1.0.0'
+command -v perl >/dev/null || { echo 'perl not found' >&2; exit 1; }
 perl -e 'setpgrp(0, 0) or die "setpgrp: $!";
 open my $f, ">", "$ARGV[0].tmp" or die "open: $!"; print $f "$$\n"; close $f or die "close: $!";
 rename "$ARGV[0].tmp", $ARGV[0] or die "rename: $!";
