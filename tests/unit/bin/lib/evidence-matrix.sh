@@ -576,9 +576,10 @@ test_evidence_scratch_failure_is_an_error() {
 test_open_refused_after_access_check_is_named() {
     # #1463: test -r asks access(2), which a FUSE overlay or a root-squashed
     # mount can answer yes while the open still fails. A jq stub stands in
-    # for that open: it fails every read the way jq 1.6/1.7 report it, so the
-    # culprit loop must name the file as unreadable, not misshapen.
-    local r db bin f out err rc=0
+    # for that open, failing every read with jq 1.7's wording (the code keys
+    # only on its "Could not open" stem), so the culprit loop must name the
+    # file as unreadable, not misshapen, and still remove its scratch.
+    local r db bin tmp f out err rc=0
     r="$(_fixture 1.0.0)"
     _version "$r/catalog" 1.90.0 debian-13-amd64
     db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
@@ -589,9 +590,11 @@ test_open_refused_after_access_check_is_named() {
     command chmod +x "$bin/jq"
     err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
     out="$(command mktemp "$TEST_TEMP_DIR/out.XXXXXX")"
-    PATH="$bin:$PATH" EVIDENCE_TESTED_SOURCE="$db" \
+    tmp="$(command mktemp -d "$TEST_TEMP_DIR/tmp.XXXXXX")"
+    PATH="$bin:$PATH" TMPDIR="$tmp" EVIDENCE_TESTED_SOURCE="$db" \
         _em_published_evidence rust "$out" 0 2>"$err" || rc=$?
     assert_equals "1" "$rc" "an open refused past access(2) is exit 1"
+    assert_equals "" "$(command ls -A "$tmp")" "and leaves no scratch behind"
     assert_equals "evidence_matrix: cannot read published evidence for rust: $f" \
         "$(command sed -n 1p "$err")" "and is named as unreadable, not misshapen"
     assert_equals "jq: error: Could not open file $f: Permission denied" \
