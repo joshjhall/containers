@@ -416,6 +416,50 @@ fn a_revocation_in_any_copy_of_the_key_wins() {
     }
 }
 
+/// Pooling must not turn a forged revocation in a sibling copy into a
+/// denial of service: each pooled revocation still has to verify against
+/// that copy's primary.
+#[test]
+fn a_forged_revocation_in_another_copy_is_ignored() {
+    let clean = keygen(27, true, true);
+    let attacker = keygen(28, true, true);
+    let mut forged_copy = clean.clone();
+    let forged = config(
+        SignatureType::KeyRevocation,
+        &attacker.primary_key,
+        T0 + DAY,
+        vec![SubpacketData::RevocationReason(RevocationCode::KeyCompromised, "x".into())],
+    )
+    .sign_key(&attacker.primary_key, &Password::empty(), clean.primary_key.public_key())
+    .unwrap();
+    forged_copy.details.revocation_signatures.push(forged);
+    let sub = subkey(&clean).public_key().clone();
+    let forged_sub = config(
+        SignatureType::SubkeyRevocation,
+        &attacker.primary_key,
+        T0 + DAY,
+        vec![SubpacketData::RevocationReason(RevocationCode::KeyCompromised, "x".into())],
+    )
+    .sign_subkey_binding(
+        &attacker.primary_key,
+        attacker.primary_key.public_key(),
+        &Password::empty(),
+        &sub,
+    )
+    .unwrap();
+    forged_copy.secret_subkeys[0].signatures.push(forged_sub);
+
+    let by_primary = sign_data(&clean.primary_key, T0 + 2 * DAY, DATA);
+    let by_subkey = sign_data(subkey(&clean), T0 + 2 * DAY, DATA);
+    for keys in [
+        [clean.to_public_key(), forged_copy.to_public_key()],
+        [forged_copy.to_public_key(), clean.to_public_key()],
+    ] {
+        check(&by_primary, &keys, DATA, NOW).unwrap();
+        check(&by_subkey, &keys, DATA, NOW).unwrap();
+    }
+}
+
 /// A revocation that does not verify against the primary is noise anyone
 /// could append to a published keyring; it must not deny service.
 #[test]
