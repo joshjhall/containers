@@ -768,9 +768,9 @@ test_replace_failure_keeps_tmpfile() {
     done
 }
 
-# Test: a write failure stops the run — earlier fixes stand, later files
-# are untouched, exit 2
-test_unwritable_file_stops_batch() {
+# Test: a file in an unwritable directory stops the run — earlier fixes
+# stand, later files are untouched, exit 2
+test_unwritable_dir_stops_batch() {
     if [ "$(id -u)" -eq 0 ]; then
         skip_test "root can create files in a mode-555 directory"
         return
@@ -875,7 +875,7 @@ run_test test_fixed_file_replaced_atomically "Fix replaces the file by rename, n
 run_test test_mode_read_via_stat "Mode via stat: unreadable/non-octal exit 2; zero-stripped and BSD -f applied"
 run_test test_signal_removes_tmpfile "SIGTERM/SIGINT mid-rewrite exit 143/130 and remove the tmpfile"
 run_test test_replace_failure_keeps_tmpfile "Failed chmod or mv exits 2 and keeps the named tmpfile"
-run_test test_unwritable_file_stops_batch "Write failure stops the batch with exit 2"
+run_test test_unwritable_dir_stops_batch "Unwritable directory stops the batch with exit 2"
 run_test test_awk_failure_exits_2 "awk failure exits 2 and cleans up"
 run_test test_filename_with_equals "File name containing = is processed as a file"
 
