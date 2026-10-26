@@ -675,15 +675,18 @@ test_unwritable_file_exits_2() {
 }
 
 # Test: a symlinked operand is skipped — the link survives and its target,
-# which may lie outside the repo, is never rewritten (#1439)
+# which may lie outside the repo, is never rewritten (#1439) — and the run
+# goes on to fix the regular file after it
 test_symlink_operand_skipped() {
     /usr/bin/mkdir -p "$TEST_TEMP_DIR/outside" "$TEST_TEMP_DIR/repo"
     write_fixture "$TEST_TEMP_DIR/outside/target.sh" 'grep x' # enforce-command-prefix: off
+    write_fixture "$TEST_TEMP_DIR/repo/plain.sh" 'grep x'     # enforce-command-prefix: off
     /usr/bin/ln -s ../outside/target.sh "$TEST_TEMP_DIR/repo/link.sh"
     local exit_code=0 out
-    out=$("$SCRIPT" "$TEST_TEMP_DIR/repo/link.sh") || exit_code=$?
-    assert_equals "0" "$exit_code" "A symlink operand should be skipped (exit 0)"
-    assert_equals "" "$out" "A skipped symlink should not be reported as fixed"
+    out=$("$SCRIPT" "$TEST_TEMP_DIR/repo/link.sh" "$TEST_TEMP_DIR/repo/plain.sh") || exit_code=$?
+    assert_equals "1" "$exit_code" "The regular file after the symlink should still be fixed"
+    assert_equals "Fixed: $TEST_TEMP_DIR/repo/plain.sh" "$out" "Only the regular file is reported"
+    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/repo/plain.sh")" "plain.sh is fixed"
     assert_true "[ -L '$TEST_TEMP_DIR/repo/link.sh' ]" "Operand should still be a symlink"
     assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/outside/target.sh")" \
         "Symlink target should be untouched"
