@@ -363,23 +363,57 @@ fn revoked_subkey_is_refused() {
     assert!(err.contains("subkey has been revoked"), "{err}");
 }
 
-/// The same key can appear in two certificates — a stale copy carrying a
-/// revocation and a current one without it (the key was un-revoked by
-/// re-issuing, or the keyring merged two exports). The verdict must not
-/// depend on which comes first.
+/// The same key can appear in two certificates — an old export whose
+/// self-signature expired, and a re-issued one that extends it. The verdict
+/// must not depend on which comes first.
 #[test]
 fn a_refused_candidate_does_not_hide_a_valid_later_one() {
-    let clean = keygen(25, true, true);
-    let mut stale = clean.clone();
-    revoke_primary(&mut stale, T0 + 100 * DAY, RevocationCode::KeyRetired);
-    let sig = sign_data(&clean.primary_key, T0 + 200 * DAY, DATA);
+    let mut old = keygen(25, true, true);
+    set_primary_lifetime(&mut old, 10);
+    let mut renewed = keygen(25, true, true);
+    set_primary_lifetime(&mut renewed, 500);
+    let sig = sign_data(&old.primary_key, T0 + 200 * DAY, DATA);
 
-    let stale_first = [stale.to_public_key(), clean.to_public_key()];
-    check(&sig, &stale_first, DATA, NOW).unwrap();
+    for keys in [
+        [old.to_public_key(), renewed.to_public_key()],
+        [renewed.to_public_key(), old.to_public_key()],
+    ] {
+        check(&sig, &keys, DATA, NOW).unwrap();
+    }
 
-    // And when every candidate is refused, the refusal says so.
-    let err = check(&sig, &[stale.to_public_key()], DATA, NOW).unwrap_err();
-    assert!(err.contains("primary key has been revoked"), "{err}");
+    // With only the old copy, the refusal says why.
+    let err = check(&sig, &[old.to_public_key()], DATA, NOW).unwrap_err();
+    assert!(err.contains("primary key had expired"), "{err}");
+}
+
+/// Revocation is permanent: a copy of the key that lacks the revocation is
+/// the stale one, and must not shadow it — in either keyring order, and for
+/// a subkey as well as a primary.
+#[test]
+fn a_revocation_in_any_copy_of_the_key_wins() {
+    let clean = keygen(26, true, true);
+    let mut primary_revoked = clean.clone();
+    revoke_primary(&mut primary_revoked, T0 + 100 * DAY, RevocationCode::KeyCompromised);
+    let mut subkey_revoked = clean.clone();
+    revoke_subkey(&mut subkey_revoked, T0 + 100 * DAY, RevocationCode::KeyCompromised);
+    let by_primary = sign_data(&clean.primary_key, T0 + DAY, DATA);
+    let by_subkey = sign_data(subkey(&clean), T0 + DAY, DATA);
+
+    for keys in [
+        [clean.to_public_key(), primary_revoked.to_public_key()],
+        [primary_revoked.to_public_key(), clean.to_public_key()],
+    ] {
+        let err = check(&by_primary, &keys, DATA, NOW).unwrap_err();
+        assert!(err.contains("primary key has been revoked"), "{err}");
+    }
+    for keys in [
+        [clean.to_public_key(), subkey_revoked.to_public_key()],
+        [subkey_revoked.to_public_key(), clean.to_public_key()],
+    ] {
+        let err = check(&by_subkey, &keys, DATA, NOW).unwrap_err();
+        assert!(err.contains("subkey has been revoked"), "{err}");
+        assert!(!err.contains("primary key has been revoked"), "{err}");
+    }
 }
 
 /// A revocation that does not verify against the primary is noise anyone

@@ -427,15 +427,17 @@ fn check_signature<'d>(
     }
 
     // Every candidate gets its chance: the same key can sit in two
-    // certificates (one stale), and refusing on whichever came first would
-    // make the verdict depend on keyring order.
+    // certificates, and refusing on whichever came first would make the
+    // verdict depend on keyring order (e.g. an older copy whose self-signature
+    // had expired, next to a re-issued one that extends it). Revocations are
+    // pooled across copies inside `check_signer`, so order cannot hide one.
     let mut refusals = Vec::new();
     for signer in candidates {
         let key = signer.verifying_key();
         let mut data = open().map_err(CheckError::Io)?;
         let fpr = key.fingerprint_hex();
         match key.verify_data(sig, &mut data) {
-            Ok(()) => match check_signer(signer, created) {
+            Ok(()) => match check_signer(signer, keys, created) {
                 Ok(()) => return Ok(()),
                 Err(e) => refusals.push(format!("key {fpr}: {e}")),
             },
@@ -497,7 +499,14 @@ fn newest<'s>(
 }
 
 /// Enforce key validity for the key that made a signature at `sig_created`.
-fn check_signer(signer: Signer<'_>, sig_created: u64) -> std::result::Result<(), String> {
+///
+/// `keys` is the whole pinned keyring, consulted only for revocations of the
+/// same key held in another certificate.
+fn check_signer(
+    signer: Signer<'_>,
+    keys: &[SignedPublicKey],
+    sig_created: u64,
+) -> std::result::Result<(), String> {
     let cert = match signer {
         Signer::Primary(c) | Signer::Subkey(c, _) => c,
     };
@@ -528,10 +537,18 @@ fn check_signer(signer: Signer<'_>, sig_created: u64) -> std::result::Result<(),
 
     let primary_created = u64::from(primary.created_at().as_secs());
     check_lifetime("primary key", primary_created, primary_self, sig_created)?;
+    // Revocation is permanent, so it is gathered from EVERY copy of this key
+    // in the keyring: a copy that lacks the revocation is the stale one, and
+    // must not shadow it. (Lifetime and flags above stay per-copy — a
+    // re-issued copy legitimately extends expiry.)
+    let primary_fpr = primary.fingerprint();
     check_revocations(
         "primary key",
-        cert.details.revocation_signatures.iter().filter(|s| {
-            s.typ() == Some(SignatureType::KeyRevocation) && s.verify_key(primary).is_ok()
+        keys.iter().filter(|c| c.primary_key.fingerprint() == primary_fpr).flat_map(|c| {
+            c.details.revocation_signatures.iter().filter(|s| {
+                s.typ() == Some(SignatureType::KeyRevocation)
+                    && s.verify_key(&c.primary_key).is_ok()
+            })
         }),
         sig_created,
     )?;
@@ -560,12 +577,23 @@ fn check_signer(signer: Signer<'_>, sig_created: u64) -> std::result::Result<(),
                 .map_err(|e| format!("signing subkey back-signature is invalid: {e}"))?;
             let sub_created = u64::from(sub.key.created_at().as_secs());
             check_lifetime("subkey", sub_created, binding, sig_created)?;
+            let sub_fpr = sub.key.fingerprint();
             check_revocations(
                 "subkey",
-                sub.signatures.iter().filter(|s| {
-                    s.typ() == Some(SignatureType::SubkeyRevocation)
-                        && s.verify_subkey_binding(primary, &sub.key).is_ok()
-                }),
+                keys.iter()
+                    .filter(|c| c.primary_key.fingerprint() == primary_fpr)
+                    .flat_map(|c| {
+                        c.public_subkeys
+                            .iter()
+                            .filter(|s| s.key.fingerprint() == sub_fpr)
+                            .map(move |s| (c, s))
+                    })
+                    .flat_map(|(c, s)| {
+                        s.signatures.iter().filter(move |r| {
+                            r.typ() == Some(SignatureType::SubkeyRevocation)
+                                && r.verify_subkey_binding(&c.primary_key, &s.key).is_ok()
+                        })
+                    }),
                 sig_created,
             )?;
         }
