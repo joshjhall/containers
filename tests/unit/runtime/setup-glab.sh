@@ -433,6 +433,23 @@ test_xtrace_stays_off_when_untraced() {
         bash "$SETUP_GLAB_SCRIPT" 2>&1) || true
     assert_contains "$output" "GITLAB_TOKEN is too short" "[invalid] should take the validate-fail path"
     assert_not_contains "$output" "+ return 0" "[invalid] untraced run must stay untraced after the restore"
+
+    # Login path, then (now logged in) the already-authenticated path
+    output=$(command env -u BASH_ENV -u GITLAB_HOST \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITLAB_TOKEN="fake-gitlab-token-for-testing-1234" \
+        bash "$SETUP_GLAB_SCRIPT" 2>&1) || true
+    assert_contains "$output" "glab authenticated" "[login] should take the login path"
+    assert_not_contains "$output" "+ _persist_token" "[login] untraced run must stay untraced after the restore"
+
+    assert_file_exists "$TEST_TEMP_DIR/glab.loggedin" "[already-authed] stub should now report logged in"
+    output=$(command env -u BASH_ENV -u GITLAB_TOKEN -u GITLAB_HOST \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash "$SETUP_GLAB_SCRIPT" 2>&1) || true
+    assert_contains "$output" "already authenticated" "[already-authed] should take the already-authenticated path"
+    assert_not_contains "$output" "+ _persist_token" "[already-authed] untraced run must stay untraced after the restore"
 }
 
 # ---------------------------------------------------------------------------

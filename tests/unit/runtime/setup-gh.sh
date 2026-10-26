@@ -549,6 +549,23 @@ test_xtrace_stays_off_when_untraced() {
         bash "$SETUP_GH_SCRIPT" 2>&1) || true
     assert_contains "$output" "GITHUB_TOKEN is too short" "[invalid] should take the validate-fail path"
     assert_not_contains "$output" "+ return 0" "[invalid] untraced run must stay untraced after the restore"
+
+    # Login path, then (now logged in) the already-authenticated path
+    output=$(command env -u BASH_ENV -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" \
+        bash "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "gh authenticated" "[login] should take the login path"
+    assert_not_contains "$output" "+ _persist_token" "[login] untraced run must stay untraced after the restore"
+
+    assert_file_exists "$TEST_TEMP_DIR/gh.loggedin" "[already-authed] stub should now report logged in"
+    output=$(command env -u BASH_ENV -u GITHUB_TOKEN -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "already authenticated" "[already-authed] should take the already-authenticated path"
+    assert_not_contains "$output" "+ _persist_token" "[already-authed] untraced run must stay untraced after the restore"
 }
 
 run_test_with_setup test_login_clears_env_token "Login runs with env tokens cleared and persists"
