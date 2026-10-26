@@ -38,7 +38,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/evidence-epoch.sh"
 # Rewrites <version-file> in place (trailing newline kept). Byte-stable for
 # identical inputs, so callers detect a no-op with `git diff --quiet`.
 # Returns 2 when the row is not valid JSON or lacks os/arch/result, or when
-# EVIDENCE_NOW is set but not 1-12 digits.
+# EVIDENCE_NOW is non-empty but not 1-12 digits. An empty EVIDENCE_NOW reads as
+# unset (the current time), the same as evidence_matrix.
 merge_evidence_row() {
     local file="$1" row="$2" tmp now="${EVIDENCE_NOW:-}"
     [ -n "$now" ] || now="$(command date +%s)"
