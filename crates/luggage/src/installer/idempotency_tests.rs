@@ -711,14 +711,35 @@ impl Drop for KillOnDrop {
 /// ended — the hang the tempfile capture exists to avoid. The
 /// still-running check proves the fds really were held at return, so the
 /// elapsed bound cannot pass because the grandchild died early.
+///
+/// The grandchild moves itself to its own process group first. A descendant
+/// left in the probe's group is killed when the probe exits (#1371), so
+/// an in-group one raced that kill and the still-running check flaked
+/// (#1497). An escaped descendant is the gap the group kill leaves, and the
+/// one where the tempfile capture still matters. The shim exits only once
+/// the pid file exists, which perl writes (renamed into place, never seen
+/// half-written) after `setpgrp`, so the group kill cannot reach it.
 #[cfg(unix)]
 #[test]
 #[serial_test::serial]
 fn run_version_check_returns_while_a_grandchild_holds_the_capture_fds() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("tool");
-    fs::write(&path, "#!/bin/sh\necho 'tool 1.0.0'\nsleep 30 &\necho $! > \"$0.gpid\"\nexit 0\n")
-        .unwrap();
+    fs::write(
+        &path,
+        r#"#!/bin/sh
+echo 'tool 1.0.0'
+command -v perl >/dev/null || { echo 'perl not found' >&2; exit 1; }
+perl -e 'setpgrp(0, 0) or die "setpgrp: $!";
+open my $f, ">", "$ARGV[0].tmp" or die "open: $!"; print $f "$$\n"; close $f or die "close: $!";
+rename "$ARGV[0].tmp", $ARGV[0] or die "rename: $!";
+exec "sleep", "30" or die "exec: $!"' "$0.gpid" &
+i=0
+while [ ! -s "$0.gpid" ] && [ "$i" -lt 500 ]; do sleep 0.01; i=$((i + 1)); done
+exit 0
+"#,
+    )
+    .unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
 
     let start = Instant::now();
@@ -726,8 +747,13 @@ fn run_version_check_returns_while_a_grandchild_holds_the_capture_fds() {
         run_version_check_within(&path, VERSION_ARGS, &BTreeMap::new(), VERSION_PROBE_TIMEOUT);
     let elapsed = start.elapsed();
 
-    let gpid = fs::read_to_string(dir.path().join("tool.gpid"))
-        .expect("the shim must record its background pid before exiting");
+    // perl's `die` text lands in the probe's captured stderr, so show it.
+    let gpid = fs::read_to_string(dir.path().join("tool.gpid")).unwrap_or_else(|e| {
+        let stderr = result.as_ref().map(|out| String::from_utf8_lossy(&out.stderr).into_owned());
+        panic!(
+            "the shim must record its background pid before exiting ({e}); probe stderr: {stderr:?}"
+        )
+    });
     let gpid = gpid.trim().to_owned();
     let raw: i32 = gpid.parse().unwrap_or_else(|e| panic!("unparsable pid {gpid:?} ({e})"));
     let guard = KillOnDrop(
