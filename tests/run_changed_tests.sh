@@ -130,6 +130,14 @@ map_to_test() {
             return
             ;;
 
+        # The evidence-sources suites' shared gh stub and fixtures (#1482) →
+        # every suite that sources them. Delegating to the lib collects its
+        # evidence-sources-*.sh siblings and trigger-paths, as above.
+        tests/lib/evidence-sources-fixtures.sh)
+            map_to_test "bin/lib/evidence-sources.sh"
+            return
+            ;;
+
         # The gpg keyring suites' shared fixtures (#1456) → every suite that
         # sources them. keyring-swap*.sh is globbed so a split-out sibling
         # suite runs at push time without another edit here.

@@ -84,11 +84,21 @@ test_evidence_scripts_map_to_trigger_paths() {
     done
 
     # Own suite plus trigger-paths, as an exact sorted set.
-    for f in evidence-epoch evidence-sources; do
-        out=$(map_to_test "bin/lib/$f.sh" | command sort)
-        assert_equals "$TESTS_DIR/unit/bin/lib/$f.sh
+    out=$(map_to_test "bin/lib/evidence-epoch.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/lib/evidence-epoch.sh
 $TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
-            "bin/lib/$f.sh must map to its own suite and trigger-paths"
+        "bin/lib/evidence-epoch.sh must map to its own suite and trigger-paths"
+
+    # #1482: the sources lib's suite was split along the listing / extraction
+    # seam, with the gh stub and fixtures shared from tests/lib/. The exact set,
+    # for the lib and its fixtures: a dropped sibling narrows push-time coverage
+    # silently.
+    for f in bin/lib/evidence-sources.sh tests/lib/evidence-sources-fixtures.sh; do
+        out=$(map_to_test "$f" | command sort)
+        assert_equals "$TESTS_DIR/unit/bin/lib/evidence-sources-extract.sh
+$TESTS_DIR/unit/bin/lib/evidence-sources.sh
+$TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
+            "$f must map to both split suites and trigger-paths"
     done
 
     # Scripts the workflow neither runs nor sources keep their own mapping.
