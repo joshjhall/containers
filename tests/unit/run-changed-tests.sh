@@ -724,8 +724,9 @@ $TESTS_DIR/unit/bin/check-versions.sh" "$out" \
     done
 }
 
-# The -f guard: with no trigger-paths suite present, an evidence lib with no
-# own suite maps to nothing rather than to a path that does not exist.
+# The -f guard: with no trigger-paths suite present, an evidence lib maps to
+# only the suites that exist (nothing, or its own suite), never to a missing
+# path, and the guard does not cut the own-suite lookup short.
 test_evidence_scripts_trigger_paths_guarded() {
     local root out
     if ! _load_map_to_test; then
