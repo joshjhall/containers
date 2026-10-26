@@ -310,6 +310,11 @@ test_bin_mapping_emits_all_siblings() {
     assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
 $TESTS_DIR/unit/bin/check-versions.sh" "$out" \
         "exactly the exact-match suite and its split sibling must be mapped (#1024)"
+
+    out=$(map_to_test "bin/enforce-command-prefix.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/enforce-command-prefix-write.sh
+$TESTS_DIR/unit/bin/enforce-command-prefix.sh" "$out" \
+        "the rewrite-rule suite and its write-path sibling must both be mapped (#1490)"
 }
 
 # The runner's own collection loop, not just map_to_test. #832's sibling fanout
