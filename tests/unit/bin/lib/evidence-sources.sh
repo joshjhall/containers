@@ -548,6 +548,27 @@ test_archive_failure_removes_partial_tar() {
     assert_equals "" "$OUT" "and no sources"
 }
 
+test_unlistable_archive_fails_closed() {
+    # git archive always writes a listable tar, so the listing helper itself
+    # is overridden (not git) to answer "cannot list"; the lib is re-sourced
+    # after, restoring it for later tests.
+    _setup
+    _open_pr 7 >/dev/null
+    _listing 7
+    _pr_state 7 OPEN
+    _es_tar_has_links() { return 2; }
+    _collect
+    # shellcheck source=bin/lib/evidence-sources.sh
+    source "$PROJECT_ROOT/bin/lib/evidence-sources.sh"
+    _assert_stubbed
+    assert_equals "1" "$RC" "an archive that cannot be listed fails the job"
+    assert_equals "evidence_db_sources: cannot extract containers-db#7 tools/ (head)" "$ERR" \
+        "naming the PR and side"
+    assert_equals "" "$(command ls -A "$T/_db_pr/7/head")" "nothing is extracted"
+    assert_file_not_exists "$T/_db_pr/7/head.tar" "the archive is removed"
+    assert_equals "" "$OUT" "and no sources"
+}
+
 test_non_empty_extraction_dir_is_refused() {
     _setup
     _open_pr 7 >/dev/null
@@ -679,6 +700,7 @@ run_test test_empty_merge_base_fails "an empty merge-base sha fails the job"
 run_test test_merge_base_fetch_failure_fails "a merge-base the origin will not serve fails after 3 attempts"
 run_test test_tar_extraction_failure_fails "a tools/ tree tar cannot extract fails the job"
 run_test test_archive_failure_removes_partial_tar "a failed git archive fails the job and removes its partial tar"
+run_test test_unlistable_archive_fails_closed "an archive that cannot be listed fails closed"
 run_test test_non_empty_extraction_dir_is_refused "a non-empty extraction dir is refused"
 run_test test_rerun_in_the_same_work_dir_is_refused "a second call into the same work dir is refused"
 run_test test_permanent_failure_is_not_retried "a 404 is not retried"
