@@ -109,8 +109,13 @@ main() {
 
     # Authenticate (pipe token via stdin to avoid exposing it in process listings)
     _info "authenticating glab CLI (host: ${host})"
-    printf '%s' "$token" | glab auth login --hostname "$host" --stdin 2>&1
+    local rc=0
+    printf '%s' "$token" | glab auth login --hostname "$host" --stdin 2>&1 || rc=$?
     eval "$_xt"
+    if [ "$rc" -ne 0 ]; then
+        _warn "glab auth login failed (exit ${rc}) — GITLAB_TOKEN may be invalid or expired, ${host} unreachable, or GITLAB_HOST wrong"
+        return "$rc"
+    fi
 
     # Persist token derivation in bashrc
     _persist_token
