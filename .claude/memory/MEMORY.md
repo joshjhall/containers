@@ -150,3 +150,7 @@
 - [Heuristic scanner: union of views](heuristic-scanner-union-of-views.md) — patching a lossy transform has no fixed point
 - [Review-fix commit scope](review-fix-commit-scope.md) — conform rejects `fix(review)`; use the component scope (e.g. `test(luggage)`)
 - [git-cliff in a worktree empties CHANGELOG](git-cliff-worktree-empty-changelog.md) — pass --workdir; fixed in release.sh by #1423
+- [prComments need real id](pr-comments-need-real-id.md) — id-less PR comment forces harness clean:false despite 0 findings; convergence may still say stop
+- [Handoff relaunch refuses dim suggestion](handoff-relaunch-refuses-dim-suggestion.md) — type /clear directly when the composer holds only the dim suggestion (librarian#1223)
+- [gpg keyboxd ignores --keyring](gpg-keyboxd-ignores-keyring-flag.md) — under use-keyboxd no .kbx is created even with --keyring; pin an empty common.conf + assert the file
+- [Post-PR review is pr-attempt*.json](post-pr-review-artifact-is-pr-attempt.md) — glob *attempt*.json before holding a merge for a missing post-PR review
