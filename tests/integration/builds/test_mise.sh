@@ -103,15 +103,28 @@ test_mise_install_runtime() {
     # 3 attempts, each capped at 120s (SIGKILL 10s later if mise ignores TERM),
     # with 5s/10s backoff (~6.75 min worst case,
     # inside the 30-min integration job).
-    # A persistent outage or a real install break still fails every attempt,
-    # and `mise which deno` then fails the test.
+    # A persistent outage or a real install break still fails every attempt.
+    # Each attempt overwrites /tmp/mise-install.log; when all three fail, the
+    # last exit code (124/137 = timeout) and the log tail are printed so the
+    # assertion output tells a flake, a timeout and a permanent error apart
+    # (#1459). `mise which deno` is left unsilenced for the same reason.
     local script='cd /tmp && mkdir -p mise-test && cd mise-test \
         && printf "[tools]\ndeno = \"1\"\n" > .mise.toml \
         && mise trust >/dev/null 2>&1 \
-        && for attempt in 1 2 3; do
-               timeout -k 10 120 mise install >/dev/null 2>&1 && break
-               [ "$attempt" -lt 3 ] && sleep $((attempt * 5))
-           done; mise which deno >/dev/null 2>&1 && echo install-ok'
+        || { echo "mise-test setup failed"; exit 1; }
+        rc=1
+        for attempt in 1 2 3; do
+            timeout -k 10 120 mise install >/tmp/mise-install.log 2>&1
+            rc=$?
+            [ "$rc" -eq 0 ] && break
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 5))
+        done
+        if [ "$rc" -ne 0 ]; then
+            echo "mise install failed after 3 attempts (last exit $rc)"
+            command tail -n 20 /tmp/mise-install.log
+            exit 1
+        fi
+        mise which deno 2>&1 && echo install-ok'
     # $script must stay free of single quotes: it is wrapped in bash -ic '...'.
     assert_command_in_container "$image" "bash -ic '$script'" "install-ok"
 }
