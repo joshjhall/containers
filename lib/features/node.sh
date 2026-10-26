@@ -146,8 +146,8 @@ install_node_system_deps
 # against the matching line of the release's SHASUMS256.txt (tier 3, manifest
 # mode — an arch mismatch fails rather than verifying the wrong artifact),
 # strips the versioned root into /usr/local, and validates with
-# `node --version`. node, npm, npx and corepack land in /usr/local/bin as the
-# tarball ships them.
+# `node --version`. node, npm and npx (and corepack on Node < 25) land in
+# /usr/local/bin as the tarball ships them; ensure_corepack below covers 25+.
 log_message "Installing Node.js via luggage..."
 
 log_command "luggage install node@${NODE_VERSION}" \
