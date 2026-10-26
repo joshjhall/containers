@@ -509,22 +509,33 @@ test_unopenable_published_file_is_named() {
     command mkdir "$f"
     _unopenable_fails "$db" "$f" "a directory named like a version file"
     command rmdir "$f"
+
+    # A later source takes the i>0 branch of the empty-directory probe, so
+    # its dangling first match is pinned there too.
+    local db2
+    db2="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    command mkdir -p "$db2/tools/rust/versions"
+    f="$db2/tools/rust/versions/1.10.0.json"
+    command ln -s nowhere.json "$f"
+    _unopenable_fails "$db:$db2" "$f" "a broken symlink first in a second source"
 }
 
 test_unreadable_mode_published_file_is_named() {
-    # Root reads a mode-000 file anyway, so this case needs a non-root uid.
-    # Its own test, so the skip covers only it (skips render as passes, and
-    # skip_test relabels everything that already ran in the same test).
+    # Root, a DAC-override capability, or a FUSE permission overlay can all
+    # read a mode-000 file anyway, so probe the denial itself rather than the
+    # uid. Its own test, so the skip covers only it (skips render as passes,
+    # and skip_test relabels everything that already ran in the same test).
     local db f
-    if [ "$(command id -u)" = 0 ]; then
-        skip_test "mode-000 case needs a non-root uid"
-        return 0
-    fi
     db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
     _db_version "$db" 1.80.0 debian-13-amd64
     _db_version "$db" 1.90.0 debian-13-amd64
     f="$db/tools/rust/versions/1.90.0.json"
     command chmod 000 "$f"
+    if [ -r "$f" ]; then
+        command chmod 644 "$f"
+        skip_test "mode 000 does not deny reads here"
+        return 0
+    fi
     _unopenable_fails "$db" "$f" "a file without read permission" restore
 }
 
