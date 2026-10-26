@@ -25,6 +25,11 @@ const DAY: u32 = 86_400;
 const NOW: u32 = T0 + 1000 * DAY;
 const DATA: &[u8] = b"release bytes";
 
+fn wall_now() -> u32 {
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    u32::try_from(secs).unwrap()
+}
+
 // ---- fixtures ---------------------------------------------------------------
 
 struct StubClient(HashMap<String, Vec<u8>>);
@@ -298,7 +303,7 @@ fn signing_subkey_without_back_signature_is_refused() {
     let mut flags = KeyFlags::default();
     flags.set_sign(true);
     // Newer than the builder's binding (dated at the wall clock), so it wins.
-    let at = u32::try_from(unix_now()).unwrap() + DAY;
+    let at = wall_now() + DAY;
     let bare = config(
         SignatureType::SubkeyBinding,
         &key.primary_key,
@@ -331,7 +336,7 @@ fn signing_subkey_with_foreign_back_signature_is_refused() {
         .unwrap();
     let mut flags = KeyFlags::default();
     flags.set_sign(true);
-    let at = u32::try_from(unix_now()).unwrap() + DAY;
+    let at = wall_now() + DAY;
     let binding = config(
         SignatureType::SubkeyBinding,
         &key.primary_key,
@@ -356,6 +361,25 @@ fn revoked_subkey_is_refused() {
     let sig = sign_data(subkey(&key), T0 + DAY, DATA);
     let err = check(&sig, &[key.to_public_key()], DATA, NOW).unwrap_err();
     assert!(err.contains("subkey has been revoked"), "{err}");
+}
+
+/// The same key can appear in two certificates — a stale copy carrying a
+/// revocation and a current one without it (the key was un-revoked by
+/// re-issuing, or the keyring merged two exports). The verdict must not
+/// depend on which comes first.
+#[test]
+fn a_refused_candidate_does_not_hide_a_valid_later_one() {
+    let clean = keygen(25, true, true);
+    let mut stale = clean.clone();
+    revoke_primary(&mut stale, T0 + 100 * DAY, RevocationCode::KeyRetired);
+    let sig = sign_data(&clean.primary_key, T0 + 200 * DAY, DATA);
+
+    let stale_first = [stale.to_public_key(), clean.to_public_key()];
+    check(&sig, &stale_first, DATA, NOW).unwrap();
+
+    // And when every candidate is refused, the refusal says so.
+    let err = check(&sig, &[stale.to_public_key()], DATA, NOW).unwrap_err();
+    assert!(err.contains("primary key has been revoked"), "{err}");
 }
 
 /// A revocation that does not verify against the primary is noise anyone
@@ -453,7 +477,7 @@ fn real_node_signature_verifies_and_tamper_fails() {
     let keys = load_keyring(&testdata("nodejs.asc")).unwrap();
     let sig = real_sig("node-v22.23.4-SHASUMS256.txt.sig");
     let manifest = read("node-v22.23.4-SHASUMS256.txt");
-    let now = u32::try_from(unix_now()).unwrap();
+    let now = wall_now();
     check(&sig, &keys, &manifest, now).unwrap();
 
     let mut tampered = manifest;

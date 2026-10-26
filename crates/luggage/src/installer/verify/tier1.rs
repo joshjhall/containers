@@ -186,6 +186,7 @@ pub fn verify(
     let (sig, _) = DetachedSignature::from_reader_single(&sig_bytes[..])
         .map_err(|e| fail(format!("signature at {sig_url} is not an OpenPGP signature: {e}")))?;
     let sig = sig.signature;
+    let now = unix_now(&fail)?;
 
     match shape.manifest_url_template {
         None => {
@@ -196,14 +197,14 @@ pub fn verify(
                 })?;
                 Ok(Box::new(BufReader::new(f)))
             };
-            check_signature(&sig, &keys, &shape.keyring, unix_now(), open)
+            check_signature(&sig, &keys, &shape.keyring, now, open)
                 .map_err(|e| e.into_error(&fail))?;
             Ok(())
         }
         Some(template) => {
             let manifest_url = substitute_url(template, subs)?;
             let manifest = fetch(http, &manifest_url, &fail)?;
-            check_signature(&sig, &keys, &shape.keyring, unix_now(), || {
+            check_signature(&sig, &keys, &shape.keyring, now, || {
                 Ok(Box::new(&manifest[..]) as Box<dyn Read + '_>)
             })
             .map_err(|e| e.into_error(&fail))?;
@@ -263,8 +264,13 @@ fn fetch(
     })
 }
 
-fn unix_now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+/// The current time, failing closed: a clock before the epoch would read as
+/// time 0 and quietly disable the signature-expiry check.
+fn unix_now(fail: &impl Fn(String) -> LuggageError) -> Result<u64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .map_err(|_| fail("system clock is before the Unix epoch".to_owned()))
 }
 
 /// Resolve `rel` under `root`, refusing anything that could name a file
@@ -420,21 +426,25 @@ fn check_signature<'d>(
         .into());
     }
 
-    let mut last = String::new();
+    // Every candidate gets its chance: the same key can sit in two
+    // certificates (one stale), and refusing on whichever came first would
+    // make the verdict depend on keyring order.
+    let mut refusals = Vec::new();
     for signer in candidates {
         let key = signer.verifying_key();
         let mut data = open().map_err(CheckError::Io)?;
+        let fpr = key.fingerprint_hex();
         match key.verify_data(sig, &mut data) {
-            Ok(()) => {
-                return check_signer(signer, created)
-                    .map_err(|e| format!("key {}: {e}", key.fingerprint_hex()).into());
-            }
+            Ok(()) => match check_signer(signer, created) {
+                Ok(()) => return Ok(()),
+                Err(e) => refusals.push(format!("key {fpr}: {e}")),
+            },
             Err(e) => {
-                last = format!("does not verify against pinned key {}: {e}", key.fingerprint_hex());
+                refusals.push(format!("signature does not verify against pinned key {fpr}: {e}"));
             }
         }
     }
-    Err(format!("signature {last}").into())
+    Err(refusals.join("; ").into())
 }
 
 /// Keys in `keys` whose fingerprint or key ID the signature names as issuer.
