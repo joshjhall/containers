@@ -597,12 +597,16 @@ test_retry_classifies_by_stderr() {
         assert_equals "1" "$(command cat "$n")" "'$msg' is attempted once"
         assert_contains "$err" "$msg" "'$msg' is still shown"
     done
-    echo 0 >"$n"
-    rc=0
-    err="$(_es_retry _failing "HTTP 502: Bad Gateway" 2>&1 >/dev/null)" || rc=$?
-    assert_equals "1" "$rc" "a persistent 502 fails"
-    assert_equals "3" "$(command cat "$n")" "after three attempts: a 5xx is transient"
-    assert_not_contains "$err" "not retrying" "and is not called permanent"
+    for msg in "HTTP 502: Bad Gateway" \
+        "HTTP 403: API rate limit exceeded for installation ID 1. (https://api.github.com/graphql)" \
+        "HTTP 403: You have exceeded a secondary rate limit. Please wait a few minutes before you try again."; do
+        echo 0 >"$n"
+        rc=0
+        err="$(_es_retry _failing "$msg" 2>&1 >/dev/null)" || rc=$?
+        assert_equals "1" "$rc" "a persistent '$msg' fails"
+        assert_equals "3" "$(command cat "$n")" "'$msg' is transient: three attempts"
+        assert_not_contains "$err" "not retrying" "'$msg' is not called permanent"
+    done
 }
 
 test_tar_link_listing() {
@@ -654,7 +658,7 @@ run_test test_tar_extraction_failure_fails "a tools/ tree tar cannot extract fai
 run_test test_archive_failure_removes_partial_tar "a failed git archive fails the job and removes its partial tar"
 run_test test_non_empty_extraction_dir_is_refused "a non-empty extraction dir is refused"
 run_test test_permanent_failure_is_not_retried "a 404 is not retried"
-run_test test_retry_classifies_by_stderr "401/403/404 are permanent, 5xx is retried"
+run_test test_retry_classifies_by_stderr "401/403/404 are permanent; 5xx and rate-limit 403s are retried"
 run_test test_tar_link_listing "symlink and hardlink tar entries are found before extraction"
 
 generate_report

@@ -35,8 +35,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/evidence-matrix.sh"
 # succeeds, so a listing cut off by a failed try is never parsed. A failure
 # whose stderr names HTTP 401, 403 or 404 (gh's "HTTP 404", git's "returned
 # error: 404") is permanent — a bad token or a missing ref or compare — so it
-# is not retried. Any other failure is retried. Returns the last attempt's exit
-# code either way, so a permanent failure still fails the job.
+# is not retried, unless it mentions a rate limit: GitHub answers both its
+# primary and secondary rate limits with a 403, and those clear on their own.
+# Any other failure is retried. Returns the last attempt's exit code either
+# way, so a permanent failure still fails the job.
 _es_retry() {
     local attempts="${EVIDENCE_RETRY_ATTEMPTS:-3}" delay="${EVIDENCE_RETRY_DELAY:-2}"
     local i=1 rc out errf
@@ -51,7 +53,8 @@ _es_retry() {
             return 0
         fi
         command echo "evidence_sources: attempt $i/$attempts failed (exit $rc): $*" >&2
-        if command grep -Eq 'HTTP 40[134]|returned error: 40[134]' "$errf"; then
+        if command grep -Eq 'HTTP 40[134]|returned error: 40[134]' "$errf" &&
+            ! command grep -iq 'rate limit' "$errf"; then
             command echo "evidence_sources: not retrying a permanent failure (exit $rc): $*" >&2
             command rm -f "$errf"
             return "$rc"
