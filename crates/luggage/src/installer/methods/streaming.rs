@@ -273,3 +273,7 @@ pub const PIPE_DRAIN_GRACE: std::time::Duration = std::time::Duration::from_secs
 
 /// Prefix of the line forwarded when output pipes outlive the step.
 pub const PIPES_HELD_MARKER: &str = "[luggage: output pipes still open:";
+
+#[cfg(all(test, unix))]
+#[path = "streaming_tests.rs"]
+mod tests;

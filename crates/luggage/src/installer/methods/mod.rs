@@ -41,9 +41,6 @@ pub use streaming::{
     MAX_LINE_BYTES, PIPE_DRAIN_GRACE, PIPES_HELD_MARKER, READ_ERROR_MARKER, STDERR_TAIL_LINES,
     StreamingCall, StreamingCommand, TRUNCATED_MARKER,
 };
-// Reached by `source_build_tests` through `super::super::`.
-#[cfg(test)]
-use streaming::{Pipe, pump, resolve_exit};
 
 /// Outcome of running a child process.
 #[derive(Debug, Clone)]
