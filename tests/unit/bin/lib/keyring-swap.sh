@@ -578,16 +578,18 @@ test_swap_mktemp_failure_clears_traps() {
     local pattern traps
     for pattern in ".new." ".old."; do
         # shellcheck disable=SC2016 # expands in the child shell
-        traps=$(bash -c '
+        # The pattern goes in via the environment: inside the stub, $5
+        # would be the stub's own (empty) 5th argument, matching every mktemp
+        traps=$(MKTEMP_FAIL="$pattern" bash -c '
             log_error() { :; }
             mktemp() {
-                case "${!#}" in *"$5"*) return 1 ;; esac
+                case "${!#}" in *"$MKTEMP_FAIL"*) return 1 ;; esac
                 command mktemp "$@"
             }
             source "$1"
             swap_keyring_atomic "$2" "$3" "$4" Test >/dev/null 2>&1
             trap -p INT TERM
-        ' _ "$LIB_FILE" "$TEST_TEMP_DIR/src" "$TEST_TEMP_DIR/keys/keyring" "$TEST_TEMP_DIR/work" "$pattern")
+        ' _ "$LIB_FILE" "$TEST_TEMP_DIR/src" "$TEST_TEMP_DIR/keys/keyring" "$TEST_TEMP_DIR/work")
         assert_equals "" "$traps" "no INT/TERM trap outlives a failed $pattern mktemp"
     done
 }
