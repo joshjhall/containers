@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Shared fixtures for the evidence-matrix suites (#1381):
-# tests/unit/bin/lib/evidence-matrix.sh (one tool) and
-# tests/unit/bin/lib/evidence-matrix-all.sh (every tool). Sourced only — it
+# tests/unit/bin/lib/evidence-matrix.sh (one tool),
+# tests/unit/bin/lib/evidence-matrix-published.sh (unreadable published
+# evidence, #1464) and tests/unit/bin/lib/evidence-matrix-all.sh (every
+# tool). Sourced only — it
 # lives outside tests/unit/ so the unit runner does not execute it as a suite.
 # Callers source tests/framework.sh first: _fixture writes under TEST_TEMP_DIR.
 
