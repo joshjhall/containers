@@ -459,7 +459,50 @@ test_unreadable_published_source_is_an_error() {
     assert_equals "1" "$rc" "an unparsable source is exit 1"
     assert_equals "" "$out" "and prints no matrix"
     assert_equals "$(_malformed_msg "$db/tools/rust/versions/1.90.0.json")" \
-        "$(command cat "$err")" "and names the unparsable file (#1329)"
+        "$(command sed -n 1p "$err")" "and names the unparsable file (#1329)"
+    # jq's parse error follows, so the operator sees where the file broke
+    # (#1463). Its wording belongs to the jq release; only the location is pinned.
+    assert_contains "$(command sed -n 2p "$err")" "line 1, column" "and jq's parse location follows it"
+}
+
+# _unopenable_fails <source> <bad_file> <what> — evidence_matrix exits 1,
+# prints no matrix, and says bad_file cannot be read, without the shape hint.
+_unopenable_fails() {
+    local src="$1" bad="$2" what="$3" r out err rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    out="$(EVIDENCE_TESTED_SOURCE="$src" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
+    assert_equals "1" "$rc" "$what is exit 1"
+    assert_equals "" "$out" "$what prints no matrix"
+    assert_equals "evidence_matrix: cannot read published evidence for rust: $bad" \
+        "$(command cat "$err")" "$what is named as unreadable, not misshapen"
+}
+
+test_unopenable_published_file_is_named() {
+    # #1463: a file the glob matched but jq cannot open is an access problem;
+    # the shape hint would send the operator to its content. Still fatal
+    # (#1319). 1.80.0 and 1.90.0 are valid, so the culprit is not just
+    # "the only file there is".
+    local db f
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.80.0 debian-13-amd64
+    _db_version "$db" 1.90.0 debian-13-amd64
+
+    f="$db/tools/rust/versions/1.95.0.json"
+    command ln -s nowhere.json "$f"
+    _unopenable_fails "$db" "$f" "a broken symlink"
+    command rm -f "$f"
+
+    # Root reads a mode-000 file anyway, so this case needs a non-root uid.
+    if [ "$(command id -u)" = 0 ]; then
+        command echo "    (skipping the mode-000 case: running as root)"
+        return 0
+    fi
+    f="$db/tools/rust/versions/1.90.0.json"
+    command chmod 000 "$f"
+    _unopenable_fails "$db" "$f" "a file without read permission"
+    command chmod 644 "$f"
 }
 
 _malformed_msg() {
@@ -572,9 +615,9 @@ test_unnamed_evidence_failure_names_the_sources() {
 }
 
 test_evidence_scratch_is_removed() {
-    # The batch jq's stderr sidecar sits next to evidence_matrix's mktemp
-    # output; every exit path (success, a named file, the fallback) removes
-    # both, so a scratch TMPDIR is empty afterwards.
+    # The batch jq's stderr sidecar is its own mktemp (#1463), like
+    # evidence_matrix's output file; every exit path (success, a named file,
+    # the fallback) removes both, so a scratch TMPDIR is empty afterwards.
     # Each case pins its exit code and first stderr line, so the three
     # cases cannot quietly collapse onto one path.
     local r db tmp f err case rc want_rc want_err
@@ -934,6 +977,7 @@ run_test test_open_prs_unparsable_listing_is_an_error "open evidence PRs: unpars
 run_test test_fully_published_coverage_exits_3 "full published coverage exits 3"
 run_test test_unreadable_published_source_is_an_error "an unreadable evidence source is an error, not a full matrix"
 run_test test_malformed_published_file_is_named "a malformed published version file is fatal and named"
+run_test test_unopenable_published_file_is_named "an unopenable published version file is fatal and named as unreadable"
 run_test test_unnamed_evidence_failure_names_the_sources "a failure no file check explains falls back to the source list"
 run_test test_evidence_scratch_is_removed "published-evidence scratch is removed on every exit path"
 run_test test_repeated_source_is_not_two_documents "a source listed twice is not a two-document file"
