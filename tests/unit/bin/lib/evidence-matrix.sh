@@ -668,20 +668,26 @@ test_unnamed_evidence_failure_names_the_sources() {
 
 test_evidence_scratch_is_removed() {
     # The batch jq's stderr sidecar is its own mktemp (#1463), like
-    # evidence_matrix's output file; every exit path (success, a named file,
-    # the fallback) removes both, so a scratch TMPDIR is empty afterwards.
-    # Each case pins its exit code and first stderr line, so the three
-    # cases cannot quietly collapse onto one path.
-    local r db tmp f err case rc want_rc want_err
+    # evidence_matrix's output file; every exit path (success, an unopenable
+    # file, a named file, the fallback) removes both, so a scratch TMPDIR is
+    # empty afterwards. Each case pins its exit code and first stderr line,
+    # so the four cases cannot quietly collapse onto one path.
+    local r db tmp f link err case rc want_rc want_err
     r="$(_fixture 1.0.0)"
     _version "$r/catalog" 1.90.0 debian-13-amd64
     db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
     f="$db/tools/rust/versions/1.90.0.json"
+    link="$db/tools/rust/versions/1.95.0.json"
     err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
-    for case in ok named fallback; do
+    for case in ok unopenable named fallback; do
         _db_version "$db" 1.90.0 ""
+        command rm -f "$link"
         case "$case" in
             ok) want_rc=0 want_err="" ;;
+            unopenable)
+                command ln -s nowhere.json "$link"
+                want_rc=1 want_err="evidence_matrix: cannot read published evidence for rust: $link"
+                ;;
             named)
                 _mutate "$f" 'del(.version)'
                 want_rc=1 want_err="$(_malformed_msg "$f")"
