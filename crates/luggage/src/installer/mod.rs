@@ -272,6 +272,7 @@ impl Installer {
             &resolved.version,
             &resolved.verification,
             self.options.require_verified_downloads,
+            self.options.catalog_root.as_deref(),
         )?;
 
         let target = rustup_target_for(&resolved.platform).ok();
@@ -527,7 +528,11 @@ impl Installer {
         let artifact = scratch.path().join(&artifact_filename);
 
         let digest = self.stage_download(resolved, source_url, &artifact, logger)?;
-        let warnings = self.stage_verify(resolved, &digest, &artifact_filename, logger)?;
+        let warnings = self.stage_verify(
+            resolved,
+            &verify::Artifact { digest: &digest, filename: &artifact_filename, path: &artifact },
+            logger,
+        )?;
 
         // Build the env map once so every stage that shells out (install
         // method, post-install steps, post-install validate) sees the same

@@ -32,6 +32,18 @@ ignore = [
   # requires heapless ^0.7, so the dependency cannot be bumped from our side.
   # Revisit when phonenumber drops postcard or postcard moves to heapless 0.9.
   { id = "RUSTSEC-2023-0089", reason = "unmaintained; embedded-target-only via heapless 0.7, never compiled on any target we build. See #802-style note in .osv-scanner.toml." },
+  # rsa 0.9 (Marvin) and crypto-bigint 0.5 (non-constant-time arithmetic),
+  # both reached only through pgp 0.21 for luggage's tier-1 verification
+  # (#1508). Each is a timing side channel that leaks a SECRET operand.
+  # luggage only ever verifies signatures against public keys from the pinned
+  # catalog keyrings — it loads no secret key, decrypts nothing, and signs
+  # nothing — so there is no secret for either channel to leak. (Secret keys
+  # appear only in luggage's unit tests, generated from a fixed seed.)
+  # No fix is reachable from our side: rsa has no constant-time release yet,
+  # and pgp 0.21 pins the elliptic-curve 0.13 line that requires
+  # crypto-bigint 0.5. Revisit when pgp moves to rsa 0.10 / elliptic-curve 0.14.
+  { id = "RUSTSEC-2023-0071", reason = "rsa Marvin timing attack needs a secret-key operation; luggage only verifies with public keys (pgp 0.21, tier 1, #1508). See .osv-scanner.toml." },
+  { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 non-constant-time ops leak secret operands; luggage only verifies with public keys (pgp 0.21, tier 1, #1508). See .osv-scanner.toml." },
 ]
 
 [licenses]

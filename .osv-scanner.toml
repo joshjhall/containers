@@ -55,3 +55,32 @@ reason = "atomic-polyfill unmaintained; embedded-target-only via heapless 0.7, n
 id = "GHSA-qwgh-2vcv-g2f7"
 ignoreUntil = 2027-01-31
 reason = "block-buffer 0.10 cursor corruption needs a caught panic inside a compression callback; we only do one-shot sha2/digest hashing. Fix needs digest 0.11 (#1522)."
+
+# ---------------------------------------------------------------------------
+# rsa 0.9.10 + crypto-bigint 0.5.5 — via pgp 0.21, luggage tier-1 GPG (#1508)
+# ---------------------------------------------------------------------------
+# RUSTSEC-2023-0071 (Marvin) and RUSTSEC-2026-0387 (non-constant-time
+# arithmetic) are both timing side channels that leak a SECRET operand: an
+# RSA private key during decryption/signing, or secret integers in
+# constant-time-intended bignum ops.
+#
+# luggage uses pgp only to verify detached signatures against PUBLIC keys
+# committed to the catalog (keyrings/*.asc). It loads no secret key, decrypts
+# nothing and signs nothing, so neither channel has a secret to leak. Secret
+# keys exist only in luggage's unit tests, generated from a fixed seed.
+#
+# No upgrade path from our side: rsa has no constant-time release, and pgp
+# 0.21 pins elliptic-curve 0.13, which requires crypto-bigint 0.5.
+#
+# Mirrored in deny.toml's [advisories] ignore list — keep the two in sync.
+# Revisit when pgp moves to rsa 0.10 / elliptic-curve 0.14.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2023-0071"
+ignoreUntil = 2027-04-30
+reason = "rsa Marvin timing attack needs a secret-key operation; luggage only verifies signatures with pinned public keys (pgp 0.21, tier 1, #1508)."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0387"
+ignoreUntil = 2027-04-30
+reason = "crypto-bigint 0.5 non-constant-time ops leak secret operands; luggage only verifies signatures with pinned public keys (pgp 0.21, tier 1, #1508)."
