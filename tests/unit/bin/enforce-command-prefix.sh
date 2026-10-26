@@ -27,9 +27,9 @@ write_fixture() {
 }
 
 # Helper: octal permission bits of a file, GNU (stat -c) or BSD (stat -f).
-# Prints nothing (and still returns 0, so set -e can't skip the caller's
-# skip_test) if neither form works. Bare 'stat' (not 'command stat') so an
-# exported stat() stub can stand in for a BSD userland.
+# Prints nothing (and still returns 0) if neither form works. Bare 'stat'
+# (not 'command stat') so an exported stat() stub can stand in for a BSD
+# userland.
 file_mode() {
     stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null || true
 }
@@ -617,40 +617,37 @@ test_fixed_file_keeps_mode() {
     local exit_code=0
     "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
     assert_equals "1" "$exit_code" "Should exit 1 when changes made"
-    local mode
-    mode=$(file_mode "$TEST_TEMP_DIR/test.sh")
-    if [ -z "$mode" ]; then
-        skip_test "Neither GNU nor BSD stat can report the file mode"
-        return
-    fi
-    assert_equals "755" "$mode" "Fixed file should keep its 755 mode"
+    # Exit 1 means the hook read the mode, so file_mode can too (#1439)
+    assert_equals "755" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Fixed file should keep its 755 mode"
 }
 
-# Test: mode survives a BSD-style chmod that rejects GNU --reference (#1429).
-# The stub is first on PATH; BASH_ENV is cleared so /etc/bash_env can't
-# rebuild PATH and drop it.
-test_fixed_file_keeps_mode_without_gnu_chmod() {
+# Helper: run the hook on test.sh ('grep x', mode $3 or 644) with a PATH
+# stub named $2 whose body is $1; sets exit_code and err (stderr). BASH_ENV
+# is cleared so /etc/bash_env can't rebuild PATH and drop the stub.
+run_with_stub() {
     /usr/bin/mkdir -p "$TEST_TEMP_DIR/stub"
-    printf '#!/bin/sh\ncase "$1" in --reference*) exit 1 ;; esac\nexec /bin/chmod "$@"\n' \
-        >"$TEST_TEMP_DIR/stub/chmod"
-    /bin/chmod 755 "$TEST_TEMP_DIR/stub/chmod"
+    printf '#!/bin/sh\n%s\n' "$1" >"$TEST_TEMP_DIR/stub/$2"
+    /bin/chmod 755 "$TEST_TEMP_DIR/stub/$2"
+    /usr/bin/rm -f "$TEST_TEMP_DIR/test.sh"         # a prior call may have left it read-only
     write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
-    chmod 755 "$TEST_TEMP_DIR/test.sh"
-    local exit_code=0
-    env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" \
-        "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
+    /bin/chmod "${3:-644}" "$TEST_TEMP_DIR/test.sh"
+    exit_code=0
+    err=$(env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" \
+        "$SCRIPT" "$TEST_TEMP_DIR/test.sh" 2>&1 >/dev/null) || exit_code=$?
+}
+
+# Test: mode survives a BSD-style chmod that rejects GNU --reference (#1429)
+test_fixed_file_keeps_mode_without_gnu_chmod() {
+    local exit_code err
+    run_with_stub 'case "$1" in --reference*) exit 1 ;; esac
+exec /bin/chmod "$@"' chmod 755
     assert_equals "1" "$exit_code" "Should exit 1 when changes made"
     assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" \
         "Fixed content should be written back"
     assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
         "No tmpfile should be left after a successful write"
-    local mode
-    mode=$(file_mode "$TEST_TEMP_DIR/test.sh")
-    if [ -z "$mode" ]; then
-        skip_test "Neither GNU nor BSD stat can report the file mode"
-        return
-    fi
-    assert_equals "755" "$mode" "Fixed file should keep 755 without GNU chmod --reference"
+    # Exit 1 means the hook read the mode, so file_mode can too (#1439)
+    assert_equals "755" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Fixed file should keep 755 without GNU chmod --reference"
 }
 
 # Test: a fixable but unwritable file → exit 2, and the tmpfile holding the
@@ -677,19 +674,81 @@ test_unwritable_file_exits_2() {
         "Unwritable original should be unchanged"
 }
 
-# Test: a symlinked operand stays a symlink and its target is rewritten
-# (the old mv path replaced the link with a regular file)
-test_symlink_operand_rewrites_target() {
-    write_fixture "$TEST_TEMP_DIR/target.sh" 'grep x' # enforce-command-prefix: off
-    /usr/bin/ln -s target.sh "$TEST_TEMP_DIR/link.sh"
+# Test: a symlinked operand is skipped — the link survives and its target,
+# which may lie outside the repo, is never rewritten (#1439) — and the run
+# goes on to fix the regular file after it
+test_symlink_operand_skipped() {
+    /usr/bin/mkdir -p "$TEST_TEMP_DIR/outside" "$TEST_TEMP_DIR/repo"
+    write_fixture "$TEST_TEMP_DIR/outside/target.sh" 'grep x' # enforce-command-prefix: off
+    write_fixture "$TEST_TEMP_DIR/repo/plain.sh" 'grep x'     # enforce-command-prefix: off
+    /usr/bin/ln -s ../outside/target.sh "$TEST_TEMP_DIR/repo/link.sh"
+    local exit_code=0 out
+    out=$("$SCRIPT" "$TEST_TEMP_DIR/repo/link.sh" "$TEST_TEMP_DIR/repo/plain.sh") || exit_code=$?
+    assert_equals "1" "$exit_code" "The regular file after the symlink should still be fixed"
+    assert_equals "Fixed: $TEST_TEMP_DIR/repo/plain.sh" "$out" "Only the regular file is reported"
+    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/repo/plain.sh")" "plain.sh is fixed"
+    assert_true "[ -L '$TEST_TEMP_DIR/repo/link.sh' ]" "Operand should still be a symlink"
+    assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/outside/target.sh")" \
+        "Symlink target should be untouched"
+}
+
+# Test: the fix replaces the file by rename, not by truncate-and-rewrite —
+# a new inode, and a hard link to the old one still holds the old bytes
+test_fixed_file_replaced_atomically() {
+    write_fixture "$TEST_TEMP_DIR/test.sh" 'grep x' # enforce-command-prefix: off
+    /usr/bin/ln "$TEST_TEMP_DIR/test.sh" "$TEST_TEMP_DIR/old.sh"
     local exit_code=0
-    "$SCRIPT" "$TEST_TEMP_DIR/link.sh" >/dev/null || exit_code=$?
+    "$SCRIPT" "$TEST_TEMP_DIR/test.sh" >/dev/null || exit_code=$?
     assert_equals "1" "$exit_code" "Should exit 1 when changes made"
-    assert_true "[ -L '$TEST_TEMP_DIR/link.sh' ]" "Operand should still be a symlink"
-    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/target.sh")" \
-        "Symlink target should hold the fixed content"
-    assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
-        "No tmpfile should be left after a successful write"
+    assert_equals "command grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" \
+        "Fixed content should be in place"
+    assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/old.sh")" \
+        "The old inode should be untouched (rename, not in-place write)"
+}
+
+# Test: how the hook reads the mode through stat. No usable answer, or a
+# non-octal one → exit 2, original untouched, no tmpfile (never a silent 0600
+# script). GNU's zero-stripped "44" (mode 044) and BSD 'stat -f %Lp' are applied.
+test_mode_read_via_stat() {
+    local exit_code err stub
+    for stub in 'exit 1' 'printf "abc\n"'; do
+        run_with_stub "$stub" stat
+        assert_equals "2" "$exit_code" "stat '$stub' should exit 2"
+        assert_contains "$err" "could not read the mode of $TEST_TEMP_DIR/test.sh" "Stderr names the file"
+        assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" "Original should be unchanged"
+        assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" "No tmpfile should be left"
+    done
+    run_with_stub 'printf "44\n"' stat
+    assert_equals "44" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Zero-stripped mode 044 should be applied"
+    run_with_stub 'case "$1" in -f) printf "750\n" ;; *) exit 1 ;; esac' stat
+    assert_equals "1" "$exit_code" "BSD stat -f should supply the mode"
+    assert_equals "750" "$(file_mode "$TEST_TEMP_DIR/test.sh")" "Mode should come from stat -f"
+}
+
+# Test: SIGTERM/SIGINT mid-rewrite (sent by a chmod stub while the tmpfile
+# exists) exits 143/130, leaves the original intact and removes the tmpfile
+test_signal_removes_tmpfile() {
+    local exit_code err sig
+    for sig in TERM:143 INT:130; do
+        run_with_stub "kill -${sig%:*} \"\$PPID\"; exit 1" chmod
+        assert_equals "${sig#*:}" "$exit_code" "SIG${sig%:*} should exit ${sig#*:}"
+        assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" "Original should be intact"
+        assert_equals "" "$(/usr/bin/find "$TEST_TEMP_DIR" -name '*.enforce.*')" \
+            "The SIG${sig%:*} trap should remove the in-flight tmpfile"
+    done
+}
+
+# Test: a failing chmod or mv → exit 2, the original intact, the tmpfile
+# kept and named
+test_replace_failure_keeps_tmpfile() {
+    local exit_code err tool
+    for tool in chmod mv; do
+        run_with_stub 'exit 1' "$tool"
+        assert_equals "2" "$exit_code" "A failed $tool should exit 2"
+        assert_contains "$err" "fixed content kept at $TEST_TEMP_DIR/test.sh.enforce." "Stderr names the tmpfile"
+        assert_equals "grep x" "$(command cat "$TEST_TEMP_DIR/test.sh")" "Original should be intact"
+        /usr/bin/rm -rf "$TEST_TEMP_DIR/stub" "$TEST_TEMP_DIR"/test.sh.enforce.*
+    done
 }
 
 # Test: a write failure stops the run — earlier fixes stand, later files
@@ -792,7 +851,11 @@ run_test test_consecutive_pipe_matches "Consecutive piped commands are all prefi
 run_test test_fixed_file_keeps_mode "Fixed file keeps its mode"
 run_test test_fixed_file_keeps_mode_without_gnu_chmod "Fixed file keeps its mode without GNU chmod"
 run_test test_unwritable_file_exits_2 "Unwritable file exits 2 and keeps the tmpfile"
-run_test test_symlink_operand_rewrites_target "Symlinked operand keeps the link and rewrites its target"
+run_test test_symlink_operand_skipped "Symlinked operand is skipped, target untouched"
+run_test test_fixed_file_replaced_atomically "Fix replaces the file by rename, not in place"
+run_test test_mode_read_via_stat "Mode via stat: unreadable/non-octal exit 2; zero-stripped and BSD -f applied"
+run_test test_signal_removes_tmpfile "SIGTERM/SIGINT mid-rewrite exit 143/130 and remove the tmpfile"
+run_test test_replace_failure_keeps_tmpfile "Failed chmod or mv exits 2 and keeps the named tmpfile"
 run_test test_unwritable_file_stops_batch "Write failure stops the batch with exit 2"
 run_test test_awk_failure_exits_2 "awk failure exits 2 and cleans up"
 run_test test_filename_with_equals "File name containing = is processed as a file"
