@@ -98,7 +98,7 @@ pub(super) fn require_shape<'v>(
     verification: &'v Verification,
     catalog_root: Option<&Path>,
 ) -> Result<Shape<'v>> {
-    let fail = failer(tool, version);
+    let fail = failure_for(tool, version);
     match verification.algorithm.as_deref() {
         Some("gpg") => {}
         Some("sigstore") => {
@@ -178,7 +178,7 @@ pub fn verify(
     catalog_root: Option<&Path>,
 ) -> Result<()> {
     let shape = require_shape(tool, version, verification, catalog_root)?;
-    let fail = failer(tool, version);
+    let fail = failure_for(tool, version);
     let keys = load_keyring(&shape.keyring).map_err(&fail)?;
 
     let sig_url = substitute_url(shape.signature_url_template, subs)?;
@@ -238,7 +238,7 @@ pub fn verify(
 }
 
 /// Build the tier-1 `VerificationFailed` constructor for one tool@version.
-fn failer(tool: &str, version: &str) -> impl Fn(String) -> LuggageError {
+fn failure_for(tool: &str, version: &str) -> impl Fn(String) -> LuggageError {
     let (tool, version) = (tool.to_owned(), version.to_owned());
     move |reason| LuggageError::VerificationFailed {
         tool: tool.clone(),
