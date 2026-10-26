@@ -2,21 +2,25 @@
 # Node.js - JavaScript runtime with npm, yarn, and pnpm
 #
 # Description:
-#   Installs Node.js directly from source with modern package managers.
-#   Configures cache directories for optimal container performance.
+#   Installs Node.js from the official release tarball with modern package
+#   managers. Configures cache directories for optimal container performance.
 #
 # Features:
-#   - Node.js runtime from nodejs.org
+#   - Node.js runtime, installed by luggage (binary-tarball method, tier-3
+#     verification against the release's SHASUMS256.txt manifest) from the
+#     containers-db catalog
+#   - amd64 and arm64 only, matching docs/reference/supported-platforms.md
 #   - npm (included with Node.js)
 #   - yarn and pnpm (via corepack; installed from npm on Node 25+, whose
 #     tarballs no longer bundle it, after an npm registry-signature audit)
-#   - Automatic dependency detection and installation
 #   - Cache optimization for containerized environments
 #
 # Environment Variables:
 #   - NODE_VERSION: Version specification (default: 22)
-#     * Major version only (e.g., "22"): Resolves to latest 22.x with pinned checksum
-#     * Partial version (e.g., "22.12"): Resolves to latest 22.12.x with pinned checksum
+#     * Major version only (e.g., "22"): Resolves to the newest 22.x in the
+#       luggage catalog
+#     * Partial version (e.g., "22.12"): Resolves to the newest 22.12.x in the
+#       luggage catalog
 #     * Specific version (e.g., "22.12.0"): Uses exact version
 #
 #   - COREPACK_VERSION: corepack installed from npm only when the extracted
@@ -27,7 +31,7 @@
 #   - 26.x (current)
 #   - 24.x (active LTS)
 #   - 22.x (maintenance LTS)
-#   - 20.x, 18.x (EOL; still installable)
+#   - 20.x, 18.x (EOL; still installable — 18.0.0 is the catalog floor)
 #
 set -euo pipefail
 
@@ -37,20 +41,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
-# Source download and verification utilities
-source /tmp/build-scripts/base/download-verify.sh
-
-# Source checksum verification utilities
-source /tmp/build-scripts/base/checksum-fetch.sh
-
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 
-# Source version resolution for partial version support
-source /tmp/build-scripts/base/version-resolution.sh
-
-# Source 4-tier checksum verification system
-source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
 
 # Source path utilities for secure PATH management
@@ -79,35 +72,65 @@ validate_node_version "$NODE_VERSION" || {
     exit 1
 }
 
-# Resolve partial versions to full versions (e.g., "22" -> "22.12.0")
-# This enables users to use partial versions and get latest patches with pinned checksums
-ORIGINAL_VERSION="$NODE_VERSION"
-NODE_VERSION=$(resolve_node_version "$NODE_VERSION" 2>/dev/null || echo "$NODE_VERSION")
+# Ensure Node.js version is 18 or higher (16 EOL was April 2024). The luggage
+# catalog also starts at 18.0.0, so this refuses an older request by name
+# rather than letting it surface as a luggage "no matching version" error.
+# Every accepted form ("16", "16.20", "16.20.2") carries its major up front.
+NODE_MAJOR_VERSION=$(echo "${NODE_VERSION}" | command cut -d. -f1)
+if [ "$NODE_MAJOR_VERSION" -lt 18 ]; then
+    log_error "Node.js version must be 18 or higher"
+    log_error "Node.js 16 reached end-of-life in April 2024"
+    log_error "Requested version: ${NODE_VERSION} (major: ${NODE_MAJOR_VERSION})"
+    exit 1
+fi
 
-if [ "$ORIGINAL_VERSION" != "$NODE_VERSION" ]; then
-    log_message "📍 Version Resolution: $ORIGINAL_VERSION → $NODE_VERSION"
-    log_message "   Using latest patch version with pinned checksum verification"
+# Resolve a partial version ("22" or "22.12") to the newest patch the luggage
+# catalog holds. The catalog is the single source of truth for which patches
+# exist: asking nodejs.org could pick a release the catalog lacks, which then
+# fails to install, and it breaks offline builds. `luggage install node@22`
+# resolves the same way on its own; resolving here only makes the log and the
+# feature summary name the version actually installed.
+#
+# The top-level `version` key is read with sed rather than jq, which no base
+# image guarantees — the same extraction golang.sh uses. luggage pretty-prints
+# with a two-space indent, so the top-level key is the only `"version": "…"`
+# at exactly that depth. luggage's own stderr is kept so a failure says why.
+if [[ "$NODE_VERSION" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    ORIGINAL_VERSION="$NODE_VERSION"
+    resolve_err=$(command mktemp)
+    if ! resolve_json=$(/usr/local/bin/luggage resolve node \
+        --version "$ORIGINAL_VERSION" \
+        --catalog "${CONTAINERS_DB:-/opt/containers-db}" \
+        --json 2>"$resolve_err"); then
+        log_error "Could not resolve Node.js ${ORIGINAL_VERSION} via luggage (catalog: ${CONTAINERS_DB:-/opt/containers-db}):"
+        log_error "$(command cat "$resolve_err")"
+        command rm -f "$resolve_err"
+        exit 1
+    fi
+    command rm -f "$resolve_err"
+    NODE_VERSION=$(printf '%s\n' "$resolve_json" |
+        command sed -n 's/^  "version": "\([^"]*\)",\{0,1\}$/\1/p')
+    if [ -z "$NODE_VERSION" ]; then
+        log_error "luggage resolved Node.js ${ORIGINAL_VERSION} but its output carried no top-level version"
+        exit 1
+    fi
+
+    if [ "$ORIGINAL_VERSION" != "$NODE_VERSION" ]; then
+        log_message "📍 Version Resolution: $ORIGINAL_VERSION → $NODE_VERSION"
+        log_message "   Newest patch in the luggage catalog"
+    fi
 fi
 
 # Start logging
 log_feature_start "Node.js" "${NODE_VERSION}"
 
-# Extract major version for EOL check
-NODE_MAJOR_VERSION=$(echo "${NODE_VERSION}" | command cut -d. -f1)
-
-# Ensure Node.js version is 18 or higher (16 EOL was April 2024)
-if [ "$NODE_MAJOR_VERSION" -lt 18 ]; then
-    log_error "Node.js version must be 18 or higher"
-    log_error "Node.js 16 reached end-of-life in April 2024"
-    log_error "Requested version: ${NODE_VERSION} (major: ${NODE_MAJOR_VERSION})"
-    log_feature_end
-    exit 1
-fi
-
 # ============================================================================
 # System Dependencies
 # ============================================================================
-log_message "Installing Node.js build dependencies..."
+# luggage installs the catalog's own dependencies (ca-certificates). libatomic1
+# is a runtime link dependency of newer node binaries (#983), not an install
+# dependency, so it stays here with the rest of node's apt prerequisites.
+log_message "Installing Node.js system dependencies..."
 
 # Update package lists with retry logic
 apt_update
@@ -116,46 +139,23 @@ apt_update
 install_node_system_deps
 
 # ============================================================================
-# Node.js Installation from Source
+# Node.js Installation (delegated to luggage)
 # ============================================================================
-log_message "Downloading and installing Node.js ${NODE_VERSION}..."
+# luggage picks this arch's install method (node names amd64 "x64", so the
+# catalog carries one method per arch), downloads the .tar.xz, verifies it
+# against the matching line of the release's SHASUMS256.txt (tier 3, manifest
+# mode — an arch mismatch fails rather than verifying the wrong artifact),
+# strips the versioned root into /usr/local, and validates with
+# `node --version`. node, npm and npx (and corepack on Node < 25) land in
+# /usr/local/bin as the tarball ships them; ensure_corepack below covers 25+.
+log_message "Installing Node.js via luggage..."
 
-# Determine architecture
-NODE_ARCH=$(map_arch "x64" "arm64")
-
-log_message "Detected architecture: $(dpkg --print-architecture) (Node.js: ${NODE_ARCH})"
-
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-
-# Download Node.js tarball with 4-tier checksum verification
-NODE_TARBALL="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
-NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}/${NODE_TARBALL}"
-
-# Download Node.js tarball
-log_message "Downloading Node.js ${NODE_VERSION}..."
-if ! command curl -fsSL "$NODE_URL" -o "$NODE_TARBALL"; then
-    log_error "Failed to download Node.js ${NODE_VERSION}"
-    log_error "Please verify version exists: https://nodejs.org/dist/v${NODE_VERSION}/"
-    log_feature_end
-    exit 1
-fi
-
-# Verify using 4-tier system (GPG → Pinned → Published → Calculated)
-# This will try each tier in order and log which method succeeded
-# Exit codes: 0=verified, 1=failed, 2=unverified (TOFU fallback)
-verify_download_or_fail "language" "nodejs" "$NODE_VERSION" "$NODE_TARBALL" "$NODE_ARCH" || {
-    log_feature_end
-    exit 1
-}
-
-log_command "Extracting Node.js to /usr/local" \
-    tar -xJf "$NODE_TARBALL" --strip-components=1 -C /usr/local
-
-# Clean up build files
-cd /
-log_command "Cleaning up Node.js build directory" \
-    command rm -rf "$BUILD_TEMP"
+log_command "luggage install node@${NODE_VERSION}" \
+    /usr/local/bin/luggage install "node@${NODE_VERSION}" \
+    --catalog "${CONTAINERS_DB:-/opt/containers-db}" \
+    --user "${USERNAME}" \
+    --cache-root /cache \
+    --log-dir /var/log/luggage
 
 # ============================================================================
 # Package Manager Setup
