@@ -714,6 +714,14 @@ $TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
     assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
 $TESTS_DIR/unit/bin/check-versions.sh" "$out" \
         "a non-evidence bin script must not map to trigger-paths"
+
+    # The pattern's edge: these carry "evidence" in their names but sit outside
+    # the workflow's bin/ paths: filters, so a widened pattern (bin/*evidence*.sh)
+    # would wrongly collect trigger-paths for them. Neither has a suite.
+    for f in bin/dispatch-evidence.sh bin/dispatch-evidence-for-tuple.sh; do
+        out=$(map_to_test "$f")
+        assert_empty "$out" "$f is not an evidence-run.yml script and must map to nothing"
+    done
 }
 
 # The -f guard: with no trigger-paths suite present, an evidence lib with no
@@ -734,6 +742,20 @@ test_evidence_scripts_trigger_paths_guarded() {
     out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/lib/evidence-x.sh")
     assert_equals "$root/tests/unit/evidence-run-trigger-paths.sh" "$out" \
         "a present trigger-paths suite must be the evidence lib's selection"
+
+    # A missing trigger-paths suite must not cut the own-suite lookup short.
+    /usr/bin/rm -f "$root/tests/unit/evidence-run-trigger-paths.sh"
+    /usr/bin/mkdir -p "$root/tests/unit/bin/lib"
+    /usr/bin/touch "$root/tests/unit/bin/lib/evidence-x.sh"
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/lib/evidence-x.sh")
+    assert_equals "$root/tests/unit/bin/lib/evidence-x.sh" "$out" \
+        "with trigger-paths absent, an evidence lib must still map to its own suite"
+
+    /usr/bin/touch "$root/tests/unit/evidence-run-trigger-paths.sh"
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/lib/evidence-x.sh" | command sort)
+    assert_equals "$root/tests/unit/bin/lib/evidence-x.sh
+$root/tests/unit/evidence-run-trigger-paths.sh" "$out" \
+        "with both present, an evidence lib must map to exactly both"
 
     /usr/bin/rm -rf "$root"
 }
