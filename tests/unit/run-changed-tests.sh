@@ -486,17 +486,19 @@ test_bin_nested_maps_by_relative_path() {
 
     # #1386: the merge lib had no suite at its conventional path, so an edit to
     # it alone selected nothing at push time.
-    out=$(map_to_test "bin/lib/evidence-merge.sh")
-    assert_equals "$TESTS_DIR/unit/bin/lib/evidence-merge.sh" "$out" \
-        "bin/lib/evidence-merge.sh must map to its own suite"
+    out=$(map_to_test "bin/lib/evidence-merge.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/lib/evidence-merge.sh
+$TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
+        "bin/lib/evidence-merge.sh must map to its own suite and trigger-paths"
 
     # #1381: the matrix lib's suite was split along the single-tool /
     # every-tool seam. The exact set: a dropped sibling narrows push-time
     # coverage silently.
     out=$(map_to_test "bin/lib/evidence-matrix.sh" | command sort)
     assert_equals "$TESTS_DIR/unit/bin/lib/evidence-matrix-all.sh
-$TESTS_DIR/unit/bin/lib/evidence-matrix.sh" "$out" \
-        "bin/lib/evidence-matrix.sh must map to both of its split suites"
+$TESTS_DIR/unit/bin/lib/evidence-matrix.sh
+$TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
+        "bin/lib/evidence-matrix.sh must map to both of its split suites and trigger-paths"
 }
 
 # The split suites' shared fixtures sit outside tests/unit/ (so the unit runner
@@ -509,10 +511,13 @@ test_evidence_matrix_fixtures_map_to_both_suites() {
         return 0
     fi
 
+    # The arm delegates to the matrix lib, so it also carries that lib's
+    # trigger-paths suite (#1473).
     out=$(map_to_test "tests/lib/evidence-matrix-fixtures.sh" | command sort)
     assert_equals "$TESTS_DIR/unit/bin/lib/evidence-matrix-all.sh
-$TESTS_DIR/unit/bin/lib/evidence-matrix.sh" "$out" \
-        "the shared fixtures must map to exactly the two suites that source them"
+$TESTS_DIR/unit/bin/lib/evidence-matrix.sh
+$TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
+        "the shared fixtures must map to the two suites that source them plus trigger-paths"
 }
 
 # Extract collect_test_files (the main block's dedupe / ALL / GO_TEST step).
@@ -671,6 +676,64 @@ test_evidence_run_mapping_follows_glob() {
     assert_equals "$root/tests/unit/evidence-run-a.sh
 $root/tests/unit/evidence-run-b.sh" "$out" \
         "evidence-run.yml must map to exactly the evidence-run-*.sh suites present"
+
+    /usr/bin/rm -rf "$root"
+}
+
+# ============================================================================
+# evidence-run.yml's bin scripts → trigger-paths suite (#1473)
+# ============================================================================
+# The trigger-paths suite derives the workflow's script set from these files'
+# `source` lines, so an edit confined to one of them must run it at push time,
+# not only in full CI.
+
+test_evidence_scripts_map_to_trigger_paths() {
+    local out f
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # No own suite: trigger-paths is the whole push-time selection.
+    for f in bin/ingest-evidence.sh bin/ingest-evidence-batch.sh bin/lib/evidence-issue.sh; do
+        out=$(map_to_test "$f")
+        assert_equals "$TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
+            "$f must map to exactly the trigger-paths suite"
+    done
+
+    # Own suite plus trigger-paths, as an exact sorted set.
+    for f in evidence-epoch evidence-sources; do
+        out=$(map_to_test "bin/lib/$f.sh" | command sort)
+        assert_equals "$TESTS_DIR/unit/bin/lib/$f.sh
+$TESTS_DIR/unit/evidence-run-trigger-paths.sh" "$out" \
+            "bin/lib/$f.sh must map to its own suite and trigger-paths"
+    done
+
+    # Scripts the workflow neither runs nor sources keep their own mapping.
+    out=$(map_to_test "bin/check-versions.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/check-versions-checkers.sh
+$TESTS_DIR/unit/bin/check-versions.sh" "$out" \
+        "a non-evidence bin script must not map to trigger-paths"
+}
+
+# The -f guard: with no trigger-paths suite present, an evidence lib with no
+# own suite maps to nothing rather than to a path that does not exist.
+test_evidence_scripts_trigger_paths_guarded() {
+    local root out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+    root=$(/usr/bin/mktemp -d)
+    /usr/bin/mkdir -p "$root/tests/unit" "$root/bin/lib"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/lib/evidence-x.sh")
+    assert_empty "$out" "no trigger-paths suite must map to no test path"
+
+    /usr/bin/touch "$root/tests/unit/evidence-run-trigger-paths.sh"
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "bin/lib/evidence-x.sh")
+    assert_equals "$root/tests/unit/evidence-run-trigger-paths.sh" "$out" \
+        "a present trigger-paths suite must be the evidence lib's selection"
 
     /usr/bin/rm -rf "$root"
 }
@@ -849,6 +912,8 @@ run_test test_feature_lib_toplevel_file_has_no_mirror_glob "top-level feature li
 run_test test_lefthook_mapping_follows_glob "lefthook.yml mapping follows the lefthook-*.sh glob (#1075)"
 run_test test_evidence_run_mapping_emits_both_suites "evidence-run.yml maps to both evidence-run suites (#1467)"
 run_test test_evidence_run_mapping_follows_glob "evidence-run.yml mapping follows the evidence-run-*.sh glob (#1467)"
+run_test test_evidence_scripts_map_to_trigger_paths "evidence-run.yml bin scripts map to the trigger-paths suite (#1473)"
+run_test test_evidence_scripts_trigger_paths_guarded "evidence script trigger-paths mapping is -f guarded (#1473)"
 run_test test_devcontainer_mapping_root_scripts "devcontainer root scripts map to their suites (#1067)"
 run_test test_devcontainer_mapping_unmatched_is_silent "uncovered devcontainer script maps to no test path (#1067)"
 run_test test_devcontainer_mapping_nested_by_path "nested devcontainer script maps by path, not basename (#1067)"
