@@ -462,7 +462,7 @@ test_unreadable_published_source_is_an_error() {
         "$(command sed -n 1p "$err")" "and names the unparsable file (#1329)"
     # jq's parse error follows, so the operator sees where the file broke
     # (#1463). Its wording belongs to the jq release; only the location is pinned.
-    assert_contains "$(command sed -n 2p "$err")" "line 1, column" "and jq's parse location follows it"
+    assert_contains "$(command sed -n '2,$p' "$err")" "line 1, column" "and jq's parse location follows it"
 }
 
 # _unopenable_fails <source> <bad_file> <what> [restore] — evidence_matrix
@@ -503,13 +503,20 @@ test_unopenable_published_file_is_named() {
     command ln -s nowhere.json "$f"
     _unopenable_fails "$db" "$f" "a broken symlink that sorts first"
     command rm -f "$f"
+}
 
+test_unreadable_mode_published_file_is_named() {
     # Root reads a mode-000 file anyway, so this case needs a non-root uid.
-    # A skip, not a pass: the -r branch did not run (skips render as passes).
+    # Its own test, so the skip covers only it (skips render as passes, and
+    # skip_test relabels everything that already ran in the same test).
+    local db f
     if [ "$(command id -u)" = 0 ]; then
         skip_test "mode-000 case needs a non-root uid"
         return 0
     fi
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.80.0 debian-13-amd64
+    _db_version "$db" 1.90.0 debian-13-amd64
     f="$db/tools/rust/versions/1.90.0.json"
     command chmod 000 "$f"
     _unopenable_fails "$db" "$f" "a file without read permission" restore
@@ -524,6 +531,24 @@ test_unopenable_only_file_is_named() {
     f="$db/tools/rust/versions/1.90.0.json"
     command ln -s nowhere.json "$f"
     _unopenable_fails "$db" "$f" "a lone broken symlink"
+}
+
+test_evidence_scratch_failure_is_an_error() {
+    # The batch's stderr sidecar is a mktemp (#1463); when that cannot be
+    # created the source is unread, so exit 1 (#1319) with a message that
+    # names the step, never a matrix.
+    local r db out err rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 ""
+    out="$(command mktemp "$TEST_TEMP_DIR/out.XXXXXX")"
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    TMPDIR="$TEST_TEMP_DIR/no-such-tmp" EVIDENCE_TESTED_SOURCE="$db" \
+        _em_published_evidence rust "$out" 0 2>"$err" || rc=$?
+    assert_equals "1" "$rc" "a failed scratch mktemp is exit 1"
+    assert_contains "$(command cat "$err")" "evidence_matrix: cannot create a scratch file for rust evidence" \
+        "and says which step failed"
 }
 
 _malformed_msg() {
@@ -999,7 +1024,9 @@ run_test test_fully_published_coverage_exits_3 "full published coverage exits 3"
 run_test test_unreadable_published_source_is_an_error "an unreadable evidence source is an error, not a full matrix"
 run_test test_malformed_published_file_is_named "a malformed published version file is fatal and named"
 run_test test_unopenable_published_file_is_named "an unopenable published version file is fatal and named as unreadable"
+run_test test_unreadable_mode_published_file_is_named "a version file without read permission is named as unreadable"
 run_test test_unopenable_only_file_is_named "a lone dangling version file is named, not read as an empty source"
+run_test test_evidence_scratch_failure_is_an_error "a failed published-evidence scratch file is an error"
 run_test test_unnamed_evidence_failure_names_the_sources "a failure no file check explains falls back to the source list"
 run_test test_evidence_scratch_is_removed "published-evidence scratch is removed on every exit path"
 run_test test_repeated_source_is_not_two_documents "a source listed twice is not a two-document file"
