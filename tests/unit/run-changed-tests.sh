@@ -315,6 +315,11 @@ $TESTS_DIR/unit/bin/check-versions.sh" "$out" \
     assert_equals "$TESTS_DIR/unit/bin/enforce-command-prefix-write.sh
 $TESTS_DIR/unit/bin/enforce-command-prefix.sh" "$out" \
         "the rewrite-rule suite and its write-path sibling must both be mapped (#1490)"
+
+    out=$(map_to_test "bin/lib/keyring-swap.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/lib/keyring-swap-signals.sh
+$TESTS_DIR/unit/bin/lib/keyring-swap.sh" "$out" \
+        "the swap suite and its INT/TERM-trap sibling must both be mapped (#1493)"
 }
 
 # The runner's own collection loop, not just map_to_test. #832's sibling fanout
@@ -511,10 +516,11 @@ test_gpg_keyring_fixtures_map_to_every_sourcing_suite() {
     fi
 
     out=$(map_to_test "tests/lib/gpg-keyring-fixtures.sh" | command sort)
-    assert_equals "$TESTS_DIR/unit/bin/lib/keyring-swap.sh
+    assert_equals "$TESTS_DIR/unit/bin/lib/keyring-swap-signals.sh
+$TESTS_DIR/unit/bin/lib/keyring-swap.sh
 $TESTS_DIR/unit/bin/update-gpg-keys.sh
 $TESTS_DIR/unit/gpg-keyrings-readable.sh" "$out" \
-        "the gpg fixtures must map to the three suites that source them"
+        "the gpg fixtures must map to the four suites that source them"
 }
 
 # The arm globs keyring-swap*.sh so the signal-test sibling split out of
