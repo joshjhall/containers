@@ -561,6 +561,7 @@ test_evidence_scratch_failure_is_an_error() {
     _db_version "$db" 1.90.0 ""
     out="$(command mktemp "$TEST_TEMP_DIR/out.XXXXXX")"
     err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    # Portable: BSD mktemp with no template is `-t tmp` under $TMPDIR too (#1495).
     TMPDIR="$TEST_TEMP_DIR/no-such-tmp" EVIDENCE_TESTED_SOURCE="$db" \
         _em_published_evidence rust "$out" 0 2>"$err" || rc=$?
     assert_equals "1" "$rc" "a failed scratch mktemp is exit 1"
@@ -571,6 +572,50 @@ test_evidence_scratch_failure_is_an_error() {
     assert_not_contains "$(command cat "$err")" "unreadable published evidence" \
         "and no later path ran"
     assert_equals "" "$(command cat "$out")" "and writes no matrix"
+}
+
+test_preexisting_out_err_is_not_a_failure() {
+    # The sidecar is its own mktemp (#1463): a directory at "$out.err" made
+    # the old 2>"$out.err" redirect fail and read as an evidence failure.
+    local db out err rc=0
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    _db_version "$db" 1.90.0 debian-13-amd64
+    out="$(command mktemp "$TEST_TEMP_DIR/out.XXXXXX")"
+    err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+    command mkdir "$out.err"
+    EVIDENCE_TESTED_SOURCE="$db" _em_published_evidence rust "$out" 0 2>"$err" || rc=$?
+    assert_equals "0" "$rc" "a directory at \$out.err is not a failure"
+    assert_equals "" "$(command cat "$err")" "and prints nothing"
+    assert_equals "true" "$(command jq '. != null and has("1.90.0")' "$out")" "and writes the matrix"
+}
+
+test_first_culprit_wins_across_kinds() {
+    # The culprit loop checks access then shape per file, in glob order, so
+    # the first bad file is named whatever its kind (#1495). An access pass
+    # over every file before a shape pass would flip case "shape".
+    local db v out err rc first ver want
+    for first in shape access; do
+        db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+        for ver in 1.10.0 1.80.0 1.95.0; do
+            _db_version "$db" "$ver" debian-13-amd64
+        done
+        v="$db/tools/rust/versions"
+        if [ "$first" = shape ]; then
+            _mutate "$v/1.10.0.json" 'del(.version)'
+            command ln -sf nowhere.json "$v/1.95.0.json"
+            want="$(_malformed_msg "$v/1.10.0.json")"
+        else
+            command ln -sf nowhere.json "$v/1.10.0.json"
+            _mutate "$v/1.95.0.json" 'del(.version)'
+            want="evidence_matrix: cannot read published evidence for rust: $v/1.10.0.json"
+        fi
+        out="$(command mktemp "$TEST_TEMP_DIR/out.XXXXXX")"
+        err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
+        rc=0
+        EVIDENCE_TESTED_SOURCE="$db" _em_published_evidence rust "$out" 0 2>"$err" || rc=$?
+        assert_equals "1" "$rc" "a $first culprit first is exit 1"
+        assert_equals "$want" "$(command sed -n 1p "$err")" "the first file, a $first culprit, is named"
+    done
 }
 
 test_open_refused_after_access_check_is_named() {
@@ -1083,6 +1128,8 @@ run_test test_unopenable_published_file_is_named "an unopenable published versio
 run_test test_unreadable_mode_published_file_is_named "a version file without read permission is named as unreadable"
 run_test test_unopenable_only_file_is_named "a lone dangling version file is named, not read as an empty source"
 run_test test_evidence_scratch_failure_is_an_error "a failed published-evidence scratch file is an error"
+run_test test_preexisting_out_err_is_not_a_failure "a pre-existing \$out.err does not fake an evidence failure"
+run_test test_first_culprit_wins_across_kinds "the first culprit in glob order is named, unopenable or misshapen"
 run_test test_open_refused_after_access_check_is_named "an open refused past the access check is named as unreadable"
 run_test test_unnamed_evidence_failure_names_the_sources "a failure no file check explains falls back to the source list"
 run_test test_evidence_scratch_is_removed "published-evidence scratch is removed on every exit path"
