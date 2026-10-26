@@ -107,7 +107,9 @@ map_to_test() {
 
         # The evidence-matrix suites' shared fixtures (#1381) → both suites
         # that source them. Like the scan above, they live outside tests/unit/
-        # so the unit runner does not execute them as a suite.
+        # so the unit runner does not execute them as a suite. Delegating also
+        # brings in the matrix lib's trigger-paths suite (#1473): an extra
+        # fast suite, never a dropped one.
         tests/lib/evidence-matrix-fixtures.sh)
             map_to_test "bin/lib/evidence-matrix.sh"
             return
@@ -294,8 +296,21 @@ map_to_test() {
         #    the suite. So a future bin/check.sh does not collect check-versions*.sh,
         #    while check-versions-checkers.sh stays with bin/check-versions.sh
         #    because no bin/check-versions-checkers.sh exists.
+        #
+        # The scripts evidence-run.yml runs or sources (its bin/ `paths:`
+        # filters) also map to the trigger-paths suite (#1473). An edit that
+        # adds a `source` of an uncovered helper is a trigger-paths gap, which
+        # that suite derives from these very files; their own suites cannot see
+        # it, so without this only full CI would.
         bin/*.sh)
             local rel own match mstem candidate owned
+            case "$file" in
+                bin/lib/evidence-*.sh | bin/ingest-evidence*.sh)
+                    if [ -f "${TESTS_DIR}/unit/evidence-run-trigger-paths.sh" ]; then
+                        echo "${TESTS_DIR}/unit/evidence-run-trigger-paths.sh"
+                    fi
+                    ;;
+            esac
             rel="${file#bin/}"
             own="${rel%.sh}"
             local test_path="${TESTS_DIR}/unit/bin/${rel}"
