@@ -746,8 +746,13 @@ exit 0
         run_version_check_within(&path, VERSION_ARGS, &BTreeMap::new(), VERSION_PROBE_TIMEOUT);
     let elapsed = start.elapsed();
 
-    let gpid = fs::read_to_string(dir.path().join("tool.gpid"))
-        .expect("the shim must record its background pid before exiting (is perl on PATH?)");
+    // perl's `die` text lands in the probe's captured stderr, so show it.
+    let gpid = fs::read_to_string(dir.path().join("tool.gpid")).unwrap_or_else(|e| {
+        let stderr = result.as_ref().map(|out| String::from_utf8_lossy(&out.stderr).into_owned());
+        panic!(
+            "the shim must record its background pid before exiting ({e}); probe stderr: {stderr:?}"
+        )
+    });
     let gpid = gpid.trim().to_owned();
     let raw: i32 = gpid.parse().unwrap_or_else(|e| panic!("unparsable pid {gpid:?} ({e})"));
     let guard = KillOnDrop(
