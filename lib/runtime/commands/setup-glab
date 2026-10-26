@@ -70,6 +70,12 @@ main() {
     # Validate hostname
     _validate_hostname "$host" "GITLAB_HOST" || return 0
 
+    # Disable xtrace from here through the login: every line below may expand
+    # the token (the already-authenticated export, the emptiness check,
+    # sanitize, validate). Each return in this region restores it first (#1468).
+    local _xt; _xt=$(set +o | command grep xtrace)
+    { set +x; } 2>/dev/null
+
     # Already authenticated — export token and exit
     if glab auth status --hostname "$host" >/dev/null 2>&1; then
         _skip "glab already authenticated (host: ${host})"
@@ -81,12 +87,14 @@ main() {
                 export GITLAB_TOKEN="$token"
             fi
         fi
+        eval "$_xt"
         _persist_token
         return 0
     fi
 
     # No token — print help and exit (not an error)
     if [ -z "${GITLAB_TOKEN:-}" ]; then
+        eval "$_xt"
         _info "GITLAB_TOKEN not set — skipping glab authentication"
         _info "Set GITLAB_TOKEN directly or via OP_GITLAB_TOKEN_REF"
         return 0
@@ -97,12 +105,10 @@ main() {
     token=$(printf '%s' "$GITLAB_TOKEN" | tr -d '[:space:]')
 
     # Validate token format
-    _validate_token "$token" "GITLAB_TOKEN" || return 0
+    _validate_token "$token" "GITLAB_TOKEN" || { eval "$_xt"; return 0; }
 
     # Authenticate (pipe token via stdin to avoid exposing it in process listings)
     _info "authenticating glab CLI (host: ${host})"
-    local _xt; _xt=$(set +o | command grep xtrace)
-    { set +x; } 2>/dev/null
     printf '%s' "$token" | glab auth login --hostname "$host" --stdin 2>&1
     eval "$_xt"
 

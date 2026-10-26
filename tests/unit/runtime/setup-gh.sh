@@ -218,12 +218,19 @@ test_auth_no_token_leak() {
     disable_line=$(command sed -n "${main_line},\$p" "$SETUP_GH_SCRIPT" | command grep -n '{ set +x; } 2>/dev/null' | command head -1 | command cut -d: -f1)
     disable_line=$((main_line + disable_line - 1))
     auth_line=$(command grep -n 'gh auth login --with-token' "$SETUP_GH_SCRIPT" | command head -1 | command cut -d: -f1)
-    restore_line=$(command sed -n "${main_line},\$p" "$SETUP_GH_SCRIPT" | command grep -n 'eval "$_xt"' | command head -1 | command cut -d: -f1)
-    restore_line=$((main_line + restore_line - 1))
+    # Early returns restore xtrace too, so take the first restore after login
+    restore_line=$(command sed -n "${auth_line},\$p" "$SETUP_GH_SCRIPT" | command grep -n 'eval "$_xt"' | command head -1 | command cut -d: -f1)
+    restore_line=$((auth_line + restore_line - 1))
+    # The region must open before main() first expands the token (#1468)
+    local deref_line
+    deref_line=$(command sed -n "${main_line},\$p" "$SETUP_GH_SCRIPT" | command grep -n '\$GITHUB_TOKEN\|\${GITHUB_TOKEN' | command head -1 | command cut -d: -f1)
+    deref_line=$((main_line + deref_line - 1))
 
     # Verify correct ordering
     assert_true [ "$save_line" -lt "$disable_line" ] \
         "Xtrace save should come before disable"
+    assert_true [ "$disable_line" -lt "$deref_line" ] \
+        "Xtrace disable should come before the first GITHUB_TOKEN expansion in main()"
     assert_true [ "$disable_line" -lt "$auth_line" ] \
         "Xtrace disable should come before auth login"
     assert_true [ "$auth_line" -lt "$restore_line" ] \
@@ -349,6 +356,7 @@ test_main_validates_token() {
 # $TEST_TEMP_DIR/gh.calls: argv plus whether GITHUB_TOKEN/GH_TOKEN were set in
 # its env. Like real gh, `auth login` is refused while either token is set.
 # `auth status` fails until a login succeeds. $1=fail makes every login fail.
+# `auth token` prints a stored token distinct from the env one.
 _install_stub_gh() {
     local mode="${1:-ok}"
     mkdir -p "$TEST_TEMP_DIR/bin"
@@ -361,6 +369,7 @@ printf '%s GITHUB_TOKEN=%s GH_TOKEN=%s\n' "$*" \
     "${GITHUB_TOKEN:+set}" "${GH_TOKEN:+set}" >>"$state/gh.calls"
 case "$*" in
     *"auth status"*) [ -f "$state/gh.loggedin" ] ;;
+    *"auth token"*) echo "gho_fake_stored_token_5555555555" ;;
     *"auth login"*)
         command cat >"$state/gh.stdin"
         if [ -n "${GITHUB_TOKEN:-}" ] || [ -n "${GH_TOKEN:-}" ]; then
@@ -435,11 +444,11 @@ test_login_failure_reported() {
     assert_not_contains "$output" "gh authenticated" "Must not claim success after a failed login"
 }
 
-# Under bash -x the login block must keep the token out of the trace, and the
-# failure path must restore xtrace before it warns. (Lines before the block,
-# e.g. the sanitize step, are out of scope here.)
-test_login_block_xtrace_safe() {
-    local mode output block
+# Under bash -x no token may appear anywhere in the trace (#1468): not in the
+# sanitize/validate steps before the login, not in the login itself. The fail
+# path must also restore xtrace before it warns.
+test_xtrace_no_token_leak() {
+    local mode output
     for mode in ok fail; do
         command rm -rf "$TEST_TEMP_DIR/bin" "$TEST_TEMP_DIR"/gh.*
         _install_stub_gh "$mode"
@@ -449,20 +458,122 @@ test_login_block_xtrace_safe() {
             GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" \
             bash -x "$SETUP_GH_SCRIPT" 2>&1) || true
         _assert_stub_login_without_env_token
-        block=$(printf '%s\n' "$output" | command sed -n '/authenticating gh CLI/,$p')
-        assert_not_empty "$block" "[$mode] trace should reach the login block"
-        assert_not_contains "$block" "ghp_fake_token_for_testing_1234567890" \
-            "[$mode] token must not appear in xtrace from the login block on"
+        # A trace that never got past startup would pass the leak check vacuously
+        assert_contains "$output" "+ main" "[$mode] trace should be non-empty and enter main"
+        assert_contains "$output" "authenticating gh CLI" "[$mode] trace should reach the login"
+        assert_not_contains "$output" "ghp_fake_token_for_testing_1234567890" \
+            "[$mode] token must not appear anywhere in the xtrace"
         if [ "$mode" = "fail" ]; then
-            assert_contains "$block" "+ _warn 'gh auth login failed" \
+            assert_contains "$output" "+ _warn 'gh auth login failed" \
                 "[fail] xtrace should be restored before the failure warning"
+        else
+            assert_contains "$output" "+ _persist_token" \
+                "[ok] xtrace should be restored after the login"
         fi
     done
 }
 
+# Already authenticated with GITHUB_TOKEN unset: the token read back from
+# `gh auth token` and exported must stay out of the trace too.
+test_xtrace_no_stored_token_leak() {
+    local output
+    _install_stub_gh ok
+    touch "$TEST_TEMP_DIR/gh.loggedin"
+    output=$(command env -u BASH_ENV -u GITHUB_TOKEN -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash -x "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_file_contains "$TEST_TEMP_DIR/gh.calls" "auth token" \
+        "Stub gh auth token must have been called (already-authenticated path)"
+    assert_contains "$output" "gh already authenticated" "Should take the already-authenticated path"
+    assert_contains "$output" "+ _persist_token" "xtrace should be restored before _persist_token"
+    assert_not_contains "$output" "gho_fake_stored_token_5555555555" \
+        "Stored token must not appear anywhere in the xtrace"
+
+    # Restart case: already authenticated AND GITHUB_TOKEN injected. The
+    # emptiness check on the already-authenticated branch expands it.
+    output=$(command env -u BASH_ENV -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" \
+        bash -x "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "gh already authenticated" "[env set] should take the already-authenticated path"
+    assert_contains "$output" "+ _persist_token" "[env set] xtrace should be restored before _persist_token"
+    assert_not_contains "$output" "ghp_fake_token_for_testing_1234567890" \
+        "[env set] env token must not appear anywhere in the xtrace"
+}
+
+# The no-token and invalid-token returns must restore xtrace too. Without the
+# restore the trace ends at the `_xt=` save; with it, the traced `_info` (no
+# token) or `return 0` (invalid token) follows.
+test_xtrace_restored_on_early_returns() {
+    local output after
+    _install_stub_gh ok
+    output=$(command env -u BASH_ENV -u GITHUB_TOKEN -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash -x "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "+ _info 'GITHUB_TOKEN not set" \
+        "[no-token] xtrace should be restored before the help message"
+
+    # Sanitizes to "zq9" (too short), so _validate_token rejects it
+    output=$(command env -u BASH_ENV -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITHUB_TOKEN="zq9 " \
+        bash -x "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "GITHUB_TOKEN is too short" "[invalid] should take the validate-fail path"
+    assert_not_contains "$output" "zq9" "[invalid] token must not appear anywhere in the xtrace"
+    # Anchor on what follows the warning, not the last line, so later trailing
+    # trace output cannot break it
+    after=$(printf '%s\n' "$output" | command sed -n '/GITHUB_TOKEN is too short/,$p')
+    assert_contains "$after" "+ return 0" "[invalid] xtrace should be restored before the return"
+}
+
+# The restores must put back the caller's state, not force xtrace on: an
+# untraced run (the normal case) must produce no trace lines after them.
+test_xtrace_stays_off_when_untraced() {
+    local output
+    _install_stub_gh ok
+    output=$(command env -u BASH_ENV -u GITHUB_TOKEN -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "GITHUB_TOKEN not set" "[no-token] should take the no-token path"
+    assert_not_contains "$output" "+ _info" "[no-token] untraced run must stay untraced after the restore"
+
+    output=$(command env -u BASH_ENV -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITHUB_TOKEN="zq9 " \
+        bash "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "GITHUB_TOKEN is too short" "[invalid] should take the validate-fail path"
+    assert_not_contains "$output" "+ return 0" "[invalid] untraced run must stay untraced after the restore"
+
+    # Login path, then (now logged in) the already-authenticated path
+    output=$(command env -u BASH_ENV -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GITHUB_TOKEN="ghp_fake_token_for_testing_1234567890" \
+        bash "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "gh authenticated" "[login] should take the login path"
+    assert_not_contains "$output" "+ _persist_token" "[login] untraced run must stay untraced after the restore"
+
+    assert_file_exists "$TEST_TEMP_DIR/gh.loggedin" "[already-authed] stub should now report logged in"
+    output=$(command env -u BASH_ENV -u GITHUB_TOKEN -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash "$SETUP_GH_SCRIPT" 2>&1) || true
+    assert_contains "$output" "already authenticated" "[already-authed] should take the already-authenticated path"
+    assert_not_contains "$output" "+ _persist_token" "[already-authed] untraced run must stay untraced after the restore"
+}
+
 run_test_with_setup test_login_clears_env_token "Login runs with env tokens cleared and persists"
 run_test_with_setup test_login_failure_reported "Failed login is reported with non-zero exit"
-run_test_with_setup test_login_block_xtrace_safe "Login block keeps token out of xtrace, restores it on failure"
+run_test_with_setup test_xtrace_no_token_leak "Whole xtrace is token-free on login, restored on failure"
+run_test_with_setup test_xtrace_no_stored_token_leak "Already-authenticated path keeps stored token out of xtrace"
+run_test_with_setup test_xtrace_restored_on_early_returns "No-token and invalid-token returns restore xtrace"
+run_test_with_setup test_xtrace_stays_off_when_untraced "Restores leave an untraced run untraced"
 
 run_test_with_setup test_warn_defined "_warn helper is defined"
 run_test_with_setup test_validate_token_defined "_validate_token function is defined"
