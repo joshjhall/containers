@@ -630,6 +630,9 @@ test_retry_classifies_by_stderr() {
 }
 
 test_tar_link_listing() {
+    # Direct, because evidence_db_sources cannot reach these answers with real
+    # git: no git tree holds a hardlink, and git archive never writes an
+    # unlistable tar. A git stub that did would answer what git cannot.
     local d rc
     d="$(command mktemp -d "$TEST_TEMP_DIR/tl.XXXXXX")"
     command mkdir -p "$d/src/tools"

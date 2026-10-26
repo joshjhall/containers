@@ -74,7 +74,9 @@ _es_retry() {
 # _es_tar_has_links <tar> — exit 0 when the archive lists a symlink or
 # hardlink entry, 1 when it lists none, 2 when it cannot be listed. Checked
 # before extraction: an untrusted tools/ tree never gets the chance to write
-# through a link it planted.
+# through a link it planted. git archive emits symlinks but never a hardlink
+# (a git tree cannot hold one) and always writes a listable tar, so the
+# hardlink and unlistable answers guard a different archiver, not today's.
 _es_tar_has_links() {
     local listing
     listing="$(command tar -tvf "$1")" || return 2
