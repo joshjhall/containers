@@ -755,7 +755,9 @@ exit 0
         // A perl slow enough to outlast the shim's wait has already left the
         // probe's group, so nothing else will kill it. Wait briefly for its
         // late pid and arm the guard before panicking: the unwind then kills
-        // it, before or after its exec into `sleep 30` (#1501).
+        // it, before or after its exec into `sleep 30` (#1501). A perl later
+        // than that still leaks; the shell's `$!` is no safer to kill here, as
+        // it may already name a dead, reused pid.
         let deadline = Instant::now() + Duration::from_secs(2);
         let late = loop {
             if let Ok(pid) = fs::read_to_string(&gpid_file) {
@@ -766,11 +768,15 @@ exit 0
             }
             thread::sleep(Duration::from_millis(20));
         };
+        let late_note = late.map_or_else(
+            || "no late pid appeared within 2s".to_owned(),
+            |pid| format!("killed late pid {}", pid.as_raw_nonzero()),
+        );
         let _late = late.map(KillOnDrop);
         let stderr = result.as_ref().map(|out| String::from_utf8_lossy(&out.stderr).into_owned());
         panic!(
-            "the shim must record its background pid before exiting ({e}); late pid killed: \
-             {late:?}; probe stderr: {stderr:?}"
+            "the shim must record its background pid before exiting ({e}); {late_note}; \
+             probe stderr: {stderr:?}"
         )
     });
     let gpid = gpid.trim().to_owned();
