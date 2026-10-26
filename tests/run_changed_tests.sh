@@ -130,6 +130,21 @@ map_to_test() {
             return
             ;;
 
+        # The gpg keyring suites' shared fixtures (#1456) → every suite that
+        # sources them. keyring-swap*.sh is globbed so a split-out sibling
+        # suite runs at push time without another edit here.
+        tests/lib/gpg-keyring-fixtures.sh)
+            local match
+            for match in "${TESTS_DIR}/unit/bin/update-gpg-keys.sh" \
+                "${TESTS_DIR}/unit/gpg-keyrings-readable.sh" \
+                "${TESTS_DIR}"/unit/bin/lib/keyring-swap*.sh; do
+                if [ -f "$match" ]; then
+                    echo "$match"
+                fi
+            done
+            return
+            ;;
+
         # Test files themselves — run directly
         tests/unit/*.sh)
             if [ -f "${PROJECT_ROOT}/${file}" ]; then

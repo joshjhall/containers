@@ -17,6 +17,10 @@ init_test_framework
 # Test suite
 test_suite "Committed GPG Keyrings Readable"
 
+# Shared gpg fixtures: require_gpg (#1456)
+# shellcheck source=tests/lib/gpg-keyring-fixtures.sh
+source "$PROJECT_ROOT/tests/lib/gpg-keyring-fixtures.sh"
+
 GPG_KEYS_ROOT="$PROJECT_ROOT/lib/gpg-keys"
 
 setup() {
@@ -40,20 +44,6 @@ run_test_with_setup() {
     setup
     run_test "$test_function" "$test_description"
     teardown
-}
-
-# Returns 0 when gpg is usable; otherwise skips locally and fails in CI, so a
-# missing gpg can never make these tests pass by skipping.
-require_gpg() {
-    if command -v gpg >/dev/null 2>&1; then
-        return 0
-    fi
-    if [ "${CI:-false}" = "true" ]; then
-        assert_true false "gpg is required in CI — keyring tests cannot silently skip"
-    else
-        skip_test "gpg not available — skipping locally"
-    fi
-    return 1
 }
 
 # check_keyring <keyring_dir> <scratch_dir>
