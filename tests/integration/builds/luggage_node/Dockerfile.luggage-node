@@ -1,0 +1,80 @@
+# syntax=docker/dockerfile:1.7
+# Minimal fixture for the luggage node smoke test (issue #812).
+#
+# Builds luggage from the in-tree workspace, then runs
+# `luggage install node@<NODE_VERSION>` against the in-tree vendored catalog.
+# The second binary-tarball port and the first that exercises: xz
+# decompression, `strip_components: 1` into the shared /usr/local prefix,
+# tier-3 verification in MANIFEST mode against SHASUMS256.txt, and the
+# one-method-per-arch catalog shape (node spells amd64 "x64").
+#
+# Build context is the repo root (`BUILD_CONTEXT=$CONTAINERS_DIR`), so
+# every COPY here is repo-root-relative.
+
+ARG NODE_VERSION=22.23.4
+
+# ─── Stage 1: compile the luggage binary ───
+FROM rust:1.99-slim-trixie AS builder
+
+WORKDIR /workspace
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/workspace/target \
+    cargo build --release -p luggage --bin luggage \
+    && cp target/release/luggage /tmp/luggage
+
+# ─── Stage 2: install node via luggage on a fresh debian ───
+FROM debian:trixie-slim AS runtime
+
+ARG NODE_VERSION
+
+# luggage shells out to `su` and `apt-get`; the slim image has the
+# former but needs adduser to create the install user. libatomic1 is node's
+# runtime link dependency on newer arm64 builds (#983) — node.sh installs it
+# via install_node_system_deps, outside luggage. No jq and no xz-utils: the
+# partial resolve reads luggage's output with sed exactly as node.sh does,
+# and luggage decompresses xz in-process, so this fixture proves neither is
+# needed for the install.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends adduser ca-certificates libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN adduser --disabled-password --gecos '' --shell /bin/bash vscode \
+    && mkdir -p /cache /var/log/luggage \
+    && chown vscode:vscode /cache /var/log/luggage
+ENV USERNAME=vscode
+
+COPY --from=builder /tmp/luggage /usr/local/bin/luggage
+COPY crates/luggage/testdata/catalog /opt/containers-db
+
+# Resolve NODE_VERSION by running node.sh's OWN version block — validation,
+# the pre-18 floor, and its sed over `luggage resolve --json` — extracted by
+# the same script the unit suite uses. Real luggage output through the real
+# sed. Only the block is copied, under its production path for
+# version-validation.sh's own `source` guard.
+COPY lib/base/version-validation.sh /tmp/build-scripts/base/version-validation.sh
+COPY lib/features/node.sh /tmp/node.sh
+COPY tests/integration/builds/luggage_node/extract-version-block.sh /tmp/extract-version-block.sh
+
+# Then install with the same flags node.sh passes. bash with errexit +
+# pipefail: the sourced block exits non-zero on a failed resolve or an empty
+# parse, and that must fail this step.
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+RUN log_error() { echo "ERROR: $*" >&2; }; \
+    log_message() { echo "$*"; }; \
+    source /tmp/build-scripts/base/version-validation.sh; \
+    bash /tmp/extract-version-block.sh /tmp/node.sh > /tmp/version-block.sh; \
+    source /tmp/version-block.sh; \
+    v="${NODE_VERSION}"; \
+    echo "$v" > /etc/node-resolved-version; \
+    /usr/local/bin/luggage install "node@${v}" \
+        --catalog /opt/containers-db \
+        --user vscode \
+        --cache-root /cache \
+        --log-dir /var/log/luggage
+
+USER vscode
+WORKDIR /home/vscode
+CMD ["bash"]

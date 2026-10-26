@@ -1,0 +1,118 @@
+{
+  "channel": "stable",
+  "install_methods": [
+    {
+      "dependencies": [
+        {
+          "tool": "ca_certificates"
+        }
+      ],
+      "method_kind": "binary-tarball",
+      "name": "node-tarball-amd64",
+      "platform": {
+        "arch": [
+          "amd64"
+        ],
+        "os": [
+          "debian",
+          "ubuntu"
+        ]
+      },
+      "prefix": "/usr/local",
+      "source_url_template": "https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz",
+      "strip_components": 1,
+      "verification": {
+        "algorithm": "sha256",
+        "checksum_manifest": true,
+        "checksum_url_template": "https://nodejs.org/dist/v{version}/SHASUMS256.txt",
+        "tier": 3
+      }
+    },
+    {
+      "dependencies": [
+        {
+          "tool": "ca_certificates"
+        }
+      ],
+      "method_kind": "binary-tarball",
+      "name": "node-tarball-arm64",
+      "platform": {
+        "arch": [
+          "arm64"
+        ],
+        "os": [
+          "debian",
+          "ubuntu"
+        ]
+      },
+      "prefix": "/usr/local",
+      "source_url_template": "https://nodejs.org/dist/v{version}/node-v{version}-linux-arm64.tar.xz",
+      "strip_components": 1,
+      "verification": {
+        "algorithm": "sha256",
+        "checksum_manifest": true,
+        "checksum_url_template": "https://nodejs.org/dist/v{version}/SHASUMS256.txt",
+        "tier": 3
+      }
+    }
+  ],
+  "metadata": {
+    "added_at": "2026-10-25T00:00:00Z",
+    "schema_version": 1,
+    "updated_at": "2026-10-25T00:00:00Z"
+  },
+  "released": "2025-10-28",
+  "schemaVersion": 1,
+  "support_matrix": [
+    {
+      "arch": "amd64",
+      "os": "debian",
+      "os_version": "12",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "debian",
+      "os_version": "12",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "debian",
+      "os_version": "13",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "debian",
+      "os_version": "13",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "status": "supported"
+    }
+  ],
+  "tool": "node",
+  "version": "25.1.0"
+}

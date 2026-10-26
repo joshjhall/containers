@@ -511,11 +511,20 @@ _run_node_sh_prefix() {
     local prefix="$TEST_TEMP_DIR/node-prefix.sh"
     local stub_bin="$TEST_TEMP_DIR/stub-bin"
     local tools="$TEST_TEMP_DIR/tools"
-    mkdir -p "$stub_bin" "$tools" "$TEST_TEMP_DIR/build"
+    mkdir -p "$stub_bin" "$tools"
     : >"$TEST_TEMP_DIR/apt.calls"
     command rm -f "$TEST_TEMP_DIR/corepack.call"
 
-    command awk '{ sub(/^source \/tmp\/build-scripts\//, "_src ") } { print }
+    # The luggage calls are pointed at a stub that succeeds: this harness
+    # proves the deps/audit/corepack wiring, not the install (tested below).
+    # The default NODE_VERSION (22) is a partial, so `resolve` must answer
+    # the way real luggage does: pretty-printed, top-level version.
+    printf '#!/bin/bash\n[ "$1" = resolve ] && printf "{\\n  \\"version\\": \\"22.23.4\\"\\n}\\n"\nexit 0\n' \
+        >"$stub_bin/luggage"
+    command chmod +x "$stub_bin/luggage"
+    command awk -v luggage="$stub_bin/luggage" '
+        { sub(/^source \/tmp\/build-scripts\//, "_src "); gsub(/\/usr\/local\/bin\/luggage/, luggage) }
+        { print }
         /^ensure_corepack \|\| exit 1$/ { exit }' "$node_sh" >"$prefix"
     if ! command grep -qx 'ensure_corepack || exit 1' "$prefix"; then
         echo "no-prefix"
@@ -523,16 +532,12 @@ _run_node_sh_prefix() {
     fi
 
     local tool
-    for tool in cut rm; do
+    for tool in cut rm mktemp cat sed; do
         ln -sf "$(command -v "$tool")" "$tools/$tool"
     done
-    printf '#!/bin/bash\nexit 0\n' >"$stub_bin/curl"
-    printf '#!/bin/bash\nexit 0\n' >"$stub_bin/tar"
-    printf '#!/bin/bash\necho arm64\n' >"$stub_bin/dpkg"
-    chmod +x "$stub_bin/curl" "$stub_bin/tar" "$stub_bin/dpkg"
 
     local rc=0
-    env -i PATH="$stub_bin:$tools" ROOT="$PROJECT_ROOT" OUT="$TEST_TEMP_DIR" \
+    env -i PATH="$stub_bin:$tools" ROOT="$PROJECT_ROOT" OUT="$TEST_TEMP_DIR" USERNAME=vscode \
         /bin/bash -c '
         _src() {
             case "$1" in
@@ -555,10 +560,6 @@ _run_node_sh_prefix() {
         log_feature_end() { :; }
         log_command() { shift; "$@"; }
         validate_node_version() { :; }
-        resolve_node_version() { printf "%s\n" "$1"; }
-        map_arch() { printf "%s\n" "$2"; }
-        create_secure_temp_dir() { printf "%s\n" "$OUT/build"; }
-        verify_download_or_fail() { :; }
         apt_update() { :; }
         apt_install() { printf "%s\n" "$@" >>"$OUT/apt.calls"; }
         source "$1"
@@ -735,58 +736,262 @@ test_no_curl_pipe_bash() {
     fi
 }
 
-# Test: node.sh uses manual repository setup
-test_manual_repository_setup() {
+# ============================================================================
+# luggage delegation (#812)
+# ============================================================================
+# node.sh delegates the Node.js install to `luggage install` (#812): arch
+# selection (node's "x64" spelling lives in the catalog as one install method
+# per arch), download, tier-3 SHASUMS256.txt manifest verification, xz
+# extraction and the strip into /usr/local all live in the luggage engine and
+# the containers-db catalog now. The tests below run node.sh's real version
+# block and install statement against a stub luggage;
+# tests/integration/builds/test_luggage_node.sh runs them against the real
+# engine.
+
+# Test: the install itself is luggage's — node.sh carries none of it. The
+# behavioral tests below prove what the delegation DOES; this pins what was
+# removed, so a partial revert that re-adds a second download path fails.
+test_node_sh_has_no_inline_install() {
     local node_script="$PROJECT_ROOT/lib/features/node.sh"
-
-    if ! [ -f "$node_script" ]; then
-        skip_test "node.sh not found"
-        return
-    fi
-
-    # Check for 4-tier verification system (replaced repository setup)
-    if command grep -q "checksum-verification.sh" "$node_script"; then
-        assert_true true "node.sh sources 4-tier checksum verification system"
-    else
-        assert_true false "node.sh does not source checksum-verification.sh"
-    fi
-
-    # Check for verify_download usage
-    if command grep -q "verify_download" "$node_script"; then
-        assert_true true "node.sh uses verify_download for binary verification"
-    else
-        assert_true false "node.sh does not use verify_download"
-    fi
+    local pattern
+    for pattern in 'curl -fsSL' 'verify_download_or_fail' 'tar -xJf' \
+        'checksum-verification.sh' 'download-verify.sh' 'nodejs.org/dist'; do
+        assert_file_not_contains "$node_script" "$pattern" \
+            "node.sh no longer contains '$pattern' (the install is luggage's)"
+    done
 }
 
-# Test: node.sh downloads binaries directly (no repository)
-test_repository_sources_list() {
+# Run node.sh's real version block — input validation, the pre-18 floor, and
+# the partial resolve — against a stub luggage, and print what it decided.
+# Extracting the block from the script (not copying it) and sourcing the real
+# version-validation.sh keeps these tests on the code that ships, entry check
+# included. Usage: run_version_block <NODE_VERSION> <stub-luggage-body>
+# Prints "RESULT: <version>" on success, the logged errors on failure, and
+# returns the block's exit status.
+run_version_block() {
+    local node_version="$1" stub_body="$2"
     local node_script="$PROJECT_ROOT/lib/features/node.sh"
+    local stub="$TEST_TEMP_DIR/luggage-stub" block="$TEST_TEMP_DIR/version-block.sh"
 
-    if ! [ -f "$node_script" ]; then
-        skip_test "node.sh not found"
+    printf '#!/bin/bash\n%s\n' "$stub_body" >"$stub"
+    command chmod +x "$stub"
+    # The same extractor the luggage_node fixture runs against real luggage
+    # output, here with luggage's absolute path redirected to the stub.
+    bash "$PROJECT_ROOT/tests/integration/builds/luggage_node/extract-version-block.sh" \
+        "$node_script" "$stub" >"$block"
+
+    # Its own bash process, so errexit holds: callers run this as
+    # `out=$(run_version_block …) || rc=$?`, and a subshell in that position
+    # runs with errexit suspended — an unhandled failure in the block would be
+    # stepped over instead of aborting it the way the real build does.
+    # shellcheck disable=SC2016  # expanded by the inner bash, not here
+    bash -c '
+        set -euo pipefail
+        log_error() { echo "ERR: $*"; }
+        log_message() { :; }
+        source "$1"
+        NODE_VERSION="$2"
+        source "$3"
+        echo "RESULT: $NODE_VERSION"
+    ' _ "$PROJECT_ROOT/lib/base/version-validation.sh" "$node_version" "$block"
+}
+
+# luggage resolve --json, as it really pretty-prints: two-space indent and the
+# top-level version mid-object. The decoy is a dependency carrying its own
+# `"version": "…"` key, printed FIRST at a deeper indent: an unanchored match
+# would take "9.9.9".
+NODE_RESOLVE_JSON='{
+  "tool": "node",
+  "dependencies": [
+    {
+      "tool": "ca_certificates",
+      "version": "9.9.9"
+    }
+  ],
+  "version": "22.23.4",
+  "method_name": "node-tarball-amd64"
+}'
+
+# Test: a major-only pin ("22") resolves through luggage to the newest patch,
+# and asks luggage for exactly that partial
+test_major_version_resolves_via_luggage() {
+    local out rc=0 argv="$TEST_TEMP_DIR/resolve-argv"
+    command rm -f "$argv"
+    out=$(run_version_block "22" "printf '%s\n' \"\$*\" >'$argv'
+command cat <<'JSON'
+$NODE_RESOLVE_JSON
+JSON") || rc=$?
+    assert_equals "0" "$rc" "major-only 22 resolves (exit 0)"
+    assert_contains "$out" "RESULT: 22.23.4" "resolves to the top-level version, not the nested dependency's 9.9.9"
+    assert_equals "resolve node --version 22 --catalog /opt/containers-db --json" \
+        "$(command cat "$argv" 2>/dev/null)" "luggage resolve is asked for node, partial 22, default catalog, JSON"
+}
+
+# Test: a major.minor pin ("22.12") resolves too; version as the last key
+# (no trailing comma) still parses
+test_partial_minor_resolves_via_luggage() {
+    local out rc=0
+    out=$(run_version_block "22.12" "cat <<'JSON'
+{
+  \"tool\": \"node\",
+  \"version\": \"22.12.0\"
+}
+JSON") || rc=$?
+    assert_equals "0" "$rc" "partial 22.12 resolves (exit 0)"
+    assert_contains "$out" "RESULT: 22.12.0" "parsed 22.12.0"
+}
+
+# Test: an exact pin skips resolution entirely (luggage must not be called)
+test_exact_version_skips_resolve() {
+    local out rc=0
+    out=$(run_version_block "22.12.0" 'echo "luggage must not be called for an exact pin" >&2; exit 99') || rc=$?
+    assert_equals "0" "$rc" "exact 22.12.0 passes through"
+    assert_contains "$out" "RESULT: 22.12.0" "exact version unchanged"
+}
+
+# Test: a failing luggage resolve fails the build and surfaces luggage's reason
+test_resolve_failure_surfaces_luggage_error() {
+    local out rc=0
+    out=$(run_version_block "27" 'echo "error: no version of `node` matches spec `partial:27`" >&2; exit 1') || rc=$?
+    assert_not_equals "0" "$rc" "a failed resolve exits non-zero"
+    assert_contains "$out" "Could not resolve Node.js 27" "names the request"
+    assert_contains "$out" "partial:27" "carries luggage's own stderr, not a guessed cause"
+}
+
+# Test: luggage succeeding with no top-level version is an error, not ""
+test_resolve_without_version_fails_closed() {
+    local out rc=0
+    out=$(run_version_block "22" "cat <<'JSON'
+{
+  \"tool\": \"node\",
+  \"method_name\": \"node-tarball-amd64\"
+}
+JSON") || rc=$?
+    assert_not_equals "0" "$rc" "no top-level version exits non-zero"
+    assert_contains "$out" "carried no top-level version" "fails closed instead of installing node@\"\""
+}
+
+# Test: Node < 18 is refused up front — major, partial and exact form — before
+# luggage is reached; the floor itself is accepted
+test_pre_floor_versions_refused() {
+    local v out rc
+    for v in 16 16.20 16.20.2; do
+        rc=0
+        out=$(run_version_block "$v" 'echo "luggage must not be reached below the floor" >&2; exit 99') || rc=$?
+        assert_not_equals "0" "$rc" "Node $v is refused"
+        assert_contains "$out" "must be 18 or higher" "Node $v refusal names the floor"
+        assert_not_contains "$out" "luggage must not be reached" "Node $v never reaches luggage"
+    done
+    rc=0
+    out=$(run_version_block "18.0.0" 'exit 99') || rc=$?
+    assert_equals "0" "$rc" "Node 18.0.0 (the floor) is accepted"
+}
+
+# Test: input validation still runs first — a malformed pin never reaches
+# the floor check or luggage
+test_invalid_version_rejected_by_validation() {
+    local out rc=0
+    out=$(run_version_block "22.x" 'echo "luggage must not be reached" >&2; exit 99') || rc=$?
+    assert_not_equals "0" "$rc" "NODE_VERSION=22.x is rejected"
+    assert_contains "$out" "Invalid NODE_VERSION format" "rejected by input validation"
+}
+
+# Extract node.sh's install statement (log_command line through the first
+# line that does not continue) with luggage redirected to STUB.
+_node_install_block() {
+    local stub="$1" out="$2"
+    command awk '/log_command "luggage install node@/{f=1} f{print; if ($0 !~ /\\$/) exit}' \
+        "$PROJECT_ROOT/lib/features/node.sh" |
+        command sed "s#/usr/local/bin/luggage#$stub#g" >"$out"
+}
+
+# Test: a failing luggage install aborts the feature script. Runs the real
+# install statement under the script's own `set -euo pipefail` with a luggage
+# stub that exits 1, then checks the line after it never ran — catching every
+# way of swallowing the failure (`|| true`, `|| :`, an `if` wrapper).
+test_luggage_install_failure_aborts() {
+    local stub="$TEST_TEMP_DIR/luggage-fail-stub" block="$TEST_TEMP_DIR/install-block.sh"
+    printf '#!/bin/bash\necho "stub luggage: install failed" >&2\nexit 1\n' >"$stub"
+    command chmod +x "$stub"
+    _node_install_block "$stub" "$block"
+    if [ ! -s "$block" ]; then
+        assert_true false "Could not locate the luggage install block"
         return
     fi
 
-    # Check that repository setup is NOT used (direct binary download instead)
-    if command grep -q "/etc/apt/sources.list.d/nodesource.list" "$node_script"; then
-        assert_true false "node.sh should not use repository setup (uses direct download)"
-    else
-        assert_true true "node.sh correctly uses direct binary download (no repository)"
-    fi
+    # Its own bash process, NOT `out=$( … ) || rc=$?`: an `||` context
+    # disables `set -e` inside it — the very swallow this test exists to catch.
+    local runner="$TEST_TEMP_DIR/install-runner.sh" out rc
+    printf '%s\n' '#!/bin/bash' 'set -euo pipefail' \
+        'log_command() { shift; "$@"; }' \
+        'NODE_VERSION="22.23.4"' 'USERNAME="vscode"' \
+        "source \"$block\"" 'echo "REACHED-AFTER-INSTALL"' >"$runner"
+    set +e
+    out=$(bash "$runner" 2>&1)
+    rc=$?
+    set -e
 
-    # Check that Node.js is downloaded from dist URLs
-    if command grep -q "nodejs.org/dist" "$node_script"; then
-        assert_true true "node.sh downloads from nodejs.org/dist"
-    else
-        assert_true false "node.sh does not download from official dist URL"
-    fi
+    assert_not_equals "0" "$rc" "a failing luggage install exits non-zero"
+    assert_not_contains "$out" "REACHED-AFTER-INSTALL" "the script stops at the failed install"
+}
+
+# Run node.sh's real install statement against a stub luggage that records
+# "$*". Usage: run_install_argv [CONTAINERS_DB] — empty leaves it unset, so the
+# script's own default applies. Prints "RC: <status>" then the recorded argv.
+run_install_argv() {
+    local stub="$TEST_TEMP_DIR/luggage-argv-stub" block="$TEST_TEMP_DIR/install-argv-block.sh"
+    local argv_log="$TEST_TEMP_DIR/luggage-argv.log"
+    local db_line="unset CONTAINERS_DB"
+    [ -n "${1:-}" ] && db_line="export CONTAINERS_DB=\"$1\""
+    command rm -f "$argv_log"
+    printf '#!/bin/bash\nprintf "%%s\\n" "$*" >"%s"\n' "$argv_log" >"$stub"
+    command chmod +x "$stub"
+    _node_install_block "$stub" "$block"
+
+    local runner="$TEST_TEMP_DIR/install-argv-runner.sh" rc
+    printf '%s\n' '#!/bin/bash' 'set -euo pipefail' \
+        'log_command() { shift; "$@"; }' "$db_line" \
+        'NODE_VERSION="22.23.4"' 'USERNAME="vscode"' \
+        "source \"$block\"" >"$runner"
+    set +e
+    bash "$runner" >/dev/null 2>&1
+    rc=$?
+    set -e
+
+    echo "RC: $rc"
+    command cat "$argv_log" 2>/dev/null || echo '<no call>'
+}
+
+# Test: the real install statement passes luggage exactly the argv the
+# delegation depends on — a dropped `--user` or `--cache-root` passes every
+# grep pin, so the assertion is on the whole argv.
+test_luggage_install_argv() {
+    assert_equals \
+        "RC: 0
+install node@22.23.4 --catalog /opt/containers-db --user vscode --cache-root /cache --log-dir /var/log/luggage" \
+        "$(run_install_argv)" \
+        "luggage install receives the exact argv (version, catalog default, user, cache root, log dir)"
+}
+
+# Test: a CONTAINERS_DB override reaches luggage's --catalog
+test_luggage_install_honors_containers_db() {
+    assert_contains "$(run_install_argv "/tmp/alt-containers-db")" \
+        "--catalog /tmp/alt-containers-db " "CONTAINERS_DB override reaches --catalog"
 }
 
 # Run security tests
 run_test test_no_curl_pipe_bash "node.sh does not use curl | bash pattern"
-run_test test_manual_repository_setup "node.sh uses 4-tier verification system"
-run_test test_repository_sources_list "node.sh uses direct binary download (no repository)"
+run_test_with_setup test_node_sh_has_no_inline_install "node.sh has no inline download/verify/extract"
+run_test_with_setup test_major_version_resolves_via_luggage "Major-only NODE_VERSION resolves via luggage"
+run_test_with_setup test_partial_minor_resolves_via_luggage "Partial NODE_VERSION resolves via luggage"
+run_test_with_setup test_exact_version_skips_resolve "Exact NODE_VERSION skips luggage resolve"
+run_test_with_setup test_resolve_failure_surfaces_luggage_error "Failed resolve surfaces luggage's error"
+run_test_with_setup test_resolve_without_version_fails_closed "Resolve without a version fails closed"
+run_test_with_setup test_pre_floor_versions_refused "Node < 18 refused before luggage"
+run_test_with_setup test_invalid_version_rejected_by_validation "Malformed NODE_VERSION rejected first"
+run_test_with_setup test_luggage_install_failure_aborts "Failing luggage install aborts node.sh"
+run_test_with_setup test_luggage_install_argv "luggage install receives the exact argv"
+run_test_with_setup test_luggage_install_honors_containers_db "CONTAINERS_DB reaches luggage --catalog"
 
 # Generate test report
 generate_report

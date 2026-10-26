@@ -184,6 +184,11 @@ update_version() {
                     sed_inplace "s/^ARG NODE_VERSION=.*/ARG NODE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
                     # Also update the fallback default in node.sh
                     sed_inplace "s/NODE_VERSION=\"\${NODE_VERSION:-[^}]*}\"/NODE_VERSION=\"\${NODE_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/node.sh" || return "$RC_UPDATE_FAILED"
+                    # Node installs via luggage (#812) — keep the vendored
+                    # catalog in lockstep with the pin, as for go and rust.
+                    # check-versions resolves the major pin to an exact
+                    # release, which is what add-version needs.
+                    update_luggage_catalog "node" "$latest" || return "$RC_UPDATE_FAILED"
                     ;;
                 Go)
                     sed_inplace "s/^ARG GO_VERSION=.*/ARG GO_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile" || return "$RC_UPDATE_FAILED"
