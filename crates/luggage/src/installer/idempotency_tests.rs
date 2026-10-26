@@ -711,14 +711,34 @@ impl Drop for KillOnDrop {
 /// ended — the hang the tempfile capture exists to avoid. The
 /// still-running check proves the fds really were held at return, so the
 /// elapsed bound cannot pass because the grandchild died early.
+///
+/// The grandchild moves itself to its own process group first. A descendant
+/// left in the probe's group is killed when the probe exits (#1371), so
+/// an in-group one raced that kill and the still-running check flaked
+/// (#1497). An escaped descendant is the gap the group kill leaves, and the
+/// one where the tempfile capture still matters. The shim exits only once
+/// the pid file exists, which perl writes (renamed into place, never seen
+/// half-written) after `setpgrp`, so the group kill cannot reach it.
 #[cfg(unix)]
 #[test]
 #[serial_test::serial]
 fn run_version_check_returns_while_a_grandchild_holds_the_capture_fds() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("tool");
-    fs::write(&path, "#!/bin/sh\necho 'tool 1.0.0'\nsleep 30 &\necho $! > \"$0.gpid\"\nexit 0\n")
-        .unwrap();
+    fs::write(
+        &path,
+        r#"#!/bin/sh
+echo 'tool 1.0.0'
+perl -e 'setpgrp(0, 0) or die "setpgrp: $!";
+open my $f, ">", "$ARGV[0].tmp" or die "open: $!"; print $f "$$\n"; close $f or die "close: $!";
+rename "$ARGV[0].tmp", $ARGV[0] or die "rename: $!";
+exec "sleep", "30" or die "exec: $!"' "$0.gpid" &
+i=0
+while [ ! -s "$0.gpid" ] && [ "$i" -lt 200 ]; do sleep 0.01; i=$((i + 1)); done
+exit 0
+"#,
+    )
+    .unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
 
     let start = Instant::now();
