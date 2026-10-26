@@ -465,14 +465,17 @@ test_unreadable_published_source_is_an_error() {
     assert_contains "$(command sed -n 2p "$err")" "line 1, column" "and jq's parse location follows it"
 }
 
-# _unopenable_fails <source> <bad_file> <what> — evidence_matrix exits 1,
-# prints no matrix, and says bad_file cannot be read, without the shape hint.
+# _unopenable_fails <source> <bad_file> <what> [restore] — evidence_matrix
+# exits 1, prints no matrix, and says bad_file cannot be read, without the
+# shape hint. With restore, bad_file is made readable again before any
+# assertion can fail, so a mode-000 fixture never outlives the test.
 _unopenable_fails() {
-    local src="$1" bad="$2" what="$3" r out err rc=0
+    local src="$1" bad="$2" what="$3" restore="${4:-}" r out err rc=0
     r="$(_fixture 1.0.0)"
     _version "$r/catalog" 1.90.0 debian-13-amd64
     err="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
     out="$(EVIDENCE_TESTED_SOURCE="$src" evidence_matrix "$r/catalog" rust "$r" 2>"$err")" || rc=$?
+    [ -z "$restore" ] || command chmod 644 "$bad"
     assert_equals "1" "$rc" "$what is exit 1"
     assert_equals "" "$out" "$what prints no matrix"
     assert_equals "evidence_matrix: cannot read published evidence for rust: $bad" \
@@ -494,15 +497,33 @@ test_unopenable_published_file_is_named() {
     _unopenable_fails "$db" "$f" "a broken symlink"
     command rm -f "$f"
 
+    # Sorting first, the dangling link is found[0], which the empty-directory
+    # probe must not read as "no version files".
+    f="$db/tools/rust/versions/1.10.0.json"
+    command ln -s nowhere.json "$f"
+    _unopenable_fails "$db" "$f" "a broken symlink that sorts first"
+    command rm -f "$f"
+
     # Root reads a mode-000 file anyway, so this case needs a non-root uid.
+    # A skip, not a pass: the -r branch did not run (skips render as passes).
     if [ "$(command id -u)" = 0 ]; then
-        command echo "    (skipping the mode-000 case: running as root)"
+        skip_test "mode-000 case needs a non-root uid"
         return 0
     fi
     f="$db/tools/rust/versions/1.90.0.json"
     command chmod 000 "$f"
-    _unopenable_fails "$db" "$f" "a file without read permission"
-    command chmod 644 "$f"
+    _unopenable_fails "$db" "$f" "a file without read permission" restore
+}
+
+test_unopenable_only_file_is_named() {
+    # The source's only match is a dangling link: still a named file, not
+    # the "no published evidence ... at <dir>" message (#1463).
+    local db f
+    db="$(command mktemp -d "$TEST_TEMP_DIR/db.XXXXXX")"
+    command mkdir -p "$db/tools/rust/versions"
+    f="$db/tools/rust/versions/1.90.0.json"
+    command ln -s nowhere.json "$f"
+    _unopenable_fails "$db" "$f" "a lone broken symlink"
 }
 
 _malformed_msg() {
@@ -978,6 +999,7 @@ run_test test_fully_published_coverage_exits_3 "full published coverage exits 3"
 run_test test_unreadable_published_source_is_an_error "an unreadable evidence source is an error, not a full matrix"
 run_test test_malformed_published_file_is_named "a malformed published version file is fatal and named"
 run_test test_unopenable_published_file_is_named "an unopenable published version file is fatal and named as unreadable"
+run_test test_unopenable_only_file_is_named "a lone dangling version file is named, not read as an empty source"
 run_test test_unnamed_evidence_failure_names_the_sources "a failure no file check explains falls back to the source list"
 run_test test_evidence_scratch_is_removed "published-evidence scratch is removed on every exit path"
 run_test test_repeated_source_is_not_two_documents "a source listed twice is not a two-document file"

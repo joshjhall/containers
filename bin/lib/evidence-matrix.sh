@@ -156,7 +156,9 @@ _em_published_evidence() {
         src="${srcs[$i]}"
         dir="$src/tools/$tool/versions"
         found=("$dir"/*.json)
-        if [ ! -e "${found[0]}" ]; then
+        # -e follows symlinks: a dangling first match is a file to name, not
+        # an empty directory (#1463).
+        if [ ! -e "${found[0]}" ] && [ ! -L "${found[0]}" ]; then
             if [ "$i" -gt 0 ] && [ -d "$src/tools" ] && [ ! -e "$src/tools/$tool" ]; then
                 command echo "evidence_matrix: $src has no tools/$tool; it adds no $tool evidence" >&2
                 continue
@@ -184,7 +186,10 @@ _em_published_evidence() {
     # The batch's stderr sidecar is its own mktemp: a name derived from out
     # could already exist (as a directory, say), and the failed redirect would
     # read as an evidence failure (#1463).
-    errf="$(command mktemp)" || return 1
+    errf="$(command mktemp)" || {
+        command echo "evidence_matrix: cannot create a scratch file for $tool evidence" >&2
+        return 1
+    }
     # Slurping drops an empty file and splits one holding two documents, so
     # values are counted per file (input_filename): a total count would let
     # an empty file and a two-document one cancel out.
