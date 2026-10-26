@@ -141,6 +141,14 @@ pub struct TestEntry {
     /// pre-#850 shape, so existing evidence rows are unaffected.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub verification_warnings: Vec<VerificationWarning>,
+    /// Tier (`1`–`4`) the install was actually verified at.
+    ///
+    /// Recorded rather than inferred from the catalog because the catalog
+    /// says what an entry *should* get, and an evidence row is the record of
+    /// what it *did* get. `None` on rows predating the field (#1508), which
+    /// `skip_serializing_if` keeps byte-identical.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_tier: Option<u8>,
     /// Free-form notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,

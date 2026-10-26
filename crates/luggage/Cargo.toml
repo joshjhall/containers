@@ -27,6 +27,7 @@ time = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 ureq = { version = "3", default-features = false, features = ["rustls"] }
+pgp = "0.21"
 
 # Safe `kill_process_group` for the version-probe timeout (#1352) — the
 # workspace forbids unsafe_code, so `libc::killpg` is unavailable.

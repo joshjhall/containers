@@ -72,6 +72,15 @@ pub struct InstallerOptions {
     /// `LUGGAGE_VERSION_PROBE_TIMEOUT` (seconds) to override it, for hosts
     /// where a correct probe is just slow (qemu emulation, a cold cache).
     pub version_probe_timeout: Duration,
+    /// Root of the catalog the install was resolved from (`--catalog` /
+    /// `CONTAINERS_DB`). Tier-1 verification resolves an entry's
+    /// `gpg_keyring` against it, which is what keeps the pinned keyring and
+    /// the version file that names it in the same reviewed tree.
+    ///
+    /// `None` by default, and a tier-1 entry is then refused rather than
+    /// guessing a location: a guessed root could silently pick up a different
+    /// keyring than the one the catalog entry was reviewed against.
+    pub catalog_root: Option<PathBuf>,
 }
 
 impl Default for InstallerOptions {
@@ -90,6 +99,7 @@ impl Default for InstallerOptions {
             require_verified_downloads: false,
             max_extract_bytes: methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             version_probe_timeout: idempotency::VERSION_PROBE_TIMEOUT,
+            catalog_root: None,
         }
     }
 }

@@ -125,6 +125,12 @@ pub fn build_test_entry(inputs: RecorderInputs) -> Result<TestEntry, RecorderErr
         // asymmetry is the point: `dependencies` describes a successful
         // install, while a warning describes what was trusted to attempt one.
         verification_warnings: report.warnings.clone(),
+        // Copied as-is: luggage sets it only once the verify stage has passed,
+        // so a row for an install that failed before (or during) verification
+        // carries `None` rather than claiming a tier it never reached. Not
+        // gated on `result == Pass` for the same reason as the warnings above
+        // — a verified artifact whose install then broke was still verified.
+        verification_tier: report.verification_tier,
         // `notes` stays the carrier for free-form context (flake reason for a
         // `fail`, why a `skip`) per the containers-db schema; it is no longer
         // where verification warnings land.
@@ -178,6 +184,7 @@ mod tests {
             dependencies: None,
             skipped_dependencies: Vec::new(),
             warnings: Vec::new(),
+            verification_tier: Some(3),
         }
     }
 
