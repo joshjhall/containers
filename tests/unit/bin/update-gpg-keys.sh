@@ -13,6 +13,10 @@ init_test_framework
 # Test suite
 test_suite "Bin Update GPG Keys Tests"
 
+# Shared gpg fixtures: require_gpg, make_empty_keybox (#1456)
+# shellcheck source=tests/lib/gpg-keyring-fixtures.sh
+source "$PROJECT_ROOT/tests/lib/gpg-keyring-fixtures.sh"
+
 SOURCE_FILE="$PROJECT_ROOT/bin/update-gpg-keys.sh"
 KEYRING_SWAP_LIB="$PROJECT_ROOT/bin/lib/keyring-swap.sh"
 
@@ -251,32 +255,6 @@ test_gpg_script_syntax() {
 # ---------------------------------------------------------------------------
 
 COMMITTED_NODEJS_KEYRING="$PROJECT_ROOT/lib/gpg-keys/nodejs/keyring"
-
-# Returns 0 when gpg is usable; otherwise skips locally and fails in CI, so a
-# missing gpg can never make these tests pass by skipping.
-require_gpg() {
-    if command -v gpg >/dev/null 2>&1; then
-        return 0
-    fi
-    if [ "${CI:-false}" = "true" ]; then
-        assert_true false "gpg is required in CI — keyring tests cannot silently skip"
-    else
-        skip_test "gpg not available — skipping locally"
-    fi
-    return 1
-}
-
-# make_empty_keybox <home> <kbx> — create a keybox holding no keys without
-# relying on gpg's homedir defaults: an explicit empty common.conf keeps
-# use-keyboxd off (GnuPG 2.4.1+ would otherwise write public-keys.d/ and no
-# .kbx), and the keyring path is named rather than inferred (#1433)
-make_empty_keybox() {
-    command mkdir -p "$1"
-    command chmod 700 "$1"
-    : >"$1/common.conf"
-    GNUPGHOME="$1" gpg --batch --no-default-keyring --keyring "$2" --list-keys >/dev/null 2>&1
-    [ -f "$2" ]
-}
 
 # make_fixture_repo <dir> [corrupt|no-trustdb]
 # Build a one-commit git repo shaped like nodejs/release-keys from the

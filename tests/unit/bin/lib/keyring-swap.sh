@@ -17,6 +17,10 @@ init_test_framework
 # Test suite
 test_suite "bin/lib/keyring-swap.sh"
 
+# Shared gpg fixtures: require_gpg, make_empty_keybox (#1456)
+# shellcheck source=tests/lib/gpg-keyring-fixtures.sh
+source "$PROJECT_ROOT/tests/lib/gpg-keyring-fixtures.sh"
+
 LIB_FILE="$PROJECT_ROOT/bin/lib/keyring-swap.sh"
 GOOD_KEYRING="$PROJECT_ROOT/lib/gpg-keys/nodejs/keyring"
 
@@ -38,32 +42,6 @@ run_test_with_setup() {
     setup
     run_test "$1" "$2"
     teardown
-}
-
-# Returns 0 when gpg is usable; otherwise skips locally and fails in CI, so a
-# missing gpg can never make these tests pass by skipping.
-require_gpg() {
-    if command -v gpg >/dev/null 2>&1; then
-        return 0
-    fi
-    if [ "${CI:-false}" = "true" ]; then
-        assert_true false "gpg is required in CI — keyring tests cannot silently skip"
-    else
-        skip_test "gpg not available — skipping locally"
-    fi
-    return 1
-}
-
-# make_empty_keybox <home> <kbx> — create a keybox holding no keys without
-# relying on gpg's homedir defaults: an explicit empty common.conf keeps
-# use-keyboxd off (GnuPG 2.4.1+ would otherwise write public-keys.d/ and no
-# .kbx), and the keyring path is named rather than inferred (#1433)
-make_empty_keybox() {
-    command mkdir -p "$1"
-    command chmod 700 "$1"
-    : >"$1/common.conf"
-    GNUPGHOME="$1" gpg --batch --no-default-keyring --keyring "$2" --list-keys >/dev/null 2>&1
-    [ -f "$2" ]
 }
 
 # make_src <dir> [corrupt|no-trustdb] — a source keyring dir from the good one.
@@ -177,6 +155,22 @@ test_count_empty_keyring_fails() {
     output=$(count_in_child "$TEST_TEMP_DIR/src" 2>&1) || rc=$?
     assert_equals "1" "$rc" "count fails on a keyring with no keys"
     assert_contains "$output" "contains no public keys" "names the empty keyring"
+}
+
+# The shared fixture's keyboxd override, exercised directly: a homedir whose
+# common.conf already says use-keyboxd would send the listing to keyboxd
+# (public-keys.d/, no .kbx) unless make_empty_keybox truncates it (#1456)
+test_make_empty_keybox_overrides_use_keyboxd() {
+    require_gpg || return 0
+    local home="$TEST_TEMP_DIR/keyboxd-home"
+    command mkdir -p "$home"
+    printf 'use-keyboxd\n' >"$home/common.conf"
+    local rc=0
+    make_empty_keybox "$home" "$home/pubring.kbx" || rc=$?
+    gpgconf --homedir "$home" --kill all >/dev/null 2>&1 || true
+    assert_equals "0" "$rc" "make_empty_keybox succeeds despite a planted use-keyboxd"
+    assert_file_exists "$home/pubring.kbx" "the named .kbx is created"
+    assert_dir_not_exists "$home/public-keys.d" "keyboxd's public-keys.d/ is not created"
 }
 
 # ---------------------------------------------------------------------------
@@ -797,6 +791,7 @@ run_test_with_setup test_count_good_keyring "count_keyring_keys: counts a readab
 run_test_with_setup test_count_corrupt_keyring_fails "count_keyring_keys: corrupt keyring fails"
 run_test_with_setup test_count_missing_pubring_fails "count_keyring_keys: missing pubring.kbx fails and leaves no scratch"
 run_test_with_setup test_count_empty_keyring_fails "count_keyring_keys: keyring with no keys fails"
+run_test_with_setup test_make_empty_keybox_overrides_use_keyboxd "make_empty_keybox: a planted use-keyboxd still yields a .kbx, no public-keys.d/"
 run_test_with_setup test_swap_replaces_existing "swap: replaces an existing keyring byte-exact"
 run_test_with_setup test_swap_first_install "swap: installs where no keyring exists yet"
 run_test_with_setup test_swap_mirrors_source_without_trustdb "swap: no stale trustdb.gpg when the source ships none"
