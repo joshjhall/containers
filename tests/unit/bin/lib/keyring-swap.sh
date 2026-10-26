@@ -85,7 +85,8 @@ make_dest() {
 }
 
 # run_swap <src> <dest> <work> — source the lib in a child bash and swap;
-# prints combined output, returns the helper's (or the trap's exit) status.
+# prints combined output, then a `traps=<...>` line naming any INT/TERM trap
+# the helper left behind; returns the helper's (or the trap's exit) status.
 # Any mv/cmp stubs exported by the caller apply inside the child.
 run_swap() {
     # shellcheck disable=SC2016 # expands in the child shell
@@ -93,6 +94,9 @@ run_swap() {
         log_error() { printf "ERR: %s\n" "$1" >&2; }
         source "$1"
         swap_keyring_atomic "$2" "$3" "$4" "Test"
+        rc=$?
+        printf "traps=<%s>\n" "$(trap -p INT TERM)"
+        exit "$rc"
     ' _ "$LIB_FILE" "$1" "$2" "$3" 2>&1
 }
 
@@ -251,6 +255,7 @@ test_swap_unreadable_source_keeps_existing() {
     assert_equals "1" "$rc" "swap returns 1 for an unreadable source"
     assert_contains "$output" "Staged Test keyring does not match upstream or is unreadable" \
         "the label names the keyring in the error"
+    assert_contains "$output" "traps=<>" "no INT/TERM trap outlives the staged-check failure"
     assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "existing keyring untouched"
     assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left"
     assert_dir_exists "$TEST_TEMP_DIR/work" "work dir left for the caller on failure"
@@ -292,6 +297,7 @@ test_swap_install_failure_restores() {
 
     assert_equals "1" "$rc" "swap returns 1 when the install rename fails"
     assert_contains "$output" "Could not install the new keyring" "names the install failure"
+    assert_contains "$output" "traps=<>" "no INT/TERM trap outlives the install failure"
     assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "previous keyring restored"
     assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left"
 }
@@ -317,6 +323,7 @@ test_swap_move_aside_failure_keeps_existing() {
 
     assert_equals "1" "$rc" "swap returns 1 when the existing keyring cannot be moved aside"
     assert_contains "$output" "Could not move the existing keyring aside" "names the move-aside failure"
+    assert_contains "$output" "traps=<>" "no INT/TERM trap outlives the move-aside failure"
     assert_equals "previous-pubring" "$(command cat "$dest/pubring.kbx")" "existing keyring untouched"
     assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left"
 }
@@ -445,17 +452,18 @@ run_swap_signal() {
     )
 }
 
-# assert_signal <SIG> <window> <expected-rc> <new|previous>
+# assert_signal <SIG> <window> <expected-rc> <new|previous> [keys-dir]
+# keys-dir: parent of the keyring and work dir (see assert_signal_at_mktemp)
 assert_signal() {
-    local sig="$1" window="$2" expected_rc="$3" expect="$4"
+    local sig="$1" window="$2" expected_rc="$3" expect="$4" keys="${5:-$TEST_TEMP_DIR/keys}"
     make_src "$TEST_TEMP_DIR/src"
-    local dest="$TEST_TEMP_DIR/keys/keyring"
+    local dest="$keys/keyring" work="$keys/work"
     make_dest "$dest"
-    command mkdir -p "$TEST_TEMP_DIR/work"
-    printf 'x' >"$TEST_TEMP_DIR/work/clone-marker"
+    command mkdir -p "$work"
+    printf 'x' >"$work/clone-marker"
 
     local output rc=0
-    output=$(run_swap_signal "$TEST_TEMP_DIR/src" "$dest" "$TEST_TEMP_DIR/work" "$sig" "$window") || rc=$?
+    output=$(run_swap_signal "$TEST_TEMP_DIR/src" "$dest" "$work" "$sig" "$window") || rc=$?
 
     assert_equals "$expected_rc" "$rc" "$sig in the $window window exits through its trap (output: $output)"
     if [ "$expect" = previous ]; then
@@ -468,7 +476,7 @@ assert_signal() {
     fi
     assert_false "[ -e '$dest/keyring' ]" "no keyring nested inside the keyring"
     assert_equals "0" "$(leftovers "$dest")" "no keyring.new.*/keyring.old.* left after $sig ($window)"
-    assert_dir_not_exists "$TEST_TEMP_DIR/work" "work dir removed by the trap"
+    assert_dir_not_exists "$work" "work dir removed by the trap"
 }
 
 # run_swap_signal_at_mktemp <src> <dest> <work> <SIG> <pattern>
@@ -565,6 +573,14 @@ test_swap_term_mid_swap_restores() {
 test_swap_int_mid_swap_restores() {
     require_gpg || return 0
     assert_signal INT mid 130 previous
+}
+
+# The restore branch (mv the moved-aside keyring back) expands its paths at
+# fire time too, and it is the one branch that can lose the keyring
+test_swap_term_mid_swap_restores_special_path() {
+    require_gpg || return 0
+    # shellcheck disable=SC2016 # a literal $ in the directory name
+    assert_signal TERM mid 143 previous "$TEST_TEMP_DIR/key s"'/$ring'
 }
 
 test_swap_term_post_swap_keeps_new() {
@@ -669,6 +685,7 @@ run_test_with_setup test_swap_term_during_staging "swap: SIGTERM during staging 
 run_test_with_setup test_swap_int_during_staging "swap: SIGINT during staging keeps the existing keyring"
 run_test_with_setup test_swap_term_mid_swap_restores "swap: SIGTERM mid-swap restores the existing keyring"
 run_test_with_setup test_swap_int_mid_swap_restores "swap: SIGINT mid-swap restores the existing keyring"
+run_test_with_setup test_swap_term_mid_swap_restores_special_path "swap: SIGTERM mid-swap restores a keyring whose path has a space and \$"
 run_test_with_setup test_swap_term_post_swap_keeps_new "swap: SIGTERM post-swap keeps the new keyring"
 run_test_with_setup test_swap_clears_traps_on_return "swap: INT/TERM traps cleared on return"
 run_test_with_setup test_swap_mktemp_failure_clears_traps "swap: INT/TERM traps cleared on a mktemp failure return"
