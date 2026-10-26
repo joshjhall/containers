@@ -5,10 +5,12 @@ metadata:
   type: project
 ---
 
-**Enforced shellcheck bar = `--severity=warning`** (lefthook.yml:65 for `*.sh`;
-:155 for actionlint `run:` blocks). `.shellcheckrc` sets `severity=info` but
-globally disables only `SC1090,SC1091,SC2016`. CI/lefthook gate at WARNING, so
-info/note-level codes do NOT fail CI.
+**Enforced shellcheck bar = `--severity=warning`** (lefthook.yml:136 for `*.sh`;
+:184 for actionlint `run:` blocks; justfile `v4` lint + `lint-workflows`).
+Severity is CLI-only — shellcheck silently ignores a `severity=` key in
+`.shellcheckrc` (the old dead `severity=info` line was removed in #1494). The rc
+globally disables only `SC1090,SC1091,SC2016`. Gates run at WARNING, so
+info/note-level codes (incl. SC2086) do NOT fail CI.
 
 As of 2026-07-16 the repo is CLEAN at warning severity: **0 warning+ findings
 across all 478 source shell scripts** (dirs: lib bin tests/{unit,framework,
