@@ -23,6 +23,11 @@
 #
 # Optional $2: parent directory for the scratch copy, so a caller's interrupt
 # trap that removes that directory also removes the scratch.
+#
+# swap_keyring_atomic's interrupt trap reads its locals (staging, previous_dir,
+# previous, keyring_dir, work_dir) by name when it fires, and bash runs it in
+# whatever frame is current, so this function must not declare locals with
+# any of those names.
 count_keyring_keys() {
     local src_dir="$1"
     local scratch_parent="${2:-${TMPDIR:-/tmp}}"
@@ -79,9 +84,37 @@ swap_keyring_atomic() {
     local src_dir="$1" keyring_dir="$2" work_dir="$3" label="$4"
 
     mkdir -p "$(dirname "$keyring_dir")"
-    local staging previous_dir previous
+    local staging="" previous_dir="" previous=""
+    # On interrupt: drop the staging dir and the work dir; if the swap below
+    # had moved the existing keyring aside, put it back, otherwise drop the
+    # moved-aside copy so nothing stray is left beside the keyring.
+    # The holder dir is kept only when a restore fails, since it then holds
+    # the sole copy of the previous keyring.
+    # Installed BEFORE either mktemp so no interrupt can strand an empty
+    # keyring.new.*/keyring.old.* dir (#1443). The paths do not exist yet, so
+    # the trap reads these locals when it fires (every return clears it, so
+    # it only fires in this scope) and skips any still empty. Bash defers a
+    # signal sent to this shell during a mktemp command substitution until
+    # the assignment lands, so the trap sees the created dir. (A group-wide
+    # Ctrl-C can still kill mktemp itself between creating the dir and
+    # printing its name; that strands one empty dir, never the keyring.)
+    # Each failure return below removes its dirs BEFORE dropping the trap.
+    local on_interrupt='[ -n "$staging" ] && rm -rf "$staging"
+        if [ -n "$previous_dir" ]; then
+            if [ -d "$keyring_dir" ]; then rm -rf "$previous_dir"
+            elif [ -n "$previous" ] && [ -d "$previous" ]; then mv "$previous" "$keyring_dir" && rm -rf "$previous_dir"
+            else rm -rf "$previous_dir"; fi
+        fi
+        rm -rf "$work_dir"'
+    # Separate traps so the exit status names the signal (128+2 / 128+15)
+    # shellcheck disable=SC2064 # embed the body now; its variables expand at fire time
+    trap "$on_interrupt; exit 130" INT
+    # shellcheck disable=SC2064 # embed the body now; its variables expand at fire time
+    trap "$on_interrupt; exit 143" TERM
+
     if ! staging=$(mktemp -d "${keyring_dir}.new.XXXXXX") || [ ! -d "$staging" ]; then
         log_error "Could not create a staging directory beside $keyring_dir — keeping existing keyring"
+        trap - INT TERM
         return 1
     fi
     # The existing keyring is moved aside into a fresh, empty holder dir rather
@@ -92,27 +125,10 @@ swap_keyring_atomic() {
     if ! previous_dir=$(mktemp -d "${keyring_dir}.old.XXXXXX") || [ ! -d "$previous_dir" ]; then
         log_error "Could not create a directory to move the existing keyring aside — keeping existing keyring"
         rm -rf "$staging"
+        trap - INT TERM
         return 1
     fi
     previous="$previous_dir/keyring"
-    # On interrupt: drop the staging dir and the work dir; if the swap below
-    # had moved the existing keyring aside, put it back, otherwise drop the
-    # moved-aside copy so nothing stray is left beside the keyring.
-    # The holder dir is kept only when a restore fails, since it then holds
-    # the sole copy of the previous keyring.
-    # Paths are %q-quoted because the trap string is evaluated later.
-    local q_staging q_previous_dir q_previous q_keyring q_work
-    q_staging=$(printf '%q' "$staging")
-    q_previous_dir=$(printf '%q' "$previous_dir")
-    q_previous=$(printf '%q' "$previous")
-    q_keyring=$(printf '%q' "$keyring_dir")
-    q_work=$(printf '%q' "$work_dir")
-    local on_interrupt="rm -rf $q_staging; if [ -d $q_keyring ]; then rm -rf $q_previous_dir; elif [ -d $q_previous ]; then mv $q_previous $q_keyring && rm -rf $q_previous_dir; else rm -rf $q_previous_dir; fi; rm -rf $q_work"
-    # Separate traps so the exit status names the signal (128+2 / 128+15)
-    # shellcheck disable=SC2064 # expand paths now; the trap outlives this scope
-    trap "$on_interrupt; exit 130" INT
-    # shellcheck disable=SC2064 # expand paths now; the trap outlives this scope
-    trap "$on_interrupt; exit 143" TERM
 
     # trustdb.gpg is optional (count_keyring_keys treats it the same way)
     local keyring_files=(pubring.kbx)
@@ -132,16 +148,16 @@ swap_keyring_atomic() {
     fi
     if [ "$staged_ok" != true ]; then
         log_error "Staged $label keyring does not match upstream or is unreadable — keeping existing keyring"
-        trap - INT TERM
         rm -rf "$staging" "$previous_dir"
+        trap - INT TERM
         return 1
     fi
 
     # Swap the validated keyring into place
     if [ -d "$keyring_dir" ] && ! mv "$keyring_dir" "$previous"; then
         log_error "Could not move the existing keyring aside — keeping it"
-        trap - INT TERM
         rm -rf "$staging" "$previous_dir"
+        trap - INT TERM
         return 1
     fi
     if ! mv "$staging" "$keyring_dir"; then
@@ -151,8 +167,8 @@ swap_keyring_atomic() {
         else
             rm -rf "$previous_dir"
         fi
-        trap - INT TERM
         rm -rf "$staging"
+        trap - INT TERM
         return 1
     fi
     # Clear the moved-aside copy BEFORE dropping the trap, so an interrupt
