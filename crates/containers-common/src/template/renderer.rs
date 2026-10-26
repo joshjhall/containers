@@ -1,5 +1,6 @@
 //! Template renderer — renders embedded templates with a `RenderContext`.
 
+use minijinja::syntax::SyntaxConfig;
 use minijinja::{Environment, Value, context};
 
 use super::context::RenderContext;
@@ -18,8 +19,7 @@ impl Renderer {
     /// Returns an error if templates fail to parse.
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let mut env = Environment::new();
-        env.set_lstrip_blocks(false);
-        env.set_trim_blocks(false);
+        env.set_syntax(SyntaxConfig::builder().lstrip_blocks(false).trim_blocks(false).build()?);
 
         env.add_template("docker-compose.yml.tmpl", include_str!("sources/docker-compose.yml.j2"))?;
         env.add_template("devcontainer.json.tmpl", include_str!("sources/devcontainer.json.j2"))?;
@@ -52,13 +52,13 @@ impl Renderer {
                     .iter()
                     .map(|a| {
                         context! {
-                            line => a.line,
-                            comment => a.comment,
+                            line => a.line.clone(),
+                            comment => a.comment.clone(),
                         }
                     })
                     .collect();
                 context! {
-                    label => g.label,
+                    label => g.label.clone(),
                     args => args,
                 }
             })
@@ -72,7 +72,7 @@ impl Renderer {
                 let parts: Vec<&str> = v.splitn(2, ':').collect();
                 context! {
                     name => parts[0],
-                    path => parts.get(1).unwrap_or(&""),
+                    path => parts.get(1).copied().unwrap_or(""),
                 }
             })
             .collect();
@@ -81,11 +81,11 @@ impl Renderer {
         let features: Vec<String> = ctx.enabled_features.iter().map(|f| f.id.clone()).collect();
 
         // Explicit features for igor.yml (only explicitly selected, in registry order).
-        let explicit_features: Vec<&str> = ctx
+        let explicit_features: Vec<String> = ctx
             .enabled_features
             .iter()
             .filter(|f| ctx.selection.explicit.contains(&f.id))
-            .map(|f| f.id.as_str())
+            .map(|f| f.id.clone())
             .collect();
 
         // Versions as a sorted list of (key, value) for deterministic iteration.

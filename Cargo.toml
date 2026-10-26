@@ -30,11 +30,11 @@ octarine = { package = "octarine-core", git = "https://github.com/joshjhall/octa
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-minijinja = { version = "2", features = ["builtins"] }
+minijinja = { version = "3", features = ["builtins"] }
 # Pure-Rust YAML: serde_yaml (deprecated) pulled in unsafe-libyaml,
 # RUSTSEC-2024-0449 (unmaintained). Forks such as serde_yaml_ng / serde_norway
 # carry the same c2rust libyaml, so they would not clear it.
-serde-saphyr = "1.3"
+serde-saphyr = "2"
 tokio = { version = "1", features = ["full"] }
 indexmap = { version = "2", features = ["serde"] }
 inquire = "0.9"
