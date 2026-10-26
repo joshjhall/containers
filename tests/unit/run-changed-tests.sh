@@ -512,6 +512,29 @@ $TESTS_DIR/unit/gpg-keyrings-readable.sh" "$out" \
         "the gpg fixtures must map to the three suites that source them"
 }
 
+# The arm globs keyring-swap*.sh so the signal-test sibling split out of
+# keyring-swap.sh (#1493) runs at push time; a literal keyring-swap.sh would
+# still pass the test above, so pin the glob against a scratch tree.
+test_gpg_keyring_fixtures_mapping_follows_glob() {
+    local root out
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+    root=$(/usr/bin/mktemp -d)
+    /usr/bin/mkdir -p "$root/tests/unit/bin/lib"
+    /usr/bin/touch "$root/tests/unit/bin/lib/keyring-swap.sh" \
+        "$root/tests/unit/bin/lib/keyring-swap-signals.sh" \
+        "$root/tests/unit/bin/lib/other.sh"
+
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" map_to_test "tests/lib/gpg-keyring-fixtures.sh" | command sort)
+    assert_equals "$root/tests/unit/bin/lib/keyring-swap-signals.sh
+$root/tests/unit/bin/lib/keyring-swap.sh" "$out" \
+        "the gpg fixtures must map to every keyring-swap*.sh suite present, and only those"
+
+    /usr/bin/rm -rf "$root"
+}
+
 # A changed script plus its own changed suite map to the same path twice; the
 # runner must run each suite once.
 test_collect_dedupes_overlapping_inputs() {
@@ -730,6 +753,7 @@ run_test test_bin_sibling_owner_is_longest_stem "bin sibling ownership goes to t
 run_test test_bin_nested_maps_by_relative_path "nested bin/** script maps by its path under bin/ (#1031)"
 run_test test_evidence_matrix_fixtures_map_to_both_suites "evidence-matrix shared fixtures map to both split suites (#1381)"
 run_test test_gpg_keyring_fixtures_map_to_every_sourcing_suite "gpg keyring shared fixtures map to every suite that sources them (#1456)"
+run_test test_gpg_keyring_fixtures_mapping_follows_glob "gpg keyring shared fixtures follow the keyring-swap*.sh glob (#1456)"
 run_test test_collect_dedupes_overlapping_inputs "runner main block runs each overlapping suite once (#1031)"
 run_test test_collect_sets_run_all "runner main block sets RUN_ALL and stops at ALL (#1031)"
 run_test test_collect_go_test_sentinel "runner main block handles the GO_TEST sentinel (#1031)"
