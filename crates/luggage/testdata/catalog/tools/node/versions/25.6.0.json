@@ -15,7 +15,8 @@
         ],
         "os": [
           "debian",
-          "ubuntu"
+          "ubuntu",
+          "rhel"
         ]
       },
       "prefix": "/usr/local",
@@ -32,6 +33,10 @@
       "dependencies": [
         {
           "tool": "ca_certificates"
+        },
+        {
+          "tool": "libatomic",
+          "purpose": "runtime"
         }
       ],
       "method_kind": "binary-tarball",
@@ -42,12 +47,82 @@
         ],
         "os": [
           "debian",
-          "ubuntu"
+          "ubuntu",
+          "rhel"
         ]
       },
       "prefix": "/usr/local",
       "source_url_template": "https://nodejs.org/dist/v{version}/node-v{version}-linux-arm64.tar.xz",
       "strip_components": 1,
+      "verification": {
+        "algorithm": "sha256",
+        "checksum_manifest": true,
+        "checksum_url_template": "https://nodejs.org/dist/v{version}/SHASUMS256.txt",
+        "tier": 3
+      }
+    },
+    {
+      "name": "node-source",
+      "method_kind": "source-build",
+      "platform": {
+        "os": "alpine",
+        "arch": [
+          "amd64",
+          "arm64"
+        ]
+      },
+      "source_url_template": "https://nodejs.org/dist/v{version}/node-v{version}.tar.xz",
+      "strip_components": 1,
+      "prefix": "/usr/local",
+      "build_steps": [
+        {
+          "command": "./configure",
+          "args": [
+            "--prefix=/usr/local"
+          ]
+        },
+        {
+          "command": "make",
+          "args": [
+            "-j{nproc}"
+          ]
+        },
+        {
+          "command": "make",
+          "args": [
+            "install"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "tool": "ca_certificates"
+        },
+        {
+          "tool": "gxx",
+          "purpose": "build"
+        },
+        {
+          "tool": "make",
+          "purpose": "build"
+        },
+        {
+          "tool": "linux_headers",
+          "purpose": "build"
+        },
+        {
+          "tool": "python3",
+          "purpose": "build"
+        },
+        {
+          "tool": "libstdcxx",
+          "purpose": "runtime"
+        },
+        {
+          "tool": "libgcc",
+          "purpose": "runtime"
+        }
+      ],
       "verification": {
         "algorithm": "sha256",
         "checksum_manifest": true,
@@ -110,6 +185,66 @@
       "arch": "arm64",
       "os": "ubuntu",
       "os_version": "26.04",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "alpine",
+      "os_version": "3.22",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "alpine",
+      "os_version": "3.22",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "alpine",
+      "os_version": "3.23",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "alpine",
+      "os_version": "3.23",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "alpine",
+      "os_version": "3.24",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "alpine",
+      "os_version": "3.24",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "rhel",
+      "os_version": "9",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "rhel",
+      "os_version": "9",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "rhel",
+      "os_version": "10",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "rhel",
+      "os_version": "10",
       "status": "supported"
     }
   ],

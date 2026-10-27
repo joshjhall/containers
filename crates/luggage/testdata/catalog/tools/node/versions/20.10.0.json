@@ -15,7 +15,8 @@
         ],
         "os": [
           "debian",
-          "ubuntu"
+          "ubuntu",
+          "rhel"
         ]
       },
       "prefix": "/usr/local",
@@ -42,12 +43,82 @@
         ],
         "os": [
           "debian",
-          "ubuntu"
+          "ubuntu",
+          "rhel"
         ]
       },
       "prefix": "/usr/local",
       "source_url_template": "https://nodejs.org/dist/v{version}/node-v{version}-linux-arm64.tar.xz",
       "strip_components": 1,
+      "verification": {
+        "algorithm": "sha256",
+        "checksum_manifest": true,
+        "checksum_url_template": "https://nodejs.org/dist/v{version}/SHASUMS256.txt",
+        "tier": 3
+      }
+    },
+    {
+      "name": "node-source",
+      "method_kind": "source-build",
+      "platform": {
+        "os": "alpine",
+        "arch": [
+          "amd64",
+          "arm64"
+        ]
+      },
+      "source_url_template": "https://nodejs.org/dist/v{version}/node-v{version}.tar.xz",
+      "strip_components": 1,
+      "prefix": "/usr/local",
+      "build_steps": [
+        {
+          "command": "./configure",
+          "args": [
+            "--prefix=/usr/local"
+          ]
+        },
+        {
+          "command": "make",
+          "args": [
+            "-j{nproc}"
+          ]
+        },
+        {
+          "command": "make",
+          "args": [
+            "install"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "tool": "ca_certificates"
+        },
+        {
+          "tool": "gxx",
+          "purpose": "build"
+        },
+        {
+          "tool": "make",
+          "purpose": "build"
+        },
+        {
+          "tool": "linux_headers",
+          "purpose": "build"
+        },
+        {
+          "tool": "python3",
+          "purpose": "build"
+        },
+        {
+          "tool": "libstdcxx",
+          "purpose": "runtime"
+        },
+        {
+          "tool": "libgcc",
+          "purpose": "runtime"
+        }
+      ],
       "verification": {
         "algorithm": "sha256",
         "checksum_manifest": true,
@@ -111,8 +182,228 @@
       "os": "ubuntu",
       "os_version": "26.04",
       "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "alpine",
+      "os_version": "3.22",
+      "status": "unsupported",
+      "reason": "Source build only: this release's ./configure rejects this alpine's python3 (3.12), which is newer than its acceptable_pythons list. nodejs.org publishes no musl tarball."
+    },
+    {
+      "arch": "arm64",
+      "os": "alpine",
+      "os_version": "3.22",
+      "status": "unsupported",
+      "reason": "Source build only: this release's ./configure rejects this alpine's python3 (3.12), which is newer than its acceptable_pythons list. nodejs.org publishes no musl tarball."
+    },
+    {
+      "arch": "amd64",
+      "os": "alpine",
+      "os_version": "3.23",
+      "status": "unsupported",
+      "reason": "Source build only: this release's ./configure rejects this alpine's python3 (3.12), which is newer than its acceptable_pythons list. nodejs.org publishes no musl tarball."
+    },
+    {
+      "arch": "arm64",
+      "os": "alpine",
+      "os_version": "3.23",
+      "status": "unsupported",
+      "reason": "Source build only: this release's ./configure rejects this alpine's python3 (3.12), which is newer than its acceptable_pythons list. nodejs.org publishes no musl tarball."
+    },
+    {
+      "arch": "amd64",
+      "os": "alpine",
+      "os_version": "3.24",
+      "status": "unsupported",
+      "reason": "Source build only: this release's ./configure rejects this alpine's python3 (3.14), which is newer than its acceptable_pythons list. nodejs.org publishes no musl tarball."
+    },
+    {
+      "arch": "arm64",
+      "os": "alpine",
+      "os_version": "3.24",
+      "status": "unsupported",
+      "reason": "Source build only: this release's ./configure rejects this alpine's python3 (3.14), which is newer than its acceptable_pythons list. nodejs.org publishes no musl tarball."
+    },
+    {
+      "arch": "amd64",
+      "os": "rhel",
+      "os_version": "9",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "rhel",
+      "os_version": "9",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "rhel",
+      "os_version": "10",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "rhel",
+      "os_version": "10",
+      "status": "supported"
     }
   ],
   "tool": "node",
-  "version": "20.10.0"
+  "version": "20.10.0",
+  "tested": [
+    {
+      "os": "debian",
+      "os_version": "12",
+      "arch": "amd64",
+      "tested_at": "2026-10-27T14:17:56.244911452Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-debian-12-amd64",
+      "image_digest": "sha256:95c73dd234d98f23d37ac8eff1e0cdd8f70c17b4f2b21965332cb1a531e17490",
+      "duration_seconds": 6.01590248,
+      "version_output": "v20.10.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "20250419~deb12u2"
+        }
+      ]
+    },
+    {
+      "os": "debian",
+      "os_version": "12",
+      "arch": "arm64",
+      "tested_at": "2026-10-27T14:17:52.711760573Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-debian-12-arm64",
+      "image_digest": "sha256:5c19b224155251780d36becfa98b6d21d4df027d9a38084db0c19fe9f45bf772",
+      "duration_seconds": 4.527877778,
+      "version_output": "v20.10.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "20250419~deb12u2"
+        }
+      ]
+    },
+    {
+      "os": "debian",
+      "os_version": "13",
+      "arch": "amd64",
+      "tested_at": "2026-10-27T14:20:12.740608752Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-debian-13-amd64",
+      "image_digest": "sha256:ec729db35ee5e13147ec4b3fc7380037548abb6027d0483e2250c9902c70e0b9",
+      "duration_seconds": 5.961800391,
+      "version_output": "v20.10.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "20250419+deb13u1"
+        }
+      ]
+    },
+    {
+      "os": "debian",
+      "os_version": "13",
+      "arch": "arm64",
+      "tested_at": "2026-10-27T14:18:30.099062864Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-debian-13-arm64",
+      "image_digest": "sha256:c1596ddb36332195be7cf737acdecf461b8aa4f03ddc52b47c1fdd2fc40cb6e8",
+      "duration_seconds": 5.062953328,
+      "version_output": "v20.10.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "20250419+deb13u1"
+        }
+      ]
+    },
+    {
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "arch": "amd64",
+      "tested_at": "2026-10-27T14:22:15.477288672Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-ubuntu-24.04-amd64",
+      "image_digest": "sha256:20d8c611dc6089060b8643ca0a57b0cd70e9a3ceaf703bd9a0a350562b436798",
+      "duration_seconds": 9.360030706,
+      "version_output": "v20.10.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "20260816ubuntu0.24.04.1"
+        }
+      ]
+    },
+    {
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "arch": "arm64",
+      "tested_at": "2026-10-27T14:15:57.827560856Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-ubuntu-24.04-arm64",
+      "image_digest": "sha256:ab65434f6604e443106fd6b7cbf57a0915641b769c1aa4eabe29fe3e9f972922",
+      "duration_seconds": 8.660223269,
+      "version_output": "v20.10.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "20260816ubuntu0.24.04.1"
+        }
+      ]
+    },
+    {
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "arch": "amd64",
+      "tested_at": "2026-10-27T14:22:28.644319021Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-ubuntu-26.04-amd64",
+      "image_digest": "sha256:c23f62b44befc4a2521d5c31bda0e1582bb0477013b707a0838772d87c7279e0",
+      "duration_seconds": 8.925522916,
+      "version_output": "v20.10.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "20260816ubuntu0.26.04.1"
+        }
+      ]
+    },
+    {
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "arch": "arm64",
+      "tested_at": "2026-10-27T14:22:06.855362045Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-ubuntu-26.04-arm64",
+      "image_digest": "sha256:70a9da8bd72ba4ed0a2107570cdebca182cf8d81780554417a1374ab4d5e35b0",
+      "duration_seconds": 7.687511231,
+      "version_output": "v20.10.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "20260816ubuntu0.26.04.1"
+        }
+      ]
+    }
+  ]
 }
