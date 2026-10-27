@@ -7,7 +7,8 @@
 #
 # Features:
 #   - Go compiler and runtime, installed by luggage (binary-tarball method,
-#     tier-3 publisher-checksum verification) from the containers-db catalog
+#     tier-1 GPG signature verification against the catalog's pinned
+#     keyrings/golang.asc) from the containers-db catalog
 #   - amd64 and arm64 only, matching docs/reference/supported-platforms.md.
 #     The pre-luggage script also mapped armhf/i386, platforms this project
 #     never built; luggage now refuses them by name ("no install method for
@@ -152,7 +153,8 @@ apt_install git
 # Go Installation (delegated to luggage)
 # ============================================================================
 # luggage picks the artifact for this platform's arch, downloads it,
-# verifies it against the publisher's .sha256 (tier 3), extracts it under
+# verifies Google's detached .asc signature over it against the catalog's
+# pinned keyrings/golang.asc (tier 1, #1508), extracts it under
 # /usr/local, creates + chowns the GOPATH/GOCACHE/GOMODCACHE cache dirs, links
 # go and gofmt into /usr/local/bin, and validates with `go version`.
 log_message "Installing Go via luggage..."

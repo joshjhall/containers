@@ -34,9 +34,10 @@
       "source_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz",
       "strip_components": 0,
       "verification": {
-        "algorithm": "sha256",
-        "checksum_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz.sha256",
-        "tier": 3
+        "algorithm": "gpg",
+        "gpg_keyring": "keyrings/golang.asc",
+        "signature_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz.asc",
+        "tier": 1
       }
     },
     {
@@ -68,9 +69,10 @@
       "source_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz",
       "strip_components": 0,
       "verification": {
-        "algorithm": "sha256",
-        "checksum_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz.sha256",
-        "tier": 3
+        "algorithm": "gpg",
+        "gpg_keyring": "keyrings/golang.asc",
+        "signature_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz.asc",
+        "tier": 1
       }
     }
   ],

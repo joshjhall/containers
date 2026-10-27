@@ -48,6 +48,10 @@
 #     re-mirrored by hand. Its only reader, `luggage reconcile`, fetches the
 #     published evidence itself and warns when it has to fall back to the
 #     vendored copy.
+#   - keyrings/* (tier-1 `gpg_keyring` trust anchors, #1521) are compared
+#     byte-for-byte, and a keyring present on only one side is drift in either
+#     direction: the shipped image must trust exactly the keys containers-db
+#     reviewed.
 #   - crates/luggage/testdata/fixtures-catalog/ is exempt by design and is not
 #     passed to this script — it carries edge cases (an unsupported platform
 #     cell, a distinctly-named musl method) that exist purely so the hermetic
@@ -83,7 +87,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -h | --help)
-            command sed -n '2,58p' "$0"
+            command sed -n '2,62p' "$0"
             exit 0
             ;;
         *)
@@ -130,6 +134,7 @@ readonly SCANNER_FIELDS='["activity"]'
 
 compared=0
 skipped=0
+seen_keyrings=""
 failures=0
 report=""
 
@@ -285,6 +290,39 @@ for tool_dir in "$VENDORED"/tools/*/; do
             add_report "$(command printf '%s\n' "$delta" | command sed 's/^/    /')"
         fi
     done
+done
+
+# Pinned keyrings (tier-1 `gpg_keyring`). Compared BYTE-FOR-BYTE, not
+# canonicalized: these are trust anchors, and a key that diverged silently
+# from containers-db would make the shipped image trust a different signer
+# than the catalog was reviewed against. Every direction is drift — a missing,
+# extra, or changed keyring all mean the two catalogs disagree about whom to
+# trust. A catalog with no keyrings/ on either side checks nothing here.
+for keyring in "$VENDORED"/keyrings/* "$UPSTREAM"/keyrings/*; do
+    [ -f "$keyring" ] || continue
+    name="$(command basename "$keyring")"
+    # Each name is handled once, from whichever side lists it first.
+    case $'\n'"$seen_keyrings" in *$'\n'"$name"$'\n'*) continue ;; esac
+    seen_keyrings="$seen_keyrings$name"$'\n'
+
+    ven_keyring="$VENDORED/keyrings/$name"
+    up_keyring="$UPSTREAM/keyrings/$name"
+    label="keyrings/$name"
+    if [ ! -f "$ven_keyring" ]; then
+        failures=$((failures + 1))
+        add_report "  $label: upstream-only; re-mirror it from containers-db"
+    elif [ ! -f "$up_keyring" ]; then
+        failures=$((failures + 1))
+        add_report "  $label: vendored-only; publish it upstream (containers-db) or remove it"
+    else
+        compared=$((compared + 1))
+        if command cmp -s "$up_keyring" "$ven_keyring"; then
+            say "OK   $label"
+        else
+            failures=$((failures + 1))
+            add_report "  $label: differs from upstream (byte comparison)"
+        fi
+    fi
 done
 
 shopt -u nullglob
