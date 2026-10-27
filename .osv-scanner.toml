@@ -34,3 +34,24 @@
 id = "RUSTSEC-2023-0089"
 ignoreUntil = 2026-12-31
 reason = "atomic-polyfill unmaintained; embedded-target-only via heapless 0.7, never compiled on any target we build. No upgrade path (postcard 1.1.3 still pins heapless ^0.7)."
+
+# ---------------------------------------------------------------------------
+# block-buffer 0.10.4 — via digest 0.10 (sha2, octarine, RustCrypto)
+# ---------------------------------------------------------------------------
+# GHSA-qwgh-2vcv-g2f7: a panic inside a caller-supplied block-compression
+# callback, caught and followed by reuse of the same buffer, can leave its
+# cursor byte corrupt and allow out-of-bounds access. Fixed only in 0.12.1;
+# no 0.10.x patch exists, so `cargo update` cannot clear it — the whole
+# digest 0.10 family has to move to 0.11 (#1522).
+#
+# Our use is one-shot hashing (sha256/sha512 of downloads, digests inside
+# signature verification). Those compression functions do not panic, and
+# nothing in the workspace catches a panic and reuses a hasher.
+#
+# Not yet in the RustSec database, so cargo-deny does not flag it and there is
+# no deny.toml entry to mirror. Add one if a RUSTSEC id is assigned.
+
+[[IgnoredVulns]]
+id = "GHSA-qwgh-2vcv-g2f7"
+ignoreUntil = 2027-01-31
+reason = "block-buffer 0.10 cursor corruption needs a caught panic inside a compression callback; we only do one-shot sha2/digest hashing. Fix needs digest 0.11 (#1522)."
