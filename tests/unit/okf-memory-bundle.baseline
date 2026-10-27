@@ -1,0 +1,11 @@
+# OKF memory-bundle finding ratchet (tests/unit/okf-memory-bundle.sh).
+#
+# Per-category counts frozen at their present value: a count ABOVE its entry
+# fails, an unlisted category is an implicit 0. RAISING an entry is a
+# deliberate, reviewable diff that wants a reason in the commit message.
+# Graph-health categories are never listed here -- they are a hard zero.
+#
+# Regenerate with: tests/unit/okf-memory-bundle.sh --regen
+
+memory-missing-why 63
+okf-missing-type 145

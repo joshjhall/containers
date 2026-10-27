@@ -630,6 +630,23 @@ $TESTS_DIR/unit/lefthook-sequential-fixers.sh" "$out" \
         "lefthook.yml must collect each lefthook policy suite as its own path"
 }
 
+# .claude/memory/*.md → the OKF memory-bundle gate (#1528). The bundle lives
+# outside tests/unit/ and lib/, so without its arm a memory edit ran nothing at
+# push time and an orphaned or dangling memory first failed in CI.
+test_memory_bundle_mapping() {
+    local out
+    out=$(map_to_test ".claude/memory/some-lesson.md")
+    assert_equals "$TESTS_DIR/unit/okf-memory-bundle.sh" "$out" \
+        "a memory concept maps to the bundle gate"
+    out=$(map_to_test ".claude/memory/MEMORY.md")
+    assert_equals "$TESTS_DIR/unit/okf-memory-bundle.sh" "$out" \
+        "the root index maps to the bundle gate"
+    # Scoped to the bundle: a same-named file elsewhere must not match.
+    out=$(map_to_test "docs/MEMORY.md")
+    assert_not_contains "$out" "okf-memory-bundle.sh" \
+        "a MEMORY.md outside .claude/memory/ does not map to the gate"
+}
+
 # The arm globs tests/unit/lefthook-*.sh, so a new policy suite is picked up
 # and an unrelated suite is not. With none present, the unmatched glob stays
 # literal and the -f guard must keep it out.
@@ -881,6 +898,7 @@ run_test test_feature_lib_mapping_emits_mirrored_suites "feature lib file maps t
 run_test test_feature_lib_mapping_mirrors_a_second_subdir "feature lib mirror glob works for a second subdir (op-cli) (#1331)"
 run_test test_feature_lib_toplevel_file_has_no_mirror_glob "top-level feature lib file maps to its same-named mirror only (#1331)"
 run_test test_lefthook_mapping_follows_glob "lefthook.yml mapping follows the lefthook-*.sh glob (#1075)"
+run_test test_memory_bundle_mapping "memory bundle edits map to the OKF bundle gate (#1528)"
 run_test test_devcontainer_mapping_root_scripts "devcontainer root scripts map to their suites (#1067)"
 run_test test_devcontainer_mapping_unmatched_is_silent "uncovered devcontainer script maps to no test path (#1067)"
 run_test test_devcontainer_mapping_nested_by_path "nested devcontainer script maps by path, not basename (#1067)"

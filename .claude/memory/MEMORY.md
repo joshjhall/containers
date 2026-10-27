@@ -4,155 +4,43 @@
      file only. Individual memory files keep the line-length check. -->
 
 - [v5 Architecture](v5-architecture.md) — Three executables (stibbons/igor/luggage), manifest-driven installs…
-- [Host monitor state forwarding (#735)](host-monitor-state-forwarding-735.md) — Forward container golem state to host menu-bar monitors
-- [Shellcheck policy + bash deprecation](shellcheck-policy-and-bash-deprecation.md) — Enforced at --severity=warning
-- [Octarine Windows](octarine-windows.md) — Octarine doesn't compile on Windows yet, blocks stibbons Windows CI
 - [Luggage Tooldb Design](luggage-tooldb-design.md) — Tool catalog: separate containers-tooldb repo, 7-tier activity, luggage crate
 - [Minimal build philosophy](minimal-build-philosophy.md) — Install minimal package sets
-- [Use file-issue skill](use-file-issue-skill.md) — Always file new issues via `/file-issue`, not raw `gh issue create`
 - [Prefer just recipes](prefer-just-recipes.md) — Use `just <recipe>` over bare cargo/shell when one exists
-- [update-versions script](update-versions-script.md) — bin/update-versions.sh applies check-versions drift (not just-wired)
+- [Use file-issue skill](use-file-issue-skill.md) — Always file new issues via `/file-issue`, not raw `gh issue create`
 - [PR merge + prune is the default ship](feedback_pr_merge_default.md) — `/next-issue-ship` Option 1 ends at merged + branch deleted, not at "PR open"
-- [Skip all-files lint](feedback_local_lint_scope.md) — `just lint` scans the whole repo
-- [known_hosts seeded system-wide](known-hosts-seeded-system-wide.md) — pinned github/gitlab host keys → /etc/ssh/ssh_known_hosts at build
-- [tmpfs uid can't be templated](tmpfs-uid-cannot-be-templated.md) — compose tmpfs uid=/gid= baked at mount time
-- [entrypoint UID-agnostic user](entrypoint-uid-agnostic-user-detection.md) — resolve runtime user by shape, not hardcoded UID
-- [Rust tools use cargo binstall](rust-tools-use-cargo-binstall.md) — rust.sh/rust-dev.sh install via cargo binstall
-- [R packages use PPM binaries](r-packages-use-ppm-binaries.md) — CRAN from Posit PPM binaries (x86_64 only
-- [Cache mounts not on install dirs](cache-mounts-not-on-install-dirs.md) — no type=cache on /cache/cargo or /cache/r (runtime install locations)
-- [Auto-patch inline checksums](auto-patch-inline-checksums.md) — inline *_SHA256 pins in setup.sh need TOOL_CHECKSUM_REGISTRY_INLINE
-- [check-versions scrape pins nonexistent](check-versions-scrape-pins-nonexistent.md) — read downloadable artifact filenames, not scraped HTML
-- [Luggage vendored catalog](luggage-vendored-catalog.md) — builds read vendored snapshot (crates/luggage/testdata/catalog), not sibling…
-- [Rust split triage by production LOC](rust-split-triage-by-production-loc.md) — rank .rs split candidates by production LOC; check test_excluded first (#874 miscount)
-- [Luggage release deferred until v5](luggage-release-deferred-until-v5.md) — no apt/Homebrew/cargo release for luggage until v5 substantially
 - [Auto-merge needs explicit consent](feedback_auto_merge_consent.md) — gh pr merge --auto needs per-turn authorization, separate from default-ship
 - [Golem autonomy contract](feedback_golem_autonomy_contract.md) — auto-approve push/PR-create + auto-merge green PRs
-- [Parallel automation (golem) initiative](parallel-automation-golem-initiative.md) — golem = per-issue sub-orchestrator
+- [Skip all-files lint](feedback_local_lint_scope.md) — `just lint` scans the whole repo
+- [Full review before merge](feedback-full-review-before-merge.md) — a cap-stop on a narrow clean cycle isn't mergeable
+- [Assertions must discriminate](assertions-must-discriminate.md) — exit codes and substring fragments pass for the wrong reason
+- [Mutation checks on scratch copies](mutation-checks-on-scratch-copies.md) — prove a guard by mutating a mktemp copy, never sed -i/cp over a tracked file +…
+- [Rebase before blaming your own change](rebase-before-blaming-your-change.md) — a CI failure in files your branch never touched usually means main
+- [BASH_ENV breaks PATH stubs](bash-env-breaks-path-stubs.md) — /etc/bash_env rebuilds PATH on non-interactive bash
+- [FUSE scratch breaks write-then-read](fuse-scratch-breaks-write-then-read.md) — test scratch AND cargo target/ on the FUSE-mounted repo lose coherency
+- [git env leak breaks worktree tests](git-env-leak-breaks-worktree-tests.md) — GIT_DIR leaks into pre-push hook
+- [Shellcheck policy + bash deprecation](shellcheck-policy-and-bash-deprecation.md) — Enforced at --severity=warning
 - [Worktree push hooks vs gitignore](worktree-push-hooks-gitignore.md) — pushing from .worktrees/ breaks osv-scanner (#556) + compose-validate
+- [Degraded review gate is not a pass](degraded-review-gate-is-not-a-pass.md) — a review dimension that dies on a 429 returns no verdict
+- [Empty review dimension is not a pass](empty-review-dimension-is-not-a-pass.md) — reviewers submit {findings:[]} unread (21% Sonnet, 17 security)
+- [Review-fix commit scope](review-fix-commit-scope.md) — conform rejects `fix(review)`; use the component scope (e.g. `test(luggage)`)
 - [Golem supervised auto mode](golem-supervised-auto-mode.md) — pass `--permission-mode auto` EXPLICITLY
 - [Golem push gate under auto](golem-push-gate-under-auto.md) — `auto` auto-approves push/PR-create
-- [claude-setup template stamp re-sync](claude-setup-template-stamp-resync.md) — bundled ~/.claude artifacts re-sync via content stamp (#574)
-- [gh pr checks JSON state is uppercase](gh-pr-checks-json-state-uppercase.md) — filter CI monitors on `bucket` (lowercase), not `state` (UPPERCASE)
-- [git env leak breaks worktree tests](git-env-leak-breaks-worktree-tests.md) — GIT_DIR leaks into pre-push hook
-- [Librarian plugin extraction](librarian-plugin-extraction.md) — DONE: librarian live (38 skills+17 agents, 3 plugins)
-- [Librarian container install](librarian-container-install.md) — #608: clone librarian@LIBRARIAN_REF to /opt/librarian at build
-- [Plugin agents must be flat md](plugin-agents-must-be-flat-md.md) — Claude Code discovers plugin agents only as flat agents/<name>.md
-- [Golem feed event classification](golem-feed-event-classification.md) — feed events gate|idle
-- [Hermetic fixture tests need git identity](hermetic-fixture-tests-need-git-identity.md) — export GIT_*_NAME/EMAIL in committing tests (#606)
-- [Pre-push skips network tests](pre-push-skips-network-tests.md) — SKIP_NETWORK_TESTS=1 keeps the push gate offline
-- [Ship review reads whole files](ship-review-whole-file-scope.md) — ship review flags pre-existing main code
-- [BASH_ENV breaks PATH stubs](bash-env-breaks-path-stubs.md) — /etc/bash_env rebuilds PATH on non-interactive bash
-- [Evidence-run arch-aware](evidence-run-arch-aware.md) — native arm64+amd64
-- [Evidence-run validates live vs db main](evidence-run-validates-live-against-db-main.md) — new TestEntry field needs containers-db schema PR merged
-- [Pre-existing osv vuln blocks push](preexisting-osv-vuln-blocks-push.md) — whole-lockfile osv pre-push gate blocks ALL pushes on any Cargo.lock
-- [Alpine hardening: no coreutils paths](alpine-hardening-no-coreutils-paths.md) — Alpine build scripts use bare command names, not /usr/bin/<cmd>
-- [Luggage InstallReport field → workspace test](luggage-installreport-field-workspace-test.md) — new InstallReport field breaks record-evidence
-- [UBI image tag verify against registry](ubi-image-tag-verify-registry.md) — UBI FROM tags: no bare :9, floating minors cap at 9.5
-- [ubi-minimal no nologin → use /usr/bin/false](ubi-minimal-no-nologin-use-false.md) — ubi-minimal ships no nologin (not even via util-linux-core)
-- [Base-image publish path vs PR Trivy arch](base-image-publish-path-trivy-arch.md) — PR scans local single-arch
-- [Lint couples docs to templates](lint-couples-docs-to-templates.md) — Lint AI Templates CI requires every templates/claude skill+agent be
-- [justfile delegation breaks content invariants](justfile-delegation-breaks-content-invariants.md) — thinning recipes into librarian wrappers breaks
-- [golem-notify wiring moved to plugin](golem-notify-wiring-moved-to-plugin.md) — #611 deleted the build-bound hook
-- [CI lint fails on deleted paths](ci-lint-fails-on-deleted-paths.md) — Run Tests PR-lint fed deleted files to lefthook
-- [Ship review harness provider error](ship-review-harness-provider-error.md) — harness/code-reviewer 400 on Sonnet provider
-- [Ship review harness agent-type missing](ship-review-harness-agent-type-missing.md) — ship-issue review harness hardcodes dev-core:code-reviewer
-- [Librarian signature verification](librarian-signature-verification.md) — #671: build verifies signed release tarball via cosign (not git clone)
-- [ETXTBSY held-fd is Linux-only](etxtbsy-held-fd-linux-only.md) — inducing ETXTBSY via a held write fd across exec works only on Linux
-- [Golem launch bare slash-command fails](golem-launch-bare-slash-command-fails.md) — golem-launch.sh passes bare /next-issue but plugin registers
-- [stibbons binary distribution](stibbons-binary-distribution.md) — VERSION-file injection via build.rs, release-binaries.yml 6-target matrix
-- [ETXTBSY test coverage split #676/#576](etxtbsy-test-coverage-split-676-576.md) — PR #575 ETXTBSY-retry test gaps split: #676 did exhaustion+stderr
-- [Label metadata reference vs definition](label-metadata-reference-vs-definition.md) — stibbons labels sync (#289): defs live in
-- [Zed postStart races entrypoint](zed-poststart-races-entrypoint.md) — postStart fires T+147ms, entrypoint finishes T+3s
-- [Zed every-boot startup replay](zed-every-boot-startup-replay.md) — Zed replaces ENTRYPOINT
-- [Services reuse agent Docker layer](services-reuse-agent-docker-layer.md) — stibbons services (#311) assembled on #310's shared layer
-- [Worktree test Windows path separators](worktree-test-windows-path-separators.md) — worktree .git-pointer assertions must derive git dir via
-- [typos hook breaks on spaced filenames](typos-hook-breaks-on-spaced-filenames.md) — lefthook typos ran `typos $files` unquoted
-- [Stale base re-adds bin/igor, breaks typos](stale-base-typos-bin-igor.md) — worktree cut before #690 carries deleted bin/igor in push range
-- [dist profile scoping](dist-profile-scoping.md) — stibbons size tuning lives in [profile.dist] not workspace-wide…
-- [aarch64 release native not cross](aarch64-release-native-not-cross.md) — release-binaries aarch64 leg builds native on ubuntu-24.04-arm
-- [Rust toolchain pin sync](rust-toolchain-pin-sync.md) — split since #1111: build chain/MSRV frozen (deliberate PR), container default…
-- [cargo missing from non-login/shebang shells](cargo-path-missing-luggage-rust.md) — luggage rust: /cache/cargo/bin empty, /usr/local/bin/cargo
-- [Review harness destructive rm (#746)](review-harness-destructive-rm-746.md) — ship-issue pre-PR review subagent ran `rm -rf` with unresolved `..`
-- [Host activity line shows pipeline phase](host-activity-line-shows-pipeline-phase.md) — golem host activity line sources from next-issue phase
-- [Host hooks fallback parity](host-hooks-fallback-parity.md) — the two host hooks share an identity ladder
-- [jsonc-merge helper (#529)](jsonc-merge-helper-529.md) — Node CLI + jsonc-parser for comment-preserving Zed settings.json merges
-- [npm-global tools tracked via check-versions](npm-global-tools-tracked-via-check-versions.md) — no dependabot
-- [UBI arm64 mirror depsolve flake](ubi-arm64-mirror-depsolve-flake.md) — rhel-9-arm64 base build fails on transient microdnf glibc depsolve
-- [Case-insensitive mount shares inodes](case-insensitive-mount-shared-inode.md) — case-shadowed entries share an inode
-- [Stale symlink attrs on virtiofs](stale-symlink-attrs-virtiofs.md) — nlink=0 symlinks read as permanently modified
-- [git flags need the oldest-base floor](git-flags-need-debian-11-floor.md) — a newer flag behind a `|| return 0` fail-safe no-ops the whole feature
-- [workflow.js must be readable in-worktree](workflow-js-must-be-readable-in-worktree.md) — stage via harness-stage.sh (librarian v0.15.0+)
-- [Worktree guard blocks eval + heredocs](worktree-guard-blocks-eval-and-heredocs.md) — refuses the literal `eval` (incl. `yq eval`) and `golem-work.sh complete`…
-- [Cron legs need a boot env snapshot](cron-legs-need-boot-env-snapshot.md) — periodic leg of a startup script sees no container env
-- [Skips render as passes](skips-render-as-passes.md) — interpreter-gated tests skipped silently in CI for months
-- [Sibling suite split updates mapping test](sibling-suite-split-updates-mapping-test.md) — a new tests/unit/runtime/ sibling breaks run-changed-tests.sh's exact-count…
-- [Stale repo-local git identity](stale-repo-local-git-identity.md) — `.git/config` `t <t@t.t>` shadows the 1Password global identity
-- [Fetch before releasing](fetch-before-release-bot-owns-main.md) — auto-patch bot pushes releases+tags to main on a schedule
-- [worktree-rm blocked by held build artifacts](worktree-rm-blocked-by-held-build-artifacts.md) — leftover cargo artifacts held open by rust-analyzer
-- [Cross-repo schema required-flip](cross-repo-schema-required-flip.md) — a REQUIRED catalog field needs 3 PRs (optional→consume→required)
-- [logger without a syslog daemon](logger-without-syslog-daemon.md) — no /dev/log in these images
-- [cron user column is build-time](cron-user-column-is-build-time.md) — run cron jobs as root + resolve the container user at run time
-- [Luggage install-method decomposition](luggage-install-method-decomposition.md) — #805-813 chain
-- [npm audit signatures exit-code ambiguity](npm-audit-signatures-exit-code-ambiguity.md) — non-zero means tampering OR can't-run
-- [Vendored catalog drift gate](vendored-catalog-drift-gate.md) — shipped luggage catalog mirrors containers-db (#815)
-- [Pooled invariant masks a per-variant gap](pooled-invariant-masks-per-variant-gap.md) — union-across-install-methods hid an alpine entry with no
-- [Unit suites share tests/results/](tests-share-results-dir.md) — fixed TEST_TEMP_DIR names collide, unique ones leak
+- [Luggage vendored catalog](luggage-vendored-catalog.md) — builds read vendored snapshot (crates/luggage/testdata/catalog), not sibling…
 - [tests/results/ is on an incoherent FUSE mount](results-dir-fuse-incoherent.md) — writes succeed, report success, then aren't readable
-- [Rebase before blaming your own change](rebase-before-blaming-your-change.md) — a CI failure in files your branch never touched usually means main
-- [FUSE scratch breaks write-then-read](fuse-scratch-breaks-write-then-read.md) — test scratch AND cargo target/ on the FUSE-mounted repo lose coherency
-- [clap `env` attr breaks bool flags](clap-env-attr-breaks-bool-flags.md) — `#[arg(env=...)]` on a bool makes it value-taking
-- [git-env neutralization boundary](git-env-neutralization-boundary.md) — fs-health clears 8 git vars by measurement not name family
-- [Fixture state hides vectors](fixture-state-hides-vectors.md) — an exhaustive sweep in one fixture state missed two of its own members
-- [Assertions must discriminate](assertions-must-discriminate.md) — exit codes and substring fragments pass for the wrong reason
-- [Grep pin is not behavioral coverage](grep-pin-is-not-behavioral-coverage.md) — pinning a guard's source text misses semantics
-- [Discriminate rule has no fixed point on scaffolding](discriminate-rule-has-no-fixed-point-on-scaffolding.md) — #900→#903→#907→#913: each round's guards became the next round's undriven…
+- [Worktree guard blocks eval + heredocs](worktree-guard-blocks-eval-and-heredocs.md) — refuses the literal `eval` (incl. `yq eval`) and `golem-work.sh complete`…
+- [Pre-push skips network tests](pre-push-skips-network-tests.md) — SKIP_NETWORK_TESTS=1 keeps the push gate offline
 - [Zero checks is not green](zero-checks-is-not-green.md) — check-runs can't tell "never fired" from "delayed"
-- [Fine-grained PAT lacks admin](fine-grained-pat-lacks-admin.md) — repo-settings writes 403 despite permissions.admin=true
-- [virtiofs EBADF is not bindfs](virtiofs-ebadf-not-bindfs.md) — wedged worktree entries fail on the lower virtiofs too
-- [Validation on load is a breaking change](validation-on-load-is-a-breaking-change.md) — a loader allow-list breaks existing files AND desyncs the
-- [Degraded review gate is not a pass](degraded-review-gate-is-not-a-pass.md) — a review dimension that dies on a 429 returns no verdict
-- [Octarine publishes as octarine-core](octarine-package-renamed-core.md) — `package =` rename since beta.5
-- [Embedded-only advisory suppression](embedded-only-advisory-suppression.md) — prove unreachability with `cargo tree -i --target <triple>`
-- [Trailing empty line hides a guard](trailing-empty-line-hides-guard.md) — $(...) strips trailing newlines
-- [Prove unreachability via symbol table](prove-unreachability-via-symbol-table.md) — for a CVE in a prebuilt Go binary, use `nm` on the
-- [Report I/O decides suite exit](report-io-decides-suite-exit.md) — a suite's last command sets its status
-- [Build-time chown breaks UID remap](build-time-chown-breaks-uid-remap.md) — a build-time owner is wrong under Zed's remap
-- [Mock fidelity gates assertions](mock-fidelity-gates-assertions.md) — a stub answering what the real tool could not lets tests pass on impossible…
-- [Harness placeholder args fake a review](harness-placeholder-args-fake-review.md) — a stand-in or cross-repo-omitted `args.diff` returns clean:true on the wrong bytes
-- [Ambient injection misses ordering](ambient-injection-tests-miss-ordering.md) — to pin an unset-after-source ordering, the hostile value must come from the…
-- [mawk drops literal NUL in printf](mawk-drops-literal-nul-in-printf.md) — use `printf "%s%c", str, 0`
-- [Symlink xattr ELOOP is virtiofs, not bindfs](symlink-xattr-eloop-is-virtiofs-not-bindfs.md) — fixed by bindfs --xattr-none
-- [PR-tier rerun keeps old labels](pr-tier-rerun-keeps-old-labels.md) — label at create time, not rerun
-- [Node 25+ install deps](node-25-plus-install-deps.md) — no bundled corepack (≥25) + libatomic1 on Node 26 arm64
-- [Sourced lib set flags leak into caller](sourced-lib-set-flags-leak-into-caller.md) — a lib's `set -e` re-enables errexit in a no-`-e` sourcer
-- [Unconsumed default status fails silently](unconsumed-default-status-fails-silently.md) — registered-but-unhandled lands in `unchecked`, which no stage reads
-- [Container UID fixed, not remapped](container-uid-fixed-not-remapped.md) — updateRemoteUserUID:false keeps 1000:1000
-- [Mutation checks on scratch copies](mutation-checks-on-scratch-copies.md) — prove a guard by mutating a mktemp copy, never sed -i/cp over a tracked file +…
-- [Empty review dimension is not a pass](empty-review-dimension-is-not-a-pass.md) — reviewers submit {findings:[]} unread (21% Sonnet, 17 security)
-- [grep -q pipefail SIGPIPE needs load](grep-q-pipefail-sigpipe-needs-load.md) — `x | grep -q` flake only shows under scheduler pressure
-- [containers-db scanner silent failure](containers-db-scanner-silent-failure.md) — scanner went green while PR-create failed for weeks
-- [reconcile uses published evidence](reconcile-uses-published-evidence.md) — fetch tested[] from published db
 - [Stale git index.lock](stale-git-index-lock.md) — host↔container git index ping-pong under Zed (zed#52265)
-- [YAML crate is serde-saphyr](yaml-crate-serde-saphyr.md) — serde_yaml forks (ng/norway/bw) still embed c2rust libyaml
-- [Evidence batched ingest](evidence-batched-ingest.md) — one auto-merged db PR + one issue per run (#1249)
-- [Evidence pending from published db](evidence-pending-from-published-db.md) — matrix subtracts containers-db tested[], not vendored (#1319)
-- [Distro deps live in catalog](distro-deps-live-in-catalog.md) — system_package.platforms + `distro:release` selectors (#1164)
-- [Peel FUSE layers with unshare](peel-fuse-layers-with-unshare.md) — `sudo unshare -m` + `umount -l` to test raw virtiofs safely
-- [Merge commit breaks conform CI](merge-commit-breaks-conform-ci.md) — a merge commit on a PR fails Run Tests at `conform enforce` (EOF, no FAIL line)
-- [File follow-ups before teardown](file-followups-before-teardown.md) — subagent spawned in a golem worktree is stranded when Phase D removes it
-- [Golem teardown trips on own scaffolding](golem-teardown-untracked-scaffolding.md) — worktree-rm refuses on copied settings.local.json + staged harness
-- [Harness resume replays a fake review](harness-resume-replays-fake-review.md) — resumeFromRunId on the next cycle replays cache: 0 tokens, stale clean
-- [Full review before merge](feedback-full-review-before-merge.md) — a cap-stop on a narrow clean cycle isn't mergeable
-- [Env scrub is not a boundary (same uid)](env-scrub-not-a-boundary-same-uid.md) — child reads parent's /proc/PPID/environ
-- [Mutation scratch needs own target dir](mutation-scratch-needs-own-target-dir.md) — sharing CARGO_TARGET_DIR with a mutated copy makes real tests fail on correct…
-- [Refusal tests reach real gh](refusal-tests-reach-real-gh.md) — a guard that silently misses falls through to real `gh` (#424)
-- [Readdir order CI-only failure](readdir-order-ci-only-failure.md) — deterministic CI-only fail in an untouched suite can be find order (mutate-while-walking)
-- [Heuristic scanner: union of views](heuristic-scanner-union-of-views.md) — patching a lossy transform has no fixed point
-- [Review-fix commit scope](review-fix-commit-scope.md) — conform rejects `fix(review)`; use the component scope (e.g. `test(luggage)`)
-- [git-cliff in a worktree empties CHANGELOG](git-cliff-worktree-empty-changelog.md) — pass --workdir; fixed in release.sh by #1423
-- [prComments need real id](pr-comments-need-real-id.md) — id-less PR comment forces harness clean:false despite 0 findings; convergence may still say stop
-- [Handoff relaunch refuses dim suggestion](handoff-relaunch-refuses-dim-suggestion.md) — type /clear directly when the composer holds only the dim suggestion (librarian#1223)
-- [gpg keyboxd ignores --keyring](gpg-keyboxd-ignores-keyring-flag.md) — under use-keyboxd no .kbx is created even with --keyring; pin an empty common.conf + assert the file
-- [cargo update -p churns transitives](cargo-update-p-reresolves-transitives.md) — a pin-only bump re-resolved serde-saphyr's base64; read lock hunks, not --stat
-- [Post-PR review is pr-attempt*.json](post-pr-review-artifact-is-pr-attempt.md) — glob *attempt*.json before holding a merge for a missing post-PR review
-- [PR link closes despite Refs](pr-link-closes-despite-refs.md) — a linked PR closes its issue on merge even with only `Refs #N`; check closedByPullRequestsReferences first
+- [Fetch before releasing](fetch-before-release-bot-owns-main.md) — auto-patch bot pushes releases+tags to main on a schedule
+
+## Topic indexes
+
+- [Review harness & golem internals](index-review-harness-golem.md) — open when driving golems, the ship-issue/next-issue review harness, PR/merge automation, or host monitors (25)
+- [Filesystem, virtiofs, FUSE & case-sensitivity](index-filesystem-mounts.md) — open on wedged files, EBADF/ELOOP, stale symlinks, case-shadowed paths, or env leaking across process boundaries (8)
+- [CI & test-framework gotchas](index-ci-test-gotchas.md) — open when a test or CI job fails oddly, flakes, or passes suspiciously (30)
+- [Dependencies, advisories & version pinning](index-deps-security.md) — open when handling osv/cargo-deny advisories, version pins, auto-patch, checksums or signatures (16)
+- [Luggage, catalog, evidence & containers-db](index-luggage-catalog-evidence.md) — open when touching luggage install methods, the vendored catalog, evidence runs, or containers-db schema (14)
+- [Container runtime, entrypoint, Zed & permissions](index-runtime-devcontainer.md) — open when debugging the entrypoint, UID handling, Zed/devcontainer startup, cron or logging inside the image (11)
+- [Build & feature-script specifics](index-build-features.md) — open when editing Dockerfile/base-image layers, per-language feature scripts, or stibbons packaging (15)
+- [Resolved, historical & superseded](index-historical.md) — open only for the background of a finished extraction or plugin-wiring change; these are done (4)

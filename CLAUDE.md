@@ -277,7 +277,9 @@ Two-tier memory under `.claude/memory/`:
 - Long-term (committed): `.claude/memory/*.md` — team knowledge, architecture decisions
 - Short-term (gitignored): `.claude/memory/tmp/` — ephemeral session state
 
-See `docs/claude-code/memory-system.md` for conventions.
+`MEMORY.md` is a lean root index; topic-specific memories go behind an
+`index-<topic>.md` sub-index (one entry, one index), gated by
+`tests/unit/okf-memory-bundle.sh`. See `docs/claude-code/memory-system.md`.
 
 ### Secrets & Setup Commands
 
