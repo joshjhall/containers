@@ -6,8 +6,9 @@
 #   managers. Configures cache directories for optimal container performance.
 #
 # Features:
-#   - Node.js runtime, installed by luggage (binary-tarball method, tier-3
-#     verification against the release's SHASUMS256.txt manifest) from the
+#   - Node.js runtime, installed by luggage (binary-tarball method, tier-1
+#     GPG verification of the release's signed SHASUMS256.txt manifest
+#     against the catalog's pinned keyrings/nodejs.asc) from the
 #     containers-db catalog
 #   - amd64 and arm64 only, matching docs/reference/supported-platforms.md
 #   - npm (included with Node.js)
@@ -143,8 +144,9 @@ install_node_system_deps
 # ============================================================================
 # luggage picks this arch's install method (node names amd64 "x64", so the
 # catalog carries one method per arch), downloads the .tar.xz, verifies it
-# against the matching line of the release's SHASUMS256.txt (tier 3, manifest
-# mode — an arch mismatch fails rather than verifying the wrong artifact),
+# against the matching line of the release's SHASUMS256.txt once that
+# manifest's signature verifies against the pinned keyrings/nodejs.asc (tier
+# 1, #1508; an arch mismatch fails rather than verifying the wrong artifact),
 # strips the versioned root into /usr/local, and validates with
 # `node --version`. node, npm and npx (and corepack on Node < 25) land in
 # /usr/local/bin as the tarball ships them; ensure_corepack below covers 25+.

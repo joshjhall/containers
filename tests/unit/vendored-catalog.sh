@@ -756,7 +756,52 @@ test_schema_fixtures_are_rejected() {
     return 0
 }
 
+test_drift_compares_keyrings_byte_for_byte() {
+    # #1521: tier-1 trust anchors ship in keyrings/. A key that diverged
+    # silently from containers-db makes the image trust a different signer than
+    # the catalog was reviewed against, so every direction is drift.
+    local up="$TEST_TEMP_DIR/kr-up" ven="$TEST_TEMP_DIR/kr-ven" output rc=0
+    _mini_catalog "$up" 2026-10-01 '[]'
+    _mini_catalog "$ven" 2026-10-01 '[]'
+    command mkdir -p "$up/keyrings" "$ven/keyrings"
+    command printf 'KEY-A\n' >"$up/keyrings/a.asc"
+    command printf 'KEY-A\n' >"$ven/keyrings/a.asc"
+
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
+    assert_equals "0" "$rc" "identical keyrings pass"
+    assert_contains "$output" "3 entries compared, 0 skipped (vendored-only tool or live pin), 0 drifted" \
+        "the keyring is counted as compared"
+
+    # One changed byte. JSON canonicalization would be the wrong tool here.
+    command printf 'KEY-B\n' >"$ven/keyrings/a.asc"
+    rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "a changed keyring is drift"
+    assert_contains "$output" "keyrings/a.asc: differs from upstream" "the failure names the keyring"
+    assert_contains "$output" "3 entries compared, 0 skipped (vendored-only tool or live pin), 1 drifted" \
+        "exactly the changed keyring is counted"
+    command printf 'KEY-A\n' >"$ven/keyrings/a.asc"
+
+    command printf 'KEY-U\n' >"$up/keyrings/u.asc"
+    rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "an upstream-only keyring is drift"
+    assert_contains "$output" "keyrings/u.asc: upstream-only; re-mirror it" "the upstream-only keyring is named"
+    command rm -f "$up/keyrings/u.asc"
+
+    command printf 'KEY-V\n' >"$ven/keyrings/v.asc"
+    rc=0
+    output="$(command bash "$DRIFT_SCRIPT" --vendored "$ven" --upstream "$up" --quiet 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "a vendored-only keyring is drift"
+    assert_contains "$output" "keyrings/v.asc: vendored-only; publish it upstream" \
+        "the vendored-only keyring is named"
+    assert_contains "$output" "3 entries compared, 0 skipped (vendored-only tool or live pin), 1 drifted" \
+        "a one-sided keyring adds drift, not a comparison"
+    command rm -rf "$up" "$ven"
+}
+
 run_test "test_vendored_matches_upstream" "vendored catalog matches containers-db"
+run_test "test_drift_compares_keyrings_byte_for_byte" "drift check compares keyrings byte-for-byte, both directions"
 run_test "test_drift_fixtures_are_rejected" "drift check rejects planted drift fixtures"
 run_test "test_version_token_predicate" "shared routing refuses path-shaped and malformed versions"
 run_test "test_path_shaped_vendored_only_fixture_is_refused" "a path-shaped drift-vendored-only fixture is refused, not staged"

@@ -23,10 +23,12 @@
       "source_url_template": "https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz",
       "strip_components": 1,
       "verification": {
-        "algorithm": "sha256",
+        "algorithm": "gpg",
         "checksum_manifest": true,
         "checksum_url_template": "https://nodejs.org/dist/v{version}/SHASUMS256.txt",
-        "tier": 3
+        "gpg_keyring": "keyrings/nodejs.asc",
+        "signature_url_template": "https://nodejs.org/dist/v{version}/SHASUMS256.txt.sig",
+        "tier": 1
       }
     },
     {
@@ -51,10 +53,12 @@
       "source_url_template": "https://nodejs.org/dist/v{version}/node-v{version}-linux-arm64.tar.xz",
       "strip_components": 1,
       "verification": {
-        "algorithm": "sha256",
+        "algorithm": "gpg",
         "checksum_manifest": true,
         "checksum_url_template": "https://nodejs.org/dist/v{version}/SHASUMS256.txt",
-        "tier": 3
+        "gpg_keyring": "keyrings/nodejs.asc",
+        "signature_url_template": "https://nodejs.org/dist/v{version}/SHASUMS256.txt.sig",
+        "tier": 1
       }
     },
     {
@@ -120,10 +124,12 @@
         }
       ],
       "verification": {
-        "algorithm": "sha256",
+        "algorithm": "gpg",
         "checksum_manifest": true,
         "checksum_url_template": "https://nodejs.org/dist/v{version}/SHASUMS256.txt",
-        "tier": 3
+        "gpg_keyring": "keyrings/nodejs.asc",
+        "signature_url_template": "https://nodejs.org/dist/v{version}/SHASUMS256.txt.sig",
+        "tier": 1
       }
     }
   ],
@@ -404,6 +410,86 @@
           "version": "20260816ubuntu0.26.04.1"
         }
       ]
+    },
+    {
+      "os": "rhel",
+      "os_version": "10",
+      "arch": "amd64",
+      "tested_at": "2026-10-27T18:06:04.73780826Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40555787231",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-rhel-10-amd64",
+      "image_digest": "sha256:44955a54d54359bb1b08e733b7dedf7e379465cf98b73f173c7d301347e543f3",
+      "duration_seconds": 4.099355944,
+      "version_output": "v18.13.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "2026.2.92_v9.0.319-100.3.el10_2"
+        }
+      ],
+      "verification_tier": 3
+    },
+    {
+      "os": "rhel",
+      "os_version": "10",
+      "arch": "arm64",
+      "tested_at": "2026-10-27T18:05:05.459818233Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40555787231",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-rhel-10-arm64",
+      "image_digest": "sha256:72383076d5def5f62876c273baf167eb8324c2e03e83c0f15d641efb7a724943",
+      "duration_seconds": 3.5380578,
+      "version_output": "v18.13.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "2026.2.92_v9.0.319-100.3.el10_2"
+        }
+      ],
+      "verification_tier": 3
+    },
+    {
+      "os": "rhel",
+      "os_version": "9",
+      "arch": "amd64",
+      "tested_at": "2026-10-27T18:04:11.965510673Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40555787231",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-rhel-9-amd64",
+      "image_digest": "sha256:c21dc73b8baaa9c23e40d91738c29689d6ce7fd4c5dcf5ce9e26ffb6726f79ba",
+      "duration_seconds": 4.825881703,
+      "version_output": "v18.13.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "2026.2.92_v9.0.319-90.3.el9_8"
+        }
+      ],
+      "verification_tier": 3
+    },
+    {
+      "os": "rhel",
+      "os_version": "9",
+      "arch": "arm64",
+      "tested_at": "2026-10-27T18:04:29.509621873Z",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40555787231",
+      "result": "pass",
+      "image_ref": "ghcr.io/joshjhall/containers/base-rhel-9-arm64",
+      "image_digest": "sha256:a97f766cd1cb4316e10f8570b1b0e40ff2e553be154281be100d45262dee3f19",
+      "duration_seconds": 6.392659039,
+      "version_output": "v18.13.0",
+      "dependencies": [
+        {
+          "tool": "ca_certificates",
+          "package": "ca-certificates",
+          "version": "2026.2.92_v9.0.319-90.3.el9_8"
+        }
+      ],
+      "verification_tier": 3
     }
   ]
 }

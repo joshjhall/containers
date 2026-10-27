@@ -9,6 +9,8 @@ extend-exclude = [
   "crates/luggage/testdata/tier1/*.asc",
   "crates/luggage/testdata/tier1/*.sig",
   "crates/luggage/testdata/tier1/*.txt",
+  # Vendored tier-1 trust anchors (mirrored from containers-db keyrings/).
+  "crates/luggage/testdata/catalog/keyrings/*.asc",
   "CHANGELOG.md",
   "wizard-port-exploration.md",
   "tests/results/**",
