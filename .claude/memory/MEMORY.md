@@ -153,4 +153,6 @@
 - [prComments need real id](pr-comments-need-real-id.md) — id-less PR comment forces harness clean:false despite 0 findings; convergence may still say stop
 - [Handoff relaunch refuses dim suggestion](handoff-relaunch-refuses-dim-suggestion.md) — type /clear directly when the composer holds only the dim suggestion (librarian#1223)
 - [gpg keyboxd ignores --keyring](gpg-keyboxd-ignores-keyring-flag.md) — under use-keyboxd no .kbx is created even with --keyring; pin an empty common.conf + assert the file
+- [cargo update -p churns transitives](cargo-update-p-reresolves-transitives.md) — a pin-only bump re-resolved serde-saphyr's base64; read lock hunks, not --stat
 - [Post-PR review is pr-attempt*.json](post-pr-review-artifact-is-pr-attempt.md) — glob *attempt*.json before holding a merge for a missing post-PR review
+- [PR link closes despite Refs](pr-link-closes-despite-refs.md) — a linked PR closes its issue on merge even with only `Refs #N`; check closedByPullRequestsReferences first
