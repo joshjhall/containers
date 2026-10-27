@@ -116,7 +116,7 @@ pub fn verify(
 
 /// Why a checksum manifest did not yield a digest.
 #[derive(Debug)]
-enum ManifestError {
+pub(super) enum ManifestError {
     /// Every line parsed, but none named the artifact.
     NoMatch,
     /// A line was not `<hex-digest>  <filename>`. Carries the offending line.
@@ -133,7 +133,10 @@ enum ManifestError {
 /// safe way to guess.
 ///
 /// Blank lines are ignored; publishers routinely end the file with a newline.
-fn select_manifest_digest<'a>(
+///
+/// Shared with tier 1's signed-manifest mode, which selects from the same
+/// `SHASUMS256.txt` once its signature has verified.
+pub(super) fn select_manifest_digest<'a>(
     body: &'a str,
     artifact_filename: &str,
 ) -> std::result::Result<&'a str, ManifestError> {
@@ -226,6 +229,7 @@ mod tests {
             checksum_url_template: Some(template.into()),
             checksum_manifest: None,
             gpg_key_url: None,
+            gpg_keyring: None,
             signature_url_template: None,
             sigstore_identity: None,
             sigstore_issuer: None,
@@ -289,6 +293,7 @@ mod tests {
             checksum_url_template: None,
             checksum_manifest: None,
             gpg_key_url: None,
+            gpg_keyring: None,
             signature_url_template: None,
             sigstore_identity: None,
             sigstore_issuer: None,

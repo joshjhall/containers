@@ -13,7 +13,7 @@ see `crates/luggage/src/installer/`.
 ## What moves to luggage
 
 - Upstream download URL templating
-- Checksum fetch + tier-3 and tier-4 verification (see
+- Signature (tier-1 GPG) and checksum (tiers 2–4) verification (see
   [Verification tiers](#verification-tiers))
 - Installer execution under the target user (`su` wrapping)
 - Catalog-declared `post_install` steps (e.g., `rustup component add` for rust)
@@ -159,15 +159,48 @@ documented in [Checksum Verification System](checksum-verification.md) — same
 numbering, same meaning — so a tool's tier reads identically whichever engine
 installs it.
 
-| Tier | What it is                    | Status in luggage |
-| ---- | ----------------------------- | ----------------- |
-| 1    | Signature (GPG / sigstore)    | Not implemented   |
-| 2    | Pinned in-repo checksum       | Not implemented   |
-| 3    | Publisher-served checksum file | Implemented      |
-| 4    | Trust-on-first-use (TOFU)     | Implemented       |
+| Tier | What it is                     | Status in luggage                       |
+| ---- | ------------------------------ | --------------------------------------- |
+| 1    | Signature (GPG / sigstore)     | GPG implemented; sigstore not (#1508)   |
+| 2    | Pinned in-repo checksum        | Implemented (#849)                      |
+| 3    | Publisher-served checksum file | Implemented                             |
+| 4    | Trust-on-first-use (TOFU)      | Implemented                             |
 
-Tiers 1 and 2 return a `NotImplemented` error if a catalog entry asks for
-them; an unrecognized tier number is a catalog error.
+A tier-1 sigstore entry returns a `NotImplemented` error; an unrecognized tier
+number is a catalog error. The tier an install was actually verified at is
+recorded as `verification_tier` in the install report and evidence row.
+
+### Tier 1 — GPG against a pinned keyring
+
+The signature is checked against an ASCII-armored keyring **committed to the
+catalog** (`verification.gpg_keyring`, e.g. `keyrings/nodejs.asc`, resolved
+against `--catalog`) — never a key fetched from the publisher at install time,
+which would only be as trustworthy as the origin the signature is meant to
+protect against. An entry with only `gpg_key_url` is refused, as is a keyring
+path that is absolute, contains `..`, or resolves outside the catalog root.
+Verification is pure Rust (the `pgp` crate); no `gpg` binary is needed.
+
+Two shapes:
+
+- **Detached** — `signature_url_template` covers the artifact (go's
+  `go{version}.linux-{arch}.tar.gz.asc`). The artifact streams from disk
+  through the check.
+- **Signed manifest** — `checksum_url_template` + `checksum_manifest: true`
+  plus a signature over the manifest (node's `SHASUMS256.txt.sig`). Once the
+  manifest verifies, the artifact's line is selected by filename and compared
+  against the sha256 computed during download, exactly as tier-3 manifest mode
+  does.
+
+`pgp` checks only the cryptography, so luggage enforces key policy itself,
+judged at the **signature's creation time** (a key that expired or was retired
+later still vouches for releases it signed while valid): the signing key or
+subkey must carry the sign capability (subkeys: with a valid back-signature),
+must not have expired or predate the signature, and must not be revoked. A
+"superseded"/"retired" revocation only rejects later signatures; any other
+reason — including none — is treated as a compromise and rejects all of them.
+Only self-signatures and revocations that verify against the primary count.
+Broken hashes (MD5, SHA-1, RIPEMD-160), text-mode and issuer-less signatures
+are refused.
 
 ### Tier 4 — trust on first use
 
@@ -283,4 +316,4 @@ For each feature script (e.g. `node.sh`, `python.sh`):
 | --- | --- | --- |
 | `rust.sh` | #407 | Pilot. Channels (`stable`/`beta`/`nightly`) route through `--channel`. cargo dev tools (cargo-watch, mdbook suite) remain in bash. Callers no longer need to `export CARGO_HOME` / `RUSTUP_HOME` before invoking luggage — the validate subprocess now inherits them from the install (#463). |
 | `golang.sh` | #811 | First `binary-tarball` port. Needed two luggage additions (#1345): an `{arch}` URL placeholder (go's artifact is `go{version}.linux-{arch}.tar.gz`) and a catalog-declared `version_args` (`go --version` exits 2; go declares `["version"]`). Tier-3 verification against dl.google.com's digest-only `.sha256`. debian/ubuntu amd64/arm64 only, matching the dpkg-only bash script and `docs/reference/supported-platforms.md`; the old script's armhf (`armv6l`) and i386 (`386`) arms covered platforms this project never built, and were dropped — luggage refuses them with "no install method … matches debian/armhf". Go < 1.22 is refused up front (the catalog floor). `git` stays an `apt_install` in bash — it is a runtime need of `go get`, not an install dependency. Follow-ups: containers-db go scanner adapter (containers-db#455), evidence matrix beyond rust (#1341), version-probe timeout (#1344). |
-| `node.sh` | #812 | Second `binary-tarball` port — the reuse check — and it **needed no luggage changes** (`tarball.rs` untouched). First use of `.tar.xz` (decompressed in-process; no `xz-utils` needed for the install), `strip_components: 1` into the shared `/usr/local`, and tier-3 **manifest mode** against `SHASUMS256.txt` (`checksum_manifest: true`). node spells amd64 `x64` while `{arch}` substitutes the catalog arch verbatim, so each version carries **two install methods** (`node-tarball-amd64` / `node-tarball-arm64`) with literal URLs, picked by the resolver's first-match arch walk; manifest mode selects the line by that arch-specific filename, so an arch mismatch fails rather than verifying the wrong artifact (`crates/luggage/tests/node_catalog.rs`). The methods list **no `binaries`**: strip-1 already lands node/npm/npx/corepack in `/usr/local/bin`, and listing them would make the link step replace the tarball's `npm`/`npx` symlinks with self-referential ones (source dir == bin root). Default `--version` probe (`node --version` prints `v<version>`). Node < 18 is refused up front (the catalog floor, 18.0.0). Major-only (`22`) and partial (`22.12`) pins resolve via `luggage resolve node`. corepack/yarn/pnpm, the pnpm store-dir, cache dirs and `libatomic1` (a runtime link dep, #983) stay in bash. **Verification regression:** the bash path tried tier-1 GPG first; luggage defers tier 1, so node is tier 3 for now — same as go. Follow-up: tier-1 verification (#1508). |
+| `node.sh` | #812 | Second `binary-tarball` port — the reuse check — and it **needed no luggage changes** (`tarball.rs` untouched). First use of `.tar.xz` (decompressed in-process; no `xz-utils` needed for the install), `strip_components: 1` into the shared `/usr/local`, and tier-3 **manifest mode** against `SHASUMS256.txt` (`checksum_manifest: true`). node spells amd64 `x64` while `{arch}` substitutes the catalog arch verbatim, so each version carries **two install methods** (`node-tarball-amd64` / `node-tarball-arm64`) with literal URLs, picked by the resolver's first-match arch walk; manifest mode selects the line by that arch-specific filename, so an arch mismatch fails rather than verifying the wrong artifact (`crates/luggage/tests/node_catalog.rs`). The methods list **no `binaries`**: strip-1 already lands node/npm/npx/corepack in `/usr/local/bin`, and listing them would make the link step replace the tarball's `npm`/`npx` symlinks with self-referential ones (source dir == bin root). Default `--version` probe (`node --version` prints `v<version>`). Node < 18 is refused up front (the catalog floor, 18.0.0). Major-only (`22`) and partial (`22.12`) pins resolve via `luggage resolve node`. corepack/yarn/pnpm, the pnpm store-dir, cache dirs and `libatomic1` (a runtime link dep, #983) stay in bash. **Verification:** the bash path tried tier-1 GPG first. luggage now verifies tier 1 against a pinned keyring (#1508); node (signed `SHASUMS256.txt`) and go (detached `.asc`) move from tier 3 to tier 1 with the catalog flip in containers-db#486. |

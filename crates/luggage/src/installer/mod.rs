@@ -168,6 +168,12 @@ pub struct InstallReport {
     /// pre-#810 report when empty, so existing evidence rows are unaffected.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<verify::VerificationWarning>,
+    /// Tier (`1`–`4`) the artifact was verified at. `Some` only when the
+    /// verify stage actually ran and passed; `None` on skip, dry-run, and
+    /// failure paths, so a consumer can never read a tier off an install
+    /// that was not verified.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_tier: Option<u8>,
 }
 
 /// What a successful stage run produced, on its way into the report.
@@ -266,6 +272,7 @@ impl Installer {
             &resolved.version,
             &resolved.verification,
             self.options.require_verified_downloads,
+            self.options.catalog_root.as_deref(),
         )?;
 
         let target = rustup_target_for(&resolved.platform).ok();
@@ -404,6 +411,7 @@ impl Installer {
                     dependencies: self.captured_dependency_versions(resolved),
                     skipped_dependencies,
                     warnings,
+                    verification_tier: Some(resolved.verification_tier),
                 };
                 (report, Ok(()))
             }
@@ -438,6 +446,7 @@ impl Installer {
             dependencies: None,
             skipped_dependencies: Vec::new(),
             warnings: Vec::new(),
+            verification_tier: None,
         }
     }
 
@@ -461,6 +470,7 @@ impl Installer {
             dependencies: None,
             skipped_dependencies: plan.skipped_dependencies,
             warnings: Vec::new(),
+            verification_tier: None,
         }
     }
 
@@ -485,6 +495,7 @@ impl Installer {
             dependencies: None,
             skipped_dependencies: Vec::new(),
             warnings: Vec::new(),
+            verification_tier: None,
         }
     }
 
@@ -517,7 +528,11 @@ impl Installer {
         let artifact = scratch.path().join(&artifact_filename);
 
         let digest = self.stage_download(resolved, source_url, &artifact, logger)?;
-        let warnings = self.stage_verify(resolved, &digest, &artifact_filename, logger)?;
+        let warnings = self.stage_verify(
+            resolved,
+            &verify::Artifact { digest: &digest, filename: &artifact_filename, path: &artifact },
+            logger,
+        )?;
 
         // Build the env map once so every stage that shells out (install
         // method, post-install steps, post-install validate) sees the same
@@ -607,6 +622,7 @@ mod tests {
                 checksum_url_template: None,
                 checksum_manifest: None,
                 gpg_key_url: None,
+                gpg_keyring: None,
                 signature_url_template: None,
                 sigstore_identity: None,
                 sigstore_issuer: None,
@@ -714,6 +730,7 @@ mod tests {
             dependencies: None,
             skipped_dependencies: Vec::new(),
             warnings: vec![warning.clone()],
+            verification_tier: Some(4),
         };
         let json = serde_json::to_string(&report).unwrap();
         assert!(json.contains("\"warnings\""), "{json}");
@@ -737,6 +754,7 @@ mod tests {
             dependencies: None,
             skipped_dependencies: Vec::new(),
             warnings: Vec::new(),
+            verification_tier: None,
         };
         let json = serde_json::to_string(&report).unwrap();
         assert!(!json.contains("warnings"), "{json}");

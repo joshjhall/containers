@@ -4,6 +4,11 @@
 [files]
 extend-exclude = [
   "lib/gpg-keys/**",
+  # Real publisher keyrings/signatures/manifests (base64 + hex) for luggage's
+  # tier-1 tests — see that dir's README.md.
+  "crates/luggage/testdata/tier1/*.asc",
+  "crates/luggage/testdata/tier1/*.sig",
+  "crates/luggage/testdata/tier1/*.txt",
   "CHANGELOG.md",
   "wizard-port-exploration.md",
   "tests/results/**",

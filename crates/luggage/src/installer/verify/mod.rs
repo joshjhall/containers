@@ -2,8 +2,10 @@
 //!
 //! Catalog `verification.tier` ranges over `1..=4`:
 //!
-//! - **tier 1** — signatures (GPG / sigstore). Strongest. *Deferred to a
-//!   follow-up issue.*
+//! - **tier 1** — signatures. Strongest. **GPG implemented** against a
+//!   keyring pinned in the catalog (`gpg_keyring`), either over the artifact
+//!   or over a signed checksum manifest — see [`tier1`]. Sigstore is not yet
+//!   implemented.
 //! - **tier 2** — pinned in-repo checksum. **Implemented** — the digest is a
 //!   constant that landed through code review, so verification fetches
 //!   nothing and does not trust the publisher's endpoint at fetch time. This
@@ -29,9 +31,12 @@
 //! accepted.
 
 pub mod sha;
+pub mod tier1;
 pub mod tier2;
 pub mod tier3;
 pub mod tier4;
+
+use std::path::Path;
 
 use containers_common::tooldb::Verification;
 
@@ -53,8 +58,39 @@ use crate::installer::template::Substitutions;
 /// luggage's public API is unchanged.
 pub use containers_common::tooldb::VerificationWarning;
 
+/// The downloaded artifact, as verification sees it.
+///
+/// `digest` is its hex digest, computed while it streamed to disk (see
+/// [`digest_algorithm`]); `filename` is its on-disk basename, which manifest
+/// modes use to select their line; `path` is where it sits, which only tier
+/// 1's detached mode reads — it streams the file through the signature check.
+/// Tiers 2–4 compare digests and never re-read a possibly-enormous artifact.
+#[derive(Debug, Clone, Copy)]
+pub struct Artifact<'a> {
+    pub digest: &'a str,
+    pub filename: &'a str,
+    pub path: &'a Path,
+}
+
+/// The digest algorithm the download must compute for `verification`.
+///
+/// For tiers 2–4 that is `verification.algorithm` itself. A tier-1 entry's
+/// `algorithm` names the *signature* scheme (`gpg`), not a digest, so it
+/// would be rejected by the digest layer; tier 1 needs sha256 because its
+/// signed-manifest mode compares against `SHASUMS256.txt` (detached mode
+/// does not use the digest at all).
+#[must_use]
+pub fn digest_algorithm(verification: &Verification) -> Option<&str> {
+    if verification.tier == 1 {
+        Some(sha::DEFAULT_ALGORITHM)
+    } else {
+        verification.algorithm.as_deref()
+    }
+}
+
 /// Fail fast when `verification` is one this build will not satisfy — an
-/// unsupported tier, or a tier-2 entry with no usable `pinned_checksum`.
+/// unsupported tier, a tier-1 entry with no usable pinned keyring, or a tier-2
+/// entry with no usable `pinned_checksum`.
 ///
 /// Called before the artifact is downloaded, for three reasons. First, it keeps
 /// the *tier's* error the one the caller sees: the download path derives a
@@ -62,7 +98,7 @@ pub use containers_common::tooldb::VerificationWarning;
 /// `verification.algorithm`, and a tier-1 entry legitimately carries
 /// `algorithm: "gpg"` — without this check that would surface as a confusing
 /// `unrecognised digest algorithm` catalog error from the digest layer instead
-/// of the accurate "tier 1 not implemented". Second, an unsupported tier is
+/// of the accurate tier-level error. Second, an unusable entry is
 /// knowable before any bytes move, so there is no reason to spend a 150MB
 /// download discovering it. Third, `require_verified` refuses tier 4 here for
 /// the same reason `lib/features/python.sh` refuses before its fetch: an
@@ -71,9 +107,14 @@ pub use containers_common::tooldb::VerificationWarning;
 ///
 /// # Errors
 ///
-/// - [`LuggageError::NotImplemented`] for tier 1, and
-///   [`LuggageError::Catalog`] for a tier outside `1..=4` — the same variants
-///   [`dispatch`] returns for those tiers.
+/// - [`LuggageError::Catalog`] for a tier outside `1..=4` — the same error
+///   [`dispatch`] returns for it.
+/// - For tier 1, whatever `tier1::require_shape` refuses: sigstore
+///   ([`LuggageError::NotImplemented`]), a malformed entry
+///   ([`LuggageError::Catalog`]), and a `gpg_key_url`-only entry, a missing
+///   `catalog_root`, or a keyring path that is absolute, contains `..`, is
+///   missing, or escapes the catalog ([`LuggageError::VerificationFailed`]).
+///   [`tier1::verify`] runs the same check, so the two cannot disagree.
 /// - [`LuggageError::Catalog`] for a tier-2 entry with no `pinned_checksum`,
 ///   [`LuggageError::VerificationFailed`] for one whose pin is not a hex
 ///   digest or not the width of `verification.algorithm`'s digest, and
@@ -90,8 +131,12 @@ pub fn ensure_supported(
     version: &str,
     verification: &Verification,
     require_verified: bool,
+    catalog_root: Option<&Path>,
 ) -> Result<()> {
     match verification.tier {
+        // A signature against a pinned key is the strongest verified download,
+        // so tier 1 needs no `require_verified` arm either.
+        1 => tier1::require_shape(tool, version, verification, catalog_root).map(|_| ()),
         4 if require_verified => Err(LuggageError::VerificationFailed {
             tool: tool.to_owned(),
             version: version.to_owned(),
@@ -120,66 +165,64 @@ pub fn ensure_supported(
     }
 }
 
-/// The error for a tier this build does not implement.
+/// The error for a tier outside `1..=4`.
 ///
 /// Single source of truth so [`ensure_supported`] and [`dispatch`] cannot drift
 /// into reporting different things about the same tier.
 fn unsupported_tier(tier: u8) -> LuggageError {
-    match tier {
-        1 => LuggageError::NotImplemented("tier 1 GPG/sigstore verification"),
-        other => LuggageError::Catalog(format!("unknown verification tier {other}")),
-    }
+    LuggageError::Catalog(format!("unknown verification tier {tier}"))
 }
 
 /// Dispatch verification by tier.
 ///
-/// `actual_digest` is the artifact's hex digest, computed while it streamed to
-/// disk; `artifact_filename` is its on-disk basename, which manifest-mode tier
-/// 3 uses to select its line. Taking a digest rather than `&[u8]` is
-/// deliberate: with the bytes out of scope no tier can re-read a
-/// possibly-enormous artifact to hash it a second time.
+/// `artifact` carries the digest computed during download, the on-disk
+/// basename manifest modes select by, and the path tier 1's detached mode
+/// streams through the signature check (see [`Artifact`]).
 ///
-/// `tool` and `version` are used in error messages. `http` is only consumed by
-/// tier 3 (and any future tier that fetches over the network).
+/// `tool` and `version` are used in error messages. `http` is consumed by
+/// tiers 1 and 3, which fetch a signature or checksum file. `catalog_root` is
+/// where tier 1 finds the entry's pinned `gpg_keyring`; other tiers ignore it.
 ///
 /// Returns the warnings the verification produced — empty for tiers 1–3, one
 /// entry for a tier-4 acceptance (see the module docs).
 ///
 /// # Errors
 ///
-/// - [`LuggageError::NotImplemented`] for tier 1 — wired up in a follow-up
-///   issue.
 /// - [`LuggageError::Catalog`] when `verification.tier` is not in `1..=4`.
-/// - The same errors each implemented tier raises: tier 2 (see
-///   [`tier2::verify`]), tier 3 (see [`tier3::verify`]), tier 4 (see
+/// - The same errors each tier raises: tier 1 (see [`tier1::verify`]), tier 2
+///   (see [`tier2::verify`]), tier 3 (see [`tier3::verify`]), tier 4 (see
 ///   [`tier4::verify`]).
 pub fn dispatch(
     tool: &str,
     version: &str,
-    actual_digest: &str,
-    artifact_filename: &str,
+    artifact: &Artifact<'_>,
     verification: &Verification,
     subs: &Substitutions<'_>,
     http: &dyn HttpClient,
+    catalog_root: Option<&Path>,
 ) -> Result<Vec<VerificationWarning>> {
     match verification.tier {
+        1 => {
+            tier1::verify(tool, version, artifact, verification, subs, http, catalog_root)?;
+            Ok(Vec::new())
+        }
         2 => {
-            tier2::verify(tool, version, actual_digest, verification)?;
+            tier2::verify(tool, version, artifact.digest, verification)?;
             Ok(Vec::new())
         }
         3 => {
             tier3::verify(
                 tool,
                 version,
-                actual_digest,
-                artifact_filename,
+                artifact.digest,
+                artifact.filename,
                 verification,
                 subs,
                 http,
             )?;
             Ok(Vec::new())
         }
-        4 => Ok(vec![tier4::verify(tool, version, actual_digest, verification)?]),
+        4 => Ok(vec![tier4::verify(tool, version, artifact.digest, verification)?]),
         other => Err(unsupported_tier(other)),
     }
 }
@@ -214,6 +257,7 @@ mod tests {
             checksum_url_template: None,
             checksum_manifest: None,
             gpg_key_url: None,
+            gpg_keyring: None,
             signature_url_template: None,
             sigstore_identity: None,
             sigstore_issuer: None,
@@ -221,22 +265,26 @@ mod tests {
         }
     }
 
-    /// Tier 1 (GPG/sigstore) stays out of scope. #849 moved tier 2 out of the
-    /// unimplemented set; this is what keeps tier 1 from being swept along
-    /// with it.
+    /// Sigstore is the half of tier 1 that is still out of scope; it must say
+    /// so rather than fall through to the GPG path or pass.
     #[test]
-    fn tier_1_returns_not_implemented() {
+    fn tier_1_sigstore_returns_not_implemented() {
+        let v = Verification { algorithm: Some("sigstore".into()), ..verification(1) };
         let err = dispatch(
             "rust",
             "1.95.0",
-            "deadbeef",
-            "artifact.tar.gz",
-            &verification(1),
+            &Artifact {
+                digest: "deadbeef",
+                filename: "artifact.tar.gz",
+                path: Path::new("artifact.tar.gz"),
+            },
+            &v,
             &Substitutions::default(),
             &DeadClient,
+            None,
         )
         .unwrap_err();
-        assert!(matches!(err, LuggageError::NotImplemented(_)));
+        assert!(matches!(err, LuggageError::NotImplemented(m) if m.contains("sigstore")));
     }
 
     /// In the installer [`ensure_supported`] now refuses this entry first; this
@@ -250,11 +298,15 @@ mod tests {
         let err = dispatch(
             "rust",
             "1.95.0",
-            "deadbeef",
-            "artifact.tar.gz",
+            &Artifact {
+                digest: "deadbeef",
+                filename: "artifact.tar.gz",
+                path: Path::new("artifact.tar.gz"),
+            },
             &verification(2),
             &Substitutions::default(),
             &DeadClient,
+            None,
         )
         .unwrap_err();
         assert!(matches!(err, LuggageError::Catalog(_)), "got {err:?}");
@@ -270,11 +322,15 @@ mod tests {
         let err = dispatch(
             "node",
             "24.0.0",
-            &"0".repeat(64),
-            "node.tar.gz",
+            &Artifact {
+                digest: &"0".repeat(64),
+                filename: "node.tar.gz",
+                path: Path::new("node.tar.gz"),
+            },
             &v,
             &Substitutions::default(),
             &DeadClient,
+            None,
         )
         .unwrap_err();
         match err {
@@ -297,11 +353,15 @@ mod tests {
         let err = dispatch(
             "node",
             "24.0.0",
-            "deadbeef",
-            "node.tar.gz",
+            &Artifact {
+                digest: "deadbeef",
+                filename: "node.tar.gz",
+                path: Path::new("node.tar.gz"),
+            },
             &v,
             &Substitutions::default(),
             &DeadClient,
+            None,
         )
         .unwrap_err();
         match err {
@@ -322,11 +382,11 @@ mod tests {
         let warnings = dispatch(
             "python",
             "3.13.0",
-            "deadbeef",
-            "get-pip.py",
+            &Artifact { digest: "deadbeef", filename: "get-pip.py", path: Path::new("get-pip.py") },
             &v,
             &Substitutions::default(),
             &DeadClient,
+            None,
         )
         .unwrap();
         assert_eq!(warnings.len(), 1);
@@ -345,11 +405,11 @@ mod tests {
         let warnings = dispatch(
             "node",
             "24.0.0",
-            &digest,
-            "node.tar.gz",
+            &Artifact { digest: &digest, filename: "node.tar.gz", path: Path::new("node.tar.gz") },
             &v,
             &Substitutions::default(),
             &DeadClient,
+            None,
         )
         .unwrap();
         assert!(warnings.is_empty(), "expected empty, got {warnings:?}");
@@ -368,11 +428,11 @@ mod tests {
         dispatch(
             "node",
             "24.0.0",
-            &digest,
-            "node.tar.gz",
+            &Artifact { digest: &digest, filename: "node.tar.gz", path: Path::new("node.tar.gz") },
             &v,
             &Substitutions::default(),
             &DeadClient,
+            None,
         )
         .unwrap();
     }
@@ -382,11 +442,15 @@ mod tests {
         let err = dispatch(
             "rust",
             "1.95.0",
-            "deadbeef",
-            "artifact.tar.gz",
+            &Artifact {
+                digest: "deadbeef",
+                filename: "artifact.tar.gz",
+                path: Path::new("artifact.tar.gz"),
+            },
             &verification(9),
             &Substitutions::default(),
             &DeadClient,
+            None,
         )
         .unwrap_err();
         assert!(matches!(err, LuggageError::Catalog(_)));
@@ -403,7 +467,7 @@ mod tests {
 
     #[test]
     fn ensure_supported_accepts_tier_2() {
-        ensure_supported("node", "24.0.0", &pinned_tier_2(), false).unwrap();
+        ensure_supported("node", "24.0.0", &pinned_tier_2(), false, None).unwrap();
     }
 
     /// The width check must accept a correct non-default width, not just
@@ -418,17 +482,21 @@ mod tests {
             ..verification(2)
         };
         for strict in [false, true] {
-            ensure_supported("node", "24.0.0", &v, strict)
+            ensure_supported("node", "24.0.0", &v, strict, None)
                 .unwrap_or_else(|e| panic!("strict={strict}: {e:?}"));
         }
         let warnings = dispatch(
             "node",
             "24.0.0",
-            &pin,
-            "artifact.tar.gz",
+            &Artifact {
+                digest: &pin,
+                filename: "artifact.tar.gz",
+                path: Path::new("artifact.tar.gz"),
+            },
             &v,
             &Substitutions::default(),
             &DeadClient,
+            None,
         )
         .unwrap();
         assert!(warnings.is_empty(), "got: {warnings:?}");
@@ -440,7 +508,8 @@ mod tests {
     #[test]
     fn ensure_supported_refuses_tier_2_without_a_pin() {
         for strict in [false, true] {
-            let err = ensure_supported("node", "24.0.0", &verification(2), strict).unwrap_err();
+            let err =
+                ensure_supported("node", "24.0.0", &verification(2), strict, None).unwrap_err();
             match err {
                 LuggageError::Catalog(ref msg) => {
                     assert!(msg.contains("pinned_checksum"), "got: {msg}");
@@ -456,15 +525,19 @@ mod tests {
     #[test]
     fn ensure_supported_refuses_a_pinless_tier_2_exactly_as_dispatch_does() {
         let v = verification(2);
-        let guard = ensure_supported("node", "24.0.0", &v, false).unwrap_err();
+        let guard = ensure_supported("node", "24.0.0", &v, false, None).unwrap_err();
         let dispatched = dispatch(
             "node",
             "24.0.0",
-            "deadbeef",
-            "artifact.tar.gz",
+            &Artifact {
+                digest: "deadbeef",
+                filename: "artifact.tar.gz",
+                path: Path::new("artifact.tar.gz"),
+            },
             &v,
             &Substitutions::default(),
             &DeadClient,
+            None,
         )
         .unwrap_err();
         assert_eq!(guard.to_string(), dispatched.to_string());
@@ -477,7 +550,7 @@ mod tests {
     fn ensure_supported_refuses_a_malformed_tier_2_pin() {
         let v = Verification { pinned_checksum: Some("not-a-digest".into()), ..verification(2) };
         for strict in [false, true] {
-            match ensure_supported("node", "24.0.0", &v, strict).unwrap_err() {
+            match ensure_supported("node", "24.0.0", &v, strict, None).unwrap_err() {
                 LuggageError::VerificationFailed { tier: 2, ref reason, .. } => {
                     assert!(reason.contains("not a hex digest"), "got: {reason}");
                 }
@@ -492,15 +565,19 @@ mod tests {
     fn ensure_supported_refuses_a_malformed_pin_exactly_as_dispatch_does() {
         for pin in ["", "not-a-digest"] {
             let v = Verification { pinned_checksum: Some(pin.into()), ..verification(2) };
-            let guard = ensure_supported("node", "24.0.0", &v, false).unwrap_err();
+            let guard = ensure_supported("node", "24.0.0", &v, false, None).unwrap_err();
             let dispatched = dispatch(
                 "node",
                 "24.0.0",
-                "deadbeef",
-                "artifact.tar.gz",
+                &Artifact {
+                    digest: "deadbeef",
+                    filename: "artifact.tar.gz",
+                    path: Path::new("artifact.tar.gz"),
+                },
                 &v,
                 &Substitutions::default(),
                 &DeadClient,
+                None,
             )
             .unwrap_err();
             assert!(
@@ -537,15 +614,19 @@ mod tests {
             let dispatched = dispatch(
                 "node",
                 "24.0.0",
-                "deadbeef",
-                "artifact.tar.gz",
+                &Artifact {
+                    digest: "deadbeef",
+                    filename: "artifact.tar.gz",
+                    path: Path::new("artifact.tar.gz"),
+                },
                 &v,
                 &Substitutions::default(),
                 &DeadClient,
+                None,
             )
             .unwrap_err();
             for strict in [false, true] {
-                let guard = ensure_supported("node", "24.0.0", &v, strict).unwrap_err();
+                let guard = ensure_supported("node", "24.0.0", &v, strict, None).unwrap_err();
                 assert_eq!(
                     format!("{guard:?}"),
                     format!("{dispatched:?}"),
@@ -562,17 +643,17 @@ mod tests {
     /// with a build that passes.
     #[test]
     fn strict_mode_accepts_tier_2() {
-        ensure_supported("node", "24.0.0", &pinned_tier_2(), true).unwrap();
+        ensure_supported("node", "24.0.0", &pinned_tier_2(), true, None).unwrap();
     }
 
     #[test]
     fn ensure_supported_accepts_tier_3() {
-        ensure_supported("rust", "1.95.0", &verification(3), false).unwrap();
+        ensure_supported("rust", "1.95.0", &verification(3), false, None).unwrap();
     }
 
     #[test]
     fn ensure_supported_accepts_tier_4_when_not_strict() {
-        ensure_supported("python", "3.13.0", &verification(4), false).unwrap();
+        ensure_supported("python", "3.13.0", &verification(4), false, None).unwrap();
     }
 
     /// Strict mode turns a TOFU acceptance into a hard failure, and the
@@ -580,7 +661,7 @@ mod tests {
     /// refusal is just an unexplained wall.
     #[test]
     fn strict_mode_refuses_tier_4_and_names_the_pin_remedy() {
-        let err = ensure_supported("python", "3.13.0", &verification(4), true).unwrap_err();
+        let err = ensure_supported("python", "3.13.0", &verification(4), true, None).unwrap_err();
         match err {
             LuggageError::VerificationFailed { tier, ref tool, ref version, ref reason } => {
                 assert_eq!(tier, 4);
@@ -601,14 +682,14 @@ mod tests {
     /// `Unknown` the way `NotImplemented` does.
     #[test]
     fn strict_mode_refusal_classifies_as_a_verify_error() {
-        let err = ensure_supported("python", "3.13.0", &verification(4), true).unwrap_err();
+        let err = ensure_supported("python", "3.13.0", &verification(4), true, None).unwrap_err();
         assert_eq!(crate::error::ErrorClass::from(&err), crate::error::ErrorClass::Verify);
     }
 
     /// Strict mode is about TOFU only — it must not start rejecting tier 3.
     #[test]
     fn strict_mode_leaves_tier_3_alone() {
-        ensure_supported("rust", "1.95.0", &verification(3), true).unwrap();
+        ensure_supported("rust", "1.95.0", &verification(3), true, None).unwrap();
     }
 
     /// The guard must reject exactly what `dispatch` rejects, with the same
@@ -620,17 +701,23 @@ mod tests {
         // entry is refused for its missing pin rather than for its tier — that
         // equivalence is covered by
         // `ensure_supported_refuses_a_pinless_tier_2_exactly_as_dispatch_does`.
+        // Tier 1's shape check is shared the same way (`tier1::require_shape`);
+        // a bare tier-1 entry has no `algorithm`, which both must refuse.
         for tier in [1u8, 9] {
             let v = verification(tier);
-            let guard = ensure_supported("rust", "1.95.0", &v, false).unwrap_err();
+            let guard = ensure_supported("rust", "1.95.0", &v, false, None).unwrap_err();
             let dispatched = dispatch(
                 "rust",
                 "1.95.0",
-                "deadbeef",
-                "artifact.tar.gz",
+                &Artifact {
+                    digest: "deadbeef",
+                    filename: "artifact.tar.gz",
+                    path: Path::new("artifact.tar.gz"),
+                },
                 &v,
                 &Substitutions::default(),
                 &DeadClient,
+                None,
             )
             .unwrap_err();
             assert_eq!(
@@ -642,19 +729,25 @@ mod tests {
     }
 
     /// A tier-1 entry carries `algorithm: "gpg"`, which is not a digest
-    /// algorithm. The guard must report the TIER as unimplemented rather than
-    /// letting the digest layer complain about `gpg` (the regression this
-    /// check exists to prevent).
+    /// algorithm. The guard must report what is wrong with the TIER-1 entry
+    /// rather than letting the digest layer complain about `gpg` (the
+    /// regression this check exists to prevent) — and the download must hash
+    /// with sha256, not `gpg`.
     #[test]
     fn tier_1_with_gpg_algorithm_reports_the_tier_not_the_algorithm() {
         let v = Verification { algorithm: Some("gpg".into()), ..verification(1) };
-        let err = ensure_supported("rust", "1.95.0", &v, false).unwrap_err();
+        let err = ensure_supported("rust", "1.95.0", &v, false, None).unwrap_err();
         match err {
-            LuggageError::NotImplemented(msg) => {
-                assert!(msg.contains("tier 1"), "got: {msg}");
+            LuggageError::Catalog(msg) => {
+                assert!(msg.contains("signature_url_template"), "got: {msg}");
             }
-            other => panic!("expected NotImplemented, got {other:?}"),
+            other => panic!("expected Catalog, got {other:?}"),
         }
+        assert_eq!(digest_algorithm(&v), Some("sha256"));
+        assert_eq!(
+            digest_algorithm(&Verification { algorithm: Some("sha512".into()), ..verification(3) }),
+            Some("sha512")
+        );
     }
 
     /// Through-the-front-door check that tier 3 actually executes when
@@ -675,6 +768,7 @@ mod tests {
             checksum_url_template: Some("https://example.test/{rustup_target}/x.sha256".into()),
             checksum_manifest: None,
             gpg_key_url: None,
+            gpg_keyring: None,
             signature_url_template: None,
             sigstore_identity: None,
             sigstore_issuer: None,
@@ -682,8 +776,16 @@ mod tests {
         };
         let subs = Substitutions::new("1.95.0", "x86_64-unknown-linux-gnu");
         let digest = super::sha::digest_hex(Some("sha256"), b"hello").unwrap();
-        let warnings =
-            dispatch("rust", "1.95.0", &digest, "rustup-init", &v, &subs, &OkClient).unwrap();
+        let warnings = dispatch(
+            "rust",
+            "1.95.0",
+            &Artifact { digest: &digest, filename: "rustup-init", path: Path::new("rustup-init") },
+            &v,
+            &subs,
+            &OkClient,
+            None,
+        )
+        .unwrap();
         // Tier 3 verified against an external reference, so it has nothing to
         // warn about — only tier 4 does.
         assert!(warnings.is_empty(), "expected empty, got {warnings:?}");

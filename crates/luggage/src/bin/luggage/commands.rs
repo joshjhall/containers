@@ -116,6 +116,7 @@ pub fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         max_extract_bytes: max_extract_bytes_from_env()?,
         // Same malformed-is-fatal contract as the extract ceiling above.
         version_probe_timeout: version_probe_timeout_from_env()?,
+        catalog_root: Some(common.catalog),
     };
     let installer = Installer::with_options(opts)?;
 

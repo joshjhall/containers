@@ -508,6 +508,7 @@ mod tests {
                 checksum_url_template: Some("https://example.test/{version}".into()),
                 checksum_manifest: None,
                 gpg_key_url: None,
+                gpg_keyring: None,
                 signature_url_template: None,
                 sigstore_identity: None,
                 sigstore_issuer: None,

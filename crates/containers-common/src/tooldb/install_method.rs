@@ -285,7 +285,18 @@ pub struct Verification {
     /// Tier 1 (GPG) — publisher public key URL.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpg_key_url: Option<String>,
-    /// Tier 1 (GPG) — detached signature URL template.
+    /// Tier 1 (GPG) — ASCII-armored public keyring committed to the catalog,
+    /// as a path relative to the catalog root (e.g. `keyrings/nodejs.asc`).
+    ///
+    /// Preferred over [`Self::gpg_key_url`]: a key pinned through code review
+    /// cannot be swapped by whoever controls the publisher's origin, which is
+    /// the whole reason to check a signature at all. luggage refuses a tier-1
+    /// entry that carries only the URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpg_keyring: Option<String>,
+    /// Tier 1 (GPG) — detached signature URL template. Covers the artifact,
+    /// or in signed-manifest mode (`checksum_manifest: true`) the manifest at
+    /// `checksum_url_template`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature_url_template: Option<String>,
     /// Tier 1 (sigstore) — expected cosign identity.

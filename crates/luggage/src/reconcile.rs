@@ -291,6 +291,7 @@ mod tests {
             error_class: None,
             dependencies: None,
             verification_warnings: Vec::new(),
+            verification_tier: None,
             notes: None,
         }
     }

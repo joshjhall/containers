@@ -27,16 +27,24 @@ time = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 ureq = { version = "3", default-features = false, features = ["rustls"] }
+# Tier-1 GPG verification (#1508). Pure Rust, so no gpg binary or keybox in
+# the image. Default features only add bzip2 (a C binding for compressed
+# messages); verifying a detached signature never decompresses anything.
+pgp = { version = "0.21", default-features = false }
 
 # Safe `kill_process_group` for the version-probe timeout (#1352) — the
 # workspace forbids unsafe_code, so `libc::killpg` is unavailable.
 # signal-hook kills live probe groups on SIGINT/SIGTERM (#1370) through a safe
-# API. It adds no crate to the tree: stibbons already pulls the same version
-# in through crossterm.
+# API. On 0.4 since #1508's dependency refresh; crossterm (via stibbons) still
+# pins 0.3, so the lockfile carries both until crossterm moves.
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true }
-signal-hook = { version = "0.3", default-features = false, features = ["iterator"] }
+signal-hook = { version = "0.4", default-features = false, features = ["iterator"] }
 
 [dev-dependencies]
+# Deterministic key generation for the tier-1 fixtures — pgp 0.21's key
+# builder and signers take a rand 0.8 RNG.
+rand = "0.8"
+rand_chacha = "0.3"
 serial_test = "4"
 tempfile = { workspace = true }

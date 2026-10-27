@@ -87,8 +87,9 @@ impl Installer {
         if let Some(l) = logger {
             l.step(&format!("download {url}"));
         }
+        // Not `verification.algorithm` directly: a tier-1 entry's is `gpg`.
         let mut sink =
-            DigestingFileSink::create(artifact, resolved.verification.algorithm.as_deref())?;
+            DigestingFileSink::create(artifact, verify::digest_algorithm(&resolved.verification))?;
         self.http.get_to_writer(url, &mut sink)?;
         sink.flush().map_err(|e| LuggageError::Io { path: artifact.to_path_buf(), source: e })?;
         Ok(sink.finish())
@@ -106,8 +107,7 @@ impl Installer {
     pub(super) fn stage_verify(
         &self,
         resolved: &ResolvedInstall,
-        actual_digest: &str,
-        artifact_filename: &str,
+        artifact: &verify::Artifact<'_>,
         logger: Option<&logging::FeatureLogger>,
     ) -> Result<Vec<verify::VerificationWarning>> {
         let target = rustup_target_for(&resolved.platform).ok();
@@ -123,11 +123,11 @@ impl Installer {
         let warnings = verify::dispatch(
             &resolved.tool,
             &resolved.version,
-            actual_digest,
-            artifact_filename,
+            artifact,
             &resolved.verification,
             &subs,
             self.http.as_ref(),
+            self.options.catalog_root.as_deref(),
         )?;
         for w in &warnings {
             if let Some(l) = logger {
@@ -259,7 +259,17 @@ mod tests {
         })
         .unwrap();
         let digest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-        let warnings = installer.stage_verify(&resolved, digest, "get-pip.py", None).unwrap();
+        let warnings = installer
+            .stage_verify(
+                &resolved,
+                &verify::Artifact {
+                    digest,
+                    filename: "get-pip.py",
+                    path: std::path::Path::new("get-pip.py"),
+                },
+                None,
+            )
+            .unwrap();
 
         assert_eq!(warnings.len(), 1, "a TOFU acceptance must produce exactly one warning");
         assert_eq!(warnings[0].tier, 4);
@@ -284,8 +294,17 @@ mod tests {
         })
         .unwrap();
         let digest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-        let warnings =
-            installer.stage_verify(&resolved, digest, "get-pip.py", Some(&logger)).unwrap();
+        let warnings = installer
+            .stage_verify(
+                &resolved,
+                &verify::Artifact {
+                    digest,
+                    filename: "get-pip.py",
+                    path: std::path::Path::new("get-pip.py"),
+                },
+                Some(&logger),
+            )
+            .unwrap();
         assert_eq!(warnings.len(), 1);
 
         let body = fs::read_to_string(logger.path()).unwrap();
@@ -351,7 +370,17 @@ mod tests {
             Arc::new(methods::ProcessRunner),
         )
         .unwrap();
-        let warnings = installer.stage_verify(&resolved, &digest, "art", None).unwrap();
+        let warnings = installer
+            .stage_verify(
+                &resolved,
+                &verify::Artifact {
+                    digest: &digest,
+                    filename: "art",
+                    path: std::path::Path::new("art"),
+                },
+                None,
+            )
+            .unwrap();
         assert!(warnings.is_empty(), "expected empty, got {warnings:?}");
     }
 
@@ -386,7 +415,15 @@ mod tests {
         )
         .unwrap();
         installer
-            .stage_verify(&resolved, &digest, "go1.27.2.linux-arm64.tar.gz", None)
+            .stage_verify(
+                &resolved,
+                &verify::Artifact {
+                    digest: &digest,
+                    filename: "go1.27.2.linux-arm64.tar.gz",
+                    path: std::path::Path::new("go1.27.2.linux-arm64.tar.gz"),
+                },
+                None,
+            )
             .expect("the arm64 checksum URL must be the one fetched");
     }
 
