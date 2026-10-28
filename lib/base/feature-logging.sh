@@ -203,8 +203,9 @@ log_command() {
 
         # Match whole words only: a letter, digit, _ or - on either side means
         # the keyword is part of a name (thiserror, gix-error), not a status.
-        local error_pattern="(^|[^A-Za-z0-9_-])(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)([^A-Za-z0-9_-]|$)"
-        local warn_pattern="(^|[^A-Za-z0-9_-])(WARNING|Warning|warning|WARN|Warn|warn)([^A-Za-z0-9_-]|$)"
+        # Plurals still count ("Errors were encountered", "2 errors generated").
+        local error_pattern="(^|[^A-Za-z0-9_-])(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)[Ss]?([^A-Za-z0-9_-]|$)"
+        local warn_pattern="(^|[^A-Za-z0-9_-])(WARNING|Warning|warning|WARN|Warn|warn)[Ss]?([^A-Za-z0-9_-]|$)"
 
         # Append matching lines to error file
         _error_lines_since "$CURRENT_LOG_FILE" "$start_line" "$error_pattern" "$warn_pattern" >>"$CURRENT_ERROR_FILE" 2>/dev/null || true

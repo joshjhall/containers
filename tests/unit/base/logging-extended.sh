@@ -226,6 +226,9 @@ test_log_command_warn_tagged_error_is_warning() {
         "cargo-binstall:  WARN resolve: Error while downloading from fetcher QuickInstall: Failed to download"
     assert_equals "0" "$ERROR_COUNT" "WARN-tagged Error line is not an error"
     assert_equals "1" "$WARNING_COUNT" "WARN-tagged Error line is one warning"
+    # The line lands in the error file once (via the warning extraction)
+    assert_equals "1" "$(command grep -c 'QuickInstall' "$CURRENT_ERROR_FILE")" \
+        "WARN-tagged Error line is written to the error file exactly once"
 }
 
 # An error that mentions warnings later in the line is still an error.
@@ -233,8 +236,10 @@ test_log_command_error_mentioning_warnings_is_error() {
     log_feature_start "PatternTest"
     log_command "rustc abort" printf '%s\n' \
         "error: aborting due to 1 previous error; 1 warning emitted" \
-        "error[E0425]: cannot find value" "E: Failed to fetch http://x"
-    assert_equals "3" "$ERROR_COUNT" "genuine error lines are each counted"
+        "error[E0425]: cannot find value" "E: Failed to fetch http://x" \
+        "Errors were encountered while processing:" "2 errors generated." \
+        "npm error code ELIFECYCLE"
+    assert_equals "6" "$ERROR_COUNT" "genuine error lines (incl. plurals) are each counted"
     assert_file_contains "$CURRENT_ERROR_FILE" "aborting due to 1 previous error" \
         "genuine error line is copied to the error file"
 }

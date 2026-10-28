@@ -280,15 +280,16 @@ test_civ_fd_reports_upstream_version() {
 # "glab version 1.40.0 (date)". Both must parse (#1537).
 test_civ_glab_reports_version() {
     _civ_make_hermetic_bin
-    local out ver row
-    for out in "glab 1.125.0 (685c1cbd7)" "glab version 1.40.0 (2024-05-01)"; do
-        ver=$(echo "$out" | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command head -1)
+    local pair out ver installed
+    for pair in "1.125.0|glab 1.125.0 (685c1cbd7)" "1.40.0|glab version 1.40.0 (2024-05-01)"; do
+        ver="${pair%%|*}"
+        out="${pair#*|}"
         printf '#!/bin/sh\necho "%s"\n' "$out" >"$TEST_TEMP_DIR/bin/glab"
         chmod +x "$TEST_TEMP_DIR/bin/glab"
         _civ_run "$CIV_SCRIPT"
-        row=$(command grep -E '^glab +' "$TEST_TEMP_DIR/out" || true)
-        assert_contains "$row" "$ver" "glab row shows $ver for: $out"
-        assert_not_contains "$row" "error" "glab row is not error for: $out"
+        # Second column of the glab row is INSTALLED
+        installed=$(command awk '$1 == "glab" { print $2 }' "$TEST_TEMP_DIR/out")
+        assert_equals "$ver" "$installed" "glab INSTALLED column for: $out"
     done
 }
 
