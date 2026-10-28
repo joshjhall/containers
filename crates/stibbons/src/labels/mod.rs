@@ -45,6 +45,14 @@ pub fn parse_platform_flag(s: &str) -> Result<Platform, Box<dyn std::error::Erro
         .ok_or_else(|| format!("unknown platform `{s}` (expected `github` or `gitlab`)").into())
 }
 
+/// The platform of the `origin` remote, or `None` when there is no remote or
+/// its host is unrecognized. A best-effort default for callers that have a
+/// fallback; `run_sync` instead errors so the user passes `--platform`.
+#[must_use]
+pub fn detect_origin_platform() -> Option<Platform> {
+    platform::origin_remote_url().ok().as_deref().and_then(platform::classify_remote)
+}
+
 /// Default skill roots, in priority order (first-encountered wins on conflict):
 ///
 /// 1. In-repo template skills, if present (`lib/features/templates/claude/skills`).

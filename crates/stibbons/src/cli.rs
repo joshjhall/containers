@@ -121,12 +121,12 @@ pub enum Commands {
         command: LabelsCommand,
     },
 
-    /// Configure the repository (currently: sync issue-tracker labels).
+    /// Configure the repository: bare `setup` syncs issue-tracker labels;
+    /// `setup standards` applies/checks the repo baseline.
     ///
-    /// An umbrella for repo setup. Today it runs `labels sync`; future
-    /// additions (branch protection, CI templates) will hang off the same
-    /// command.
-    Setup(SyncArgs),
+    /// An umbrella for repo setup. Bare `stibbons setup` runs `labels sync`
+    /// (its original behavior); further steps hang off it as subcommands.
+    Setup(SetupArgs),
 
     /// Print the stibbons version (and containers version, when detectable).
     Version,
@@ -147,6 +147,82 @@ pub enum Commands {
 pub enum LabelsCommand {
     /// Create/update the tracker's labels to match skill metadata (never deletes).
     Sync(SyncArgs),
+}
+
+/// `stibbons setup [SUBCOMMAND]`. With no subcommand, the flattened
+/// [`SyncArgs`] drive a label sync, so `stibbons setup --dry-run` keeps working.
+#[derive(clap::Args, Debug)]
+#[command(args_conflicts_with_subcommands = true)]
+pub struct SetupArgs {
+    #[command(subcommand)]
+    pub command: Option<SetupCommand>,
+
+    #[command(flatten)]
+    pub sync: SyncArgs,
+}
+
+/// `setup` subcommands.
+#[derive(Subcommand, Debug)]
+pub enum SetupCommand {
+    /// Apply or check the repo baseline (lint, hooks, tests, CI) from the
+    /// librarian `repo-baseline` templates.
+    Standards {
+        #[command(subcommand)]
+        command: StandardsCommand,
+    },
+}
+
+/// `setup standards` subcommands.
+#[derive(Subcommand, Debug)]
+pub enum StandardsCommand {
+    /// Write the baseline files; never overwrites a locally edited file
+    /// without `--force`.
+    Init {
+        /// Language slices to apply (comma-separated, e.g. `shell,python`).
+        /// Default: the previous selection, else detected from the repo.
+        #[arg(long, value_name = "LANGS", value_delimiter = ',')]
+        lang: Option<Vec<String>>,
+
+        /// CI platforms to generate (comma-separated: `github`, `gitlab`).
+        /// Default: the previous selection, else the `origin` remote's host.
+        #[arg(long, value_name = "PLATFORMS", value_delimiter = ',')]
+        ci: Option<Vec<String>>,
+
+        /// Overwrite locally modified or accepted files.
+        #[arg(long)]
+        force: bool,
+
+        /// Show what would be written without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+
+        #[command(flatten)]
+        templates: TemplatesArg,
+    },
+
+    /// Report missing, modified, or stale baseline files (exit 1 on drift).
+    Check {
+        #[command(flatten)]
+        templates: TemplatesArg,
+    },
+
+    /// Record reviewed local edits so `check` stops flagging them.
+    Accept {
+        /// Baseline files to accept. Default: every modified one.
+        paths: Vec<String>,
+
+        #[command(flatten)]
+        templates: TemplatesArg,
+    },
+}
+
+/// Shared `--templates-dir` flag for `setup standards`.
+#[derive(clap::Args, Debug)]
+pub struct TemplatesArg {
+    /// Read templates from this `repo-baseline/templates` directory instead of
+    /// the copy built into stibbons.
+    #[arg(long, value_name = "DIR")]
+    pub templates_dir: Option<PathBuf>,
 }
 
 /// Shared flags for `labels sync` and `setup`.
