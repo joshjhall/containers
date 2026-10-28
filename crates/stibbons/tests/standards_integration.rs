@@ -203,7 +203,9 @@ fn check_fails_on_modified_file_until_accepted() {
 
     // …and editing it again re-flags drift.
     fs::write(&path, format!("{edited}# another\n")).unwrap();
-    assert_eq!(standards(tmp.path(), &["check"]).status.code(), Some(1));
+    let out = standards(tmp.path(), &["check"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stdout_of(&out).contains("_typos.toml (modified)"), "{}", stdout_of(&out));
 }
 
 #[test]
@@ -328,6 +330,7 @@ fn refuses_symlinked_leaf_and_dangling_link() {
     std::os::unix::fs::symlink(&target, tmp.path().join("dprint.json")).unwrap();
     let out = standards(tmp.path(), &["init"]);
     assert!(!out.status.success(), "init followed a dangling symlink");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("dprint.json is a symlink"));
     assert!(!target.exists(), "dangling symlink target was created");
 }
 
@@ -349,6 +352,7 @@ fn refuses_to_chmod_unchanged_script_through_symlink() {
 
     let out = standards(tmp.path(), &["init"]);
     assert!(!out.status.success(), "init chmodded through a symlink");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("tests/run.sh is a symlink"));
     assert_eq!(fs::metadata(&ext).unwrap().permissions().mode() & 0o777, 0o600);
 }
 
