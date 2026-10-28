@@ -366,6 +366,20 @@ fn refuses_to_save_state_through_symlink() {
     assert!(!tmp.path().join("lefthook.yml").exists(), "partial write before refusing");
 }
 
+#[cfg(unix)]
+#[test]
+fn dry_run_ignores_symlinked_state_file() {
+    // --dry-run saves nothing, so a linked state file is not a write target:
+    // the run succeeds and leaves both the link and its target untouched.
+    let tmp = shell_python_repo();
+    let outside = tempfile::tempdir().unwrap();
+    let ext = outside.path().join("state.yml");
+    std::os::unix::fs::symlink(&ext, tmp.path().join(".stibbons-standards.yml")).unwrap();
+    assert_ok(&standards(tmp.path(), &["init", "--dry-run"]), "init --dry-run");
+    assert!(!ext.exists(), "dry run wrote the state file");
+    assert!(!tmp.path().join("lefthook.yml").exists(), "dry run wrote a file");
+}
+
 #[test]
 fn corrupt_state_file_fails_check_loudly() {
     let tmp = shell_python_repo();

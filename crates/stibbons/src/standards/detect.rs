@@ -186,6 +186,14 @@ mod tests {
         let big = format!("#!/bin/sh\n{}", "x".repeat(1 << 20));
         std::fs::write(tmp.path().join("bin/big"), big).unwrap();
         assert_eq!(classify(tmp.path(), &files(&["bin/big"])), set(&["shell"]));
+
+        // The cap is observable: an interpreter that only starts past the
+        // window is never seen. An unbounded read would find `/bin/sh` after
+        // the padding and match; the bounded one sees `#!` plus blanks.
+        let pad = " ".repeat(usize::try_from(SHEBANG_PROBE_BYTES).unwrap());
+        let late = format!("#!{pad}/bin/sh\n");
+        std::fs::write(tmp.path().join("bin/late"), late).unwrap();
+        assert_eq!(classify(tmp.path(), &files(&["bin/late"])), set(&[]));
     }
 
     #[test]
