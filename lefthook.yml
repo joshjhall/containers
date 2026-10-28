@@ -245,6 +245,12 @@ pre-commit:
             glob: "{.env,.env.secrets}.example"
             run: bin/check-env-drift.sh
 
+          # Placeholder author/committer emails (t@t.t, *@example.com, ...) get
+          # GitHub-attributed to whoever claimed them. No glob: identity is
+          # independent of which files are staged.
+          - name: author-identity
+            run: bin/check-author-identity.sh
+
           - name: no-env-file
             run: |
               if git diff --cached --name-only | grep -q "^\.env$"; then
