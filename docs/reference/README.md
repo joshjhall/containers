@@ -11,6 +11,8 @@ APIs, and system specifications.
   arguments and environment variables
 - [**Feature Dependencies**](features.md) - Which tools depend on which other
   tools
+- [**stibbons setup standards**](stibbons-setup-standards.md) - Apply and
+  drift-check the repo baseline (lint, hooks, tests, CI)
 
 ### Versioning
 

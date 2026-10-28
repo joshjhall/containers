@@ -97,7 +97,7 @@ fn setup_real_execution_reports_complete() {
     assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Nothing to sync"), "got: {stdout}");
-    assert!(stdout.contains("Setup complete. (Future steps:"), "got: {stdout}");
+    assert!(stdout.contains("Setup complete. (Repo baseline:"), "got: {stdout}");
 }
 
 #[test]

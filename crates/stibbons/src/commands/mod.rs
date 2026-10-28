@@ -19,7 +19,8 @@
 //!   `.igor.yml`.
 //! - [`add_remove`] — change the feature selection and re-render.
 //! - [`update`] — re-render the existing selection after a version bump.
-//! - [`setup`] — repository configuration (today: issue-tracker label sync).
+//! - [`setup`] — repository configuration: issue-tracker label sync, and the
+//!   repo baseline (`setup standards`, body in [`crate::standards`]).
 //!
 //! Read-only:
 //!

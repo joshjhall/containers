@@ -31,4 +31,55 @@ fn main() {
 
     let version = resolve_version_from(&manifest_dir, &pkg_version, &mut emit_rerun);
     println!("cargo:rustc-env=STIBBONS_VERSION={version}");
+
+    embed_repo_baseline(&manifest_dir);
+}
+
+/// Generate `$OUT_DIR/repo_baseline_assets.rs`: a `(relative path, bytes)`
+/// table of every file under `assets/repo-baseline/`, so `stibbons setup
+/// standards` carries its templates inside the binary (no librarian checkout
+/// needed on the host). Paths use `/` separators and are sorted, so the table
+/// is identical across platforms and builds.
+fn embed_repo_baseline(manifest_dir: &str) {
+    use std::fmt::Write as _;
+
+    let root = Path::new(manifest_dir).join("assets/repo-baseline");
+    println!("cargo:rerun-if-changed={}", root.display());
+
+    let mut files = Vec::new();
+    collect_files(&root, &root, &mut files);
+    files.sort();
+
+    let mut table = String::from("&[\n");
+    for rel in &files {
+        let abs = root.join(rel);
+        println!("cargo:rerun-if-changed={}", abs.display());
+        let _ =
+            writeln!(table, "    ({rel:?}, include_bytes!({:?}) as &[u8]),", abs.to_string_lossy());
+    }
+    table.push(']');
+
+    let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR is always set by cargo");
+    std::fs::write(Path::new(&out_dir).join("repo_baseline_assets.rs"), table)
+        .expect("failed to write repo_baseline_assets.rs");
+}
+
+/// Recursively collect files under `dir`, as `/`-separated paths relative to
+/// `root`. Directories are watched too, so an added or removed file reruns
+/// the build script.
+fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    let entries =
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("failed to read {}: {e}", dir.display()));
+    for entry in entries {
+        let path = entry.expect("failed to read directory entry").path();
+        if path.is_dir() {
+            println!("cargo:rerun-if-changed={}", path.display());
+            collect_files(root, &path, out);
+        } else {
+            let rel = path.strip_prefix(root).expect("entry is under root");
+            let parts: Vec<String> =
+                rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+            out.push(parts.join("/"));
+        }
+    }
 }

@@ -15,6 +15,7 @@ mod commands;
 mod labels;
 mod render;
 mod services;
+mod standards;
 #[cfg(test)]
 mod test_support;
 mod wizard;
@@ -23,6 +24,7 @@ use clap::Parser;
 
 use crate::cli::{Cli, Commands, LabelsCommand};
 
+#[expect(clippy::too_many_lines, reason = "one arm per subcommand; the bodies live in `commands`")]
 fn main() {
     let cli = Cli::parse();
 
@@ -93,12 +95,14 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Some(Commands::Setup(args)) => {
-            if let Err(e) = commands::setup::run_setup(args) {
+        Some(Commands::Setup(args)) => match commands::setup::run_setup(args) {
+            Ok(commands::setup::SetupOutcome::Drift) => std::process::exit(1),
+            Ok(commands::setup::SetupOutcome::Done) => {}
+            Err(e) => {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
-        }
+        },
         Some(Commands::Version) => {
             if let Err(e) = commands::version::run(&mut std::io::stdout()) {
                 eprintln!("Error: {e}");

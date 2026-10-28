@@ -305,6 +305,10 @@ check-pr-checks PR:
 update-checksums:
     ./bin/update-checksums.sh
 
+# Re-vendor librarian's repo-baseline templates into stibbons (default /opt/librarian)
+sync-repo-baseline SRC="/opt/librarian":
+    ./bin/sync-repo-baseline.sh {{ quote(SRC) }}
+
 # ============================================================================
 # Release
 # ============================================================================

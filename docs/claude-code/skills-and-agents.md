@@ -211,8 +211,12 @@ stibbons labels sync                       # detect platform, apply
 stibbons labels sync --dry-run             # preview the plan, change nothing
 stibbons labels sync --platform github     # override remote auto-detection
 stibbons labels sync --skills-dir DIR      # scan DIR (repeatable)
-stibbons setup                             # umbrella: runs labels sync (+ future steps)
+stibbons setup                             # umbrella: runs labels sync
+stibbons setup standards init|check|accept # repo baseline (lint, hooks, tests, CI)
 ```
+
+`setup standards` applies librarian's `repo-baseline` scaffold without a
+skill; see [stibbons setup standards](../reference/stibbons-setup-standards.md).
 
 Platform (GitHub vs GitLab) is detected from the `origin` remote and driven
 through the `gh` / `glab` CLIs. When `--skills-dir` is omitted, the in-repo
