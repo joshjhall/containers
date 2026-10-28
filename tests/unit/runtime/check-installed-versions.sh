@@ -285,7 +285,7 @@ test_civ_glab_reports_version() {
         ver="${pair%%|*}"
         out="${pair#*|}"
         printf '#!/bin/sh\necho "%s"\n' "$out" >"$TEST_TEMP_DIR/bin/glab"
-        chmod +x "$TEST_TEMP_DIR/bin/glab"
+        command chmod +x "$TEST_TEMP_DIR/bin/glab"
         _civ_run "$CIV_SCRIPT"
         # Second column of the glab row is INSTALLED
         installed=$(command awk '$1 == "glab" { print $2 }' "$TEST_TEMP_DIR/out")

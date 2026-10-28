@@ -15,7 +15,7 @@
 # Internal helpers:
 #   _get_last_command_start_line  - Find last command marker in log
 #   _count_patterns_since         - Count regex matches after a line
-#   _error_lines_since            - Print error lines after a line
+#   _classify_lines_since         - Tag error/warning lines after a line
 
 # Prevent multiple sourcing
 if [ -n "${_FEATURE_LOGGING_LOADED:-}" ]; then
@@ -39,18 +39,26 @@ _count_patterns_since() {
     command tail -n +"$start_line" "$log_file" | command grep -cE "$pattern" 2>/dev/null || echo 0
 }
 
-# Print error lines in log output since a given line: lines matching the error
-# pattern, except where a warning tag comes first. cargo-binstall logs
-# "WARN resolve: Error while downloading ..." for a fallback that succeeds;
-# that is a warning, but rustc's "error: ...; 1 warning emitted" is still an
-# error.
-_error_lines_since() {
+# Classify log output since a given line. Prints each error line as
+# "E<TAB>line" and each warning line as "W<TAB>line" (a line can be both).
+# ANSI colour codes are stripped before matching, since the "m" that ends one
+# would otherwise glue onto a following "error". A line is not an error when a
+# warning tag comes first: cargo-binstall logs "WARN resolve: Error while
+# downloading ..." for a fallback that succeeds, but rustc's "error: ...;
+# 1 warning emitted" and "src/warn.rs:1: error: ..." are still errors.
+_classify_lines_since() {
     local log_file="$1"
     local start_line="$2"
     local error_pattern="$3"
     local warn_pattern="$4"
-    command tail -n +"$start_line" "$log_file" | command awk -v e="$error_pattern" -v w="$warn_pattern" '
-        match($0, e) { p = RSTART; if (!match($0, w) || RSTART > p) print }'
+    local warn_tag_pattern="$5"
+    command tail -n +"$start_line" "$log_file" | command awk -v e="$error_pattern" -v w="$warn_pattern" -v t="$warn_tag_pattern" '
+        {
+            l = $0
+            gsub(/\033\[[0-9;]*[A-Za-z]/, "", l)
+            if (match(l, e)) { p = RSTART; if (!match(l, t) || RSTART > p) print "E\t" $0 }
+            if (match(l, w)) print "W\t" $0
+        }'
 }
 
 # Global variables for feature logging
@@ -209,19 +217,26 @@ log_command() {
         local b="[^A-Za-z0-9_-]"
         local error_pattern="((^|$b)(error|failed|fatal)s?|(ERROR|Error|FAILED|Failed|FATAL|Fatal)[Ss]?)($b|$)"
         local warn_pattern="((^|$b)(warning|warn)s?|(WARNING|Warning|WARN|Warn)[Ss]?)($b|$)"
+        # A leading warning tag: "WARN x", "warning:", "[WARN]"; not a path
+        # or key that merely contains the word (src/warn.rs, cargo:warning=).
+        local warn_tag_pattern="(^|$b)((WARNING|WARN)[]: ]|(Warning|warning|Warn|warn)[]:])"
+
+        local classified
+        classified=$(_classify_lines_since "$CURRENT_LOG_FILE" "$start_line" \
+            "$error_pattern" "$warn_pattern" "$warn_tag_pattern" 2>/dev/null || true)
 
         # Append matching lines to error file
-        _error_lines_since "$CURRENT_LOG_FILE" "$start_line" "$error_pattern" "$warn_pattern" >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
-        command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$warn_pattern" >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
+        if [ -n "$classified" ]; then
+            printf '%s\n' "$classified" | command cut -f2- >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
+        fi
 
         # Count new errors and warnings
-        local new_errors
-        new_errors=$(_error_lines_since "$CURRENT_LOG_FILE" "$start_line" "$error_pattern" "$warn_pattern" | command grep -c '' || true)
+        local new_errors new_warnings
+        new_errors=$(printf '%s\n' "$classified" | command grep -c '^E' || true)
         new_errors=$(echo "$new_errors" | command tr -d '[:space:]')
         ERROR_COUNT=$((ERROR_COUNT + ${new_errors:-0}))
 
-        local new_warnings
-        new_warnings=$(_count_patterns_since "$CURRENT_LOG_FILE" "$start_line" "$warn_pattern")
+        new_warnings=$(printf '%s\n' "$classified" | command grep -c '^W' || true)
         new_warnings=$(echo "$new_warnings" | command tr -d '[:space:]')
         WARNING_COUNT=$((WARNING_COUNT + ${new_warnings:-0}))
     fi

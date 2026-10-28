@@ -249,6 +249,17 @@ test_log_command_error_mentioning_warnings_is_error() {
         "genuine error line is copied to the error file"
 }
 
+# Colour codes end in a letter ("m"), which must not glue onto the keyword,
+# and a path or key containing "warn" is not a warning tag (#1537).
+test_log_command_counts_coloured_and_warn_path_errors() {
+    log_feature_start "PatternTest"
+    log_command "coloured rustc" printf '%b\n' \
+        "\033[1m\033[31merror\033[0m: mismatched types" \
+        "src/warn.rs:10:5: error: mismatched types" \
+        "cargo:warning=error: build script failed"
+    assert_equals "3" "$ERROR_COUNT" "coloured / warn-path / cargo:warning errors are counted"
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -271,6 +282,7 @@ run_test_with_setup test_log_command_extracts_warning_patterns "log_command extr
 run_test_with_setup test_log_command_ignores_error_inside_names "log_command ignores error inside crate names"
 run_test_with_setup test_log_command_warn_tagged_error_is_warning "WARN-tagged Error line counts as a warning"
 run_test_with_setup test_log_command_error_mentioning_warnings_is_error "Error line mentioning warnings counts as an error"
+run_test_with_setup test_log_command_counts_coloured_and_warn_path_errors "Coloured and warn-path error lines count as errors"
 
 # Generate test report
 generate_report
