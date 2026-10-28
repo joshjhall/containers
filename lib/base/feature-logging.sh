@@ -42,21 +42,31 @@ _count_patterns_since() {
 # Classify log output since a given line. Prints each error line as
 # "E<TAB>line" and each warning line as "W<TAB>line" (a line can be both).
 # ANSI colour codes are stripped before matching, since the "m" that ends one
-# would otherwise glue onto a following "error". A line is not an error when a
-# warning tag comes first: cargo-binstall logs "WARN resolve: Error while
-# downloading ..." for a fallback that succeeds, but rustc's "error: ...;
-# 1 warning emitted" and "src/warn.rs:1: error: ..." are still errors.
+# would otherwise glue onto a following "error". A line that STARTS with a
+# warning tag (after an optional "tool:" prefix) is a warning even if it then
+# mentions an error: cargo-binstall logs "WARN resolve: Error while
+# downloading ..." for a fallback that succeeds. An explicit error tag after
+# the warning tag ("WARNING: x; ERROR: y") still makes it an error.
 _classify_lines_since() {
     local log_file="$1"
     local start_line="$2"
     local error_pattern="$3"
     local warn_pattern="$4"
     local warn_tag_pattern="$5"
-    command tail -n +"$start_line" "$log_file" | command awk -v e="$error_pattern" -v w="$warn_pattern" -v t="$warn_tag_pattern" '
+    local error_tag_pattern="$6"
+    command tail -n +"$start_line" "$log_file" | command awk -v e="$error_pattern" -v w="$warn_pattern" -v t="$warn_tag_pattern" -v x="$error_tag_pattern" '
         {
             l = $0
             gsub(/\033\[[0-9;]*[A-Za-z]/, "", l)
-            if (match(l, e)) { p = RSTART; if (!match(l, t) || RSTART > p) print "E\t" $0 }
+            if (match(l, e)) {
+                p = RSTART
+                err = 1
+                if (match(l, t)) {
+                    te = RSTART + RLENGTH
+                    if (p >= te - 1 && !match(substr(l, te), x)) err = 0
+                }
+                if (err) print "E\t" $0
+            }
             if (match(l, w)) print "W\t" $0
         }'
 }
@@ -212,18 +222,21 @@ log_command() {
         # Lowercase keywords must start a word: a letter, digit, _ or - before
         # them means a name (thiserror, gix-error), not a status. Capitalised
         # forms may follow a letter so CamelCase exceptions still count
-        # (ModuleNotFoundError, CalledProcessError). Plurals count too
-        # ("Errors were encountered", "2 errors generated").
+        # (ModuleNotFoundError, CalledProcessError). Plurals and "errored"
+        # count too ("Errors were encountered", "3 tests errored").
         local b="[^A-Za-z0-9_-]"
-        local error_pattern="((^|$b)(error|failed|fatal)s?|(ERROR|Error|FAILED|Failed|FATAL|Fatal)[Ss]?)($b|$)"
+        local error_pattern="((^|$b)(errors?|errored|failed|fatal)|(ERROR|Error)([Ss]|[Ee][Dd])?|(FAILED|Failed|FATAL|Fatal)[Ss]?)($b|$)"
         local warn_pattern="((^|$b)(warning|warn)s?|(WARNING|Warning|WARN|Warn)[Ss]?)($b|$)"
-        # A leading warning tag: "WARN x", "warning:", "[WARN]"; not a path
+        # A warning tag at the start of the line, optionally after "tool:"
+        # ("WARN x", "cargo-binstall: WARN x", "warning:", "[WARN]"); not a path
         # or key that merely contains the word (src/warn.rs, cargo:warning=).
-        local warn_tag_pattern="(^|$b)((WARNING|WARN)[]: ]|(Warning|warning|Warn|warn)[]:])"
+        local warn_tag_pattern="^[^A-Za-z]*([A-Za-z0-9_.-]+:[ ]+)?((WARNING|WARN)[]: ]|(Warning|warning|Warn|warn)[]:])"
+        # An explicit error tag ("ERROR:", "error:", "error[E0425]:").
+        local error_tag_pattern="(^|$b)(ERROR|Error|error|FATAL|Fatal|fatal)([[][A-Za-z0-9]*[]])?:"
 
         local classified
         classified=$(_classify_lines_since "$CURRENT_LOG_FILE" "$start_line" \
-            "$error_pattern" "$warn_pattern" "$warn_tag_pattern" 2>/dev/null || true)
+            "$error_pattern" "$warn_pattern" "$warn_tag_pattern" "$error_tag_pattern" 2>/dev/null || true)
 
         # Append matching lines to error file
         if [ -n "$classified" ]; then

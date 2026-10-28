@@ -260,6 +260,19 @@ test_log_command_counts_coloured_and_warn_path_errors() {
     assert_equals "3" "$ERROR_COUNT" "coloured / warn-path / cargo:warning errors are counted"
 }
 
+# Only a warning tag that starts the line suppresses the error, and an explicit
+# error tag after it still counts; "errored" is an error (#1537).
+test_log_command_warn_tag_must_lead() {
+    log_feature_start "PatternTest"
+    log_command "mixed lines" printf '%s\n' \
+        "WARNING: Running pip as root; ERROR: Could not install packages" \
+        "Compiling foo-1.0 ... WARN: cache miss; error: linking with cc failed" \
+        "3 tests errored" \
+        "[WARN] retry after error" "warning: unused variable"
+    assert_equals "3" "$ERROR_COUNT" "mid-line WARN, WARN-then-ERROR: and errored count as errors"
+    assert_equals "4" "$WARNING_COUNT" "every line carrying a warning word counts as a warning"
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -283,6 +296,7 @@ run_test_with_setup test_log_command_ignores_error_inside_names "log_command ign
 run_test_with_setup test_log_command_warn_tagged_error_is_warning "WARN-tagged Error line counts as a warning"
 run_test_with_setup test_log_command_error_mentioning_warnings_is_error "Error line mentioning warnings counts as an error"
 run_test_with_setup test_log_command_counts_coloured_and_warn_path_errors "Coloured and warn-path error lines count as errors"
+run_test_with_setup test_log_command_warn_tag_must_lead "Only a leading warning tag suppresses an error"
 
 # Generate test report
 generate_report
