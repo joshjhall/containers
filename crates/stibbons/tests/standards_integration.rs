@@ -125,7 +125,7 @@ fn rerun_preserves_user_edits_unless_forced() {
 
     let out = standards(tmp.path(), &["init"]);
     assert_ok(&out, "re-init");
-    assert!(stdout_of(&out).contains("skip"), "{}", stdout_of(&out));
+    assert!(stdout_of(&out).contains("skip       ruff.toml"), "{}", stdout_of(&out));
     assert_eq!(fs::read_to_string(&path).unwrap(), edited, "re-init clobbered a user edit");
 
     // A second re-init still recognizes the edit as the user's (provenance
