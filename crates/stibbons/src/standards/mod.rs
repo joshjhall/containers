@@ -155,6 +155,8 @@ pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std:
             ensure_no_symlink(&opts.root, &file.target)?;
         }
     }
+    // `save` re-checks, but refusing here keeps a linked state file from
+    // costing a partial write of the baseline first.
     if !opts.dry_run {
         ensure_no_symlink(&opts.root, STATE_FILE)?;
     }
@@ -228,7 +230,7 @@ pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std:
             }
         }
     }
-    new.save(&state_path)?;
+    new.save(&opts.root)?;
 
     let skipped = actions.iter().filter(|a| matches!(a, InitAction::Skipped)).count();
     writeln!(out, "\nWrote {STATE_FILE}.")?;
@@ -341,7 +343,7 @@ pub fn accept(
         state.accepted.insert(t.clone(), hash_bytes(&bytes));
         writeln!(out, "  accepted {t}")?;
     }
-    state.save(&root.join(STATE_FILE))?;
+    state.save(root)?;
     Ok(())
 }
 

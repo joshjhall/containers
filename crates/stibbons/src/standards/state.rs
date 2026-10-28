@@ -77,18 +77,26 @@ impl StandardsState {
         Ok(Some(state))
     }
 
-    /// Write the state to `path`.
+    /// Write the state to [`STATE_FILE`] under `root`.
+    ///
+    /// Refuses when the state file (or a directory above it, under `root`) is a
+    /// symlink: a hostile checkout could otherwise point it at any file the user
+    /// can write. The guard lives here, not at call sites, so no caller can
+    /// skip it.
     ///
     /// # Errors
     ///
-    /// Returns an error when serialization or the write fails.
-    pub fn save(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    /// Returns an error for a symlinked state path, or when serialization or
+    /// the write fails.
+    pub fn save(&self, root: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        super::fsutil::ensure_no_symlink(root, STATE_FILE)?;
+        let path = root.join(STATE_FILE);
         let body = serde_saphyr::to_string(self)?;
         let text = format!(
             "# Managed by `stibbons setup standards`. Records which repo-baseline\n\
              # files were applied and their hashes, for drift detection.\n{body}"
         );
-        std::fs::write(path, text)
+        std::fs::write(&path, text)
             .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
         Ok(())
     }
@@ -114,8 +122,21 @@ mod tests {
         s.ci = vec!["github".into()];
         s.files.insert("justfile".into(), "abc".into());
         s.accepted.insert("ruff.toml".into(), "def".into());
-        s.save(&path).unwrap();
+        s.save(tmp.path()).unwrap();
         assert_eq!(StandardsState::load(&path).unwrap().unwrap(), s);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_refuses_symlinked_state_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let ext = outside.path().join("victim");
+        std::fs::write(&ext, "keep\n").unwrap();
+        std::os::unix::fs::symlink(&ext, tmp.path().join(STATE_FILE)).unwrap();
+        let err = StandardsState::new().save(tmp.path()).unwrap_err().to_string();
+        assert!(err.contains("is a symlink"), "{err}");
+        assert_eq!(std::fs::read_to_string(&ext).unwrap(), "keep\n");
     }
 
     #[test]

@@ -372,6 +372,28 @@ fn refuses_to_save_state_through_symlink() {
 
 #[cfg(unix)]
 #[test]
+fn accept_refuses_to_save_state_through_symlink() {
+    // A checkout that ships the state file as a link: `accept` must not write
+    // through it, exactly like `init`.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let state = tmp.path().join(".stibbons-standards.yml");
+    let outside = tempfile::tempdir().unwrap();
+    let ext = outside.path().join("state.yml");
+    fs::rename(&state, &ext).unwrap();
+    let before = fs::read_to_string(&ext).unwrap();
+    std::os::unix::fs::symlink(&ext, &state).unwrap();
+    let p = tmp.path().join("_typos.toml");
+    fs::write(&p, format!("{}# edit\n", fs::read_to_string(&p).unwrap())).unwrap();
+
+    let out = standards(tmp.path(), &["accept", "_typos.toml"]);
+    assert!(!out.status.success(), "accept wrote through a symlinked state file");
+    assert!(String::from_utf8_lossy(&out.stderr).contains(".stibbons-standards.yml is a symlink"));
+    assert_eq!(fs::read_to_string(&ext).unwrap(), before, "link target was modified");
+}
+
+#[cfg(unix)]
+#[test]
 fn dry_run_ignores_symlinked_state_file() {
     // --dry-run saves nothing, so a linked state file is not a write target:
     // the run succeeds and leaves both the link and its target untouched.
