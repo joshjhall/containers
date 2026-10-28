@@ -15,6 +15,7 @@
 # Internal helpers:
 #   _get_last_command_start_line  - Find last command marker in log
 #   _count_patterns_since         - Count regex matches after a line
+#   _error_lines_since            - Print error lines after a line
 
 # Prevent multiple sourcing
 if [ -n "${_FEATURE_LOGGING_LOADED:-}" ]; then
@@ -36,6 +37,20 @@ _count_patterns_since() {
     local start_line="$2"
     local pattern="$3"
     command tail -n +"$start_line" "$log_file" | command grep -cE "$pattern" 2>/dev/null || echo 0
+}
+
+# Print error lines in log output since a given line: lines matching the error
+# pattern, except where a warning tag comes first. cargo-binstall logs
+# "WARN resolve: Error while downloading ..." for a fallback that succeeds;
+# that is a warning, but rustc's "error: ...; 1 warning emitted" is still an
+# error.
+_error_lines_since() {
+    local log_file="$1"
+    local start_line="$2"
+    local error_pattern="$3"
+    local warn_pattern="$4"
+    command tail -n +"$start_line" "$log_file" | command awk -v e="$error_pattern" -v w="$warn_pattern" '
+        match($0, e) { p = RSTART; if (!match($0, w) || RSTART > p) print }'
 }
 
 # Global variables for feature logging
@@ -186,16 +201,18 @@ log_command() {
         local start_line
         start_line=$(_get_last_command_start_line "$CURRENT_LOG_FILE")
 
-        local error_pattern="(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)"
-        local warn_pattern="(WARNING|Warning|warning|WARN|Warn|warn)"
+        # Match whole words only: a letter, digit, _ or - on either side means
+        # the keyword is part of a name (thiserror, gix-error), not a status.
+        local error_pattern="(^|[^A-Za-z0-9_-])(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)([^A-Za-z0-9_-]|$)"
+        local warn_pattern="(^|[^A-Za-z0-9_-])(WARNING|Warning|warning|WARN|Warn|warn)([^A-Za-z0-9_-]|$)"
 
         # Append matching lines to error file
-        command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$error_pattern" >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
+        _error_lines_since "$CURRENT_LOG_FILE" "$start_line" "$error_pattern" "$warn_pattern" >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
         command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$warn_pattern" >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
 
         # Count new errors and warnings
         local new_errors
-        new_errors=$(_count_patterns_since "$CURRENT_LOG_FILE" "$start_line" "$error_pattern")
+        new_errors=$(_error_lines_since "$CURRENT_LOG_FILE" "$start_line" "$error_pattern" "$warn_pattern" | command grep -c '' || true)
         new_errors=$(echo "$new_errors" | command tr -d '[:space:]')
         ERROR_COUNT=$((ERROR_COUNT + ${new_errors:-0}))
 

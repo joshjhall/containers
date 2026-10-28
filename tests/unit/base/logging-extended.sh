@@ -209,6 +209,36 @@ test_log_command_extracts_warning_patterns() {
     assert_true [ "$WARNING_COUNT" -ge 1 ] "WARNING pattern in command output increments WARNING_COUNT"
 }
 
+# Crate names carry "error" as part of a word; they are build progress, not
+# failures (#1537).
+test_log_command_ignores_error_inside_names() {
+    log_feature_start "PatternTest"
+    log_command "Cargo progress" printf '%s\n' \
+        "  Downloaded thiserror-impl v2.0.21" "   Compiling gix-error v0.1.0"
+    assert_equals "0" "$ERROR_COUNT" "thiserror / gix-error are not counted as errors"
+}
+
+# cargo-binstall logs a recovered fallback as WARN followed by "Error ...
+# Failed ..."; it counts once, as a warning (#1537).
+test_log_command_warn_tagged_error_is_warning() {
+    log_feature_start "PatternTest"
+    log_command "binstall fallback" echo \
+        "cargo-binstall:  WARN resolve: Error while downloading from fetcher QuickInstall: Failed to download"
+    assert_equals "0" "$ERROR_COUNT" "WARN-tagged Error line is not an error"
+    assert_equals "1" "$WARNING_COUNT" "WARN-tagged Error line is one warning"
+}
+
+# An error that mentions warnings later in the line is still an error.
+test_log_command_error_mentioning_warnings_is_error() {
+    log_feature_start "PatternTest"
+    log_command "rustc abort" printf '%s\n' \
+        "error: aborting due to 1 previous error; 1 warning emitted" \
+        "error[E0425]: cannot find value" "E: Failed to fetch http://x"
+    assert_equals "3" "$ERROR_COUNT" "genuine error lines are each counted"
+    assert_file_contains "$CURRENT_ERROR_FILE" "aborting due to 1 previous error" \
+        "genuine error line is copied to the error file"
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -228,6 +258,9 @@ run_test_with_setup test_log_message_before_feature_start "log_message works bef
 run_test_with_setup test_log_error_before_feature_start "log_error works before feature start"
 run_test_with_setup test_log_command_extracts_error_patterns "log_command extracts ERROR patterns"
 run_test_with_setup test_log_command_extracts_warning_patterns "log_command extracts WARNING patterns"
+run_test_with_setup test_log_command_ignores_error_inside_names "log_command ignores error inside crate names"
+run_test_with_setup test_log_command_warn_tagged_error_is_warning "WARN-tagged Error line counts as a warning"
+run_test_with_setup test_log_command_error_mentioning_warnings_is_error "Error line mentioning warnings counts as an error"
 
 # Generate test report
 generate_report

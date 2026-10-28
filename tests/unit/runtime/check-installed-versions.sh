@@ -276,6 +276,22 @@ test_civ_fd_reports_upstream_version() {
     assert_contains "$row" "up-to-date" "upstream fd 10.2.0 vs latest v10.2.0 is up-to-date"
 }
 
+# glab >= 1.x prints "glab 1.125.0 (sha)"; older releases print
+# "glab version 1.40.0 (date)". Both must parse (#1537).
+test_civ_glab_reports_version() {
+    _civ_make_hermetic_bin
+    local out ver row
+    for out in "glab 1.125.0 (685c1cbd7)" "glab version 1.40.0 (2024-05-01)"; do
+        ver=$(echo "$out" | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command head -1)
+        printf '#!/bin/sh\necho "%s"\n' "$out" >"$TEST_TEMP_DIR/bin/glab"
+        chmod +x "$TEST_TEMP_DIR/bin/glab"
+        _civ_run "$CIV_SCRIPT"
+        row=$(command grep -E '^glab +' "$TEST_TEMP_DIR/out" || true)
+        assert_contains "$row" "$ver" "glab row shows $ver for: $out"
+        assert_not_contains "$row" "error" "glab row is not error for: $out"
+    done
+}
+
 test_civ_runs_through_symlink() {
     _civ_make_hermetic_bin
     command ln -s "$CIV_SCRIPT" "$TEST_TEMP_DIR/bin/check-installed-versions.sh"
@@ -357,6 +373,7 @@ run_test_with_setup test_civ_summary_completes "Summary completes and exits 0 wi
 run_test_with_setup test_civ_summary_every_counter_branch "Summary survives every counter branch from 0 under set -e"
 run_test_with_setup test_civ_fd_reports_fdfind_version "fd version parsed from fdfind output"
 run_test_with_setup test_civ_fd_reports_upstream_version "fd version parsed from upstream fd output"
+run_test_with_setup test_civ_glab_reports_version "glab version parsed from old and new output formats"
 run_test_with_setup test_civ_runs_through_symlink "Script runs through a PATH symlink"
 run_test_with_setup test_civ_symlink_loads_sibling_env "Symlinked script loads the .env next to its real location"
 run_test_with_setup test_civ_json_completes "--json output completes and exits 0"
