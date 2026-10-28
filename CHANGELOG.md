@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.22.0] - 2026-10-28
+
+### Added
+
+- Implement the source-build install method (configure/make/make install) (#1435)
+- Validate InstallerOptions at the Installer constructors (#1461)
+- Tier-1 GPG verification against pinned catalog keyrings (#1517)
+- Vendor the node/go tier-1 catalog flip and its keyrings (#1527)
+- Refuse commits with placeholder author emails (#1525)
+
+### Changed
+
+- Extract the keyring swap transaction into a helper (#1448)
+- Extract the streaming command runner into methods/streaming.rs (#1465)
+- Port node.sh to luggage (binary-tarball + SHASUMS256 manifest) (#1511)
+
+### Fixed
+
+- Restore readable Node.js GPG keyring and fail closed on bad ones (#1425)
+- Check mktemp in the python/hashicorp/golang GPG key updaters (#1437)
+- Keep the exec bit when enforce-command-prefix rewrites a file (#1438)
+- Move the Node.js keyring aside into a fresh mktemp dir (#1442)
+- Count only rows an open evidence PR adds; skip closed and landed PRs (#1444)
+- Prefix the bare cat in regen-triage-lock.sh (#1447)
+- Kill live version-probe groups on SIGINT/SIGTERM (#1441)
+- Test and retry the evidence-run open-PR collection step (#1451)
+- Group-kill descendants left when the version probe exits normally (#1455)
+- Name the malformed file when published evidence fails to parse (#1462)
+- Run setup-gh login with GITHUB_TOKEN cleared (#1469)
+- Keep setup-gh/setup-glab tokens out of xtrace end to end (#1476)
+- Warn and return non-zero when glab auth login fails (#1479)
+- Make enforce-command-prefix write-back atomic and skip symlinks (#1477)
+- Harden evidence_db_sources retries and pre-extraction checks (#1481)
+- Report v-leading non-version latest as unknown in compare_version (#1483)
+- Let enforce-command-prefix fix read-only files again (#1485)
+- Check before creating a tmpfile so clean files pass in unwritable dirs (#1491)
+- Install the keyring swap traps before its mktemp calls (#1486)
+- Name the real cause for unopenable or unparsable evidence files (#1489)
+- Drop dead severity=info from .shellcheckrc (#1499)
+- Unblock main — suppress GHSA-qwgh-2vcv-g2f7, re-mirror go catalog (#1523)
+
+### Improved
+
+- Run enforce-command-prefix as one awk process per file (#1428)
+
+### Miscellaneous
+
+- Record review-fix scope, git-cliff worktree, PR-tier label race findings
+- Record golem relaunch, review artifact, prComments id, keyboxd findings
+- Record tier-1 rollout lessons (#1529)
+- Split MEMORY.md into topic sub-indexes and gate it (#1531)
+- Bump librarian to v0.18.0 and weekly tool versions (#1535)
+
+### Testing
+
+- Pin enforce-command-prefix heredoc-on-alias/marker, empty file, portable stat (#1445)
+- Cover compare_version v-stripping against sentinels and empty current (#1450)
+- Build the empty-keyring fixture keyboxd-safe (#1453)
+- Assert check-installed-versions.sh is on PATH in a built image (#1454)
+- Harden teardown/post-create follow-ups from #1072 review (#1460)
+- Keep network out of the merge-tier mise and setup-gh tests (#1458)
+- Derive evidence-run trigger coverage from the sourced files (#1466)
+- Cover 13-digit and zero-padded EVIDENCE_NOW in evidence_matrix (#1471)
+- Split evidence-run trigger-paths helpers into a sibling suite (#1472)
+- Pin merge_evidence_row's set-but-empty EVIDENCE_NOW as unset (#1474)
+- Map sourced evidence scripts to the trigger-paths suite at push time (#1478)
+- Split evidence-run mapping tests out of run-changed-tests.sh (#1487)
+- Move the streaming runner tests next to methods/streaming.rs (#1488)
+- Surface mise install output when the retry loop exhausts (#1492)
+- Split enforce-command-prefix write-path tests into a sibling suite (#1496)
+- Share the gpg keyring fixtures across the keyring suites (#1498)
+- Pin first-culprit precedence and the $out.err sidecar collision (#1500)
+- Move the capture-fds grandchild out of the probe's group (#1502)
+- Split the keyring-swap INT/TERM signal tests into a sibling suite (#1504)
+- Split the published-evidence failure tests into their own suite (#1505)
+- Split the evidence-sources extraction/retry tests into a sibling suite (#1507)
+- Kill a late grandchild pid before failing the capture-fds test (#1506)
+
 ## [4.21.3] - 2026-10-25
 
 ### Added
@@ -43,12 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Read a future-dated evidence tested_at as stale (#1390)
 - Make check-installed-versions.sh runnable and accurate (#1413)
 - Strip v prefix from displayed latest version in check-installed-versions (#1418)
-- Stop evidence ingest writing a trailing blank line that broke auto-patch
-- Stop release.sh wiping CHANGELOG.md when run from a worktree
-
-### Miscellaneous
-
-- Automated version updates
+- Repair the failed 2026-10-25 auto-patch and re-cut v4.21.3 (#1423)
 
 ### Testing
 
@@ -2753,6 +2826,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.22.0]: https://github.com/joshjhall/containers/compare/v4.21.3...v4.22.0
 [4.21.3]: https://github.com/joshjhall/containers/compare/v4.21.2...v4.21.3
 [4.21.2]: https://github.com/joshjhall/containers/compare/v4.21.1...v4.21.2
 [4.21.1]: https://github.com/joshjhall/containers/compare/v4.21.0...v4.21.1
