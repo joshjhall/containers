@@ -29,6 +29,7 @@
 - [Luggage vendored catalog](luggage-vendored-catalog.md) — builds read vendored snapshot (crates/luggage/testdata/catalog), not sibling…
 - [tests/results/ is on an incoherent FUSE mount](results-dir-fuse-incoherent.md) — writes succeed, report success, then aren't readable
 - [Worktree guard blocks eval + heredocs](worktree-guard-blocks-eval-and-heredocs.md) — refuses the literal `eval` (incl. `yq eval`) and `golem-work.sh complete`…
+- [Staged harness blocks worktree-rm](staged-harness-blocks-worktree-rm.md) — leftover `.claude/tmp/harness/*.workflow.js` makes teardown refuse; delete it if it's the only entry
 - [Pre-push skips network tests](pre-push-skips-network-tests.md) — SKIP_NETWORK_TESTS=1 keeps the push gate offline
 - [Zero checks is not green](zero-checks-is-not-green.md) — check-runs can't tell "never fired" from "delayed"
 - [Stale git index.lock](stale-git-index-lock.md) — host↔container git index ping-pong under Zed (zed#52265)
