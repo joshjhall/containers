@@ -13,6 +13,12 @@
 #
 # Replaces the whole vendored directory, so a fragment librarian dropped does
 # not linger. Run it after bumping LIBRARIAN_REF, then rebuild stibbons.
+#
+# LOCAL PATCH (SOURCE reads "+pygments-pin"): python/requirements.txt carries
+# `pygments>=2.20.0`, which librarian 0.18.0 lacks. Without it the pre-push
+# osv-scanner resolves pytest's pygments floor to 2.9.0 (PYSEC-2023-117,
+# PYSEC-2026-2987). A re-vendor overwrites it; if the new librarian does not
+# pin pygments yet, re-apply it and keep the SOURCE suffix.
 set -euo pipefail
 
 src_root="${1:-/opt/librarian}"

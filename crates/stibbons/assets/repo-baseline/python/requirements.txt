@@ -1,1 +1,2 @@
 pytest==9.1.1
+pygments>=2.20.0

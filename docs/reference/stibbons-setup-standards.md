@@ -67,7 +67,10 @@ again.
 The templates are vendored into `crates/stibbons/assets/repo-baseline/` and
 compiled into the binary, so `brew`, `apt`, and `cargo` installs need no
 librarian checkout. `SOURCE` in that directory records which librarian release
-they came from. To refresh them after a librarian bump:
+they came from, plus a `+suffix` for any local patch carried on top. The one
+patch today pins `pygments>=2.20.0` in the Python slice's
+`tests/requirements.txt`, which librarian 0.18.0 does not yet do (see the
+header of `bin/sync-repo-baseline.sh`). To refresh them after a librarian bump:
 
 ```bash
 just sync-repo-baseline            # from /opt/librarian
