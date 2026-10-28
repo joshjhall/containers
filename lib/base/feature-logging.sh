@@ -201,11 +201,14 @@ log_command() {
         local start_line
         start_line=$(_get_last_command_start_line "$CURRENT_LOG_FILE")
 
-        # Match whole words only: a letter, digit, _ or - on either side means
-        # the keyword is part of a name (thiserror, gix-error), not a status.
-        # Plurals still count ("Errors were encountered", "2 errors generated").
-        local error_pattern="(^|[^A-Za-z0-9_-])(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)[Ss]?([^A-Za-z0-9_-]|$)"
-        local warn_pattern="(^|[^A-Za-z0-9_-])(WARNING|Warning|warning|WARN|Warn|warn)[Ss]?([^A-Za-z0-9_-]|$)"
+        # Lowercase keywords must start a word: a letter, digit, _ or - before
+        # them means a name (thiserror, gix-error), not a status. Capitalised
+        # forms may follow a letter so CamelCase exceptions still count
+        # (ModuleNotFoundError, CalledProcessError). Plurals count too
+        # ("Errors were encountered", "2 errors generated").
+        local b="[^A-Za-z0-9_-]"
+        local error_pattern="((^|$b)(error|failed|fatal)s?|(ERROR|Error|FAILED|Failed|FATAL|Fatal)[Ss]?)($b|$)"
+        local warn_pattern="((^|$b)(warning|warn)s?|(WARNING|Warning|WARN|Warn)[Ss]?)($b|$)"
 
         # Append matching lines to error file
         _error_lines_since "$CURRENT_LOG_FILE" "$start_line" "$error_pattern" "$warn_pattern" >>"$CURRENT_ERROR_FILE" 2>/dev/null || true

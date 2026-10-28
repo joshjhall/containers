@@ -240,8 +240,9 @@ test_log_command_error_mentioning_warnings_is_error() {
         "error: aborting due to 1 previous error; 1 warning emitted" \
         "error[E0425]: cannot find value" "E: Failed to fetch http://x" \
         "Errors were encountered while processing:" "2 errors generated." \
-        "npm error code ELIFECYCLE"
-    assert_equals "6" "$ERROR_COUNT" "genuine error lines (incl. plurals) are each counted"
+        "npm error code ELIFECYCLE" "ModuleNotFoundError: No module named 'x'" \
+        "subprocess.CalledProcessError: Command returned 1"
+    assert_equals "8" "$ERROR_COUNT" "genuine error lines (incl. plurals, CamelCase) are each counted"
     # The rustc line also mentions a warning; it counts on both sides
     assert_equals "1" "$WARNING_COUNT" "only the rustc line counts as a warning"
     assert_file_contains "$CURRENT_ERROR_FILE" "aborting due to 1 previous error" \
