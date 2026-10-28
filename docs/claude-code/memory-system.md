@@ -61,8 +61,9 @@ change) and in CI:
 - **Budgets:** the root and each sub-index stay under their byte budgets.
 - **Ratchet:** other OKF findings (the pre-OKF `metadata.type` frontmatter
   shape) are frozen in `tests/unit/okf-memory-bundle.baseline`; a new one
-  fails. Regenerate with `tests/unit/okf-memory-bundle.sh --regen` after
-  fixing some, and say why if you ever raise an entry.
+  fails, and so does a fixed one until you bank it with
+  `tests/unit/okf-memory-bundle.sh --regen`. Say why if you ever raise an
+  entry.
 
 ## Short-term Memory (gitignored)
 

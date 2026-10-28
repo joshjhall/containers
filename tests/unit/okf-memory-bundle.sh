@@ -28,8 +28,8 @@
 #    That freezes the pre-OKF frontmatter shape (`type` nested under
 #    `metadata:`, missing **Why:** sections) without blocking on it -- the
 #    okf-author skill says that migration is a separate, mechanized job -- while
-#    one NEW non-conformant memory still fails. A count that drops is tightened
-#    by `--regen`.
+#    one NEW non-conformant memory still fails. A count that DROPS also fails
+#    until `--regen` lowers the entry, so a fix cannot become silent headroom.
 #
 # 3. Index SIZE budgets, in bytes, because the cost is context a session pays
 #    to read the index before it can recall anything:
@@ -154,6 +154,24 @@ test_no_new_conformance_findings() {
     fi
 }
 
+# A count BELOW its baseline is fixed headroom: left in place, it would let the
+# same number of new findings back in unnoticed. Fail so the fix is banked —
+# `--regen` lowers the entry in the same commit that earned it.
+test_baseline_is_tight() {
+    scanner_ready || return 0
+    local slack="" category base count
+    while read -r category base; do
+        case "$category" in '' | '#'*) continue ;; esac
+        count="$(count_of "$category")"
+        if [ "$count" -lt "$base" ]; then
+            slack="${slack}  $category: $count < $base (baseline)"$'\n'
+        fi
+    done <"$BASELINE"
+    if [ -n "$slack" ]; then
+        fail_test "baseline is looser than the bundle — run tests/unit/okf-memory-bundle.sh --regen:"$'\n'"$slack"
+    fi
+}
+
 # index_bytes FILE
 index_bytes() {
     command wc -c <"$1" | command tr -d '[:space:]'
@@ -226,6 +244,7 @@ fi
 
 run_test test_graph_health_is_clean "every memory is named by exactly one index, and every index line resolves"
 run_test test_no_new_conformance_findings "no OKF findings beyond the frozen baseline"
+run_test test_baseline_is_tight "the baseline is not looser than the bundle (fixes are banked)"
 run_test test_root_index_within_budget "MEMORY.md stays within its byte budget"
 run_test test_subindexes_within_budget "each index-<topic>.md stays within its byte budget"
 run_test test_every_subindex_linked_from_root "every index-<topic>.md is linked from MEMORY.md"

@@ -641,6 +641,12 @@ test_memory_bundle_mapping() {
     out=$(map_to_test ".claude/memory/MEMORY.md")
     assert_equals "$TESTS_DIR/unit/okf-memory-bundle.sh" "$out" \
         "the root index maps to the bundle gate"
+    # A case `*` crosses `/`, so per-session scratch under tmp/ maps too. That
+    # is intended and harmless: tmp/ is gitignored and the gate scans tracked
+    # files only, so the extra run costs a scan and can never fail on scratch.
+    out=$(map_to_test ".claude/memory/tmp/scratch.md")
+    assert_equals "$TESTS_DIR/unit/okf-memory-bundle.sh" "$out" \
+        "a tmp/ scratch note maps to the gate (harmless: it scans tracked files only)"
     # Scoped to the bundle: a same-named file elsewhere must not match.
     out=$(map_to_test "docs/MEMORY.md")
     assert_not_contains "$out" "okf-memory-bundle.sh" \
