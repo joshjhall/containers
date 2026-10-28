@@ -275,4 +275,4 @@ log_feature_instructions() {
 protected_export log_feature_start log_command log_feature_end log_feature_summary log_feature_instructions
 protected_export log_message log_info log_debug log_error log_warning
 protected_export safe_eval _get_log_level_num _should_log
-protected_export _get_last_command_start_line _count_patterns_since
+protected_export _get_last_command_start_line _count_patterns_since _classify_lines_since

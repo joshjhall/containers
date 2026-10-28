@@ -209,6 +209,90 @@ test_log_command_extracts_warning_patterns() {
     assert_true [ "$WARNING_COUNT" -ge 1 ] "WARNING pattern in command output increments WARNING_COUNT"
 }
 
+# Crate names carry "error" as part of a word; they are build progress, not
+# failures (#1537).
+test_log_command_ignores_error_inside_names() {
+    log_feature_start "PatternTest"
+    log_command "Cargo progress" printf '%s\n' \
+        "  Downloaded thiserror-impl v2.0.21" "   Compiling gix-error v0.1.0" \
+        "   Compiling no-warnings-lint v0.1.0"
+    assert_equals "0" "$ERROR_COUNT" "thiserror / gix-error are not counted as errors"
+    assert_equals "0" "$WARNING_COUNT" "no-warnings-lint is not counted as a warning"
+}
+
+# cargo-binstall logs a recovered fallback as WARN followed by "Error ...
+# Failed ..."; it counts once, as a warning (#1537).
+test_log_command_warn_tagged_error_is_warning() {
+    log_feature_start "PatternTest"
+    log_command "binstall fallback" echo \
+        "cargo-binstall:  WARN resolve: Error while downloading from fetcher QuickInstall: Failed to download"
+    assert_equals "0" "$ERROR_COUNT" "WARN-tagged Error line is not an error"
+    assert_equals "1" "$WARNING_COUNT" "WARN-tagged Error line is one warning"
+    # The line lands in the error file once (via the warning extraction)
+    assert_equals "1" "$(command grep -c 'QuickInstall' "$CURRENT_ERROR_FILE")" \
+        "WARN-tagged Error line is written to the error file exactly once"
+}
+
+# An error that mentions warnings later in the line is still an error.
+test_log_command_error_mentioning_warnings_is_error() {
+    log_feature_start "PatternTest"
+    log_command "rustc abort" printf '%s\n' \
+        "error: aborting due to 1 previous error; 1 warning emitted" \
+        "error[E0425]: cannot find value" "E: Failed to fetch http://x" \
+        "Errors were encountered while processing:" "2 errors generated." \
+        "npm error code ELIFECYCLE" "ModuleNotFoundError: No module named 'x'" \
+        "subprocess.CalledProcessError: Command returned 1"
+    assert_equals "8" "$ERROR_COUNT" "genuine error lines (incl. plurals, CamelCase) are each counted"
+    # The rustc line also mentions a warning; it counts on both sides
+    assert_equals "1" "$WARNING_COUNT" "only the rustc line counts as a warning"
+    assert_file_contains "$CURRENT_ERROR_FILE" "aborting due to 1 previous error" \
+        "genuine error line is copied to the error file"
+}
+
+# Colour codes end in a letter ("m"), which must not glue onto the keyword,
+# and a path or key containing "warn" is not a warning tag (#1537).
+test_log_command_counts_coloured_and_warn_path_errors() {
+    log_feature_start "PatternTest"
+    log_command "coloured rustc" printf '%b\n' \
+        "\033[1m\033[31merror\033[0m: mismatched types" \
+        "src/warn.rs:10:5: error: mismatched types" \
+        "cargo:warning=error: build script failed"
+    assert_equals "3" "$ERROR_COUNT" "coloured / warn-path / cargo:warning errors are counted"
+}
+
+# Only a warning tag that starts the line suppresses the error, and an explicit
+# error tag after it still counts; "errored" is an error (#1537).
+test_log_command_warn_tag_must_lead() {
+    log_feature_start "PatternTest"
+    log_command "mixed lines" printf '%s\n' \
+        "WARNING: Running pip as root; ERROR: Could not install packages" \
+        "Compiling foo-1.0 ... WARN: cache miss; error: linking with cc failed" \
+        "3 tests errored" \
+        "[WARN] retry after error" "warning: unused variable" \
+        "WARN: x; FAILED: link step"
+    assert_equals "4" "$ERROR_COUNT" "mid-line WARN, WARN-then-ERROR:/FAILED: and errored count as errors"
+    assert_equals "5" "$WARNING_COUNT" "every line carrying a warning word counts as a warning"
+}
+
+# If the classifier itself fails, errors must still be counted (fail closed):
+# a broken awk falls back to coarse substring matching (#1537).
+test_log_command_classifier_failure_falls_back() {
+    log_feature_start "PatternTest"
+    _classify_lines_since() { return 2; }
+    log_command "failing classifier" printf '%s\n' "error: real failure" "  Compiling thiserror v2"
+    assert_equals "2" "$ERROR_COUNT" "coarse fallback counts every error substring"
+}
+
+# Counts accumulate across commands and only the latest command's output is
+# classified each time.
+test_log_command_counts_accumulate() {
+    log_feature_start "PatternTest"
+    log_command "first" echo "error: one"
+    log_command "second" printf '%s\n' "warning: two" "ok"
+    assert_equals "1" "$ERROR_COUNT" "first command's error is counted once"
+    assert_equals "1" "$WARNING_COUNT" "second command's warning is counted once"
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -228,6 +312,13 @@ run_test_with_setup test_log_message_before_feature_start "log_message works bef
 run_test_with_setup test_log_error_before_feature_start "log_error works before feature start"
 run_test_with_setup test_log_command_extracts_error_patterns "log_command extracts ERROR patterns"
 run_test_with_setup test_log_command_extracts_warning_patterns "log_command extracts WARNING patterns"
+run_test_with_setup test_log_command_ignores_error_inside_names "log_command ignores error inside crate names"
+run_test_with_setup test_log_command_warn_tagged_error_is_warning "WARN-tagged Error line counts as a warning"
+run_test_with_setup test_log_command_error_mentioning_warnings_is_error "Error line mentioning warnings counts as an error"
+run_test_with_setup test_log_command_counts_coloured_and_warn_path_errors "Coloured and warn-path error lines count as errors"
+run_test_with_setup test_log_command_warn_tag_must_lead "Only a leading warning tag suppresses an error"
+run_test_with_setup test_log_command_classifier_failure_falls_back "Classifier failure falls back to coarse error counting"
+run_test_with_setup test_log_command_counts_accumulate "Counts accumulate across commands"
 
 # Generate test report
 generate_report

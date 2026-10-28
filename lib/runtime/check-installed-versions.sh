@@ -456,7 +456,7 @@ run_r_section "R Development Tools" "Development Tools" \
 run_section "Development Tools" "Development Tools" \
     "git:git:--version:git version \K[0-9]+\.[0-9]+\.[0-9]+:github:git/git" \
     "gh:gh:--version:gh version \K[0-9]+\.[0-9]+\.[0-9]+:github:cli/cli" \
-    "glab:glab:--version:glab version \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "glab:glab:--version:glab (version )?\K[0-9]+\.[0-9]+\.[0-9]+" \
     "docker:docker:--version:Docker version \K[0-9]+\.[0-9]+\.[0-9]+" \
     "docker-compose:docker-compose:--version:docker-compose version \K[0-9]+\.[0-9]+\.[0-9]+" \
     "direnv:direnv:version:\K[0-9]+\.[0-9]+\.[0-9]+:github:direnv/direnv" \
