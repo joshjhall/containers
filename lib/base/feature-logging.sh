@@ -231,25 +231,35 @@ log_command() {
         # ("WARN x", "cargo-binstall: WARN x", "warning:", "[WARN]"); not a path
         # or key that merely contains the word (src/warn.rs, cargo:warning=).
         local warn_tag_pattern="^[^A-Za-z]*([A-Za-z0-9_.-]+:[ ]+)?((WARNING|WARN)[]: ]|(Warning|warning|Warn|warn)[]:])"
-        # An explicit error tag ("ERROR:", "error:", "error[E0425]:").
-        local error_tag_pattern="(^|$b)(ERROR|Error|error|FATAL|Fatal|fatal)([[][A-Za-z0-9]*[]])?:"
+        # An explicit error tag ("ERROR:", "error:", "error[E0425]:", "FAILED:").
+        local error_tag_pattern="(^|$b)(ERROR|Error|error|FATAL|Fatal|fatal|FAILED|Failed|failed)([[][A-Za-z0-9]*[]])?:"
 
-        local classified
+        local classified classify_rc=0
         classified=$(_classify_lines_since "$CURRENT_LOG_FILE" "$start_line" \
-            "$error_pattern" "$warn_pattern" "$warn_tag_pattern" "$error_tag_pattern" 2>/dev/null || true)
+            "$error_pattern" "$warn_pattern" "$warn_tag_pattern" "$error_tag_pattern" 2>/dev/null) || classify_rc=$?
 
-        # Append matching lines to error file
-        if [ -n "$classified" ]; then
-            printf '%s\n' "$classified" | command cut -f2- >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
+        local new_errors new_warnings
+        if [ "$classify_rc" -ne 0 ]; then
+            # A broken classifier must not report a clean build: fall back to
+            # the coarse substring match, which over-counts rather than hides.
+            echo "WARNING: log classifier failed (exit $classify_rc); using coarse error matching" >&2
+            local coarse_errors="(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)"
+            local coarse_warnings="(WARNING|Warning|warning|WARN|Warn|warn)"
+            command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$coarse_errors|$coarse_warnings" >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
+            new_errors=$(_count_patterns_since "$CURRENT_LOG_FILE" "$start_line" "$coarse_errors")
+            new_warnings=$(_count_patterns_since "$CURRENT_LOG_FILE" "$start_line" "$coarse_warnings")
+        else
+            # Append matching lines to error file
+            if [ -n "$classified" ]; then
+                printf '%s\n' "$classified" | command cut -f2- >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
+            fi
+            new_errors=$(printf '%s\n' "$classified" | command grep -c '^E' || true)
+            new_warnings=$(printf '%s\n' "$classified" | command grep -c '^W' || true)
         fi
 
         # Count new errors and warnings
-        local new_errors new_warnings
-        new_errors=$(printf '%s\n' "$classified" | command grep -c '^E' || true)
         new_errors=$(echo "$new_errors" | command tr -d '[:space:]')
         ERROR_COUNT=$((ERROR_COUNT + ${new_errors:-0}))
-
-        new_warnings=$(printf '%s\n' "$classified" | command grep -c '^W' || true)
         new_warnings=$(echo "$new_warnings" | command tr -d '[:space:]')
         WARNING_COUNT=$((WARNING_COUNT + ${new_warnings:-0}))
     fi

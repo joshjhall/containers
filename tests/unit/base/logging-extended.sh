@@ -268,9 +268,29 @@ test_log_command_warn_tag_must_lead() {
         "WARNING: Running pip as root; ERROR: Could not install packages" \
         "Compiling foo-1.0 ... WARN: cache miss; error: linking with cc failed" \
         "3 tests errored" \
-        "[WARN] retry after error" "warning: unused variable"
-    assert_equals "3" "$ERROR_COUNT" "mid-line WARN, WARN-then-ERROR: and errored count as errors"
-    assert_equals "4" "$WARNING_COUNT" "every line carrying a warning word counts as a warning"
+        "[WARN] retry after error" "warning: unused variable" \
+        "WARN: x; FAILED: link step"
+    assert_equals "4" "$ERROR_COUNT" "mid-line WARN, WARN-then-ERROR:/FAILED: and errored count as errors"
+    assert_equals "5" "$WARNING_COUNT" "every line carrying a warning word counts as a warning"
+}
+
+# If the classifier itself fails, errors must still be counted (fail closed):
+# a broken awk falls back to coarse substring matching (#1537).
+test_log_command_classifier_failure_falls_back() {
+    log_feature_start "PatternTest"
+    _classify_lines_since() { return 2; }
+    log_command "failing classifier" printf '%s\n' "error: real failure" "  Compiling thiserror v2"
+    assert_equals "2" "$ERROR_COUNT" "coarse fallback counts every error substring"
+}
+
+# Counts accumulate across commands and only the latest command's output is
+# classified each time.
+test_log_command_counts_accumulate() {
+    log_feature_start "PatternTest"
+    log_command "first" echo "error: one"
+    log_command "second" printf '%s\n' "warning: two" "ok"
+    assert_equals "1" "$ERROR_COUNT" "first command's error is counted once"
+    assert_equals "1" "$WARNING_COUNT" "second command's warning is counted once"
 }
 
 # Run tests with setup/teardown
@@ -297,6 +317,8 @@ run_test_with_setup test_log_command_warn_tagged_error_is_warning "WARN-tagged E
 run_test_with_setup test_log_command_error_mentioning_warnings_is_error "Error line mentioning warnings counts as an error"
 run_test_with_setup test_log_command_counts_coloured_and_warn_path_errors "Coloured and warn-path error lines count as errors"
 run_test_with_setup test_log_command_warn_tag_must_lead "Only a leading warning tag suppresses an error"
+run_test_with_setup test_log_command_classifier_failure_falls_back "Classifier failure falls back to coarse error counting"
+run_test_with_setup test_log_command_counts_accumulate "Counts accumulate across commands"
 
 # Generate test report
 generate_report
