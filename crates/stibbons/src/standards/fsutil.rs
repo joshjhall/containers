@@ -44,6 +44,10 @@ pub fn set_executable(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(not(unix))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "must match the fallible unix signature; there is no executable bit to set here"
+)]
 pub fn set_executable(_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
