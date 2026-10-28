@@ -214,8 +214,10 @@ test_log_command_extracts_warning_patterns() {
 test_log_command_ignores_error_inside_names() {
     log_feature_start "PatternTest"
     log_command "Cargo progress" printf '%s\n' \
-        "  Downloaded thiserror-impl v2.0.21" "   Compiling gix-error v0.1.0"
+        "  Downloaded thiserror-impl v2.0.21" "   Compiling gix-error v0.1.0" \
+        "   Compiling no-warnings-lint v0.1.0"
     assert_equals "0" "$ERROR_COUNT" "thiserror / gix-error are not counted as errors"
+    assert_equals "0" "$WARNING_COUNT" "no-warnings-lint is not counted as a warning"
 }
 
 # cargo-binstall logs a recovered fallback as WARN followed by "Error ...
@@ -240,6 +242,8 @@ test_log_command_error_mentioning_warnings_is_error() {
         "Errors were encountered while processing:" "2 errors generated." \
         "npm error code ELIFECYCLE"
     assert_equals "6" "$ERROR_COUNT" "genuine error lines (incl. plurals) are each counted"
+    # The rustc line also mentions a warning; it counts on both sides
+    assert_equals "1" "$WARNING_COUNT" "only the rustc line counts as a warning"
     assert_file_contains "$CURRENT_ERROR_FILE" "aborting due to 1 previous error" \
         "genuine error line is copied to the error file"
 }
