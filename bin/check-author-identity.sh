@@ -61,11 +61,9 @@ placeholder_reason() {
 
 fail=0
 for role in AUTHOR COMMITTER; do
-    ident=$(git var "GIT_${role}_IDENT" 2>&1) || {
-        /usr/bin/printf 'ERROR: git cannot resolve the commit %s identity:\n  %s\n' "${role,,}" "$ident" >&2
-        fail=1
-        continue
-    }
+    # No resolvable identity (e.g. a CI runner linting with `lefthook run`):
+    # nothing can be misattributed, and a real `git commit` refuses on its own.
+    ident=$(git var "GIT_${role}_IDENT" 2>/dev/null) || continue
     # "Name <email> 1700000000 -0500" → email
     email="${ident##*<}"
     email="${email%%>*}"

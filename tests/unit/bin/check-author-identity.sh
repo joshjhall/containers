@@ -134,7 +134,22 @@ test_env_author_override_accepted() {
     assert_equals "0" "$HOOK_RC" "good env identity overrides a bad config one: $HOOK_OUT"
 }
 
+# CI runners lint with `lefthook run pre-commit` and no identity configured;
+# `git var` fails there, and the hook must not turn that into a refusal.
+test_unresolvable_identity_passes() {
+    git -C "$TEST_REPO" config user.useConfigOnly true
+    run_hook
+    assert_equals "0" "$HOOK_RC" "no resolvable identity must not fail the hook: $HOOK_OUT"
+    # Discriminate: prove git really couldn't resolve one in this env.
+    local var_rc=0
+    (cd "$TEST_REPO" && env -i PATH="$PATH" HOME="$TEST_TEMP_DIR/home" \
+        GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$TEST_TEMP_DIR/home/.gitconfig" \
+        git var GIT_AUTHOR_IDENT) >/dev/null 2>&1 || var_rc=$?
+    assert_not_equals "0" "$var_rc" "fixture must leave git var unable to resolve an identity"
+}
+
 run_test test_script_executable "Script is executable"
+run_test test_unresolvable_identity_passes "Passes when git can resolve no identity (CI lint)"
 run_test test_rejects_the_incident_email "Rejects t@t.t"
 run_test test_rejects_reserved_domains "Rejects reserved/test domains"
 run_test test_rejects_malformed "Rejects malformed and auto-guessed emails"
