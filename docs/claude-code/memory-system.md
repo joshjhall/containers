@@ -29,6 +29,42 @@ and shared across all developers. Use this tier for:
 .claude/memory/team-deploy-process.md  # Deploy checklist and rollback steps
 ```
 
+## Indexes: a lean root plus topic sub-indexes
+
+A memory nobody indexes is written but never recalled, and the index is what
+every session reads first. So the long-term tier is routed through two levels
+of index (OKF, configured `index_names`: `MEMORY.md`, `index.md`, `index-*.md`):
+
+- **`MEMORY.md`** (root, budget 6KB) holds only what a session needs
+  proactively and often: standing workflow feedback, architecture orientation,
+  and traps that bite any task. It ends with one pointer per topic index.
+- **`index-<topic>.md`** (each, budget 8KB) groups the rest by subject, e.g.
+  `index-ci-test-gotchas.md`, `index-filesystem-mounts.md`, and
+  `index-historical.md` for resolved or superseded mechanisms. A sub-index is
+  not a concept: no frontmatter, just a title, a "when to open this" line, and
+  entries.
+
+Rules:
+
+- **One entry, one index.** Every concept file is listed in exactly one index.
+  Put a topic-specific memory behind its sub-index, not in the root.
+- **The hook is the value.** `- [Title](slug.md) — hook` — the hook names the
+  trigger or surprise that makes a reader open it, not the topic.
+- **New topic?** Add `index-<topic>.md` and one pointer line in `MEMORY.md`.
+
+`tests/unit/okf-memory-bundle.sh` enforces this with librarian's
+`check-okf-conformance` scanner, at push time (any `.claude/memory/*.md`
+change) and in CI:
+
+- **Hard zero:** an orphaned concept, an index line naming a missing file, a
+  concept claimed by two indexes, or a sub-index the root never links.
+- **Budgets:** the root and each sub-index stay under their byte budgets.
+- **Ratchet:** other OKF findings (the pre-OKF `metadata.type` frontmatter
+  shape) are frozen in `tests/unit/okf-memory-bundle.baseline`; a new one
+  fails, and so does a fixed one until you bank it with
+  `tests/unit/okf-memory-bundle.sh --regen`. Say why if you ever raise an
+  entry.
+
 ## Short-term Memory (gitignored)
 
 The `.claude/memory/tmp/` directory is gitignored and used for ephemeral

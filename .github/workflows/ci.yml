@@ -67,6 +67,35 @@ jobs:
         # is a pinned containers-db snapshot for the vendored catalog itself;
         # pin this `ref:` at the same time.
 
+      # tests/unit/okf-memory-bundle.sh drives librarian's check-okf-conformance
+      # scanner over .claude/memory/. Dev containers have it at /opt/librarian;
+      # this runner does not, and without it the suite would skip — and per
+      # #768 a skip renders as a pass. The ref is read from the Dockerfile's
+      # `ARG LIBRARIAN_REF` so the gate runs the SAME scanner the dev image
+      # ships, from ONE pin that bin/check-versions.sh already tracks.
+      - name: Read librarian pin (for the memory-bundle gate)
+        id: librarian
+        run: |
+          set -euo pipefail
+          ref=$(sed -n 's/^ARG LIBRARIAN_REF=//p' Dockerfile | tr -d '"')
+          # LIBRARIAN_REF must be a signed release tag (CLAUDE.md), so accept
+          # only that shape before it reaches a checkout `ref:`.
+          if ! printf '%s' "$ref" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::ARG LIBRARIAN_REF in Dockerfile is not a vX.Y.Z tag: '$ref'"
+            exit 1
+          fi
+          echo "ref=$ref" >>"$GITHUB_OUTPUT"
+
+      - name: Checkout librarian (for the memory-bundle gate)
+        uses: actions/checkout@v4
+        with:
+          repository: joshjhall/librarian
+          ref: ${{ steps.librarian.outputs.ref }}
+          path: _librarian
+          fetch-depth: 1
+          # Same reasoning as the containers-db checkout: public, read-only.
+          persist-credentials: false
+
       - name: Install yq (for GitLab triage policy tests)
         run: |
           set -euo pipefail
@@ -110,6 +139,8 @@ jobs:
           # image sets to its own COPY of the vendored snapshot, so reusing it
           # would compare the catalog against itself and pass vacuously.
           CONTAINERS_DB_SRC: ${{ github.workspace }}/_containers-db
+          # The pinned scanner tests/unit/okf-memory-bundle.sh drives (above).
+          OKF_SCANNER: ${{ github.workspace }}/_librarian/plugins/review-audit/skills/check-okf-conformance/patterns.sh
         run: |
           echo "Running unit tests without Docker..."
           export SKIP_DOCKER_CHECK=true

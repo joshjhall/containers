@@ -95,6 +95,17 @@ map_to_test() {
             return
             ;;
 
+        # The memory bundle → its OKF gate (#1528). Concepts and indexes live
+        # outside tests/unit/ and lib/, so without this arm a memory edit runs
+        # nothing at push time and an orphaned or dangling memory reaches CI.
+        .claude/memory/*.md)
+            local test_path="${TESTS_DIR}/unit/okf-memory-bundle.sh"
+            if [ -f "$test_path" ]; then
+                echo "$test_path"
+            fi
+            return
+            ;;
+
         # evidence-run.yml → every tests/unit/evidence-run-*.sh suite (#1467).
         # The workflow is pinned by more than one suite (ingest shape, trigger
         # paths), none named after it, so without this arm a workflow edit runs
