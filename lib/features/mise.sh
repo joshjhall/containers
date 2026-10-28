@@ -42,7 +42,7 @@ source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/bashrc-helpers.sh
 
 # Version configuration
-MISE_VERSION="${MISE_VERSION:-2026.10.19}"
+MISE_VERSION="${MISE_VERSION:-2026.10.21}"
 
 log_feature_start "Mise" "${MISE_VERSION}"
 
