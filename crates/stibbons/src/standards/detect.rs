@@ -54,9 +54,24 @@ pub fn classify(root: &Path, files: &[String]) -> BTreeSet<String> {
     found
 }
 
-/// Whether `path`'s first line is a `sh`/`bash` shebang.
+/// Bytes read when probing a shebang: a `#!` line is far shorter, and a cap
+/// keeps a hostile repo (huge file, `/dev/zero` behind a link) from stalling us.
+const SHEBANG_PROBE_BYTES: u64 = 256;
+
+/// Whether `path`'s first line is a `sh`/`bash` shebang. Only a regular file
+/// (not a symlink, FIFO, or device) is opened, and only its first
+/// [`SHEBANG_PROBE_BYTES`] are read.
 fn has_shell_shebang(path: &Path) -> bool {
-    let Ok(bytes) = std::fs::read(path) else { return false };
+    use std::io::Read as _;
+    match std::fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_file() => {}
+        _ => return false,
+    }
+    let Ok(file) = std::fs::File::open(path) else { return false };
+    let mut bytes = Vec::new();
+    if file.take(SHEBANG_PROBE_BYTES).read_to_end(&mut bytes).is_err() {
+        return false;
+    }
     let first = bytes.split(|b| *b == b'\n').next().unwrap_or_default();
     let Ok(line) = std::str::from_utf8(first) else { return false };
     let Some(rest) = line.strip_prefix("#!") else { return false };
@@ -153,6 +168,24 @@ mod tests {
         assert_eq!(classify(tmp.path(), &files(&["bin/tool"])), set(&["shell"]));
         assert_eq!(classify(tmp.path(), &files(&["bin/plain"])), set(&["shell"]));
         assert_eq!(classify(tmp.path(), &files(&["bin/py", "bin/data"])), set(&[]));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shebang_probe_ignores_symlinks_and_reads_a_bounded_prefix() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("bin")).unwrap();
+        // A link to a real shell script must not count: the probe never
+        // follows links (the same link could point at /dev/zero).
+        std::fs::write(tmp.path().join("real.sh"), "#!/bin/bash\n").unwrap();
+        std::os::unix::fs::symlink(tmp.path().join("real.sh"), tmp.path().join("bin/link"))
+            .unwrap();
+        assert_eq!(classify(tmp.path(), &files(&["bin/link"])), set(&[]));
+
+        // A shebang followed by far more than the probe window still matches.
+        let big = format!("#!/bin/sh\n{}", "x".repeat(1 << 20));
+        std::fs::write(tmp.path().join("bin/big"), big).unwrap();
+        assert_eq!(classify(tmp.path(), &files(&["bin/big"])), set(&["shell"]));
     }
 
     #[test]

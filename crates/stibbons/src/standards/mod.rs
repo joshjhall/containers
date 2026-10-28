@@ -148,11 +148,15 @@ pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std:
         actions.push(classify_init(&opts.root, file, prev, opts.force)?);
     }
 
-    // Refuse before writing anything if any write would go through a symlink.
+    // Refuse before touching anything if any write or chmod — or the state
+    // file save — would go through a symlink.
     for (file, action) in rendered.iter().zip(&actions) {
-        if action.writes() {
+        if touches(file, *action) {
             ensure_no_symlink(&opts.root, &file.target)?;
         }
+    }
+    if !opts.dry_run {
+        ensure_no_symlink(&opts.root, STATE_FILE)?;
     }
 
     writeln!(
@@ -193,8 +197,7 @@ pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std:
             std::fs::write(&path, &file.content)
                 .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
         }
-        // Unchanged bytes still get the mode: a checkout can drop the bit.
-        if file.executable && (action.writes() || *action == InitAction::Unchanged) {
+        if file.executable && touches(file, *action) {
             set_executable(&path)?;
         }
     }
@@ -470,6 +473,13 @@ fn parse_ci(values: &[String]) -> Result<BTreeSet<Ci>, Box<dyn std::error::Error
                 .ok_or_else(|| format!("unknown CI platform '{v}' (known: github gitlab)").into())
         })
         .collect()
+}
+
+/// Whether `init` will modify `file` on disk: write its bytes, or (for an
+/// unchanged script) re-apply the executable bit a checkout can drop. The
+/// symlink guard and the chmod both key on this, so they cannot diverge.
+fn touches(file: &RenderedFile, action: InitAction) -> bool {
+    action.writes() || (file.executable && action == InitAction::Unchanged)
 }
 
 const fn action_mark(a: InitAction) -> &'static str {

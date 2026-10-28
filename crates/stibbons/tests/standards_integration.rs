@@ -308,6 +308,89 @@ fn refuses_to_write_through_symlinked_dir() {
     assert!(!tmp.path().join("lefthook.yml").exists(), "partial write before refusing");
 }
 
+#[cfg(unix)]
+#[test]
+fn refuses_symlinked_leaf_and_dangling_link() {
+    // A symlinked target file: writing would clobber the link's target.
+    let tmp = shell_python_repo();
+    let outside = tempfile::tempdir().unwrap();
+    let victim = outside.path().join("victim");
+    fs::write(&victim, "precious\n").unwrap();
+    std::os::unix::fs::symlink(&victim, tmp.path().join("justfile")).unwrap();
+    let out = standards(tmp.path(), &["init", "--force"]);
+    assert!(!out.status.success(), "init wrote through a symlinked file");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("justfile is a symlink"));
+    assert_eq!(fs::read_to_string(&victim).unwrap(), "precious\n");
+
+    // A dangling link reads as "missing" (Created) — the guard must still fire.
+    let tmp = shell_python_repo();
+    let target = outside.path().join("would-be-created");
+    std::os::unix::fs::symlink(&target, tmp.path().join("dprint.json")).unwrap();
+    let out = standards(tmp.path(), &["init"]);
+    assert!(!out.status.success(), "init followed a dangling symlink");
+    assert!(!target.exists(), "dangling symlink target was created");
+}
+
+#[cfg(unix)]
+#[test]
+fn refuses_to_chmod_unchanged_script_through_symlink() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // The link's target already holds the exact rendered bytes, so the target
+    // classifies Unchanged — it is never written, but it WOULD be chmodded.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let outside = tempfile::tempdir().unwrap();
+    let ext = outside.path().join("run.sh");
+    fs::copy(tmp.path().join("tests/run.sh"), &ext).unwrap();
+    fs::set_permissions(&ext, fs::Permissions::from_mode(0o600)).unwrap();
+    fs::remove_file(tmp.path().join("tests/run.sh")).unwrap();
+    std::os::unix::fs::symlink(&ext, tmp.path().join("tests/run.sh")).unwrap();
+
+    let out = standards(tmp.path(), &["init"]);
+    assert!(!out.status.success(), "init chmodded through a symlink");
+    assert_eq!(fs::metadata(&ext).unwrap().permissions().mode() & 0o777, 0o600);
+}
+
+#[cfg(unix)]
+#[test]
+fn refuses_to_save_state_through_symlink() {
+    let tmp = shell_python_repo();
+    let outside = tempfile::tempdir().unwrap();
+    let ext = outside.path().join("state.yml");
+    std::os::unix::fs::symlink(&ext, tmp.path().join(".stibbons-standards.yml")).unwrap();
+    let out = standards(tmp.path(), &["init"]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains(".stibbons-standards.yml is a symlink"));
+    assert!(!ext.exists(), "state written through a symlink");
+    assert!(!tmp.path().join("lefthook.yml").exists(), "partial write before refusing");
+}
+
+#[test]
+fn corrupt_state_file_fails_check_loudly() {
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    fs::write(tmp.path().join(".stibbons-standards.yml"), "files: [not, a, map\n").unwrap();
+    let out = standards(tmp.path(), &["check"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("failed to parse"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn gitlab_check_detects_missing_gitlab_ci() {
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init", "--ci", "gitlab"]), "init");
+    assert_ok(&standards(tmp.path(), &["check"]), "check clean");
+    fs::remove_file(tmp.path().join(".gitlab-ci.yml")).unwrap();
+    let out = standards(tmp.path(), &["check"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stdout_of(&out).contains(".gitlab-ci.yml (missing)"), "{}", stdout_of(&out));
+}
+
 #[test]
 fn bare_setup_still_parses_label_sync_flags() {
     // Backward compat: `stibbons setup --help` lists both the subcommand and
