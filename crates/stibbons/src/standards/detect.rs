@@ -243,10 +243,8 @@ mod tests {
         // The marker lives outside the repo so it can never alter the list.
         let elsewhere = tempfile::tempdir().unwrap();
         let marker = elsewhere.path().join("MARKER");
-        if !git(repo.path(), &["init", "-q"]) {
-            eprintln!("skipping: git unavailable");
-            return;
-        }
+        // No skip-if-missing: a silent pass would hide a regression.
+        assert!(git(repo.path(), &["init", "-q"]), "git init failed");
         std::fs::write(repo.path().join("a.sh"), "").unwrap();
         assert!(git(repo.path(), &["add", "a.sh"]));
         // A hostile clone's config: fsmonitor names a command git would run.
