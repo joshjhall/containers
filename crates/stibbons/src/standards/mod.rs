@@ -133,8 +133,9 @@ impl CheckReport {
 /// unreadable state file, a target reached through a symlink, or a write
 /// failure. Validation happens before any file is written. A write or chmod
 /// failure still saves the state, recording the targets written so far, so a
-/// re-run after fixing the cause picks up where this one stopped (`--force`
-/// also resolves it).
+/// re-run after fixing the cause does not mistake them for user edits. A file
+/// left truncated by a failed write is not recorded and reads as modified;
+/// `--force` resolves that.
 pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std::error::Error>> {
     let state_path = opts.root.join(STATE_FILE);
     let old = StandardsState::load(&state_path)?;
@@ -292,6 +293,7 @@ pub fn accept(
     out: &mut impl Write,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut state, rendered) = load_and_render(root, templates)?;
+    let mut cleared = false;
     let targets: Vec<String> = if paths.is_empty() {
         classify_all(root, &state, &rendered)?
             .files
@@ -312,6 +314,12 @@ pub fn accept(
                         out,
                         "  skipped {t} (already matches the baseline; nothing to accept)"
                     )?;
+                    // An earlier acceptance of an edit since reverted would
+                    // otherwise silently re-approve that edit if it returns.
+                    if state.accepted.remove(t).is_some() {
+                        writeln!(out, "  cleared the earlier accepted edit of {t}")?;
+                        cleared = true;
+                    }
                 }
                 FileState::Stale => {
                     writeln!(
@@ -331,7 +339,11 @@ pub fn accept(
     };
 
     if targets.is_empty() {
-        writeln!(out, "No modified baseline files to accept.")?;
+        if cleared {
+            state.save(root)?;
+        } else {
+            writeln!(out, "No modified baseline files to accept.")?;
+        }
         return Ok(());
     }
     for t in &targets {

@@ -276,6 +276,30 @@ fn accept_ok_file_is_noop_with_note() {
 }
 
 #[test]
+fn accept_ok_file_clears_earlier_acceptance() {
+    // Accept an edit, revert it, then `accept` the now-clean file: the old
+    // acceptance must go, so re-applying the edit is flagged again.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let path = tmp.path().join("_typos.toml");
+    let original = fs::read_to_string(&path).unwrap();
+    let edited = format!("{original}# per-repo edit\n");
+    fs::write(&path, &edited).unwrap();
+    assert_ok(&standards(tmp.path(), &["accept", "_typos.toml"]), "accept edit");
+
+    fs::write(&path, &original).unwrap();
+    let out = standards(tmp.path(), &["accept", "_typos.toml"]);
+    assert_ok(&out, "accept reverted file");
+    let s = stdout_of(&out);
+    assert!(s.contains("cleared the earlier accepted edit of _typos.toml"), "{s}");
+
+    fs::write(&path, &edited).unwrap();
+    let out = standards(tmp.path(), &["check"]);
+    assert_eq!(out.status.code(), Some(1), "re-applied edit must be drift again");
+    assert!(stdout_of(&out).contains("_typos.toml (modified)"), "{}", stdout_of(&out));
+}
+
+#[test]
 fn accept_stale_file_warns() {
     let tmp = shell_python_repo();
     let tpl = tempfile::tempdir().unwrap();
