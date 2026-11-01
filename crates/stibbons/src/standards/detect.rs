@@ -83,11 +83,21 @@ fn has_shell_shebang(path: &Path) -> bool {
 
 /// `git ls-files --cached --others --exclude-standard` under `root`, or `None`
 /// when `root` is not a git work tree (or git is unavailable).
+///
+/// `root` is often a freshly cloned, untrusted repo, and `ls-files` honors
+/// its `.git/config`: a `core.fsmonitor` command there runs on every call.
+/// Command-line `-c` overrides beat repo-local config, so fsmonitor and hooks
+/// are pinned off. Inherited `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` are
+/// dropped so `-C root` alone picks the repository being read.
 fn git_files(root: &Path) -> Option<Vec<String>> {
     let out = Command::new("git")
+        .args(["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"])
         .arg("-C")
         .arg(root)
         .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .output()
         .ok()?;
     if !out.status.success() {
@@ -210,6 +220,42 @@ mod tests {
             set(&["python", "shell"])
         );
         assert_eq!(detect_slices(tmp.path(), &set(&["shell"])), set(&["shell"]));
+    }
+
+    /// Runs `git` in `dir` with any inherited repo-selecting env stripped.
+    #[cfg(unix)]
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_WORK_TREE")
+            .env_remove("GIT_INDEX_FILE")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn git_files_never_runs_repo_fsmonitor() {
+        let repo = tempfile::tempdir().unwrap();
+        // The marker lives outside the repo so it can never alter the list.
+        let elsewhere = tempfile::tempdir().unwrap();
+        let marker = elsewhere.path().join("MARKER");
+        if !git(repo.path(), &["init", "-q"]) {
+            eprintln!("skipping: git unavailable");
+            return;
+        }
+        std::fs::write(repo.path().join("a.sh"), "").unwrap();
+        assert!(git(repo.path(), &["add", "a.sh"]));
+        // A hostile clone's config: fsmonitor names a command git would run.
+        let hook = format!("touch '{}'; false #", marker.display());
+        assert!(git(repo.path(), &["config", "core.fsmonitor", &hook]));
+
+        // Some(..) proves the git path ran, not the walk fallback.
+        assert_eq!(git_files(repo.path()), Some(files(&["a.sh"])));
+        assert!(!marker.exists(), "repo-local core.fsmonitor was executed");
     }
 
     #[test]
