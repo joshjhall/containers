@@ -91,7 +91,13 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// hooks today). Inherited repo-selecting and config-injecting env
 /// ([`GIT_REPO_ENV`]) is dropped so `-C root` alone picks the repository.
 fn git_files(root: &Path) -> Option<Vec<String>> {
-    let out = ls_files_command(root).output().ok()?;
+    run_ls_files(ls_files_command(root))
+}
+
+/// Run a `git ls-files -z` command and split its NUL-separated output, or
+/// `None` when git cannot run or exits non-zero.
+fn run_ls_files(mut cmd: Command) -> Option<Vec<String>> {
+    let out = cmd.output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -142,12 +148,17 @@ fn ls_files_command(root: &Path) -> Command {
 /// Repo-relative paths of regular files under `root`, skipping [`SKIP_DIRS`]
 /// and symlinks, capped at [`WALK_LIMIT`].
 fn walk_files(root: &Path) -> Vec<String> {
+    walk_files_capped(root, WALK_LIMIT)
+}
+
+/// [`walk_files`] with an explicit cap, so the limit is testable.
+fn walk_files_capped(root: &Path, limit: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else { continue };
         for entry in entries.flatten() {
-            if out.len() >= WALK_LIMIT {
+            if out.len() >= limit {
                 return out;
             }
             let Ok(ft) = entry.file_type() else { continue };
@@ -257,7 +268,24 @@ mod tests {
         for var in GIT_REPO_ENV {
             cmd.env_remove(var);
         }
+        hermetic(&mut cmd);
         cmd.output().is_ok_and(|o| o.status.success())
+    }
+
+    /// Ignore the developer's global and system git config and global
+    /// excludes, so nothing outside the fixture changes what
+    /// `--exclude-standard` drops. With `core.excludesFile` unset, git still
+    /// reads its default `$XDG_CONFIG_HOME/git/ignore`, so the key is pinned
+    /// to `/dev/null` too. This must run after `ls_files_command`, whose
+    /// `GIT_CONFIG_COUNT` removal it overrides. Repo-local config (which the
+    /// fsmonitor test relies on) still applies.
+    #[cfg(unix)]
+    fn hermetic(cmd: &mut Command) -> &mut Command {
+        cmd.env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "core.excludesFile")
+            .env("GIT_CONFIG_VALUE_0", "/dev/null")
     }
 
     #[cfg(unix)]
@@ -333,5 +361,97 @@ mod tests {
         std::fs::create_dir(tmp.path().join("src")).unwrap();
         std::fs::write(tmp.path().join("src/y.sh"), "").unwrap();
         assert_eq!(walk_files(tmp.path()), ["src/y.sh"]);
+    }
+
+    /// The path real repos take: ignored files never vote, untracked ones
+    /// do, and the NUL split keeps odd names whole. The fixture is chosen so
+    /// the walk fallback would answer differently (`{python, shell}`), which
+    /// separates the two paths.
+    #[cfg(unix)]
+    #[test]
+    fn git_files_honors_exclude_standard_and_others() {
+        let repo = tempfile::tempdir().unwrap();
+        let root = repo.path();
+        // No skip-if-missing: a silent pass would hide a regression.
+        assert!(git(root, &["init", "-q"]), "git init failed");
+        std::fs::write(root.join(".gitignore"), "vendor/\n").unwrap();
+        assert!(git(root, &["add", ".gitignore"]));
+        std::fs::create_dir(root.join("vendor")).unwrap();
+        // Ignored: only `--exclude-standard` keeps it from voting python.
+        std::fs::write(root.join("vendor/x.py"), "").unwrap();
+        // Untracked, not ignored: only `--others` lists it.
+        std::fs::write(root.join("run.sh"), "").unwrap();
+        // Without `-z`, git C-quotes this name and the split mangles it.
+        let odd = "a b\nc.txt";
+        std::fs::write(root.join(odd), "").unwrap();
+
+        // The production command and parser, isolated from global excludes.
+        let mut cmd = ls_files_command(root);
+        hermetic(&mut cmd);
+        let mut listed = run_ls_files(cmd).expect("git path did not run");
+        listed.sort();
+        assert_eq!(listed, files(&[".gitignore", odd, "run.sh"]));
+
+        assert_eq!(classify(root, &listed), set(&["shell"]));
+
+        // `detect_slices` must take the git path. This holds whatever the
+        // developer's global excludes are: the repo's own `.gitignore` drops
+        // `vendor/x.py`, so git never votes python while the walk always does.
+        let real = classify(root, &git_files(root).expect("git path did not run"));
+        assert!(!real.contains("python"), "{real:?}");
+        assert_eq!(detect_slices(root, &set(&["shell", "python"])), real);
+        // Control: the walk over the same tree does see the ignored file.
+        assert_eq!(classify(root, &walk_files(root)), set(&["python", "shell"]));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn git_files_is_none_outside_a_work_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Controls: `None` must come from "not a work tree", not from git
+        // being absent, and not from a TMPDIR that sits inside some repo
+        // (git searches parent directories).
+        assert!(git(tmp.path(), &["--version"]), "git is not runnable");
+        // rev-parse exits 0 and prints `false` inside a `.git` dir, so read
+        // its answer rather than its exit code.
+        let mut probe = Command::new("git");
+        probe.arg("-C").arg(tmp.path()).args(["rev-parse", "--is-inside-work-tree"]);
+        for var in GIT_REPO_ENV {
+            probe.env_remove(var);
+        }
+        let inside =
+            probe.output().is_ok_and(|o| o.status.success() && o.stdout.trim_ascii() == b"true");
+        assert!(
+            !inside,
+            "control: TMPDIR is inside a git work tree (environment limit, not a bug)"
+        );
+        // `-C` to a non-repo makes git fail, which selects the walk fallback.
+        assert_eq!(git_files(tmp.path()), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn walk_skips_symlinked_dirs_and_files() {
+        use std::os::unix::fs::symlink;
+        let tmp = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        std::fs::write(elsewhere.path().join("z.py"), "").unwrap();
+        std::fs::write(elsewhere.path().join("real.sh"), "").unwrap();
+        std::fs::write(tmp.path().join("a.txt"), "").unwrap();
+        symlink(elsewhere.path(), tmp.path().join("linked_dir")).unwrap();
+        symlink(elsewhere.path().join("real.sh"), tmp.path().join("link.sh")).unwrap();
+        // A link-following walk would also return linked_dir/z.py,
+        // linked_dir/real.sh, and link.sh.
+        assert_eq!(walk_files(tmp.path()), ["a.txt"]);
+    }
+
+    #[test]
+    fn walk_stops_at_limit() {
+        let tmp = tempfile::tempdir().unwrap();
+        for i in 0..5 {
+            std::fs::write(tmp.path().join(format!("f{i}.txt")), "").unwrap();
+        }
+        assert_eq!(walk_files_capped(tmp.path(), 3).len(), 3);
+        assert_eq!(walk_files_capped(tmp.path(), 10).len(), 5);
     }
 }

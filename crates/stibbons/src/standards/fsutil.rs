@@ -51,3 +51,48 @@ pub fn set_executable(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 pub fn set_executable(_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_if_exists_maps_only_not_found_to_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(read_if_exists(&tmp.path().join("absent")).unwrap(), None);
+        std::fs::write(tmp.path().join("f"), b"hi").unwrap();
+        assert_eq!(read_if_exists(&tmp.path().join("f")).unwrap(), Some(b"hi".to_vec()));
+    }
+
+    #[test]
+    fn read_if_exists_errors_on_a_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("d");
+        std::fs::create_dir(&dir).unwrap();
+        let err = read_if_exists(&dir).unwrap_err().to_string();
+        assert!(err.starts_with(&format!("failed to read {}: ", dir.display())), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_if_exists_errors_on_permission_denied() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let f = tmp.path().join("secret");
+        std::fs::write(&f, b"x").unwrap();
+        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o000)).unwrap();
+        // Control: root (or CAP_DAC_OVERRIDE) reads through mode 000, so the
+        // denial cannot be observed there. CI runs unprivileged and sets
+        // REQUIRE_UNPRIVILEGED_TESTS=1, so there this skip is a failure.
+        if std::fs::read(&f).is_ok() {
+            assert!(
+                std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
+                "REQUIRE_UNPRIVILEGED_TESTS=1 but mode 000 is readable (running as root?)"
+            );
+            eprintln!("skipping: mode 000 is readable here (running as root?)");
+            return;
+        }
+        let err = read_if_exists(&f).unwrap_err().to_string();
+        assert!(err.starts_with(&format!("failed to read {}: ", f.display())), "{err}");
+    }
+}
