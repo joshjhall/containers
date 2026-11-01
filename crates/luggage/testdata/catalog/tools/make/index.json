@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "make",
+  "display_name": "GNU Make",
+  "kind": "system_package",
+  "homepage": "https://www.gnu.org/software/make/",
+  "source_repo": "https://git.savannah.gnu.org/git/make.git",
+  "license": "GPL-3.0-or-later",
+  "activity": {
+    "score": "active",
+    "scan_cadence_days": 30,
+    "scanned_at": "2026-10-26T00:00:00Z"
+  },
+  "validation_tiers": {
+    "tier1": {
+      "available": true,
+      "notes": "Alpine archive is signed by alpine-keys. Trust is rooted in apk's configuration."
+    }
+  },
+  "system_package": {
+    "platforms": {
+      "alpine": { "name": "make" }
+    }
+  }
+}
