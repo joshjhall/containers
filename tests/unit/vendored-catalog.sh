@@ -924,6 +924,19 @@ test_dependency_guard_selectors_and_errors() {
             problems="$problems"$'\n'"  rejected for the wrong reason (want '$marker'): $bad -> $err"
         fi
     done
+    # An unreadable index.json must fail at the system_package map step. The
+    # version file is valid and its dependency mapped, so no later branch can
+    # be the one that rejects it — only the map step's own guard can.
+    command printf '%s\n' '{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":"alponly"}]}]}' \
+        >"$cat/tools/t/versions/1.0.0.json"
+    command mkdir -p "$cat/tools/broken"
+    command printf '%s\n' 'not json' >"$cat/tools/broken/index.json"
+    if err="$(dependency_gaps "$cat" 2>&1 >/dev/null)"; then
+        problems="$problems"$'\n'"  accepted an unreadable tools/broken/index.json"
+    elif [[ "$err" != *"cannot read system_package entries"* ]]; then
+        problems="$problems"$'\n'"  unreadable index.json rejected for the wrong reason: $err"
+    fi
+    command rm -rf "$cat/tools/broken"
     # A catalog with no version files must not read as "no gaps".
     command rm -rf "$cat/tools/t/versions"
     if err="$(dependency_gaps "$cat" 2>&1 >/dev/null)"; then
