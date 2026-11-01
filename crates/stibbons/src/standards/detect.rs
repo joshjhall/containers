@@ -87,8 +87,8 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// `root` is often a freshly cloned, untrusted repo, and `ls-files` honors
 /// its `.git/config`: a `core.fsmonitor` command there runs on every call.
 /// Command-line `-c` overrides beat repo-local config, so fsmonitor and hooks
-/// are pinned off. Inherited `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` are
-/// dropped so `-C root` alone picks the repository being read.
+/// are pinned off. Inherited repo-selecting and config-injecting env
+/// ([`GIT_REPO_ENV`]) is dropped so `-C root` alone picks the repository.
 fn git_files(root: &Path) -> Option<Vec<String>> {
     let out = ls_files_command(root).output().ok()?;
     if !out.status.success() {
@@ -103,8 +103,27 @@ fn git_files(root: &Path) -> Option<Vec<String>> {
     )
 }
 
-/// Env vars that would let an inherited setting pick a repo other than `root`.
-const GIT_REPO_ENV: &[&str] = &["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
+/// Env vars that would let an inherited setting pick a repo other than
+/// `root` or inject config (`GIT_CONFIG_PARAMETERS`/`GIT_CONFIG_COUNT` can
+/// re-enable fsmonitor). This is git's own `git rev-parse --local-env-vars`
+/// list, the set git clears when it switches into a submodule.
+const GIT_REPO_ENV: &[&str] = &[
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CONFIG",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+    "GIT_SHALLOW_FILE",
+    "GIT_COMMON_DIR",
+];
 
 /// The hardened `git ls-files` invocation [`git_files`] runs (see there).
 fn ls_files_command(root: &Path) -> Command {
@@ -255,6 +274,13 @@ mod tests {
         let hook = format!("touch '{}'; false #", marker.display());
         assert!(git(repo.path(), &["config", "core.fsmonitor", &hook]));
 
+        // Positive control: without the override this git does run the
+        // hook, so the negative assertion below cannot pass vacuously on a
+        // git version that never consults fsmonitor for ls-files.
+        assert!(git(repo.path(), &["ls-files", "--others"]));
+        assert!(marker.exists(), "control: this git never ran core.fsmonitor");
+        std::fs::remove_file(&marker).unwrap();
+
         // Some(..) proves the git path ran, not the walk fallback.
         assert_eq!(git_files(repo.path()), Some(files(&["a.sh"])));
         assert!(!marker.exists(), "repo-local core.fsmonitor was executed");
@@ -279,7 +305,19 @@ mod tests {
             .filter(|(_, v)| v.is_none())
             .map(|(k, _)| k.to_string_lossy().into_owned())
             .collect();
-        assert_eq!(removed, set(&["GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"]));
+        let must = [
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_COMMON_DIR",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_CONFIG_PARAMETERS",
+            "GIT_CONFIG_COUNT",
+        ];
+        for var in must {
+            assert!(removed.contains(var), "{var} is not stripped");
+        }
+        assert_eq!(removed.len(), GIT_REPO_ENV.len());
     }
 
     #[test]
