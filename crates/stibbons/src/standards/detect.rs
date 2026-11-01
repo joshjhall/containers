@@ -385,6 +385,13 @@ mod tests {
         assert_eq!(listed, files(&[".gitignore", odd, "run.sh"]));
 
         assert_eq!(classify(root, &listed), set(&["shell"]));
+
+        // `detect_slices` must take the git path. This holds whatever the
+        // developer's global excludes are: the repo's own `.gitignore` drops
+        // `vendor/x.py`, so git never votes python while the walk always does.
+        let real = classify(root, &git_files(root).expect("git path did not run"));
+        assert!(!real.contains("python"), "{real:?}");
+        assert_eq!(detect_slices(root, &set(&["shell", "python"])), real);
         // Control: the walk over the same tree does see the ignored file.
         assert_eq!(classify(root, &walk_files(root)), set(&["python", "shell"]));
     }
