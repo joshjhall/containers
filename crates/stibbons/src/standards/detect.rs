@@ -86,8 +86,9 @@ fn has_shell_shebang(path: &Path) -> bool {
 ///
 /// `root` is often a freshly cloned, untrusted repo, and `ls-files` honors
 /// its `.git/config`: a `core.fsmonitor` command there runs on every call.
-/// Command-line `-c` overrides beat repo-local config, so fsmonitor and hooks
-/// are pinned off. Inherited repo-selecting and config-injecting env
+/// Command-line `-c` overrides beat repo-local config, so fsmonitor is pinned
+/// off; `core.hooksPath` is pinned too as defense in depth (ls-files runs no
+/// hooks today). Inherited repo-selecting and config-injecting env
 /// ([`GIT_REPO_ENV`]) is dropped so `-C root` alone picks the repository.
 fn git_files(root: &Path) -> Option<Vec<String>> {
     let out = ls_files_command(root).output().ok()?;
@@ -278,7 +279,11 @@ mod tests {
         // hook, so the negative assertion below cannot pass vacuously on a
         // git version that never consults fsmonitor for ls-files.
         assert!(git(repo.path(), &["ls-files", "--others"]));
-        assert!(marker.exists(), "control: this git never ran core.fsmonitor");
+        assert!(
+            marker.exists(),
+            "control: this git version never runs core.fsmonitor for ls-files, \
+             so this test cannot observe the guard (environment limit, not a bug)"
+        );
         std::fs::remove_file(&marker).unwrap();
 
         // Some(..) proves the git path ran, not the walk fallback.
