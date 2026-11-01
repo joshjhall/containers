@@ -3,51 +3,15 @@
 //! Each test spawns the built binary in a temp directory (no git repo, so
 //! language detection takes the directory-walk path and CI detection falls back
 //! to `--ci` or GitHub), and asserts on exit codes, files on disk, and stdout.
+//! The `git ls-files` detection path is unit-tested in `standards/detect.rs`;
+//! `--templates-dir` and render.sh parity live in `standards_templates.rs`.
+
+mod standards_common;
 
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Command;
 
-const fn stibbons_bin() -> &'static str {
-    env!("CARGO_BIN_EXE_stibbons")
-}
-
-/// Run `stibbons setup standards <args...>` in `cwd`.
-fn standards(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(stibbons_bin())
-        .current_dir(cwd)
-        .args(["setup", "standards"])
-        .args(args)
-        .output()
-        .expect("failed to spawn stibbons")
-}
-
-fn stdout_of(out: &Output) -> String {
-    String::from_utf8_lossy(&out.stdout).into_owned()
-}
-
-fn assert_ok(out: &Output, what: &str) {
-    assert!(
-        out.status.success(),
-        "{what} failed ({:?})\nstdout:\n{}\nstderr:\n{}",
-        out.status.code(),
-        stdout_of(out),
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
-
-/// A temp repo holding one shell and one Python file.
-fn shell_python_repo() -> tempfile::TempDir {
-    let tmp = tempfile::tempdir().unwrap();
-    fs::write(tmp.path().join("hello.sh"), "#!/bin/bash\necho hi\n").unwrap();
-    fs::write(tmp.path().join("app.py"), "print(1)\n").unwrap();
-    tmp
-}
-
-/// The vendored templates directory in this checkout.
-fn vendored_templates() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/repo-baseline")
-}
+use standards_common::{assert_ok, shell_python_repo, standards, stdout_of, stibbons_bin};
 
 #[test]
 fn init_writes_baseline_for_detected_slices() {
@@ -241,29 +205,6 @@ fn check_without_state_errors() {
 }
 
 #[test]
-fn check_flags_stale_file_when_templates_change() {
-    // Init from a copy of the templates, then change a fragment: the unedited
-    // file is now stale, and re-init updates it in place.
-    let tmp = shell_python_repo();
-    let tpl = tempfile::tempdir().unwrap();
-    copy_dir(&vendored_templates(), tpl.path());
-    let tpl_arg = tpl.path().to_str().unwrap();
-
-    assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "init");
-    let frag = tpl.path().join("core/dprint.json.tmpl");
-    fs::write(&frag, format!("{}\n", fs::read_to_string(&frag).unwrap())).unwrap();
-
-    let out = standards(tmp.path(), &["check", "--templates-dir", tpl_arg]);
-    assert_eq!(out.status.code(), Some(1));
-    assert!(stdout_of(&out).contains("dprint.json (stale"), "{}", stdout_of(&out));
-
-    let out = standards(tmp.path(), &["init", "--templates-dir", tpl_arg]);
-    assert_ok(&out, "re-init");
-    assert!(stdout_of(&out).contains("update     dprint.json"), "{}", stdout_of(&out));
-    assert_ok(&standards(tmp.path(), &["check", "--templates-dir", tpl_arg]), "check");
-}
-
-#[test]
 fn dry_run_writes_nothing() {
     let tmp = shell_python_repo();
     let out = standards(tmp.path(), &["init", "--dry-run"]);
@@ -439,82 +380,4 @@ fn bare_setup_still_parses_label_sync_flags() {
     let help = stdout_of(&out);
     assert!(help.contains("standards"), "{help}");
     assert!(help.contains("--dry-run") && help.contains("--platform"), "{help}");
-}
-
-/// Byte parity with librarian's reference renderer, when it is installed.
-#[test]
-fn matches_librarian_render_sh() {
-    let render =
-        Path::new("/opt/librarian/plugins/dev-core/skills/repo-baseline/templates/render.sh");
-    if !render.is_file() {
-        eprintln!("skipping: {} not present", render.display());
-        return;
-    }
-    for (slices, ci) in
-        [("shell,python", "github"), ("shell", "gitlab"), ("python", "github,gitlab")]
-    {
-        let ours = tempfile::tempdir().unwrap();
-        let out = standards(ours.path(), &["init", "--lang", slices, "--ci", ci]);
-        assert_ok(&out, "init");
-        fs::remove_file(ours.path().join(".stibbons-standards.yml")).unwrap();
-
-        let theirs = tempfile::tempdir().unwrap();
-        let status = Command::new("bash")
-            .arg(render)
-            .args(["--slices", slices, "--ci", ci, "--out"])
-            .arg(theirs.path())
-            .env("RENDER_MANIFEST", vendored_templates().join("manifest.tsv"))
-            .output()
-            .unwrap();
-        assert_ok(&status, "render.sh");
-
-        assert_eq!(
-            tree(ours.path()),
-            tree(theirs.path()),
-            "stibbons and render.sh disagree for --lang {slices} --ci {ci}"
-        );
-    }
-}
-
-/// `(relative path, bytes, executable)` for every file under `root`, sorted.
-fn tree(root: &Path) -> Vec<(String, Vec<u8>, bool)> {
-    let mut out = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        for e in fs::read_dir(&dir).unwrap() {
-            let p = e.unwrap().path();
-            if p.is_dir() {
-                stack.push(p);
-            } else {
-                let rel = p.strip_prefix(root).unwrap().to_string_lossy().into_owned();
-                out.push((rel, fs::read(&p).unwrap(), is_executable(&p)));
-            }
-        }
-    }
-    out.sort();
-    out
-}
-
-#[cfg(unix)]
-fn is_executable(p: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    fs::metadata(p).unwrap().permissions().mode() & 0o100 != 0
-}
-
-#[cfg(not(unix))]
-fn is_executable(_p: &Path) -> bool {
-    false
-}
-
-fn copy_dir(src: &Path, dst: &Path) {
-    fs::create_dir_all(dst).unwrap();
-    for e in fs::read_dir(src).unwrap() {
-        let p = e.unwrap().path();
-        let target = dst.join(p.file_name().unwrap());
-        if p.is_dir() {
-            copy_dir(&p, &target);
-        } else {
-            fs::copy(&p, &target).unwrap();
-        }
-    }
 }

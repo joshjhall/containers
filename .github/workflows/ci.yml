@@ -422,6 +422,32 @@ jobs:
       - name: Force HTTPS for git dependencies
         run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 
+      # stibbons' matches_librarian_render_sh compares `setup standards` output
+      # byte-for-byte with librarian's render.sh. Without librarian it skips,
+      # and a skip renders as a pass (#768, #1541), so on Linux check it out at
+      # the Dockerfile's LIBRARIAN_REF and set REQUIRE_LIBRARIAN_PARITY=1 below.
+      - name: Read librarian pin (for render.sh parity)
+        id: librarian
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          ref=$(sed -n 's/^ARG LIBRARIAN_REF=//p' Dockerfile | tr -d '"')
+          if ! printf '%s' "$ref" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::ARG LIBRARIAN_REF in Dockerfile is not a vX.Y.Z tag: '$ref'"
+            exit 1
+          fi
+          echo "ref=$ref" >>"$GITHUB_OUTPUT"
+
+      - name: Checkout librarian (for render.sh parity)
+        if: runner.os == 'Linux'
+        uses: actions/checkout@v4
+        with:
+          repository: joshjhall/librarian
+          ref: ${{ steps.librarian.outputs.ref }}
+          path: _librarian
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable branch
         with:
@@ -447,6 +473,9 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace
+        env:
+          REQUIRE_LIBRARIAN_PARITY: ${{ runner.os == 'Linux' && '1' || '' }}
+          LIBRARIAN_RENDER_SH: ${{ github.workspace }}/_librarian/plugins/dev-core/skills/repo-baseline/templates/render.sh
 
       - name: Verify build
         run: cargo build --workspace

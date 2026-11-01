@@ -142,12 +142,17 @@ fn ls_files_command(root: &Path) -> Command {
 /// Repo-relative paths of regular files under `root`, skipping [`SKIP_DIRS`]
 /// and symlinks, capped at [`WALK_LIMIT`].
 fn walk_files(root: &Path) -> Vec<String> {
+    walk_files_capped(root, WALK_LIMIT)
+}
+
+/// [`walk_files`] with an explicit cap, so the limit is testable.
+fn walk_files_capped(root: &Path, limit: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else { continue };
         for entry in entries.flatten() {
-            if out.len() >= WALK_LIMIT {
+            if out.len() >= limit {
                 return out;
             }
             let Ok(ft) = entry.file_type() else { continue };
@@ -333,5 +338,69 @@ mod tests {
         std::fs::create_dir(tmp.path().join("src")).unwrap();
         std::fs::write(tmp.path().join("src/y.sh"), "").unwrap();
         assert_eq!(walk_files(tmp.path()), ["src/y.sh"]);
+    }
+
+    /// The path real repos take: ignored files never vote, untracked ones
+    /// do, and the NUL split keeps odd names whole. The fixture is chosen so
+    /// the walk fallback would answer differently (`{python, shell}`), which
+    /// separates the two paths.
+    #[cfg(unix)]
+    #[test]
+    fn git_files_honors_exclude_standard_and_others() {
+        let repo = tempfile::tempdir().unwrap();
+        let root = repo.path();
+        // No skip-if-missing: a silent pass would hide a regression.
+        assert!(git(root, &["init", "-q"]), "git init failed");
+        std::fs::write(root.join(".gitignore"), "vendor/\n").unwrap();
+        assert!(git(root, &["add", ".gitignore"]));
+        std::fs::create_dir(root.join("vendor")).unwrap();
+        // Ignored: only `--exclude-standard` keeps it from voting python.
+        std::fs::write(root.join("vendor/x.py"), "").unwrap();
+        // Untracked, not ignored: only `--others` lists it.
+        std::fs::write(root.join("run.sh"), "").unwrap();
+        // Without `-z`, git C-quotes this name and the split mangles it.
+        let odd = "a b\nc.txt";
+        std::fs::write(root.join(odd), "").unwrap();
+
+        let mut listed = git_files(root).expect("git path did not run");
+        listed.sort();
+        assert_eq!(listed, files(&[".gitignore", odd, "run.sh"]));
+
+        assert_eq!(detect_slices(root, &set(&["shell", "python"])), set(&["shell"]));
+        // Control: the walk over the same tree does see the ignored file.
+        assert_eq!(classify(root, &walk_files(root)), set(&["python", "shell"]));
+    }
+
+    #[test]
+    fn git_files_is_none_outside_a_work_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        // `-C` to a non-repo makes git fail, which selects the walk fallback.
+        assert_eq!(git_files(tmp.path()), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn walk_skips_symlinked_dirs_and_files() {
+        use std::os::unix::fs::symlink;
+        let tmp = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        std::fs::write(elsewhere.path().join("z.py"), "").unwrap();
+        std::fs::write(elsewhere.path().join("real.sh"), "").unwrap();
+        std::fs::write(tmp.path().join("a.txt"), "").unwrap();
+        symlink(elsewhere.path(), tmp.path().join("linked_dir")).unwrap();
+        symlink(elsewhere.path().join("real.sh"), tmp.path().join("link.sh")).unwrap();
+        // A link-following walk would also return linked_dir/z.py,
+        // linked_dir/real.sh, and link.sh.
+        assert_eq!(walk_files(tmp.path()), ["a.txt"]);
+    }
+
+    #[test]
+    fn walk_stops_at_limit() {
+        let tmp = tempfile::tempdir().unwrap();
+        for i in 0..5 {
+            std::fs::write(tmp.path().join(format!("f{i}.txt")), "").unwrap();
+        }
+        assert_eq!(walk_files_capped(tmp.path(), 3).len(), 3);
+        assert_eq!(walk_files_capped(tmp.path(), 10).len(), 5);
     }
 }
