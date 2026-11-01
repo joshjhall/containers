@@ -719,7 +719,7 @@ test_no_fixture_leakage_into_production() {
 #
 # Fails (non-zero, message on stderr) rather than printing nothing when jq
 # cannot evaluate the catalog: a dependency that is not an object with a
-# string `tool`, `platforms` that is not an array, or a method declaring
+# string `tool`, `platforms` that is not an array of strings, or a method declaring
 # dependencies with no platform.os (its distros, and so its gaps, would be
 # unknowable). An empty result must only ever mean "no gaps".
 dependency_gaps() {
@@ -758,6 +758,7 @@ dependency_gaps() {
         | $deps[] as $d
         | if ($d | type) != "object" or ($d.tool | type) != "string"
              or (($d.platforms // []) | type) != "array"
+             or any(($d.platforms // [])[]; type != "string")
           then error("\($f): malformed dependency \($d | tojson)")
           else . end
         | $oses[] as $os
@@ -887,6 +888,7 @@ test_dependency_guard_selectors_and_errors() {
     for case in \
         'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":["debonly"]}]}' \
         'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":"debonly","platforms":"alpine"}]}]}' \
+        'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":"debonly","platforms":[12]}]}]}' \
         'declares dependencies but no platform.os|{"install_methods":[{"name":"m","dependencies":[{"tool":"debonly"}]}]}' \
         'declares dependencies but no platform.os|{"install_methods":[{"name":"m","platform":{"os":[]},"dependencies":[{"tool":"debonly"}]}]}' \
         'declares dependencies but no platform.os|{"install_methods":[{"name":"m","platform":{"os":{"x":"alpine"}},"dependencies":[{"tool":"debonly"}]}]}' \
