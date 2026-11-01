@@ -272,12 +272,20 @@ mod tests {
         cmd.output().is_ok_and(|o| o.status.success())
     }
 
-    /// Ignore the developer's global and system git config, so a global
-    /// `core.excludesFile` cannot change what `--exclude-standard` drops.
-    /// Repo-local config (which the fsmonitor test relies on) still applies.
+    /// Ignore the developer's global and system git config and global
+    /// excludes, so nothing outside the fixture changes what
+    /// `--exclude-standard` drops. With `core.excludesFile` unset, git still
+    /// reads its default `$XDG_CONFIG_HOME/git/ignore`, so the key is pinned
+    /// to `/dev/null` too. This must run after `ls_files_command`, whose
+    /// `GIT_CONFIG_COUNT` removal it overrides. Repo-local config (which the
+    /// fsmonitor test relies on) still applies.
     #[cfg(unix)]
     fn hermetic(cmd: &mut Command) -> &mut Command {
-        cmd.env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1")
+        cmd.env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "core.excludesFile")
+            .env("GIT_CONFIG_VALUE_0", "/dev/null")
     }
 
     #[cfg(unix)]
