@@ -412,8 +412,17 @@ mod tests {
         // being absent, and not from a TMPDIR that sits inside some repo
         // (git searches parent directories).
         assert!(git(tmp.path(), &["--version"]), "git is not runnable");
+        // rev-parse exits 0 and prints `false` inside a `.git` dir, so read
+        // its answer rather than its exit code.
+        let mut probe = Command::new("git");
+        probe.arg("-C").arg(tmp.path()).args(["rev-parse", "--is-inside-work-tree"]);
+        for var in GIT_REPO_ENV {
+            probe.env_remove(var);
+        }
+        let inside =
+            probe.output().is_ok_and(|o| o.status.success() && o.stdout.trim_ascii() == b"true");
         assert!(
-            !git(tmp.path(), &["rev-parse", "--is-inside-work-tree"]),
+            !inside,
             "control: TMPDIR is inside a git work tree (environment limit, not a bug)"
         );
         // `-C` to a non-repo makes git fail, which selects the walk fallback.
