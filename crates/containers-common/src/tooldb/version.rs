@@ -516,6 +516,40 @@ mod tests {
     }
 
     #[test]
+    fn test_entry_legacy_row_without_verification_tier_omits_key() {
+        // Rows predating #1508 carry no `verification_tier`. They must parse
+        // to `None` and re-serialize without the key (not as `null`), so
+        // existing evidence rows stay byte-identical.
+        let entry: TestEntry = serde_json::from_str(
+            r#"{"os":"debian","arch":"amd64","tested_at":"2026-04-01T00:00:00Z","result":"pass"}"#,
+        )
+        .unwrap();
+        assert_eq!(entry.verification_tier, None);
+
+        let value = serde_json::to_value(&entry).unwrap();
+        let obj = value.as_object().expect("TestEntry serializes to an object");
+        assert!(
+            !obj.contains_key("verification_tier"),
+            "absent verification_tier must not serialize, got {obj:?}",
+        );
+    }
+
+    #[test]
+    fn test_entry_round_trips_verification_tier() {
+        let entry: TestEntry = serde_json::from_str(
+            r#"{"os":"debian","arch":"amd64","tested_at":"2026-04-01T00:00:00Z","result":"pass","verification_tier":1}"#,
+        )
+        .expect("parse row with verification_tier");
+        assert_eq!(entry.verification_tier, Some(1));
+
+        let value = serde_json::to_value(&entry).unwrap();
+        assert_eq!(value.get("verification_tier"), Some(&serde_json::json!(1)));
+
+        let reparsed: TestEntry = serde_json::from_value(value).unwrap();
+        assert_eq!(reparsed.verification_tier, Some(1));
+    }
+
+    #[test]
     fn error_class_wire_format_matches_schema_enum() {
         let pairs = [
             (ErrorClass::Download, "\"download\""),
