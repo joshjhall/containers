@@ -716,29 +716,54 @@ test_no_fixture_leakage_into_production() {
 # array), narrowed by its own `platforms` selectors — `distro` or
 # `distro:release`, the same rule as sysdeps::selector_matches. Only the distro
 # half matters here: package names are keyed by distro, not release.
+#
+# Fails (non-zero, message on stderr) rather than printing nothing when jq
+# cannot evaluate the catalog: a dependency that is not an object with a
+# string `tool`, `platforms` that is not an array, or a method declaring
+# dependencies with no platform.os (its distros, and so its gaps, would be
+# unknowable). An empty result must only ever mean "no gaps".
 dependency_gaps() {
-    local catalog="$1" map
+    local catalog="$1" map raw
     shopt -s nullglob
     local indexes=("$catalog"/tools/*/index.json)
     local versions=("$catalog"/tools/*/versions/*.json)
     shopt -u nullglob
     [ "${#versions[@]}" -gt 0 ] || return 0
 
-    map="$(command jq -cs '
-        map(select(.kind == "system_package")
-            | {key: .id, value: ((.system_package.platforms // {}) | keys)})
-        | from_entries' ${indexes[@]+"${indexes[@]}"})"
-    [ -n "$map" ] || map='{}'
+    map='{}'
+    if [ "${#indexes[@]}" -gt 0 ]; then
+        map="$(command jq -cs '
+            map(select(.kind == "system_package")
+                | {key: .id, value: ((.system_package.platforms // {}) | keys)})
+            | from_entries' "${indexes[@]}")" || {
+            command echo "dependency_gaps: cannot read system_package entries under $catalog" >&2
+            return 1
+        }
+    fi
 
-    command jq -r --argjson m "$map" '
-        (.install_methods // [])[]
+    raw="$(command jq -r --argjson m "$map" '
+        input_filename as $f
+        | (.install_methods // [])[]
+        | (.dependencies // []) as $deps
+        | if ($deps | length) > 0 and (.platform.os // null) == null
+          then error("\($f): method \(.name // "?") declares dependencies but no platform.os")
+          else . end
         | ((.platform.os // []) | if type == "string" then [.] else . end) as $oses
-        | (.dependencies // [])[] as $d
+        | $deps[] as $d
+        | if ($d | type) != "object" or ($d.tool | type) != "string"
+             or (($d.platforms // []) | type) != "array"
+          then error("\($f): malformed dependency \($d | tojson)")
+          else . end
         | $oses[] as $os
         | select(($d.platforms // null) == null
                  or any($d.platforms[]; split(":")[0] == $os))
         | select((($m[$d.tool] // []) | index($os)) == null)
-        | "\($d.tool)/\($os)"' "${versions[@]}" | command sort -u
+        | "\($d.tool)/\($os)"' "${versions[@]}")" || {
+        command echo "dependency_gaps: jq failed evaluating version files under $catalog" >&2
+        return 1
+    }
+    [ -n "$raw" ] || return 0
+    command sort -u <<<"$raw"
 }
 
 test_vendored_dependencies_resolve() {
@@ -748,7 +773,10 @@ test_vendored_dependencies_resolve() {
     fi
 
     local gaps
-    gaps="$(dependency_gaps "$VENDORED")"
+    if ! gaps="$(dependency_gaps "$VENDORED")"; then
+        fail_test "dependency_gaps could not evaluate the vendored catalog (see stderr) — refusing to read that as no gaps"
+        return 0
+    fi
     if [ -n "$gaps" ]; then
         fail_test "vendored dependencies with no system_package mapping (dep/os) — mirror them from containers-db:"$'\n'"$(command sed 's/^/  /' <<<"$gaps")"
     fi
@@ -767,12 +795,75 @@ test_dependency_guard_catches_missing_entry() {
     scratch="$(command mktemp -d)"
     command cp -R "$VENDORED/tools" "$scratch/tools"
     command rm -rf "$scratch/tools/gxx"
-    gaps="$(dependency_gaps "$scratch")"
+    local rc=0
+    gaps="$(dependency_gaps "$scratch")" || rc=$?
     command rm -rf "$scratch"
 
     # Exact match: the gap must be reported, and nothing else may be.
-    if [ "$gaps" != "gxx/alpine" ]; then
+    if [ "$rc" -ne 0 ]; then
+        fail_test "dependency_gaps exited $rc on a well-formed scratch catalog"
+    elif [ "$gaps" != "gxx/alpine" ]; then
         fail_test "expected exactly gxx/alpine after removing tools/gxx, got: ${gaps:-<nothing>}"
+    fi
+    return 0
+}
+
+# _write_sys <catalog> <id> <json platforms object> — a minimal system_package.
+_write_sys() {
+    command mkdir -p "$1/tools/$2"
+    command printf '{"id":"%s","kind":"system_package","system_package":{"platforms":%s}}\n' \
+        "$2" "$3" >"$1/tools/$2/index.json"
+}
+
+# Selector narrowing and the fail-loud path, on a synthetic catalog the real
+# one cannot exercise: array platform.os, a `distro:release` selector, a
+# selector excluding a distro, and malformed inputs that must error, not pass.
+test_dependency_guard_selectors_and_errors() {
+    if ! command -v jq >/dev/null 2>&1; then
+        skip_test "jq not available"
+        return 0
+    fi
+
+    local cat gaps rc problems=""
+    cat="$(command mktemp -d)"
+    _write_sys "$cat" debonly '{"debian":{"name":"d"}}'
+    _write_sys "$cat" alponly '{"alpine":{"name":"a"}}'
+    command mkdir -p "$cat/tools/t/versions"
+    # debian+alpine method:
+    #   debonly (no selector)        -> gap on alpine only
+    #   alponly scoped "debian:12"   -> applies to debian only -> gap debian
+    #   alponly scoped "alpine"      -> applies to alpine only -> mapped, no gap
+    #   ghost   scoped "rhel"        -> rhel not in method os  -> not checked
+    command printf '%s\n' '{"install_methods":[{"name":"m","platform":{"os":["debian","alpine"]},"dependencies":[
+        {"tool":"debonly"},
+        {"tool":"alponly","platforms":["debian:12"]},
+        {"tool":"alponly","platforms":["alpine"]},
+        {"tool":"ghost","platforms":["rhel"]}]}]}' >"$cat/tools/t/versions/1.0.0.json"
+
+    rc=0
+    gaps="$(dependency_gaps "$cat")" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        problems="$problems"$'\n'"  well-formed synthetic catalog: exit $rc"
+    elif [ "$gaps" != $'alponly/debian\ndebonly/alpine' ]; then
+        problems="$problems"$'\n'"  selector narrowing: got [${gaps//$'\n'/, }], want [alponly/debian, debonly/alpine]"
+    fi
+
+    # Each malformed shape must make dependency_gaps fail, never print nothing.
+    local bad
+    for bad in \
+        '{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":["debonly"]}]}' \
+        '{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":"debonly","platforms":"alpine"}]}]}' \
+        '{"install_methods":[{"name":"m","dependencies":[{"tool":"debonly"}]}]}' \
+        'not json'; do
+        command printf '%s\n' "$bad" >"$cat/tools/t/versions/1.0.0.json"
+        if dependency_gaps "$cat" >/dev/null 2>&1; then
+            problems="$problems"$'\n'"  accepted malformed input: $bad"
+        fi
+    done
+    command rm -rf "$cat"
+
+    if [ -n "$problems" ]; then
+        fail_test "dependency_gaps misbehaved:$problems"
     fi
     return 0
 }
@@ -899,6 +990,7 @@ run_test "test_index_matches_versions_on_disk" "index available[] agrees with ve
 run_test "test_no_fixture_leakage_into_production" "no tests-only fixtures in shipped catalog"
 run_test "test_vendored_dependencies_resolve" "every vendored dependency maps to a system package for its distros"
 run_test "test_dependency_guard_catches_missing_entry" "dependency guard names a removed system_package entry"
+run_test "test_dependency_guard_selectors_and_errors" "dependency guard narrows by selectors and fails loud on malformed input"
 run_test "test_catalogs_validate_against_schemas" "catalogs validate against JSON schemas"
 run_test "test_schema_fixtures_are_rejected" "ajv rejects schema negative fixtures"
 
