@@ -11,7 +11,9 @@ mod standards_common;
 use std::fs;
 use std::process::Command;
 
-use standards_common::{assert_ok, shell_python_repo, standards, stdout_of, stibbons_bin};
+use standards_common::{
+    assert_ok, copy_dir, shell_python_repo, standards, stdout_of, stibbons_bin, vendored_templates,
+};
 
 #[test]
 fn init_writes_baseline_for_detected_slices() {
@@ -112,6 +114,57 @@ fn preexisting_unrecorded_file_is_not_clobbered() {
     );
 }
 
+/// A write failure partway through `init` must still record the files it
+/// already wrote, so a later run updates them rather than reporting them as
+/// user edits (#1542).
+#[cfg(unix)]
+#[test]
+fn partial_init_failure_records_written_files() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = shell_python_repo();
+    let root = tmp.path();
+    let tpl = tempfile::tempdir().unwrap();
+    copy_dir(&vendored_templates(), tpl.path());
+    let tpl_arg = tpl.path().to_str().unwrap();
+
+    // `tests/run.sh` follows lefthook.yml and justfile in manifest order; a
+    // read-only `tests/` makes its write fail after those two are written.
+    let tests_dir = root.join("tests");
+    fs::create_dir(&tests_dir).unwrap();
+    fs::set_permissions(&tests_dir, fs::Permissions::from_mode(0o555)).unwrap();
+    if fs::write(tests_dir.join("probe"), b"").is_ok() {
+        eprintln!("skipping: running with permission to write a 0555 dir (root?)");
+        return;
+    }
+
+    let out = standards(root, &["init", "--templates-dir", tpl_arg]);
+    assert!(!out.status.success(), "init into a read-only dir must fail");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("failed to write") && err.contains("tests/run.sh"), "{err}");
+    assert!(root.join("lefthook.yml").is_file(), "lefthook.yml should precede the failure");
+    assert!(root.join(".stibbons-standards.yml").is_file(), "no state saved after failure");
+
+    let out = standards(root, &["check", "--templates-dir", tpl_arg]);
+    let s = stdout_of(&out);
+    assert!(s.contains("✓ lefthook.yml\n"), "{s}");
+    assert!(s.contains("tests/run.sh (missing)"), "{s}");
+
+    // Fix the cause and change a lefthook fragment: lefthook.yml is now an
+    // unedited stibbons file the templates would change, so it updates.
+    fs::set_permissions(&tests_dir, fs::Permissions::from_mode(0o755)).unwrap();
+    let frag = tpl.path().join("core/lefthook/10-pre-commit.yml.tmpl");
+    fs::write(&frag, format!("{}\n", fs::read_to_string(&frag).unwrap())).unwrap();
+
+    let out = standards(root, &["init", "--templates-dir", tpl_arg]);
+    assert_ok(&out, "re-init after fixing the failure");
+    let s = stdout_of(&out);
+    assert!(s.contains("update     lefthook.yml"), "{s}");
+    assert!(s.contains("create     tests/run.sh"), "{s}");
+    assert!(!s.contains("skip "), "re-init treated a stibbons-written file as a user edit:\n{s}");
+    assert_ok(&standards(root, &["check", "--templates-dir", tpl_arg]), "check");
+}
+
 #[test]
 fn rerun_restores_deleted_file() {
     let tmp = shell_python_repo();
@@ -185,6 +238,43 @@ fn accept_without_paths_takes_every_modified_file() {
     let s = stdout_of(&out);
     assert!(s.contains("accepted _typos.toml") && s.contains("accepted .gitleaks.toml"), "{s}");
     assert_ok(&standards(tmp.path(), &["check"]), "check");
+}
+
+#[test]
+fn accept_ok_file_is_noop_with_note() {
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let state = tmp.path().join(".stibbons-standards.yml");
+    let before = fs::read(&state).unwrap();
+
+    let out = standards(tmp.path(), &["accept", "_typos.toml"]);
+    assert_ok(&out, "accept ok file");
+    let s = stdout_of(&out);
+    assert!(s.contains("skipped _typos.toml (already matches the baseline"), "{s}");
+    assert!(!s.contains("accepted _typos.toml"), "{s}");
+    assert_eq!(fs::read(&state).unwrap(), before, "accepting an Ok file changed the state");
+}
+
+#[test]
+fn accept_stale_file_warns() {
+    let tmp = shell_python_repo();
+    let tpl = tempfile::tempdir().unwrap();
+    copy_dir(&vendored_templates(), tpl.path());
+    let tpl_arg = tpl.path().to_str().unwrap();
+    assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "init");
+    let frag = tpl.path().join("core/dprint.json.tmpl");
+    fs::write(&frag, format!("{}\n", fs::read_to_string(&frag).unwrap())).unwrap();
+
+    let out = standards(tmp.path(), &["accept", "dprint.json", "--templates-dir", tpl_arg]);
+    assert_ok(&out, "accept stale file");
+    let s = stdout_of(&out);
+    assert!(s.contains("warning: dprint.json is stale"), "{s}");
+    assert!(s.contains("pins it against template updates"), "{s}");
+    assert!(s.contains("accepted dprint.json"), "{s}");
+
+    let out = standards(tmp.path(), &["check", "--templates-dir", tpl_arg]);
+    assert_ok(&out, "check after accepting stale file");
+    assert!(stdout_of(&out).contains("dprint.json (accepted local edit)"), "{}", stdout_of(&out));
 }
 
 #[test]
