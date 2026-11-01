@@ -300,6 +300,28 @@ fn accept_ok_file_clears_earlier_acceptance() {
 }
 
 #[test]
+fn failed_accept_reports_and_saves_nothing() {
+    // A later bad path aborts the whole call: no "cleared" line for an
+    // acceptance that was never removed from disk, and the state is untouched.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let path = tmp.path().join("_typos.toml");
+    let original = fs::read_to_string(&path).unwrap();
+    fs::write(&path, format!("{original}# per-repo edit\n")).unwrap();
+    assert_ok(&standards(tmp.path(), &["accept", "_typos.toml"]), "accept edit");
+    fs::write(&path, &original).unwrap();
+    let state = tmp.path().join(".stibbons-standards.yml");
+    let before = fs::read(&state).unwrap();
+
+    let out = standards(tmp.path(), &["accept", "_typos.toml", "app.py"]);
+    assert!(!out.status.success(), "unknown path must fail the call");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not a repo-baseline file"));
+    let s = stdout_of(&out);
+    assert!(!s.contains("cleared"), "reported a change that was not saved:\n{s}");
+    assert_eq!(fs::read(&state).unwrap(), before, "failed accept changed the state");
+}
+
+#[test]
 fn bare_accept_clears_earlier_acceptance_of_reverted_file() {
     // Same hazard as above, via `accept` with no paths, while another file is
     // modified: the reverted file's acceptance is cleared, the other accepted.

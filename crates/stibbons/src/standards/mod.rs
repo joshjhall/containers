@@ -293,13 +293,30 @@ pub fn accept(
     out: &mut impl Write,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut state, rendered) = load_and_render(root, templates)?;
+    // Buffer the report and print it only once the state is saved: a later
+    // path that errors must not leave "accepted"/"cleared" lines behind for a
+    // change that never reached disk.
+    let mut log = Vec::new();
+    accept_into(root, &mut state, &rendered, paths, &mut log)?;
+    out.write_all(&log)?;
+    Ok(())
+}
+
+/// The body of [`accept`], reporting into `out` and saving `state` on success.
+fn accept_into(
+    root: &Path,
+    state: &mut StandardsState,
+    rendered: &[RenderedFile],
+    paths: &[String],
+    out: &mut impl Write,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut cleared = false;
     let mut targets: Vec<String> = Vec::new();
     if paths.is_empty() {
-        for (t, s) in classify_all(root, &state, &rendered)?.files {
+        for (t, s) in classify_all(root, state, rendered)?.files {
             match s {
                 FileState::Modified => targets.push(t),
-                FileState::Ok => cleared |= clear_reverted_acceptance(&mut state, &t, out)?,
+                FileState::Ok => cleared |= clear_reverted_acceptance(state, &t, out)?,
                 FileState::Accepted | FileState::Missing | FileState::Stale => {}
             }
         }
@@ -309,13 +326,13 @@ pub fn accept(
             let Some(file) = rendered.iter().find(|f| f.target == t) else {
                 return Err(format!("`{p}` is not a repo-baseline file").into());
             };
-            match classify_check(root, file, &state)? {
+            match classify_check(root, file, state)? {
                 FileState::Ok => {
                     writeln!(
                         out,
                         "  skipped {t} (already matches the baseline; nothing to accept)"
                     )?;
-                    cleared |= clear_reverted_acceptance(&mut state, t, out)?;
+                    cleared |= clear_reverted_acceptance(state, t, out)?;
                 }
                 FileState::Stale => {
                     writeln!(
