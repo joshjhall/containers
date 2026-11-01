@@ -133,8 +133,15 @@ fn partial_init_failure_records_written_files() {
     let tests_dir = root.join("tests");
     fs::create_dir(&tests_dir).unwrap();
     fs::set_permissions(&tests_dir, fs::Permissions::from_mode(0o555)).unwrap();
+    // Control: root writes through mode 0555, so the failure cannot be
+    // injected there. CI runs unprivileged and sets
+    // REQUIRE_UNPRIVILEGED_TESTS=1, so there this skip is a failure.
     if fs::write(tests_dir.join("probe"), b"").is_ok() {
-        eprintln!("skipping: running with permission to write a 0555 dir (root?)");
+        assert!(
+            std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
+            "REQUIRE_UNPRIVILEGED_TESTS=1 but a 0555 dir is writable (running as root?)"
+        );
+        eprintln!("skipping: a 0555 dir is writable here (running as root?)");
         return;
     }
 
@@ -142,6 +149,7 @@ fn partial_init_failure_records_written_files() {
     assert!(!out.status.success(), "init into a read-only dir must fail");
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("failed to write") && err.contains("tests/run.sh"), "{err}");
+    assert!(err.contains("recorded the files written so far"), "{err}");
     assert!(root.join("lefthook.yml").is_file(), "lefthook.yml should precede the failure");
     assert!(root.join(".stibbons-standards.yml").is_file(), "no state saved after failure");
 
@@ -253,6 +261,18 @@ fn accept_ok_file_is_noop_with_note() {
     assert!(s.contains("skipped _typos.toml (already matches the baseline"), "{s}");
     assert!(!s.contains("accepted _typos.toml"), "{s}");
     assert_eq!(fs::read(&state).unwrap(), before, "accepting an Ok file changed the state");
+
+    // A skipped Ok path must not stop a modified one named alongside it.
+    let edited = tmp.path().join(".gitleaks.toml");
+    fs::write(&edited, format!("{}# edit\n", fs::read_to_string(&edited).unwrap())).unwrap();
+    let out = standards(tmp.path(), &["accept", "_typos.toml", ".gitleaks.toml"]);
+    assert_ok(&out, "accept ok + modified");
+    let s = stdout_of(&out);
+    assert!(s.contains("skipped _typos.toml") && s.contains("accepted .gitleaks.toml"), "{s}");
+    let saved = fs::read_to_string(&state).unwrap();
+    let accepted = saved.split("accepted:").nth(1).unwrap_or("");
+    assert!(accepted.contains(".gitleaks.toml"), "{saved}");
+    assert!(!accepted.contains("_typos.toml"), "Ok file recorded as accepted:\n{saved}");
 }
 
 #[test]
