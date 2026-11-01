@@ -91,7 +91,13 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// hooks today). Inherited repo-selecting and config-injecting env
 /// ([`GIT_REPO_ENV`]) is dropped so `-C root` alone picks the repository.
 fn git_files(root: &Path) -> Option<Vec<String>> {
-    let out = ls_files_command(root).output().ok()?;
+    run_ls_files(ls_files_command(root))
+}
+
+/// Run a `git ls-files -z` command and split its NUL-separated output, or
+/// `None` when git cannot run or exits non-zero.
+fn run_ls_files(mut cmd: Command) -> Option<Vec<String>> {
+    let out = cmd.output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -262,7 +268,16 @@ mod tests {
         for var in GIT_REPO_ENV {
             cmd.env_remove(var);
         }
+        hermetic(&mut cmd);
         cmd.output().is_ok_and(|o| o.status.success())
+    }
+
+    /// Ignore the developer's global and system git config, so a global
+    /// `core.excludesFile` cannot change what `--exclude-standard` drops.
+    /// Repo-local config (which the fsmonitor test relies on) still applies.
+    #[cfg(unix)]
+    fn hermetic(cmd: &mut Command) -> &mut Command {
+        cmd.env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1")
     }
 
     #[cfg(unix)]
@@ -362,11 +377,14 @@ mod tests {
         let odd = "a b\nc.txt";
         std::fs::write(root.join(odd), "").unwrap();
 
-        let mut listed = git_files(root).expect("git path did not run");
+        // The production command and parser, isolated from global excludes.
+        let mut cmd = ls_files_command(root);
+        hermetic(&mut cmd);
+        let mut listed = run_ls_files(cmd).expect("git path did not run");
         listed.sort();
         assert_eq!(listed, files(&[".gitignore", odd, "run.sh"]));
 
-        assert_eq!(detect_slices(root, &set(&["shell", "python"])), set(&["shell"]));
+        assert_eq!(classify(root, &listed), set(&["shell"]));
         // Control: the walk over the same tree does see the ignored file.
         assert_eq!(classify(root, &walk_files(root)), set(&["python", "shell"]));
     }
