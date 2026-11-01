@@ -90,16 +90,7 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// are pinned off. Inherited `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` are
 /// dropped so `-C root` alone picks the repository being read.
 fn git_files(root: &Path) -> Option<Vec<String>> {
-    let out = Command::new("git")
-        .args(["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"])
-        .arg("-C")
-        .arg(root)
-        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
-        .env_remove("GIT_INDEX_FILE")
-        .output()
-        .ok()?;
+    let out = ls_files_command(root).output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -110,6 +101,22 @@ fn git_files(root: &Path) -> Option<Vec<String>> {
             .map(|p| String::from_utf8_lossy(p).into_owned())
             .collect(),
     )
+}
+
+/// Env vars that would let an inherited setting pick a repo other than `root`.
+const GIT_REPO_ENV: &[&str] = &["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
+
+/// The hardened `git ls-files` invocation [`git_files`] runs (see there).
+fn ls_files_command(root: &Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.args(["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"])
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
+    for var in GIT_REPO_ENV {
+        cmd.env_remove(var);
+    }
+    cmd
 }
 
 /// Repo-relative paths of regular files under `root`, skipping [`SKIP_DIRS`]
@@ -254,6 +261,28 @@ mod tests {
         // Some(..) proves the git path ran, not the walk fallback.
         assert_eq!(git_files(repo.path()), Some(files(&["a.sh"])));
         assert!(!marker.exists(), "repo-local core.fsmonitor was executed");
+    }
+
+    /// Pins the guards the fsmonitor test cannot observe: the hooksPath
+    /// override (ls-files runs no hooks) and the repo-selecting env removal.
+    /// Asserting on the builder avoids mutating this process's environment.
+    #[test]
+    fn ls_files_command_pins_config_and_strips_repo_env() {
+        let cmd = ls_files_command(Path::new("/r"));
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        let pos = |s: &str| args.iter().position(|a| a == s).unwrap();
+        // `-c` only binds as a global option, i.e. before the subcommand.
+        assert!(pos("core.fsmonitor=false") < pos("ls-files"));
+        assert!(pos("core.hooksPath=/dev/null") < pos("ls-files"));
+        assert_eq!(args[pos("core.fsmonitor=false") - 1], "-c");
+        assert_eq!(args[pos("core.hooksPath=/dev/null") - 1], "-c");
+
+        let removed: BTreeSet<String> = cmd
+            .get_envs()
+            .filter(|(_, v)| v.is_none())
+            .map(|(k, _)| k.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(removed, set(&["GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"]));
     }
 
     #[test]
