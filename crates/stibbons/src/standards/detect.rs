@@ -371,9 +371,18 @@ mod tests {
         assert_eq!(classify(root, &walk_files(root)), set(&["python", "shell"]));
     }
 
+    #[cfg(unix)]
     #[test]
     fn git_files_is_none_outside_a_work_tree() {
         let tmp = tempfile::tempdir().unwrap();
+        // Controls: `None` must come from "not a work tree", not from git
+        // being absent, and not from a TMPDIR that sits inside some repo
+        // (git searches parent directories).
+        assert!(git(tmp.path(), &["--version"]), "git is not runnable");
+        assert!(
+            !git(tmp.path(), &["rev-parse", "--is-inside-work-tree"]),
+            "control: TMPDIR is inside a git work tree (environment limit, not a bug)"
+        );
         // `-C` to a non-repo makes git fail, which selects the walk fallback.
         assert_eq!(git_files(tmp.path()), None);
     }
