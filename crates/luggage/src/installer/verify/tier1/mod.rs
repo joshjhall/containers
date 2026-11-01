@@ -188,7 +188,7 @@ pub fn verify(
     let (sig, _) = DetachedSignature::from_reader_single(&sig_bytes[..])
         .map_err(|e| fail(format!("signature at {sig_url} is not an OpenPGP signature: {e}")))?;
     let sig = sig.signature;
-    let now = unix_now(&fail)?;
+    let now = unix_secs(SystemTime::now(), &fail)?;
 
     match shape.manifest_url_template {
         None => {
@@ -266,11 +266,12 @@ fn fetch(
     })
 }
 
-/// The current time, failing closed: a clock before the epoch would read as
-/// time 0 and quietly disable the signature-expiry check.
-fn unix_now(fail: &impl Fn(String) -> LuggageError) -> Result<u64> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+/// Seconds since the epoch at `at` (production passes `SystemTime::now()`),
+/// failing closed: a clock before the epoch would read as time 0 and quietly
+/// disable the signature-expiry check. Taking the instant as a parameter is
+/// what lets a test drive the pre-epoch refusal.
+fn unix_secs(at: SystemTime, fail: &impl Fn(String) -> LuggageError) -> Result<u64> {
+    at.duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .map_err(|_| fail("system clock is before the Unix epoch".to_owned()))
 }

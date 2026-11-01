@@ -605,6 +605,22 @@ fn reason(e: &LuggageError) -> &str {
     }
 }
 
+/// A clock before the epoch must refuse, not read as time 0 — which would
+/// quietly disable the signature-expiry check.
+#[test]
+fn pre_epoch_clock_is_refused() {
+    let before_epoch = UNIX_EPOCH.checked_sub(std::time::Duration::from_secs(1)).unwrap();
+    let err = unix_secs(before_epoch, &failure_for("tool", "1.0.0")).unwrap_err();
+    assert!(reason(&err).contains("before the Unix epoch"), "{err}");
+}
+
+/// The other side of the guard: a post-epoch instant yields its whole seconds.
+#[test]
+fn post_epoch_clock_is_whole_seconds() {
+    let at = UNIX_EPOCH + std::time::Duration::from_millis(1_234_500);
+    assert_eq!(unix_secs(at, &failure_for("tool", "1.0.0")).unwrap(), 1234);
+}
+
 #[test]
 fn key_url_only_entry_is_refused_as_a_verification_failure() {
     let mut v = gpg_verification("x.asc");
