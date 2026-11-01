@@ -294,15 +294,16 @@ pub fn accept(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut state, rendered) = load_and_render(root, templates)?;
     let mut cleared = false;
-    let targets: Vec<String> = if paths.is_empty() {
-        classify_all(root, &state, &rendered)?
-            .files
-            .into_iter()
-            .filter(|(_, s)| matches!(s, FileState::Modified))
-            .map(|(t, _)| t)
-            .collect()
+    let mut targets: Vec<String> = Vec::new();
+    if paths.is_empty() {
+        for (t, s) in classify_all(root, &state, &rendered)?.files {
+            match s {
+                FileState::Modified => targets.push(t),
+                FileState::Ok => cleared |= clear_reverted_acceptance(&mut state, &t, out)?,
+                FileState::Accepted | FileState::Missing | FileState::Stale => {}
+            }
+        }
     } else {
-        let mut v = Vec::new();
         for p in paths {
             let t = p.strip_prefix("./").unwrap_or(p);
             let Some(file) = rendered.iter().find(|f| f.target == t) else {
@@ -314,12 +315,7 @@ pub fn accept(
                         out,
                         "  skipped {t} (already matches the baseline; nothing to accept)"
                     )?;
-                    // An earlier acceptance of an edit since reverted would
-                    // otherwise silently re-approve that edit if it returns.
-                    if state.accepted.remove(t).is_some() {
-                        writeln!(out, "  cleared the earlier accepted edit of {t}")?;
-                        cleared = true;
-                    }
+                    cleared |= clear_reverted_acceptance(&mut state, t, out)?;
                 }
                 FileState::Stale => {
                     writeln!(
@@ -328,15 +324,14 @@ pub fn accept(
                          pins it against template updates — `stibbons setup standards init` \
                          would update it instead"
                     )?;
-                    v.push(t.to_string());
+                    targets.push(t.to_string());
                 }
                 FileState::Accepted | FileState::Missing | FileState::Modified => {
-                    v.push(t.to_string());
+                    targets.push(t.to_string());
                 }
             }
         }
-        v
-    };
+    }
 
     if targets.is_empty() {
         if cleared {
@@ -354,6 +349,24 @@ pub fn accept(
     }
     state.save(root)?;
     Ok(())
+}
+
+/// Drop the accepted hash of a target that matches the baseline again. Left in
+/// place, it would silently re-approve the reverted edit if it ever returned.
+/// Returns whether anything was cleared.
+fn clear_reverted_acceptance(
+    state: &mut StandardsState,
+    target: &str,
+    out: &mut impl Write,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if state.accepted.remove(target).is_none() {
+        return Ok(false);
+    }
+    writeln!(
+        out,
+        "  cleared the earlier accepted edit of {target} (it matches the baseline again)"
+    )?;
+    Ok(true)
 }
 
 /// Seed the new state with what is true on disk *before* any write: an

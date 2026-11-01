@@ -300,6 +300,36 @@ fn accept_ok_file_clears_earlier_acceptance() {
 }
 
 #[test]
+fn bare_accept_clears_earlier_acceptance_of_reverted_file() {
+    // Same hazard as above, via `accept` with no paths, while another file is
+    // modified: the reverted file's acceptance is cleared, the other accepted.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let path = tmp.path().join("_typos.toml");
+    let original = fs::read_to_string(&path).unwrap();
+    let edited = format!("{original}# per-repo edit\n");
+    fs::write(&path, &edited).unwrap();
+    assert_ok(&standards(tmp.path(), &["accept", "_typos.toml"]), "accept edit");
+    assert_ok(&standards(tmp.path(), &["check"]), "check after accept");
+
+    fs::write(&path, &original).unwrap();
+    let other = tmp.path().join(".gitleaks.toml");
+    fs::write(&other, format!("{}# edit\n", fs::read_to_string(&other).unwrap())).unwrap();
+    let out = standards(tmp.path(), &["accept"]);
+    assert_ok(&out, "bare accept");
+    let s = stdout_of(&out);
+    assert!(s.contains("cleared the earlier accepted edit of _typos.toml"), "{s}");
+    assert!(s.contains("accepted .gitleaks.toml"), "{s}");
+
+    fs::write(&path, &edited).unwrap();
+    let out = standards(tmp.path(), &["check"]);
+    assert_eq!(out.status.code(), Some(1), "re-applied edit must be drift again");
+    let s = stdout_of(&out);
+    assert!(s.contains("_typos.toml (modified)"), "{s}");
+    assert!(s.contains(".gitleaks.toml (accepted local edit)"), "{s}");
+}
+
+#[test]
 fn accept_stale_file_warns() {
     let tmp = shell_python_repo();
     let tpl = tempfile::tempdir().unwrap();
