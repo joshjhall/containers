@@ -705,7 +705,7 @@ test_no_fixture_leakage_into_production() {
 # map to a package.
 #
 # luggage resolves install_methods[].dependencies[] to host packages via the
-# catalog's `kind: system_package` entries (crates/luggage/src/sysdeps.rs) and,
+# catalog's `system_package` blocks (crates/luggage/src/sysdeps.rs) and,
 # in strict mode, refuses the install when any id is unmapped. That is how
 # #1526 shipped: every vendored node version's alpine `node-source` method
 # named gxx/make/linux_headers/python3/libstdcxx/libgcc, none were mirrored,
@@ -732,8 +732,10 @@ dependency_gaps() {
 
     map='{}'
     if [ "${#indexes[@]}" -gt 0 ]; then
+        # Keyed on the system_package block, not on `kind`: sysdeps resolves
+        # any catalog tool that carries one, so the guard must agree.
         map="$(command jq -cs '
-            map(select(.kind == "system_package")
+            map(select(.system_package != null)
                 | {key: .id, value: ((.system_package.platforms // {}) | keys)})
             | from_entries' "${indexes[@]}")" || {
             command echo "dependency_gaps: cannot read system_package entries under $catalog" >&2
@@ -828,14 +830,21 @@ test_dependency_guard_selectors_and_errors() {
     cat="$(command mktemp -d)"
     _write_sys "$cat" debonly '{"debian":{"name":"d"}}'
     _write_sys "$cat" alponly '{"alpine":{"name":"a"}}'
+    # Not kind=system_package but carries a block: sysdeps resolves it, so
+    # the guard must too (no gap reported for it below).
+    command mkdir -p "$cat/tools/other"
+    command printf '%s\n' '{"id":"other","kind":"runtime","system_package":{"platforms":{"debian":{"name":"o"}}}}' \
+        >"$cat/tools/other/index.json"
     command mkdir -p "$cat/tools/t/versions"
     # debian+alpine method:
     #   debonly (no selector)        -> gap on alpine only
     #   alponly scoped "debian:12"   -> applies to debian only -> gap debian
     #   alponly scoped "alpine"      -> applies to alpine only -> mapped, no gap
     #   ghost   scoped "rhel"        -> rhel not in method os  -> not checked
+    #   other   scoped "debian"      -> non-system_package kind, mapped -> no gap
     command printf '%s\n' '{"install_methods":[{"name":"m","platform":{"os":["debian","alpine"]},"dependencies":[
         {"tool":"debonly"},
+        {"tool":"other","platforms":["debian"]},
         {"tool":"alponly","platforms":["debian:12"]},
         {"tool":"alponly","platforms":["alpine"]},
         {"tool":"ghost","platforms":["rhel"]}]}]}' >"$cat/tools/t/versions/1.0.0.json"
@@ -848,16 +857,23 @@ test_dependency_guard_selectors_and_errors() {
         problems="$problems"$'\n'"  selector narrowing: got [${gaps//$'\n'/, }], want [alponly/debian, debonly/alpine]"
     fi
 
-    # Each malformed shape must make dependency_gaps fail, never print nothing.
-    local bad
-    for bad in \
-        '{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":["debonly"]}]}' \
-        '{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":"debonly","platforms":"alpine"}]}]}' \
-        '{"install_methods":[{"name":"m","dependencies":[{"tool":"debonly"}]}]}' \
-        'not json'; do
+    # Each malformed shape must make dependency_gaps fail, never print nothing,
+    # and fail for the INTENDED reason: every case names a tool the catalog
+    # maps, so only the matching guard branch should reject it. Pairs are
+    # "<expected stderr marker>|<version file body>".
+    local case marker bad err
+    for case in \
+        'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":["debonly"]}]}' \
+        'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":"debonly","platforms":"alpine"}]}]}' \
+        'declares dependencies but no platform.os|{"install_methods":[{"name":"m","dependencies":[{"tool":"debonly"}]}]}' \
+        'jq failed evaluating version files|not json'; do
+        marker="${case%%|*}"
+        bad="${case#*|}"
         command printf '%s\n' "$bad" >"$cat/tools/t/versions/1.0.0.json"
-        if dependency_gaps "$cat" >/dev/null 2>&1; then
+        if err="$(dependency_gaps "$cat" 2>&1 >/dev/null)"; then
             problems="$problems"$'\n'"  accepted malformed input: $bad"
+        elif [[ "$err" != *"$marker"* ]]; then
+            problems="$problems"$'\n'"  rejected for the wrong reason (want '$marker'): $bad -> $err"
         fi
     done
     command rm -rf "$cat"
