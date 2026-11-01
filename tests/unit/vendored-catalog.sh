@@ -700,6 +700,83 @@ test_no_fixture_leakage_into_production() {
     return 0
 }
 
+# dependency_gaps <catalog-dir> — print one `<dep>/<os>` line per distinct
+# dependency a version file declares for a distro that <catalog-dir> cannot
+# map to a package.
+#
+# luggage resolves install_methods[].dependencies[] to host packages via the
+# catalog's `kind: system_package` entries (crates/luggage/src/sysdeps.rs) and,
+# in strict mode, refuses the install when any id is unmapped. That is how
+# #1526 shipped: every vendored node version's alpine `node-source` method
+# named gxx/make/linux_headers/python3/libstdcxx/libgcc, none were mirrored,
+# and every alpine node evidence cell failed. The drift check could not see it
+# because it does not walk upstream-only tools.
+#
+# A dependency applies to each distro in its method's platform.os (string or
+# array), narrowed by its own `platforms` selectors — `distro` or
+# `distro:release`, the same rule as sysdeps::selector_matches. Only the distro
+# half matters here: package names are keyed by distro, not release.
+dependency_gaps() {
+    local catalog="$1" map
+    shopt -s nullglob
+    local indexes=("$catalog"/tools/*/index.json)
+    local versions=("$catalog"/tools/*/versions/*.json)
+    shopt -u nullglob
+    [ "${#versions[@]}" -gt 0 ] || return 0
+
+    map="$(command jq -cs '
+        map(select(.kind == "system_package")
+            | {key: .id, value: ((.system_package.platforms // {}) | keys)})
+        | from_entries' ${indexes[@]+"${indexes[@]}"})"
+    [ -n "$map" ] || map='{}'
+
+    command jq -r --argjson m "$map" '
+        (.install_methods // [])[]
+        | ((.platform.os // []) | if type == "string" then [.] else . end) as $oses
+        | (.dependencies // [])[] as $d
+        | $oses[] as $os
+        | select(($d.platforms // null) == null
+                 or any($d.platforms[]; split(":")[0] == $os))
+        | select((($m[$d.tool] // []) | index($os)) == null)
+        | "\($d.tool)/\($os)"' "${versions[@]}" | command sort -u
+}
+
+test_vendored_dependencies_resolve() {
+    if ! command -v jq >/dev/null 2>&1; then
+        skip_test "jq not available"
+        return 0
+    fi
+
+    local gaps
+    gaps="$(dependency_gaps "$VENDORED")"
+    if [ -n "$gaps" ]; then
+        fail_test "vendored dependencies with no system_package mapping (dep/os) — mirror them from containers-db:"$'\n'"$(command sed 's/^/  /' <<<"$gaps")"
+    fi
+    return 0
+}
+
+# The guard must discriminate: drop one mirrored entry from a scratch copy and
+# it has to name exactly that gap, so a jq slip that prints nothing cannot pass.
+test_dependency_guard_catches_missing_entry() {
+    if ! command -v jq >/dev/null 2>&1; then
+        skip_test "jq not available"
+        return 0
+    fi
+
+    local scratch gaps
+    scratch="$(command mktemp -d)"
+    command cp -R "$VENDORED/tools" "$scratch/tools"
+    command rm -rf "$scratch/tools/gxx"
+    gaps="$(dependency_gaps "$scratch")"
+    command rm -rf "$scratch"
+
+    # Exact match: the gap must be reported, and nothing else may be.
+    if [ "$gaps" != "gxx/alpine" ]; then
+        fail_test "expected exactly gxx/alpine after removing tools/gxx, got: ${gaps:-<nothing>}"
+    fi
+    return 0
+}
+
 # ---------------------------------------------------------------------------
 # Schema — needs `npx ajv`, so network-gated
 # ---------------------------------------------------------------------------
@@ -820,6 +897,8 @@ run_test "test_drift_no_matching_arg_has_no_pin_suffix" "drift check names no pi
 run_test "test_drift_reads_real_dockerfile_pin" "drift check reads the repo Dockerfile's live pin"
 run_test "test_index_matches_versions_on_disk" "index available[] agrees with versions/"
 run_test "test_no_fixture_leakage_into_production" "no tests-only fixtures in shipped catalog"
+run_test "test_vendored_dependencies_resolve" "every vendored dependency maps to a system package for its distros"
+run_test "test_dependency_guard_catches_missing_entry" "dependency guard names a removed system_package entry"
 run_test "test_catalogs_validate_against_schemas" "catalogs validate against JSON schemas"
 run_test "test_schema_fixtures_are_rejected" "ajv rejects schema negative fixtures"
 

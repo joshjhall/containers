@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "libatomic",
+  "display_name": "GCC atomic operations runtime library (libatomic)",
+  "kind": "system_package",
+  "homepage": "https://gcc.gnu.org",
+  "source_repo": "https://gcc.gnu.org/git/gcc.git",
+  "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
+  "activity": {
+    "score": "very-active",
+    "scan_cadence_days": 30,
+    "scanned_at": "2026-10-26T00:00:00Z"
+  },
+  "validation_tiers": {
+    "tier1": {
+      "available": true,
+      "notes": "Distro package archives are GPG-signed by their respective archive keyrings (debian-archive-keyring, ubuntu-archive-keyring, alpine-keys, redhat-release). Trust is rooted in the host package manager's configuration. Runtime dependency of the Node.js arm64 glibc tarball from 25.0.0 on (links libatomic.so.1; exits 127 without it; measured via readelf NEEDED, see docs/source-build-musl.md). Consumers declare it arch-scoped on their arm64 install method's dependencies[] (the method's platform.arch is the scope), not unconditionally. Package names checked against the live arm64 indexes on 2026-10-26: debian 12/13, ubuntu 24.04/26.04, alpine 3.22-3.24, rhel 9/10 (ubi9/ubi10); none renames the package and none ships it in the base image."
+    }
+  },
+  "system_package": {
+    "platforms": {
+      "debian": { "name": "libatomic1" },
+      "ubuntu": { "name": "libatomic1" },
+      "alpine": { "name": "libatomic" },
+      "rhel": { "name": "libatomic" }
+    }
+  }
+}
