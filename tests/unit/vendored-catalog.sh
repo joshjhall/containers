@@ -721,14 +721,20 @@ test_no_fixture_leakage_into_production() {
 # cannot evaluate the catalog: a dependency that is not an object with a
 # string `tool`, `platforms` that is not an array of strings, or a method declaring
 # dependencies with no platform.os (its distros, and so its gaps, would be
-# unknowable). An empty result must only ever mean "no gaps".
+# unknowable), or a catalog with no version files at all. An empty result
+# must only ever mean "no gaps".
 dependency_gaps() {
     local catalog="$1" map raw
     shopt -s nullglob
     local indexes=("$catalog"/tools/*/index.json)
     local versions=("$catalog"/tools/*/versions/*.json)
     shopt -u nullglob
-    [ "${#versions[@]}" -gt 0 ] || return 0
+    # No version files means nothing was checked, not that nothing is missing
+    # (a wrong catalog path would otherwise read as a clean catalog).
+    if [ "${#versions[@]}" -eq 0 ]; then
+        command echo "dependency_gaps: no tools/*/versions/*.json under $catalog" >&2
+        return 1
+    fi
 
     map='{}'
     if [ "${#indexes[@]}" -gt 0 ]; then
@@ -865,12 +871,16 @@ test_dependency_guard_selectors_and_errors() {
     #   alponly scoped "alpine"      -> applies to alpine only -> mapped, no gap
     #   ghost   scoped "rhel"        -> rhel not in method os  -> not checked
     #   other   scoped "debian"      -> non-system_package kind, mapped -> no gap
+    #   nowhere scoped []            -> applies to nothing (as sysdeps) -> no gap;
+    #                                   unmapped everywhere, so "[] = all" would
+    #                                   surface nowhere/debian + nowhere/alpine
     command printf '%s\n' '{"install_methods":[{"name":"m","platform":{"os":["debian","alpine"]},"dependencies":[
         {"tool":"debonly"},
         {"tool":"other","platforms":["debian"]},
         {"tool":"alponly","platforms":["debian:12"]},
         {"tool":"alponly","platforms":["alpine"]},
-        {"tool":"ghost","platforms":["rhel"]}]}]}' >"$cat/tools/t/versions/1.0.0.json"
+        {"tool":"ghost","platforms":["rhel"]},
+        {"tool":"nowhere","platforms":[]}]}]}' >"$cat/tools/t/versions/1.0.0.json"
 
     rc=0
     gaps="$(dependency_gaps "$cat")" || rc=$?
@@ -903,6 +913,13 @@ test_dependency_guard_selectors_and_errors() {
             problems="$problems"$'\n'"  rejected for the wrong reason (want '$marker'): $bad -> $err"
         fi
     done
+    # A catalog with no version files must not read as "no gaps".
+    command rm -rf "$cat/tools/t/versions"
+    if err="$(dependency_gaps "$cat" 2>&1 >/dev/null)"; then
+        problems="$problems"$'\n'"  accepted a catalog with no version files"
+    elif [[ "$err" != *"no tools/*/versions/*.json"* ]]; then
+        problems="$problems"$'\n'"  empty catalog rejected for the wrong reason: $err"
+    fi
     command rm -rf "$cat"
 
     if [ -n "$problems" ]; then
