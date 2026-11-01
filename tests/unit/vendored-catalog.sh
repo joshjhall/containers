@@ -747,10 +747,14 @@ dependency_gaps() {
         input_filename as $f
         | (.install_methods // [])[]
         | (.dependencies // []) as $deps
-        | if ($deps | length) > 0 and (.platform.os // null) == null
+        | ((.platform.os // []) | if type == "string" then [.] else . end) as $oses
+        # Empty, non-array, or non-string-element os all leave the distros of
+        # the method unknowable: an empty $oses would silently check nothing.
+        | if ($deps | length) > 0
+             and (($oses | type) != "array" or ($oses | length) == 0
+                  or any($oses[]; type != "string"))
           then error("\($f): method \(.name // "?") declares dependencies but no platform.os")
           else . end
-        | ((.platform.os // []) | if type == "string" then [.] else . end) as $oses
         | $deps[] as $d
         | if ($d | type) != "object" or ($d.tool | type) != "string"
              or (($d.platforms // []) | type) != "array"
@@ -793,19 +797,37 @@ test_dependency_guard_catches_missing_entry() {
         return 0
     fi
 
-    local scratch gaps
+    local scratch gaps rc problems=""
     scratch="$(command mktemp -d)"
     command cp -R "$VENDORED/tools" "$scratch/tools"
+
+    # Whole entry missing (gxx is alpine-only).
     command rm -rf "$scratch/tools/gxx"
-    local rc=0
+    rc=0
     gaps="$(dependency_gaps "$scratch")" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        problems="$problems"$'\n'"  whole-entry removal: exit $rc on a well-formed scratch catalog"
+    elif [ "$gaps" != "gxx/alpine" ]; then
+        problems="$problems"$'\n'"  whole-entry removal: want exactly gxx/alpine, got: ${gaps:-<nothing>}"
+    fi
+    command cp -R "$VENDORED/tools/gxx" "$scratch/tools/gxx"
+
+    # Partially mirrored entry: one distro dropped from a multi-distro
+    # mapping. libatomic's consumers target debian/ubuntu/rhel.
+    local lib="$scratch/tools/libatomic/index.json"
+    command jq 'del(.system_package.platforms.rhel)' "$VENDORED/tools/libatomic/index.json" >"$lib"
+    rc=0
+    gaps="$(dependency_gaps "$scratch")" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        problems="$problems"$'\n'"  partial-entry removal: exit $rc on a well-formed scratch catalog"
+    elif [ "$gaps" != "libatomic/rhel" ]; then
+        problems="$problems"$'\n'"  partial-entry removal: want exactly libatomic/rhel, got: ${gaps:-<nothing>}"
+    fi
     command rm -rf "$scratch"
 
     # Exact match: the gap must be reported, and nothing else may be.
-    if [ "$rc" -ne 0 ]; then
-        fail_test "dependency_gaps exited $rc on a well-formed scratch catalog"
-    elif [ "$gaps" != "gxx/alpine" ]; then
-        fail_test "expected exactly gxx/alpine after removing tools/gxx, got: ${gaps:-<nothing>}"
+    if [ -n "$problems" ]; then
+        fail_test "dependency guard did not name the removed mapping:$problems"
     fi
     return 0
 }
@@ -866,6 +888,9 @@ test_dependency_guard_selectors_and_errors() {
         'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":["debonly"]}]}' \
         'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":"debonly","platforms":"alpine"}]}]}' \
         'declares dependencies but no platform.os|{"install_methods":[{"name":"m","dependencies":[{"tool":"debonly"}]}]}' \
+        'declares dependencies but no platform.os|{"install_methods":[{"name":"m","platform":{"os":[]},"dependencies":[{"tool":"debonly"}]}]}' \
+        'declares dependencies but no platform.os|{"install_methods":[{"name":"m","platform":{"os":{"x":"alpine"}},"dependencies":[{"tool":"debonly"}]}]}' \
+        'declares dependencies but no platform.os|{"install_methods":[{"name":"m","platform":{"os":[1]},"dependencies":[{"tool":"debonly"}]}]}' \
         'jq failed evaluating version files|not json'; do
         marker="${case%%|*}"
         bad="${case#*|}"
