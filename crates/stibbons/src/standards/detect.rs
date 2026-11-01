@@ -232,15 +232,12 @@ mod tests {
     /// Runs `git` in `dir` with any inherited repo-selecting env stripped.
     #[cfg(unix)]
     fn git(dir: &Path, args: &[&str]) -> bool {
-        Command::new("git")
-            .arg("-C")
-            .arg(dir)
-            .args(args)
-            .env_remove("GIT_DIR")
-            .env_remove("GIT_WORK_TREE")
-            .env_remove("GIT_INDEX_FILE")
-            .output()
-            .is_ok_and(|o| o.status.success())
+        let mut cmd = Command::new("git");
+        cmd.arg("-C").arg(dir).args(args);
+        for var in GIT_REPO_ENV {
+            cmd.env_remove(var);
+        }
+        cmd.output().is_ok_and(|o| o.status.success())
     }
 
     #[cfg(unix)]
