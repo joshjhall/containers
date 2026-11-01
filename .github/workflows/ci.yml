@@ -474,7 +474,9 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
         env:
+          # Fail, rather than skip, tests that need a gate CI is meant to run.
           REQUIRE_LIBRARIAN_PARITY: ${{ runner.os == 'Linux' && '1' || '' }}
+          REQUIRE_UNPRIVILEGED_TESTS: "1"
           LIBRARIAN_RENDER_SH: ${{ github.workspace }}/_librarian/plugins/dev-core/skills/repo-baseline/templates/render.sh
 
       - name: Verify build

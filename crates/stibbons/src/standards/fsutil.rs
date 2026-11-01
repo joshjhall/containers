@@ -82,8 +82,13 @@ mod tests {
         std::fs::write(&f, b"x").unwrap();
         std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o000)).unwrap();
         // Control: root (or CAP_DAC_OVERRIDE) reads through mode 000, so the
-        // denial cannot be observed there.
+        // denial cannot be observed there. CI runs unprivileged and sets
+        // REQUIRE_UNPRIVILEGED_TESTS=1, so there this skip is a failure.
         if std::fs::read(&f).is_ok() {
+            assert!(
+                std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
+                "REQUIRE_UNPRIVILEGED_TESTS=1 but mode 000 is readable (running as root?)"
+            );
             eprintln!("skipping: mode 000 is readable here (running as root?)");
             return;
         }
