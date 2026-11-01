@@ -250,7 +250,10 @@ test_dependency_guard_selectors_and_errors() {
         'declares dependencies but no platform.os|{"install_methods":[{"name":"m","platform":{"os":[1]},"dependencies":[{"tool":"debonly"}]}]}' \
         'dependencies is not an array|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":{"x":{"tool":"debonly"}}}]}' \
         'dependencies is not an array|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":"debonly"}]}' \
+        'dependencies is not an array|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":false}]}' \
         'install_methods is not an array|{"install_methods":{}}' \
+        'install_methods is not an array|{"install_methods":false}' \
+        'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":5}]}]}' \
         'jq failed evaluating version files|not json'; do
         marker="${case%%|*}"
         bad="${case#*|}"
