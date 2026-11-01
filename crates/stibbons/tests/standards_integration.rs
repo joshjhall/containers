@@ -322,6 +322,41 @@ fn failed_accept_reports_and_saves_nothing() {
 }
 
 #[test]
+fn accept_reports_a_repeated_path_once() {
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let path = tmp.path().join("_typos.toml");
+    fs::write(&path, format!("{}# edit\n", fs::read_to_string(&path).unwrap())).unwrap();
+    let out = standards(tmp.path(), &["accept", "_typos.toml", "./_typos.toml"]);
+    assert_ok(&out, "accept repeated path");
+    let s = stdout_of(&out);
+    assert_eq!(s.matches("accepted _typos.toml").count(), 1, "{s}");
+}
+
+#[test]
+fn bare_accept_saves_a_cleared_acceptance_alone() {
+    // Nothing is modified, so the clear is the only change bare `accept`
+    // makes — it must still be saved.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let path = tmp.path().join("_typos.toml");
+    let original = fs::read_to_string(&path).unwrap();
+    let edited = format!("{original}# per-repo edit\n");
+    fs::write(&path, &edited).unwrap();
+    assert_ok(&standards(tmp.path(), &["accept"]), "accept edit");
+    fs::write(&path, &original).unwrap();
+
+    let out = standards(tmp.path(), &["accept"]);
+    assert_ok(&out, "bare accept");
+    assert!(stdout_of(&out).contains("cleared the earlier accepted edit of _typos.toml"));
+
+    fs::write(&path, &edited).unwrap();
+    let out = standards(tmp.path(), &["check"]);
+    assert_eq!(out.status.code(), Some(1), "re-applied edit must be drift again");
+    assert!(stdout_of(&out).contains("_typos.toml (modified)"), "{}", stdout_of(&out));
+}
+
+#[test]
 fn bare_accept_clears_earlier_acceptance_of_reverted_file() {
     // Same hazard as above, via `accept` with no paths, while another file is
     // modified: the reverted file's acceptance is cleared, the other accepted.

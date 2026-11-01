@@ -321,11 +321,16 @@ fn accept_into(
             }
         }
     } else {
+        let mut seen = BTreeSet::new();
         for p in paths {
             let t = p.strip_prefix("./").unwrap_or(p);
             let Some(file) = rendered.iter().find(|f| f.target == t) else {
                 return Err(format!("`{p}` is not a repo-baseline file").into());
             };
+            // `x` and `./x` name one target: classify and report it once.
+            if !seen.insert(t) {
+                continue;
+            }
             match classify_check(root, file, state)? {
                 FileState::Ok => {
                     writeln!(
