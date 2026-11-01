@@ -762,13 +762,17 @@ dependency_gaps() {
           then error("\($f): method \(.name // "?") declares dependencies but no platform.os")
           else . end
         | $deps[] as $d
+        # Absent/null `platforms` means "no selectors"; anything else must be
+        # an array of strings. Test with == null, never `//`: `//` also
+        # swallows `false`, which would read as "applies everywhere".
         | if ($d | type) != "object" or ($d.tool | type) != "string"
-             or (($d.platforms // []) | type) != "array"
-             or any(($d.platforms // [])[]; type != "string")
+             or ($d.platforms != null
+                 and (($d.platforms | type) != "array"
+                      or any($d.platforms[]; type != "string")))
           then error("\($f): malformed dependency \($d | tojson)")
           else . end
         | $oses[] as $os
-        | select(($d.platforms // null) == null
+        | select($d.platforms == null
                  or any($d.platforms[]; split(":")[0] == $os))
         | select((($m[$d.tool] // []) | index($os)) == null)
         | "\($d.tool)/\($os)"' "${versions[@]}")" || {
@@ -864,6 +868,9 @@ test_dependency_guard_selectors_and_errors() {
     command mkdir -p "$cat/tools/other"
     command printf '%s\n' '{"id":"other","kind":"runtime","system_package":{"platforms":{"debian":{"name":"o"}}}}' \
         >"$cat/tools/other/index.json"
+    # system_package with no `platforms` maps no distro: every use is a gap.
+    command mkdir -p "$cat/tools/bare"
+    command printf '%s\n' '{"id":"bare","system_package":{}}' >"$cat/tools/bare/index.json"
     command mkdir -p "$cat/tools/t/versions"
     # debian+alpine method:
     #   debonly (no selector)        -> gap on alpine only
@@ -874,20 +881,23 @@ test_dependency_guard_selectors_and_errors() {
     #   nowhere scoped []            -> applies to nothing (as sysdeps) -> no gap;
     #                                   unmapped everywhere, so "[] = all" would
     #                                   surface nowhere/debian + nowhere/alpine
-    command printf '%s\n' '{"install_methods":[{"name":"m","platform":{"os":["debian","alpine"]},"dependencies":[
+    #   bare    scoped "alpine"      -> block without platforms -> gap alpine
+    # plus a method with no dependencies and no platform.os: valid, no output.
+    command printf '%s\n' '{"install_methods":[{"name":"nodeps"},{"name":"m","platform":{"os":["debian","alpine"]},"dependencies":[
         {"tool":"debonly"},
         {"tool":"other","platforms":["debian"]},
         {"tool":"alponly","platforms":["debian:12"]},
         {"tool":"alponly","platforms":["alpine"]},
         {"tool":"ghost","platforms":["rhel"]},
-        {"tool":"nowhere","platforms":[]}]}]}' >"$cat/tools/t/versions/1.0.0.json"
+        {"tool":"nowhere","platforms":[]},
+        {"tool":"bare","platforms":["alpine"]}]}]}' >"$cat/tools/t/versions/1.0.0.json"
 
     rc=0
     gaps="$(dependency_gaps "$cat")" || rc=$?
     if [ "$rc" -ne 0 ]; then
         problems="$problems"$'\n'"  well-formed synthetic catalog: exit $rc"
-    elif [ "$gaps" != $'alponly/debian\ndebonly/alpine' ]; then
-        problems="$problems"$'\n'"  selector narrowing: got [${gaps//$'\n'/, }], want [alponly/debian, debonly/alpine]"
+    elif [ "$gaps" != $'alponly/debian\nbare/alpine\ndebonly/alpine' ]; then
+        problems="$problems"$'\n'"  selector narrowing: got [${gaps//$'\n'/, }], want [alponly/debian, bare/alpine, debonly/alpine]"
     fi
 
     # Each malformed shape must make dependency_gaps fail, never print nothing,
@@ -899,6 +909,7 @@ test_dependency_guard_selectors_and_errors() {
         'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":["debonly"]}]}' \
         'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":"debonly","platforms":"alpine"}]}]}' \
         'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":"debonly","platforms":[12]}]}]}' \
+        'malformed dependency|{"install_methods":[{"name":"m","platform":{"os":"alpine"},"dependencies":[{"tool":"debonly","platforms":false}]}]}' \
         'declares dependencies but no platform.os|{"install_methods":[{"name":"m","dependencies":[{"tool":"debonly"}]}]}' \
         'declares dependencies but no platform.os|{"install_methods":[{"name":"m","platform":{"os":[]},"dependencies":[{"tool":"debonly"}]}]}' \
         'declares dependencies but no platform.os|{"install_methods":[{"name":"m","platform":{"os":{"x":"alpine"}},"dependencies":[{"tool":"debonly"}]}]}' \
