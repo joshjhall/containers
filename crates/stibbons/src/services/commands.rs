@@ -3,8 +3,8 @@
 //! Each `run_*` function takes an already-resolved [`AgentContext`], an
 //! injected `&dyn DockerRunner`, and a `&mut dyn Write` sink so tests can drive
 //! them with a `MockDocker` and a captured buffer — no real Docker or stdout
-//! needed. They port the Go `runServices*` bodies from the
-//! retired `cmd/igor/internal/cmd/services*.go`.
+//! needed. They port the Go `runServices*` bodies from the retired
+//! `cmd/igor/internal/cmd/services*.go`.
 
 use std::io::Write;
 
