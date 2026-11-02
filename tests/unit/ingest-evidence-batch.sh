@@ -242,6 +242,31 @@ test_all_cancelled_run_is_a_neutral_skip() {
         "no batch branch is created"
 }
 
+test_all_cancelled_skip_edge_cases() {
+    # Review follow-up: the skip keys on "no *.json under rows-dir", so a dir
+    # holding only other files is still all-cancelled; --dry-run (the PR
+    # path) skips the same way; and 0 is accepted and reported literally.
+    local d db rc=0 err
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    db="$d/db"
+    _fake_db "$db"
+    _gh_stub
+    command mkdir -p "$d/rows/evidence-row-x"
+    command printf 'not a row\n' >"$d/rows/evidence-row-x/manifest.txt"
+    _run_expected "$d/rows" "$db" 4
+    assert_equals "0" "$RC" "a rows dir with only non-JSON files is a neutral skip"
+    assert_contains "$ERR" "no evidence rows: all 4 cells cancelled/timed out" "with the all-cancelled message"
+    err="$(PATH="$STUB_DIR:$PATH" GH_TOKEN=dummy BASH_ENV='' "$BATCH" --rows-dir "$d/none" --db-path "$db" \
+        --run-id 4242 --expected-cells 2 --dry-run --no-validate 2>&1 >/dev/null)" || rc=$?
+    assert_equals "0" "$rc" "--dry-run with no rows is the same neutral skip"
+    assert_contains "$err" "no evidence rows: all 2 cells cancelled/timed out" "and says so"
+    _run_expected "$d/none" "$db" 0
+    assert_equals "0" "$RC" "--expected-cells 0 is accepted"
+    assert_contains "$ERR" "no evidence rows: all 0 cells cancelled/timed out" "and reported as given"
+    assert_equals "0" "$(git -C "$db" branch --list 'evidence/batch/*' | command wc -l | command tr -d ' ')" \
+        "none of them creates a batch branch"
+}
+
 test_expected_cells_with_rows_still_ingests() {
     local d db
     d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
@@ -283,6 +308,7 @@ run_test test_dry_run_commits_locally_and_never_calls_github "dry-run commits lo
 run_test test_api_commit_failure_fails_the_ingest_and_opens_no_pr "a failed API commit fails the ingest with no PR"
 run_test test_unsafe_run_id_is_refused "unsafe run id is refused"
 run_test test_all_cancelled_run_is_a_neutral_skip "an all-cancelled run (no rows) is a clear neutral skip"
+run_test test_all_cancelled_skip_edge_cases "all-cancelled skip: non-JSON-only dir, --dry-run, zero cells"
 run_test test_expected_cells_with_rows_still_ingests "--expected-cells does not change a run with rows"
 run_test test_missing_rows_dir_without_expected_cells_is_a_usage_error "absent --rows-dir without --expected-cells is exit 2"
 run_test test_bad_expected_cells_is_refused "a bad --expected-cells is refused"
