@@ -693,7 +693,11 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: ./bin/dispatch-evidence.sh --base "$BASE_SHA" --head "$HEAD_SHA"
 
+      # Best-effort: the matrix is informational, and since it became a PR
+      # (#1573) it has more ways to fail (API commit, PR create). None of them
+      # may block the release tag below, which the merged patch already earned.
       - name: Update compatibility matrix with test results
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
           VERSION: ${{ steps.release_info.outputs.version }}

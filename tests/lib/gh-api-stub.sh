@@ -9,6 +9,10 @@
 #   GH_PAYLOADS  directory; each `api graphql --input F` copies F to N.json
 # Behavior knobs (env, read at call time):
 #   GH_STUB_REF_EXISTS=1  `api repos/.../git/ref/heads/...` succeeds (else 404)
+#   GH_STUB_REF_EXISTS_ONLY  with REF_EXISTS=1, only refs whose path contains
+#                         this string exist
+#   GH_STUB_FAIL_MATCH    any `api` call whose argv contains this string exits 1
+#   GH_STUB_TREE_TRUNCATED=1  the tree response reports truncated:true
 #   GH_STUB_VERIFIED      the commit's verification.verified (default true)
 #   GH_STUB_TREE_MODE     mode every path reports in the tree (default: the
 #                         mode the payload implies, 100644)
@@ -35,12 +39,20 @@ case "$1 $2" in
         printf '{"data":{"createCommitOnBranch":{"commit":{"oid":"c0ffee%04d","url":"u"}}}}\n' "$n"
         ;;
     "api "*)
+        if [ -n "${GH_STUB_FAIL_MATCH:-}" ]; then
+            case "$*" in *"$GH_STUB_FAIL_MATCH"*) exit 1 ;; esac
+        fi
         for a in "$@"; do path="$a"; case "$a" in repos/*) break ;; esac; done
         case "$path" in
-            */git/ref/heads/*) [ "${GH_STUB_REF_EXISTS:-}" = 1 ] || exit 1; echo '{}' ;;
+            */git/ref/heads/*)
+                [ "${GH_STUB_REF_EXISTS:-}" = 1 ] || exit 1
+                case "$path" in *"${GH_STUB_REF_EXISTS_ONLY:-}"*) ;; *) exit 1 ;; esac
+                echo '{}'
+                ;;
             */git/trees/*)
                 command jq -c --arg m "${GH_STUB_TREE_MODE:-100644}" \
-                    '{truncated:false, tree: [.variables.input.fileChanges.additions[] | {path, mode:$m}]}' \
+                    --argjson t "$([ "${GH_STUB_TREE_TRUNCATED:-}" = 1 ] && echo true || echo false)" \
+                    '{truncated:$t, tree: [.variables.input.fileChanges.additions[] | {path, mode:$m}]}' \
                     "$GH_PAYLOADS/$(last)"
                 ;;
             */commits/*)

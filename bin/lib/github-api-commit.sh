@@ -54,29 +54,30 @@ gh_api_ensure_branch() {
 
 # gh_api_publish_branch <owner/repo> <branch> <dir> <message-file> [pathspec...]
 #
-# Like gh_api_ensure_branch + gh_api_commit_worktree, but <branch> is created
-# only once, directly at the finished signed commit: the commit is built on a
-# staging ref "<branch-prefix>-staging/<rest>" (e.g. auto-patch/x ->
-# auto-patch-staging/x), the real ref is then created at it and the staging
-# ref deleted. A workflow triggered by pushes to <branch> therefore runs once,
-# on the real commit, instead of first on the bare base SHA. <branch> must
-# not exist yet. Prints the commit oid.
+# Like gh_api_ensure_branch + gh_api_commit_worktree, but <branch> is pointed
+# at the commit only once it is finished: the commit is built on a staging ref
+# "<branch-prefix>-staging/<rest>" (e.g. auto-patch/x -> auto-patch-staging/x),
+# then <branch> is created at it (or force-moved, so a re-run with the same
+# name succeeds) and the staging ref is deleted. A workflow triggered by pushes
+# to <branch> therefore runs once, on the real commit, instead of first on the
+# bare base SHA. The staging ref is deleted on every path. Prints the oid.
 gh_api_publish_branch() {
-    local repo="$1" branch="$2" dir="$3" msg_file="$4" staging oid
+    local repo="$1" branch="$2" dir="$3" msg_file="$4" staging oid rc=0
     shift 4
     case "$branch" in
         */*) staging="${branch%%/*}-staging/${branch#*/}" ;;
         *) staging="$branch-staging" ;;
     esac
     gh_api_ensure_branch "$repo" "$staging" "$(git -C "$dir" rev-parse HEAD)" || return 1
-    oid="$(gh_api_commit_worktree "$repo" "$staging" "$dir" "$msg_file" "$@")" || {
-        gh api -X DELETE "repos/$repo/git/refs/heads/$staging" >/dev/null 2>&1 || true
-        return 1
-    }
-    gh_api_retry gh api -X POST "repos/$repo/git/refs" \
-        -f "ref=refs/heads/$branch" -f "sha=$oid" >/dev/null || return 1
+    if ! oid="$(gh_api_commit_worktree "$repo" "$staging" "$dir" "$msg_file" "$@")"; then
+        rc=1
+    elif ! gh_api_ensure_branch "$repo" "$branch" "$oid"; then
+        command echo "gh_api_publish_branch: could not point $branch at $oid on $repo" >&2
+        rc=1
+    fi
     gh api -X DELETE "repos/$repo/git/refs/heads/$staging" >/dev/null 2>&1 ||
         command echo "::warning::could not delete staging branch $staging on $repo" >&2
+    [ "$rc" -eq 0 ] || return 1
     command echo "$oid"
 }
 

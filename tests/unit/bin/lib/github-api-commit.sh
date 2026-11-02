@@ -187,6 +187,59 @@ test_publish_branch_failure_cleans_up_staging() {
         "the staging ref is removed"
 }
 
+test_publish_branch_rerun_force_moves_an_existing_branch() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    local rc=0
+    GH_STUB_REF_EXISTS=1 GH_STUB_REF_EXISTS_ONLY=heads/chore/m \
+        PATH="$STUB_DIR:$PATH" gh_api_publish_branch o/r chore/m "$REPO" "$MSG" >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "a re-run whose branch already exists still publishes"
+    assert_equals "1" "$(command grep -cx 'api -X PATCH repos/o/r/git/refs/heads/chore/m -f sha=c0ffee0001 -F force=true' "$GH_LOG")" \
+        "the existing branch is force-moved to the new commit"
+    assert_equals "1" "$(command grep -cx 'api -X DELETE repos/o/r/git/refs/heads/chore-staging/m' "$GH_LOG")" \
+        "and staging is removed"
+}
+
+test_publish_branch_real_ref_failure_cleans_up_staging() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    local rc=0 out
+    out="$(GH_API_RETRY_DELAY=0 GH_STUB_FAIL_MATCH='ref=refs/heads/auto-patch/x' \
+        PATH="$STUB_DIR:$PATH" gh_api_publish_branch o/r auto-patch/x "$REPO" "$MSG" 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "failing to create the real ref fails the publish"
+    assert_equals "" "$out" "and prints no oid"
+    assert_equals "1" "$(command grep -cx 'api -X DELETE repos/o/r/git/refs/heads/auto-patch-staging/x' "$GH_LOG")" \
+        "the staging ref is still removed"
+}
+
+test_staging_delete_failure_only_warns() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    local rc=0 out
+    out="$(GH_STUB_FAIL_MATCH='-X DELETE' PATH="$STUB_DIR:$PATH" \
+        gh_api_publish_branch o/r auto-patch/x "$REPO" "$MSG" 2>"$REPO.err")" || rc=$?
+    assert_equals "0" "$rc" "a leftover staging ref does not fail a landed publish"
+    assert_equals "c0ffee0001" "$out" "the oid is still printed"
+    assert_contains "$(command cat "$REPO.err")" "::warning::could not delete staging branch auto-patch-staging/x" \
+        "but it is flagged"
+}
+
+test_truncated_tree_warns_and_tree_read_failure_errors() {
+    _repo
+    gh_stub_install
+    command printf '#!/bin/sh\necho hi\n' >"$REPO/run.sh"
+    GH_STUB_TREE_TRUNCATED=1 GH_STUB_TREE_MODE=100644 _commit
+    assert_equals "0" "$RC" "a truncated tree cannot be checked, so it does not fail the commit"
+    assert_contains "$ERR" "::warning::tree of c0ffee0001 is truncated; file modes not verified" "but says so"
+    command printf '#!/bin/sh\necho bye\n' >"$REPO/run.sh"
+    GH_STUB_FAIL_MATCH='git/trees/' _commit
+    assert_equals "1" "$RC" "an unreadable tree fails the commit: the modes are unverified"
+    assert_contains "$ERR" "could not read the tree" "and says why"
+}
+
 run_test test_payload_carries_additions_deletions_and_expected_head "payload carries additions, deletions and expected head"
 run_test test_pathspec_limits_what_is_committed "pathspec limits what is committed"
 run_test test_new_executable_is_refused_before_any_api_call "a new executable is refused before any API call"
@@ -200,5 +253,9 @@ run_test test_ensure_branch_creates_or_force_moves "ensure_branch creates or for
 
 run_test test_publish_branch_creates_the_real_ref_only_at_the_signed_commit "publish_branch creates the real ref only at the signed commit"
 run_test test_publish_branch_failure_cleans_up_staging "publish_branch failure cleans up staging"
+run_test test_publish_branch_rerun_force_moves_an_existing_branch "publish_branch re-run force-moves an existing branch"
+run_test test_publish_branch_real_ref_failure_cleans_up_staging "publish_branch real-ref failure cleans up staging"
+run_test test_staging_delete_failure_only_warns "a staging delete failure only warns"
+run_test test_truncated_tree_warns_and_tree_read_failure_errors "truncated tree warns; unreadable tree errors"
 
 generate_report
