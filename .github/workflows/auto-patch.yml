@@ -104,6 +104,12 @@ jobs:
       # luggage-installed tools (e.g. Rust) to keep the vendored catalog in
       # lockstep with the Dockerfile pin (issue #506). Build the binary first
       # so the updater can find it at target/release/luggage.
+      #
+      # A LIBRARIAN_REF bump also re-vendors stibbons' repo-baseline templates
+      # (sync_repo_baseline clones librarian at the new tag, #1543). Changed
+      # and removed templates ride the API commit; a template librarian adds
+      # as executable is refused by gh_api_commit_worktree (new files must be
+      # 100644) and fails the job loudly rather than shipping it wrong.
       - name: Build luggage (for catalog updates)
         if: steps.check.outputs.has_updates == 'true'
         run: cargo build --release -p luggage --bin luggage
