@@ -88,13 +88,9 @@ jobs:
         id: librarian
         run: |
           set -euo pipefail
-          ref=$(sed -n 's/^ARG LIBRARIAN_REF=//p' Dockerfile | tr -d '"')
-          # LIBRARIAN_REF must be a signed release tag (CLAUDE.md), so accept
-          # only that shape before it reaches a checkout `ref:`.
-          if ! printf '%s' "$ref" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::ARG LIBRARIAN_REF in Dockerfile is not a vX.Y.Z tag: '$ref'"
-            exit 1
-          fi
+          # Fails unless exactly one ARG line exists and it is a vX.Y.Z
+          # release tag (CLAUDE.md) — before it reaches a checkout `ref:`.
+          ref=$(bin/read-librarian-pin.sh Dockerfile)
           echo "ref=$ref" >>"$GITHUB_OUTPUT"
 
       - name: Checkout librarian (for the memory-bundle gate)
@@ -442,11 +438,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
-          ref=$(sed -n 's/^ARG LIBRARIAN_REF=//p' Dockerfile | tr -d '"')
-          if ! printf '%s' "$ref" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::ARG LIBRARIAN_REF in Dockerfile is not a vX.Y.Z tag: '$ref'"
-            exit 1
-          fi
+          ref=$(bin/read-librarian-pin.sh Dockerfile)
           echo "ref=$ref" >>"$GITHUB_OUTPUT"
 
       - name: Checkout librarian (for render.sh parity)
