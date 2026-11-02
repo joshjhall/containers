@@ -37,7 +37,7 @@ _gh_api_is_permanent() {
         *[Rr]ate\ limit* | *[Aa]buse* | *"HTTP 408"* | *"HTTP 409"* | *"HTTP 429"*) return 1 ;;
         *"HTTP 4"[0-9][0-9]*) return 0 ;;
         *"Resource not accessible"* | *"Repository rule violations"* | \
-            *"Could not resolve"* | *"No commits between"* | *"not permitted"*) return 0 ;;
+            *"Could not resolve to a"* | *"No commits between"* | *"not permitted"*) return 0 ;;
     esac
     return 1
 }
@@ -337,12 +337,16 @@ _gh_api_create_commit() {
             fi
         fi
         errors="$(command jq -r '.errors[]? | "\(.type // "ERROR"): \(.message)"' <<<"$resp" 2>/dev/null || true)"
-        command echo "gh_api_commit_worktree: createCommitOnBranch attempt $i failed (exit $rc):" \
-            "${errors:-no errors in response}" >&2
+        # Every line of GitHub's text is indented, so none can start with
+        # "::" and be read as a workflow command.
+        command echo "gh_api_commit_worktree: createCommitOnBranch attempt $i failed (exit $rc):" >&2
+        command sed 's/^/  /' <<<"${errors:-no errors in response}" >&2
         [ -s "$err" ] && command sed 's/^/  gh: /' "$err" >&2
+        # NOT_FOUND / "Could not resolve" stay retryable here: GraphQL can
+        # briefly fail to resolve a branch gh_api_ensure_branch just created.
         permanent=0
-        if command grep -qE '^(FORBIDDEN|UNPROCESSABLE|NOT_FOUND|INSUFFICIENT_SCOPES):|Repository rule violations' <<<"$errors" ||
-            _gh_api_is_permanent "$err"; then
+        if command grep -qE '^(FORBIDDEN|UNPROCESSABLE|INSUFFICIENT_SCOPES):|Repository rule violations' <<<"$errors" ||
+            { _gh_api_is_permanent "$err" && ! command grep -q 'Could not resolve' "$err"; }; then
             permanent=1
         fi
         head="$(gh api "repos/$repo/git/ref/heads/$branch" 2>/dev/null |

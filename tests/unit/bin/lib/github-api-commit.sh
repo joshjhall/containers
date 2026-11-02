@@ -427,7 +427,8 @@ test_exit0_errors_body_is_logged_and_classified() {
         GH_STUB_GRAPHQL_ERRORS='UNPROCESSABLE:Repository rule violations found' _commit
     assert_equals "1" "$RC" "an exit-0 errors body fails the commit"
     assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "a ruleset rejection is not retried"
-    assert_contains "$ERR" "(exit 0): UNPROCESSABLE: Repository rule violations found" "its message is logged"
+    assert_contains "$ERR" "$(command printf '(exit 0):\n  UNPROCESSABLE: Repository rule violations found')" \
+        "its message is logged, indented on its own line"
     gh_stub_install
     GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS_EXIT0=1 GH_STUB_GRAPHQL_ERRORS='INTERNAL:Something went wrong' _commit
     assert_equals "1" "$RC" "an unknown errors body fails the commit"
@@ -501,6 +502,7 @@ transient|gh: You have triggered an abuse detection mechanism (HTTP 403)
 transient|gh: Too Many Requests (HTTP 429)
 transient|gh: Bad Gateway (HTTP 502)
 transient|dial tcp: i/o timeout
+transient|Could not resolve host: api.github.com
 transient|
 transient|gh: Reference already exists (HTTP 422)\ngh: Bad Gateway (HTTP 502)\n\n
 permanent|gh: Bad Gateway (HTTP 502)\ngh: Forbidden (HTTP 403)
@@ -540,6 +542,40 @@ test_create_pr_ignores_a_fork_pr_on_the_same_branch() {
     assert_equals "0" "$RC" "a fork PR does not block creating ours"
     assert_equals "https://github.com/joshjhall/containers-db/pull/9" "$OUT" "ours is created, the fork PR never adopted"
     assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" "with one create"
+}
+
+test_graphql_errors_cannot_issue_workflow_commands() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS_EXIT0=1 \
+        GH_STUB_GRAPHQL_ERRORS="$(command printf 'FORBIDDEN:denied\n::add-mask::x')" _commit
+    assert_equals "1" "$RC" "the commit fails"
+    assert_contains "$ERR" "  ::add-mask::x" "a later '::' line of GitHub's message is logged indented"
+    assert_equals "0" "$(command grep -c '^::add-mask::' <<<"$ERR" || true)" "and never at column 0"
+}
+
+test_not_found_graphql_error_is_retried() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS="NOT_FOUND:Could not resolve to a Ref with the name b" _commit
+    assert_equals "1" "$RC" "an unresolved branch still fails in the end"
+    assert_equals "3" "$(command grep -c '^api graphql' "$GH_LOG")" "but is retried: a new ref can lag"
+    assert_not_contains "$ERR" "permanent error" "and is not called permanent"
+}
+
+test_permanent_error_does_not_preempt_adopting_a_landed_commit() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    local base
+    base="$(git -C "$REPO" rev-parse HEAD)"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS='FORBIDDEN:Resource not accessible by integration' \
+        GH_STUB_REF_EXISTS=1 GH_STUB_BRANCH_HEAD=d00dfeed GH_STUB_PARENT="$base" _commit
+    assert_equals "0" "$RC" "a commit that landed is adopted despite the permanent error"
+    assert_equals "d00dfeed" "$OUT" "and its oid is printed"
+    assert_not_contains "$ERR" "permanent error on" "the read-back runs before the permanent stop"
 }
 
 run_test test_payload_carries_additions_deletions_and_expected_head "payload carries additions, deletions and expected head"
@@ -584,5 +620,9 @@ run_test test_409_conflict_is_retried "a 409 conflict is retried"
 run_test test_replayed_stderr_cannot_issue_workflow_commands "replayed stderr cannot issue workflow commands"
 run_test test_create_pr_requires_head_and_scopes_lookup_without_repo "create_pr requires --head; works without --repo"
 run_test test_create_pr_ignores_a_fork_pr_on_the_same_branch "create_pr ignores a fork PR on the same branch"
+
+run_test test_graphql_errors_cannot_issue_workflow_commands "GraphQL errors cannot issue workflow commands"
+run_test test_not_found_graphql_error_is_retried "a NOT_FOUND GraphQL error is retried"
+run_test test_permanent_error_does_not_preempt_adopting_a_landed_commit "a permanent error does not pre-empt adopting a landed commit"
 
 generate_report

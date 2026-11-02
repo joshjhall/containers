@@ -74,6 +74,8 @@ case "$1 $2" in
         ;;
     "api graphql")
         if [ -n "${GH_STUB_GRAPHQL_ERRORS:-}" ]; then
+            # Recorded like a landed payload, so a read-back can adopt it.
+            command cp "$4" "$GH_PAYLOADS/$(( $(command ls "$GH_PAYLOADS" | command wc -l) + 1 )).json"
             command jq -cn --arg t "${GH_STUB_GRAPHQL_ERRORS%%:*}" --arg m "${GH_STUB_GRAPHQL_ERRORS#*:}" \
                 '{data: {createCommitOnBranch: null}, errors: [{type: $t, message: $m}]}'
             [ "${GH_STUB_GRAPHQL_ERRORS_EXIT0:-}" = 1 ] && exit 0
