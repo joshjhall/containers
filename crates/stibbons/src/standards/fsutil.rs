@@ -47,7 +47,7 @@ pub fn set_executable(path: &Path) -> std::io::Result<()> {
     clippy::unnecessary_wraps,
     reason = "must match the fallible unix signature; there is no executable bit to set here"
 )]
-pub fn set_executable(_path: &Path) -> std::io::Result<()> {
+pub const fn set_executable(_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
