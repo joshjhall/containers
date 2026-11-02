@@ -3,8 +3,8 @@
 //! Each `run_*` function ports the matching Go `runAgent*` from
 //! `cmd/igor/internal/cmd/agent_*.go`. They take an already-resolved
 //! [`AgentContext`], an injected `&dyn DockerRunner`, and a `&mut dyn Write`
-//! sink so tests can drive them with a [`MockDocker`](super::docker::MockDocker)
-//! and a captured buffer — no real Docker or stdout needed.
+//! sink so tests can drive them with a `MockDocker` and a captured buffer — no
+//! real Docker or stdout needed.
 
 use std::io::{IsTerminal, Write};
 use std::time::{Duration, Instant};

@@ -92,7 +92,7 @@ fn detect_containers_version(containers_dir: &str) -> Option<String> {
 /// Resolves the containers version relative to `base`.
 ///
 /// The testable seam behind [`detect_containers_version`], mirroring
-/// [`super::version::detect_containers_version_in`]: taking the base directory
+/// `version::detect_containers_version_in`: taking the base directory
 /// as a parameter lets tests point at a temp dir without mutating the
 /// process-global CWD.
 fn detect_containers_version_in(base: &Path, containers_dir: &str) -> Option<String> {
