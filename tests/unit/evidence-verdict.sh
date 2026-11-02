@@ -184,7 +184,7 @@ test_empty_error_class_reaches_annotation() {
     # produce an annotation. `// "unknown"` does not replace "", so
     # read_evidence_verdict has to normalize it, or annotate_fail_verdict's
     # slug check rejects it and the fail cell stays invisible.
-    local row out rc=0 ec annotation
+    local row out rc=0 ec annotation summary="$TEST_TEMP_DIR/summary.md"
     row="$(write_row '{"result":"fail","error_class":""}')"
     out="$(read_evidence_verdict "$row")" || rc=$?
     assert_equals "0" "$rc" "empty error_class row still validates"
@@ -195,9 +195,15 @@ test_empty_error_class_reaches_annotation() {
     fi
     ec="$(command sed -n 's/^error_class=//p' <<<"$out")"
     rc=0
-    annotation="$(annotate_fail_verdict fail "$ec" node 20.13.1 alpine-3.22-amd64)" || rc=$?
+    # Pin the summary to scratch: CI's inherited GITHUB_STEP_SUMMARY would
+    # otherwise get a fake fail line in the unit-test job's summary.
+    annotation="$(GITHUB_STEP_SUMMARY="$summary" \
+        annotate_fail_verdict fail "$ec" node 20.13.1 alpine-3.22-amd64)" || rc=$?
     assert_equals "0" "$rc" "normalized class is accepted by annotate_fail_verdict"
     assert_contains "$annotation" "(error_class=unknown)" "annotation carries the normalized class"
+    assert_equals \
+        '- :x: `node@20.13.1` on `alpine-3.22-amd64` recorded **fail** (`error_class: unknown`)' \
+        "$(command cat "$summary")" "summary line carries the normalized class"
 }
 
 # --- Run -------------------------------------------------------------------
