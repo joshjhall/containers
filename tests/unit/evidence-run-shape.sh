@@ -267,22 +267,27 @@ test_main_runs_never_cancel() {
     local group cancel
     group="$(_concurrency_value group)"
     cancel="$(_concurrency_value cancel-in-progress)"
-    assert_true "$([[ $group == *"|| github.ref }}" ]] && echo true || echo false)" \
-        "non-PR runs fall back to the per-ref group (two main pushes serialize)"
-    case "$cancel" in
-        "\${{ github.event_name == 'pull_request' }}" | false)
-            assert_true true "cancel-in-progress cannot be true for push/dispatch"
-            ;;
-        *)
-            assert_true false "cancel-in-progress must be pull_request-gated, got: $cancel"
-            ;;
-    esac
+    # Evaluate both expressions the way Actions does for a non-PR event: the
+    # `github.event_name == 'pull_request'` test is false, so `&&` short-
+    # circuits and `||` yields the fallback, and cancel-in-progress is false.
+    local non_pr_group non_pr_cancel
+    non_pr_group="$(/usr/bin/sed -E \
+        "s/^evidence-\\$\\{\\{ github\\.event_name == 'pull_request' && [^|]+ \\|\\| (.+) \\}\\}$/evidence-<\\1>/" <<<"$group")"
+    assert_equals "evidence-<github.ref>" "$non_pr_group" \
+        "push/dispatch runs group per ref, so two main pushes serialize"
+    if [[ $cancel == "\${{ github.event_name == 'pull_request' }}" ]]; then
+        non_pr_cancel=false
+    else
+        non_pr_cancel="$cancel"
+    fi
+    assert_equals false "$non_pr_cancel" \
+        "cancel-in-progress evaluates to false for push/dispatch (got: $cancel)"
 }
 
 test_closed_pr_runs_do_nothing() {
     # A closed/merged PR's run joins the per-PR group only to cancel the
     # in-flight dry run; no job of its own may run.
-    local types job block
+    local types job block seen=0
     types="$(/usr/bin/awk '
         /^  pull_request:$/ { on = 1; next }
         on && /^  [a-z_]+:$/ { exit }
@@ -290,15 +295,20 @@ test_closed_pr_runs_do_nothing() {
     ' "$WF")"
     assert_contains "$types" 'closed' "pull_request triggers on closed"
     for job in $(/usr/bin/awk '/^jobs:$/ { on = 1; next } on && /^  [a-z_-]+:$/ { sub(/:$/, ""); sub(/^  /, ""); print }' "$WF"); do
+        seen=$((seen + 1))
         block="$(_job_block "$job")"
+        # A job reached only through `needs: setup` is skipped with setup —
+        # unless its `if:` calls a status function, which runs it anyway.
         if /usr/bin/grep -q "^    if:.*github.event.action != 'closed'" <<<"$block" ||
             { /usr/bin/grep -qE '^    needs: (setup|\[setup[],])' <<<"$block" &&
-                ! /usr/bin/grep -q '^    if:.*always()' <<<"$block"; }; then
+                ! /usr/bin/grep -qE '^    if:.*(always|cancelled|failure|success)\(\)' <<<"$block"; }; then
             assert_true true "job $job is skipped on a closed PR"
         else
-            assert_true false "job $job must skip on a closed PR (if: github.event.action != 'closed', or needs setup without always())"
+            assert_true false "job $job must skip on a closed PR (if: github.event.action != 'closed', or needs setup with no status function)"
         fi
     done
+    # Guard against a vacuous pass if the job listing ever matches nothing.
+    assert_equals 4 "$seen" "every job (setup, reconcile, evidence, collect) was checked"
     # collect runs under always(), which overrides a skipped setup.
     assert_contains "$(_job_block collect | /usr/bin/grep '^    if:')" \
         "github.event.action != 'closed'" "collect (always()) guards closed explicitly"

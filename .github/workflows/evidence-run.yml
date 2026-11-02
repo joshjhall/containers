@@ -80,8 +80,8 @@ on:
   pull_request:
     branches: [main]
     # `closed` is here only so a merged/closed PR's run joins the per-PR
-    # concurrency group below and cancels that PR's in-flight dry run. Every
-    # job skips on `closed`, so the close-event run itself does nothing (#1591).
+    # concurrency group below and cancels that PR's in-flight dry run. No job
+    # runs on `closed` (directly guarded, or skipped via `setup`) (#1591).
     types: [opened, synchronize, reopened, closed]
     paths:
       - "crates/luggage/**"
