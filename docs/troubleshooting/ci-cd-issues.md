@@ -188,9 +188,9 @@ gh api repos/OWNER/REPO/branches/main/protection \
 
 Why the two permissive settings are deliberate, not oversights:
 
-- **`enforce_admins: false`** — `auto-patch.yml`'s `post-merge` job pushes
-  **directly** to `main` (`git push origin HEAD:main` for the compatibility
-  matrix) and pushes a `v*` tag. Admin enforcement would break the release bot.
+- **`enforce_admins: false`** — `auto-patch.yml`'s `post-merge` job pushes a
+  `v*` tag. (The compatibility-matrix update no longer pushes to `main`: it is
+  an auto-merging PR with a GitHub-signed API commit, #1573.)
   The cost is that an admin can still direct-push; the goal here is the
   zero-check *merge* window on the PR path.
 - **No required reviews** — a required approval would block solo PRs from

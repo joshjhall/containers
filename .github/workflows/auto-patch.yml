@@ -112,17 +112,12 @@ jobs:
         if: steps.check.outputs.has_updates == 'true'
         env:
           UNCHECKED_TOOLS: ${{ steps.check.outputs.unchecked_tools }}
+          AUTO_PATCH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
         run: |
-          # Configure git
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Create branch name with timestamp
+          # Create branch name with timestamp. Updates are applied to the
+          # working tree; the commit is created through the API at the end.
           BRANCH_NAME="auto-patch/$(date +%Y%m%d-%H%M%S)"
           echo "Creating branch: $BRANCH_NAME"
-
-          # Create and checkout new branch
-          git checkout -b "$BRANCH_NAME"
 
           # Apply version updates.
           #
@@ -356,11 +351,14 @@ jobs:
           🤖 Generated with automated patch release system
           EOF
 
-          git add -A
-          git commit -F /tmp/commit-message.txt
-
-          # Push branch (this triggers CI)
-          git push origin "$BRANCH_NAME"
+          # Commit through the GitHub API, not git push, so GitHub signs it
+          # (#1573): a required_signatures ruleset on main refuses unsigned
+          # commits. The branch is created once, directly at the signed
+          # commit, and that push event (made with AUTO_PATCH_TOKEN, a PAT)
+          # triggers CI.
+          source bin/lib/github-api-commit.sh
+          GH_TOKEN="$AUTO_PATCH_TOKEN" gh_api_publish_branch \
+            "$GITHUB_REPOSITORY" "$BRANCH_NAME" . /tmp/commit-message.txt
 
           # Save branch name for potential use
           echo "PATCH_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
@@ -656,6 +654,7 @@ jobs:
       startsWith(github.event.pull_request.head.ref, 'auto-patch/')
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -694,7 +693,14 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: ./bin/dispatch-evidence.sh --base "$BASE_SHA" --head "$HEAD_SHA"
 
+      # Best-effort: the matrix is informational, and since it became a PR
+      # (#1573) it has more ways to fail (API commit, PR create). None of them
+      # may block the release tag below, which the merged patch already earned.
       - name: Update compatibility matrix with test results
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
+          VERSION: ${{ steps.release_info.outputs.version }}
         run: |
           echo "Updating compatibility matrix with passing test results..."
           if [ -f "version-compatibility-matrix.json" ]; then
@@ -776,12 +782,38 @@ jobs:
               echo "Only timestamp updates detected — skipping commit"
               git checkout -- version-compatibility-matrix.json
             else
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              git add version-compatibility-matrix.json
-              git commit -m "chore: Update compatibility matrix with passing test results"
-              git push origin HEAD:main
-              echo "Compatibility matrix updated with test results on main"
+              # Land the update as a PR with an API-created (GitHub-signed)
+              # commit instead of pushing to main (#1573): a direct push is
+              # unsigned and bypasses required checks. The head ref does not
+              # start with auto-patch/, so its merge does not re-enter this job.
+              source bin/lib/github-api-commit.sh
+              MATRIX_BRANCH="chore/compat-matrix-v${VERSION}"
+              printf 'chore: update compatibility matrix for v%s\n\nPassing test results from the automated patch release.\n' \
+                "$VERSION" > /tmp/matrix-message.txt
+              gh_api_publish_branch "$GITHUB_REPOSITORY" "$MATRIX_BRANCH" . \
+                /tmp/matrix-message.txt version-compatibility-matrix.json
+              # Reuse the PR a previous run of this job opened for the branch.
+              MATRIX_PR=$(gh pr list --head "$MATRIX_BRANCH" --state open --json url --jq '.[0].url // empty')
+              if [ -n "$MATRIX_PR" ]; then
+                echo "Reusing $MATRIX_PR"
+              else
+                MATRIX_PR=$(gh_api_retry gh pr create --base main --head "$MATRIX_BRANCH" \
+                  --title "chore: update compatibility matrix for v${VERSION}" \
+                  --body "Passing test results from the automated patch release v${VERSION}. Auto-merges when checks pass.")
+                echo "Opened $MATRIX_PR"
+              fi
+              # Retry: auto-merge can be refused right after PR creation.
+              for attempt in 1 2 3 4 5; do
+                if gh pr merge "$MATRIX_PR" --auto --squash --delete-branch; then
+                  echo "Auto-merge enabled on attempt $attempt"
+                  break
+                fi
+                if [ "$attempt" -eq 5 ]; then
+                  echo "::warning::could not enable auto-merge on $MATRIX_PR; merge it manually"
+                else
+                  sleep 10
+                fi
+              done
             fi
           else
             echo "Warning: version-compatibility-matrix.json not found"

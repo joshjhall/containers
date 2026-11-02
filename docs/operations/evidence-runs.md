@@ -360,6 +360,16 @@ caller-supplied credential is needed.
 The workflow reads this secret only in the non-dry-run path; a
 missing secret fails the run with a banner pointing at this doc.
 
+**Commits are made through the GitHub API, not `git push`.**
+containers-db `main` requires signed commits, and a bot's local
+`git commit` is unsigned. `bin/ingest-evidence-batch.sh` creates the
+`evidence/batch/<run-id>` ref and its single commit with the REST refs
+API and the GraphQL `createCommitOnBranch` mutation
+(`bin/lib/github-api-commit.sh`), which GitHub signs
+(`verification.verified == true`). The containers-db clone is read-only;
+no push credential is configured. `--dry-run` still commits locally and
+never calls the API (#1573).
+
 **Future: GitHub App.** Recommended once any of (rotation pain,
 auditability needs, multiple producers) is hit. Use
 [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token)

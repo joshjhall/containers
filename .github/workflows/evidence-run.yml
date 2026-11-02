@@ -87,6 +87,7 @@ on:
       - "bin/ingest-evidence.sh"
       - "bin/ingest-evidence-batch.sh"
       - "bin/lib/evidence-*.sh"
+      - "bin/lib/github-api-commit.sh"
       - ".github/workflows/evidence-run.yml"
   push:
     branches: [main]
@@ -98,6 +99,7 @@ on:
       - "bin/ingest-evidence.sh"
       - "bin/ingest-evidence-batch.sh"
       - "bin/lib/evidence-*.sh"
+      - "bin/lib/github-api-commit.sh"
       - ".github/workflows/evidence-run.yml"
 
 permissions:
@@ -630,9 +632,11 @@ jobs:
       - name: Ingest (one PR, auto-merged)
         if: ${{ needs.setup.outputs.dry_run != 'true' }}
         env:
+          # The commit is made through the GitHub API (signed by GitHub;
+          # containers-db main requires signed commits, #1573), so no git
+          # push credential is configured: the clone of the public repo
+          # is read-only.
           GH_TOKEN: ${{ secrets.CONTAINERS_DB_PAT }}
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
           RUN_ID: ${{ github.run_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -640,7 +644,6 @@ jobs:
             echo "CONTAINERS_DB_PAT secret is not configured (docs/operations/evidence-runs.md, Auth model)." >&2
             exit 1
           fi
-          git config --global "url.https://x-access-token:${GH_TOKEN}@github.com/.insteadOf" "https://github.com/"
           ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
             --run-id "$RUN_ID" --run-url "$RUN_URL"
 
