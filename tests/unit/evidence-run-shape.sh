@@ -88,6 +88,15 @@ test_fail_cells_are_annotated_without_failing() {
     assert_contains "$step" 'annotate_fail_verdict fail "$VERDICT_ERROR_CLASS" \' "calls the helper"
     assert_contains "$step" '"$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE"' \
         "coordinates passed in tool/version/tuple order"
+    assert_contains "$step" 'source "$GITHUB_WORKSPACE/bin/lib/evidence-issue.sh"' \
+        "the step sources the helper lib"
+    # The INPUT_* coordinates are job-level env on the evidence job; without
+    # them the helper sees empty strings, rejects them, and annotates nothing.
+    local job_env
+    job_env="$(_job_block evidence | /usr/bin/grep -vE '^[[:space:]]*#')"
+    assert_contains "$job_env" 'INPUT_TOOL: ${{ matrix.tool }}' "evidence job defines INPUT_TOOL"
+    assert_contains "$job_env" 'INPUT_TOOL_VERSION: ${{ matrix.version }}' "evidence job defines INPUT_TOOL_VERSION"
+    assert_contains "$job_env" 'INPUT_TUPLE: ${{ matrix.tuple }}' "evidence job defines INPUT_TUPLE"
     # Ordering: after the verdict is read, before the row is wrapped/uploaded.
     local verdict_ln annotate_ln wrap_ln
     verdict_ln="$(/usr/bin/grep -n -- '- name: Read evidence verdict' "$WF" | /usr/bin/cut -d: -f1)"
