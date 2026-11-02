@@ -180,6 +180,7 @@ fn partial_init_failure_records_written_files() {
     assert_ok(&standards(root, &["check", "--templates-dir", tpl_arg]), "check");
 }
 
+#[cfg(unix)]
 #[test]
 fn failed_state_save_still_reports_targets() {
     use std::os::unix::fs::PermissionsExt;
