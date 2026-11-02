@@ -199,8 +199,10 @@ pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std:
         let _ = report_targets(out, &rendered, &actions, prev, Some(stopped_at));
         return Err(Box::new(e));
     }
-    new.save(&opts.root)?;
+    // Every target is on disk now, so report them even if the save fails.
+    let saved = new.save(&opts.root);
     report_targets(out, &rendered, &actions, prev, None)?;
+    saved?;
 
     let skipped = actions.iter().filter(|a| matches!(a, InitAction::Skipped)).count();
     writeln!(out, "\nWrote {STATE_FILE}.")?;
@@ -562,6 +564,27 @@ mod tests {
         assert!(e.to_string().starts_with("failed to create "), "{e}");
         assert!(new.files.contains_key("a") && !new.files.contains_key("c"));
         assert!(!tmp.path().join("c").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_targets_reports_chmod_failure_with_io_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        // A dangling symlink: the write is skipped (Unchanged), the chmod's
+        // metadata lookup then fails with NotFound — for root too.
+        std::os::unix::fs::symlink(tmp.path().join("gone"), tmp.path().join("s.sh")).unwrap();
+        let rendered = [RenderedFile { executable: true, ..file("s.sh") }];
+        let (at, e) = write_targets(
+            tmp.path(),
+            &rendered,
+            &[InitAction::Unchanged],
+            &mut StandardsState::new(),
+        )
+        .unwrap_err();
+        assert_eq!(at, 0);
+        assert!(e.to_string().starts_with("failed to chmod "), "{e}");
+        let src = e.source().and_then(|s| s.downcast_ref::<std::io::Error>());
+        assert_eq!(src.map(std::io::Error::kind), Some(std::io::ErrorKind::NotFound));
     }
 
     #[test]
