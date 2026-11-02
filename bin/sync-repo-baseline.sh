@@ -47,6 +47,7 @@ fi
 stage="$(command mktemp -d)"
 trap 'command rm -rf "$stage"' EXIT
 
+templates_real="$(command realpath "$templates")"
 command cp "$manifest" "$stage/manifest.tsv"
 while IFS="$(printf '\t')" read -r target _slice _when source || [ -n "${target:-}" ]; do
     case "$target" in '' | '#'*) continue ;; esac
@@ -59,7 +60,15 @@ while IFS="$(printf '\t')" read -r target _slice _when source || [ -n "${target:
             exit 2
             ;;
     esac
-    if [ -L "$templates/$source" ]; then
+    # -L catches a symlinked file; the resolved-path prefix check also catches
+    # a symlinked directory partway along the path.
+    if [ -L "$templates/$source" ] || {
+        [ -e "$templates/$source" ] &&
+            case "$(command realpath "$templates/$source")/" in
+                "$templates_real"/*) false ;;
+                *) true ;;
+            esac
+    } then
         printf 'sync-repo-baseline: manifest source is a symlink: %s\n' "$source" >&2
         exit 2
     fi

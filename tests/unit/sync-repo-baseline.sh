@@ -265,6 +265,9 @@ _escape() {
         >>"$src/plugins/dev-core/skills/repo-baseline/templates/manifest.tsv"
     command printf 'secret\n' >"$src/outside.txt"
     command ln -s "$src/outside.txt" "$src/plugins/dev-core/skills/repo-baseline/templates/core/link.txt"
+    command mkdir -p "$src/elsewhere"
+    command printf 'secret\n' >"$src/elsewhere/f.txt"
+    command ln -s "$src/elsewhere" "$src/plugins/dev-core/skills/repo-baseline/templates/dirlink"
     REPO_BASELINE_DEST="$dest" "$SYNC" "$src" >/dev/null 2>&1 || rc=$?
     command echo "$rc $([ -e "$dest" ] && command echo written || command echo none)"
     command rm -rf "$src" "$(command dirname "$dest")"
@@ -274,6 +277,7 @@ test_rejects_escaping_sources() {
     assert_equals "2 none" "$(_escape '../../../../../outside.txt')" "a .. source is refused"
     assert_equals "2 none" "$(_escape "$(command mktemp -u)")" "an absolute source is refused"
     assert_equals "2 none" "$(_escape 'core/link.txt')" "a symlinked source is refused"
+    assert_equals "2 none" "$(_escape 'dirlink/f.txt')" "a source under a symlinked directory is refused"
 }
 
 test_tracked_copy_round_trips() {
