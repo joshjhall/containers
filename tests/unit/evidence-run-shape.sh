@@ -83,10 +83,16 @@ test_collect_passes_the_cell_count() {
     assert_contains "$collect" 'EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}' "collect reads it"
     n="$(command grep -c 'ingest-evidence-batch.sh --rows-dir rows' <<<"$collect")"
     assert_equals "2" "$n" "both ingest steps call the batch script"
-    assert_equals "$n" "$(command grep -c -- '--expected-cells "$EXPECTED_CELLS" --cells-result "$CELLS_RESULT"' <<<"$collect")" \
-        "every ingest call passes the cell count and the cells' result"
-    assert_equals "$n" "$(command grep -c 'CELLS_RESULT: ${{ needs.evidence.result }}' <<<"$collect")" \
-        "each ingest step reads the evidence job's result"
+    assert_equals "$n" "$(command grep -c -- '--expected-cells "$EXPECTED_CELLS" --succeeded-cells "$SUCCEEDED_CELLS"' <<<"$collect")" \
+        "every ingest call passes the cell count and the per-cell success count"
+    assert_equals "$n" "$(command grep -c 'SUCCEEDED_CELLS: ${{ steps.cells.outputs.succeeded }}' <<<"$collect")" \
+        "each ingest step reads the per-cell count, not the aggregate result"
+    assert_not_contains "$collect" '${{ needs.evidence.result }}' \
+        "the aggregate result (failure if ANY cell fails) does not decide the skip"
+    assert_contains "$collect" 'actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100' \
+        "the count reads this run attempt's jobs"
+    assert_contains "$collect" 'gh api --paginate' "paginated past 100 cells"
+    assert_contains "$collect" 'actions: read' "with the permission the Jobs API needs"
 }
 
 test_artifact_name_is_per_cell() {

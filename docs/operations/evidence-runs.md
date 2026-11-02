@@ -272,19 +272,23 @@ files, and one luggage bug filed dozens of duplicate issues.
 
 If **every** cell died before uploading a row, no row artifact exists and there
 is no `rows/` directory. The cause might be cancellation, a timeout, or a build
-step that failed before upload. `collect` passes `--expected-cells <N>` and
-`--cells-result` (the evidence job's aggregate `needs.evidence.result`), and
-ingest acts on that result (#1569):
+step that failed before upload. `collect` counts this run's `Evidence *` jobs
+that concluded `success` through the Jobs API (paginated, `actions: read`). It
+passes that count as `--succeeded-cells` along with `--expected-cells <N>`, and
+ingest acts on it (#1569):
 
-| Evidence jobs | Rows | Ingest |
+| Cells that succeeded | Rows | Ingest |
 | --- | --- | --- |
-| `cancelled` / `failure` | none | `no evidence rows: all N cells cancelled/timed out or failed before upload`, exit 0 (neutral skip) |
-| `success` / `skipped` | none | exit 1: the cells passed but uploaded nothing, so the row upload or download is broken |
+| 0 | none | `no evidence rows: none of N cells reached upload (cancelled, timed out, or failed)`, exit 0 (neutral skip) |
+| 1 or more | none | exit 1: a cell that succeeded uploaded a row, so the row upload or download is broken |
 | any | some | ingests normally |
+
+The count is per cell, not the aggregate `needs.evidence.result`. That
+aggregate is `failure` when **any** cell fails, so a single timed-out cell
+would hide a broken upload from every other cell behind the neutral skip.
 
 The skip is neutral because the cells have already failed the run with the
 real cause. A second red job that blamed `--rows-dir` only hid that cause.
-Ingest can't see which cause it was, so the message lists all of them.
 Without `--expected-cells`, a missing `--rows-dir` is still a usage error
 (exit 2), so a mistyped path in a manual run still fails loudly.
 

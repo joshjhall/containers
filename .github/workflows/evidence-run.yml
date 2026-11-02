@@ -618,9 +618,30 @@ jobs:
     permissions:
       contents: read
       issues: write
+      # Count this run's successful evidence jobs (Count successful evidence cells).
+      actions: read
     steps:
       - name: Checkout containers
         uses: actions/checkout@v4
+
+      # Per-cell success count for ingest's zero-row decision (#1569). Not
+      # needs.evidence.result: that is `failure` when ANY cell fails, so one
+      # timed-out cell would hide a broken upload from the rest. Counted from
+      # the Jobs API, paginated; an API failure fails this step, never a 0.
+      - name: Count successful evidence cells
+        id: cells
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          JOBS=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name | startswith("Evidence ")) | .conclusion')
+          SUCCEEDED=$(command grep -cx success <<<"$JOBS" || true)
+          echo "succeeded=$SUCCEEDED" >> "$GITHUB_OUTPUT"
+          echo "evidence cells succeeded: $SUCCEEDED of ${{ needs.setup.outputs.cells }}"
 
       - name: Download evidence rows
         uses: actions/download-artifact@v4
@@ -642,11 +663,11 @@ jobs:
           # Lets ingest tell a run whose cells all died before upload (no rows) from
           # a bad path or a broken upload (#1569).
           EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}
-          CELLS_RESULT: ${{ needs.evidence.result }}
+          SUCCEEDED_CELLS: ${{ steps.cells.outputs.succeeded }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
-            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS" --cells-result "$CELLS_RESULT" --dry-run
+            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS" --succeeded-cells "$SUCCEEDED_CELLS" --dry-run
 
       - name: Ingest (one PR, auto-merged)
         if: ${{ needs.setup.outputs.dry_run != 'true' }}
@@ -660,7 +681,7 @@ jobs:
           # Lets ingest tell a run whose cells all died before upload (no rows) from
           # a bad path or a broken upload (#1569).
           EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}
-          CELLS_RESULT: ${{ needs.evidence.result }}
+          SUCCEEDED_CELLS: ${{ steps.cells.outputs.succeeded }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
@@ -668,7 +689,7 @@ jobs:
             exit 1
           fi
           ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
-            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS" --cells-result "$CELLS_RESULT"
+            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS" --succeeded-cells "$SUCCEEDED_CELLS"
 
       # ONE tracking issue per run listing every fail row, instead of one issue
       # per failing cell (a broken luggage build opened 47, then 83). Best-effort.

@@ -19,7 +19,7 @@
 # Usage:
 #   bin/ingest-evidence-batch.sh --rows-dir DIR --db-path DIR --run-id ID
 #                                [--run-url URL]
-#                                [--expected-cells N --cells-result RESULT]
+#                                [--expected-cells N --succeeded-cells S]
 #                                [--dry-run] [--no-validate]
 #
 #   --rows-dir   directory holding the run's rows (*.json, any depth; e.g. the
@@ -28,16 +28,19 @@
 #   --run-id     identifies the run; the branch is evidence/batch/<run-id>
 #   --expected-cells
 #                how many cells the run's matrix had (#1569)
-#   --cells-result
-#                the evidence job's aggregate result (needs.evidence.result:
-#                success, failure, cancelled, or skipped). Required with
-#                --expected-cells.
+#   --succeeded-cells
+#                how many of this run's evidence jobs concluded `success`
+#                (counted per job from the Jobs API by evidence-run.yml).
+#                Required with --expected-cells; must not exceed it.
 #
 # Zero rows (--rows-dir absent or holding no *.json), with --expected-cells:
-#   cells-result cancelled|failure  ->  `no evidence rows: all N cells
-#       cancelled/timed out or failed before upload (evidence jobs: R)`, exit 0
-#   cells-result success|skipped    ->  exit 1: cells that report success but
-#       uploaded nothing mean the row upload or download is broken
+#   succeeded 0   ->  `no evidence rows: none of N cells reached upload
+#       (cancelled, timed out, or failed)`, exit 0
+#   succeeded >0  ->  exit 1: a cell that succeeded uploaded a row, so zero
+#       rows means the row upload or download is broken
+# The count is per cell on purpose. needs.evidence.result is `failure` when
+# ANY cell fails, so one timed-out cell would hide a broken upload from every
+# other cell behind a neutral skip.
 # Without --expected-cells, an absent --rows-dir stays a usage error (exit 2),
 # so a mistyped path in a manual run still fails loudly.
 #
@@ -74,7 +77,8 @@ RUN_ID=""
 RUN_URL=""
 EXPECTED_CELLS=""
 EXPECTED_GIVEN=false
-CELLS_RESULT=""
+SUCCEEDED_CELLS=""
+SUCCEEDED_GIVEN=false
 DRY_RUN=false
 NO_VALIDATE=false
 REMOTE_URL="https://github.com/joshjhall/containers-db.git"
@@ -103,8 +107,9 @@ while [ $# -gt 0 ]; do
             EXPECTED_GIVEN=true
             shift 2
             ;;
-        --cells-result)
-            CELLS_RESULT="${2:-}"
+        --succeeded-cells)
+            SUCCEEDED_CELLS="${2:-}"
+            SUCCEEDED_GIVEN=true
             shift 2
             ;;
         --remote)
@@ -136,24 +141,23 @@ done
 if $EXPECTED_GIVEN; then
     [[ "$EXPECTED_CELLS" =~ ^[0-9]{1,6}$ ]] ||
         die "--expected-cells must be a non-negative integer: $EXPECTED_CELLS" 2
-    case "$CELLS_RESULT" in
-        success | failure | cancelled | skipped) ;;
-        *) die "--cells-result must be success, failure, cancelled, or skipped with --expected-cells, got '$CELLS_RESULT'" 2 ;;
-    esac
+    $SUCCEEDED_GIVEN || die "--expected-cells needs --succeeded-cells" 2
+    [[ "$SUCCEEDED_CELLS" =~ ^[0-9]{1,6}$ ]] ||
+        die "--succeeded-cells must be a non-negative integer: $SUCCEEDED_CELLS" 2
+    [ "$((10#$SUCCEEDED_CELLS))" -le "$((10#$EXPECTED_CELLS))" ] ||
+        die "--succeeded-cells ($SUCCEEDED_CELLS) exceeds --expected-cells ($EXPECTED_CELLS)" 2
     # actions/download-artifact creates no directory when no artifact matched,
     # which is what a run whose every cell died before uploading leaves behind.
     if [ ! -d "$ROWS_DIR" ] ||
         [ -z "$(command find "$ROWS_DIR" -type f -name '*.json' -print -quit)" ]; then
-        case "$CELLS_RESULT" in
-            cancelled | failure)
-                command echo "::warning::no evidence rows: all $EXPECTED_CELLS cells cancelled/timed out or failed before upload (evidence jobs: $CELLS_RESULT); nothing to ingest" >&2
-                exit 0
-                ;;
-            *) die "no evidence rows from $EXPECTED_CELLS cells, yet the evidence jobs report '$CELLS_RESULT': the row upload or download is broken" 1 ;;
-        esac
+        if [ "$((10#$SUCCEEDED_CELLS))" -eq 0 ]; then
+            command echo "::warning::no evidence rows: none of $EXPECTED_CELLS cells reached upload (cancelled, timed out, or failed); nothing to ingest" >&2
+            exit 0
+        fi
+        die "no evidence rows, yet $SUCCEEDED_CELLS of $EXPECTED_CELLS evidence cells succeeded: the row upload or download is broken" 1
     fi
-elif [ -n "$CELLS_RESULT" ]; then
-    die "--cells-result needs --expected-cells" 2
+elif $SUCCEEDED_GIVEN; then
+    die "--succeeded-cells needs --expected-cells" 2
 fi
 [ -d "$ROWS_DIR" ] || die "--rows-dir is not a directory: $ROWS_DIR" 2
 
