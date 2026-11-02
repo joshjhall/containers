@@ -150,6 +150,13 @@ fn partial_init_failure_records_written_files() {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("failed to write") && err.contains("tests/run.sh"), "{err}");
     assert!(err.contains("recorded the files written so far"), "{err}");
+    // Stdout reports what happened, not the plan: nothing from the failed
+    // write on is claimed created.
+    let s = stdout_of(&out);
+    assert!(s.contains("create     lefthook.yml\n"), "{s}");
+    assert!(s.contains("failed     tests/run.sh\n"), "{s}");
+    assert!(s.contains("not run    dprint.json\n"), "{s}");
+    assert!(!s.contains("create     tests/run.sh") && !s.contains("create     dprint.json"), "{s}");
     assert!(root.join("lefthook.yml").is_file(), "lefthook.yml should precede the failure");
     assert!(root.join(".stibbons-standards.yml").is_file(), "no state saved after failure");
 
