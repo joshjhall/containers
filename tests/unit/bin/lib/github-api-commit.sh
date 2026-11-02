@@ -578,6 +578,18 @@ test_permanent_error_does_not_preempt_adopting_a_landed_commit() {
     assert_not_contains "$ERR" "permanent error on" "the read-back runs before the permanent stop"
 }
 
+test_create_pr_with_failing_lookup_still_creates_or_fails() {
+    gh_stub_install
+    GH_STUB_PR_LIST_FAIL=1 _pr
+    assert_equals "0" "$RC" "a failed lookup does not block the create"
+    assert_equals "https://github.com/joshjhall/containers-db/pull/9" "$OUT" "the new PR is printed"
+    gh_stub_install
+    GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 _pr
+    assert_equals "1" "$RC" "a failed create with no lookup to rescue it fails"
+    assert_equals "" "$OUT" "and prints no URL"
+    assert_equals "3" "$(command grep -c '^pr create' "$GH_LOG")" "after the transient retries"
+}
+
 run_test test_payload_carries_additions_deletions_and_expected_head "payload carries additions, deletions and expected head"
 run_test test_pathspec_limits_what_is_committed "pathspec limits what is committed"
 run_test test_new_executable_is_refused_before_any_api_call "a new executable is refused before any API call"
@@ -624,5 +636,6 @@ run_test test_create_pr_ignores_a_fork_pr_on_the_same_branch "create_pr ignores 
 run_test test_graphql_errors_cannot_issue_workflow_commands "GraphQL errors cannot issue workflow commands"
 run_test test_not_found_graphql_error_is_retried "a NOT_FOUND GraphQL error is retried"
 run_test test_permanent_error_does_not_preempt_adopting_a_landed_commit "a permanent error does not pre-empt adopting a landed commit"
+run_test test_create_pr_with_failing_lookup_still_creates_or_fails "create_pr with a failing lookup still creates or fails"
 
 generate_report

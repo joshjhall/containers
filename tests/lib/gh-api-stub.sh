@@ -30,6 +30,7 @@
 #                         "gh: Failed (HTTP N)" on stderr (default: silent)
 #   GH_STUB_PR_EXISTING   `pr list` prints this URL (default: no open PR)
 #   GH_STUB_PR_FORK=1     the GH_STUB_PR_EXISTING PR is cross-repository (a fork)
+#   GH_STUB_PR_LIST_FAIL=1  `pr list` exits 1 (the lookup itself fails)
 #   GH_STUB_PR_CREATE_FAIL=1  `pr create` fails with "already exists"
 #   GH_STUB_PR_AFTER_CREATE  `pr list` prints this URL once `pr create` ran
 # The tree response lists every addition path from the last payload.
@@ -54,6 +55,7 @@ case "$1 $2" in
         fi
         printf 'https://github.com/joshjhall/containers-db/pull/9\n' ;;
     "pr list")
+        [ "${GH_STUB_PR_LIST_FAIL:-}" = 1 ] && exit 1
         # Emulate --json url,isCrossRepository + --jq by applying the jq
         # filter the caller passed to a one-PR (or empty) list.
         url="" fork=false
