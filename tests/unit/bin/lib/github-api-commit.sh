@@ -263,9 +263,9 @@ test_branch_moved_elsewhere_is_an_error() {
     gh_stub_install
     command printf 'changed\n' >"$REPO/keep.txt"
     GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_FAIL=1 GH_STUB_REF_EXISTS=1 \
-        GH_STUB_BRANCH_HEAD=0ther GH_STUB_PARENT=unrelated _commit
+        GH_STUB_BRANCH_HEAD=d00dfeed GH_STUB_PARENT=unrelated _commit
     assert_equals "1" "$RC" "a branch moved by someone else is not adopted"
-    assert_contains "$ERR" "moved to 0ther, not our commit on" "and says so"
+    assert_contains "$ERR" "moved to d00dfeed, not our commit on" "and says so"
     assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "nor retried into an expectedHeadOid failure"
 }
 

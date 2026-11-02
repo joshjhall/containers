@@ -243,7 +243,7 @@ _gh_api_create_commit() {
                 command echo "$oid"
                 return 0
             fi
-            command echo "gh_api_commit_worktree: no commit oid in response: $(command jq -rc '[.errors[]?.message]' <<<"$resp" 2>/dev/null || command echo unparseable)" >&2
+            command echo "gh_api_commit_worktree: no commit oid in response: $(command jq -rc '[.errors[]?.message]' <<<"$resp" 2>/dev/null || command echo unparsable)" >&2
         fi
         head="$(gh api "repos/$repo/git/ref/heads/$branch" 2>/dev/null |
             command jq -r '.object.sha // empty' 2>/dev/null || true)"
