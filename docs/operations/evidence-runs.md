@@ -230,6 +230,30 @@ Both arches run natively: arm64 on `ubuntu-24.04-arm`, amd64 on
 `ubuntu-latest`. The supported platform set lives in
 [`docs/reference/supported-platforms.md`](../reference/supported-platforms.md).
 
+**Per-cell job timeout (#1569).** Each cell carries a `source_build` flag, and
+the `evidence` job sets `timeout-minutes: ${{ matrix.source_build && 180 || 30 }}`.
+The flag comes from the install method luggage would pick for that tuple, which
+is the first `install_methods[]` whose `platform` matches:
+
+- A `source-build` method gets **180** minutes. Node on alpine compiles from
+  source with `make -j4`. The first hosted run of `node@22.22.3` on
+  `alpine-3.22-amd64` took **116 minutes**, which left only 4 minutes of
+  headroom under an earlier 120-minute cap, so the cap is 180.
+- Every other method, or no matching method, gets **30**.
+
+The matrix carries the boolean rather than a minute count so the timeout stays
+provably bounded. That expression can only evaluate to 180 or 30, and
+[`tests/unit/workflow-timeouts.sh`](../../tests/unit/workflow-timeouts.sh)
+accepts only that `cond && N || M` shape with literal minutes. A bare
+`${{ matrix.x }}` could carry any value, and an empty one would inherit the
+6-hour default.
+
+The push matrix and a `workflow_dispatch` cell both compute the flag with the
+same rule (`_EM_SOURCE_BUILD_JQ` and `evidence_cell_source_build` in
+[`bin/lib/evidence-matrix.sh`](../../bin/lib/evidence-matrix.sh)). A dispatch
+for a version missing from the vendored catalog fails in `setup`. It does not
+fall back to the short timeout.
+
 ### Ingest: one PR per run
 
 Cells only install, record, and upload their row (an envelope adding
@@ -247,6 +271,28 @@ It runs even when cells failed, since a fail row is evidence too. Rows already
 recorded make it a no-op: no PR. Before this, every cell opened its own PR and
 its own issue, so one push could open 200 PRs that conflicted on shared version
 files, and one luggage bug filed dozens of duplicate issues.
+
+If **every** cell died before uploading a row, no row artifact exists and there
+is no `rows/` directory. The cause might be cancellation, a timeout, or a build
+step that failed before upload. `collect` counts this run's `Evidence *` jobs
+that concluded `success` through the Jobs API (paginated, `actions: read`). It
+passes that count as `--succeeded-cells` along with `--expected-cells <N>`, and
+ingest acts on it (#1569):
+
+| Cells that succeeded | Rows | Ingest |
+| --- | --- | --- |
+| 0 | none | `no evidence rows: none of N cells reached upload (cancelled, timed out, or failed)`, exit 0 (neutral skip) |
+| 1 or more | none | exit 1: a cell that succeeded uploaded a row, so the row upload or download is broken |
+| any | some | ingests normally |
+
+The count is per cell, not the aggregate `needs.evidence.result`. That
+aggregate is `failure` when **any** cell fails, so a single timed-out cell
+would hide a broken upload from every other cell behind the neutral skip.
+
+The skip is neutral because the cells have already failed the run with the
+real cause. A second red job that blamed `--rows-dir` only hid that cause.
+Without `--expected-cells`, a missing `--rows-dir` is still a usage error
+(exit 2), so a mistyped path in a manual run still fails loudly.
 
 **Cells install against the vendored catalog** (`crates/luggage/testdata/catalog`,
 the one luggage was built and shipped with), not containers-db `main`.

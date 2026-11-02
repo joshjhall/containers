@@ -131,6 +131,7 @@ jobs:
       matrix: ${{ steps.gen.outputs.matrix }}
       dry_run: ${{ steps.gen.outputs.dry_run }}
       has_cells: ${{ steps.gen.outputs.has_cells }}
+      cells: ${{ steps.gen.outputs.cells }}
     steps:
       # The push/PR matrix is derived from the vendored catalog and the
       # base-images tree (bin/lib/evidence-matrix.sh), so it needs both.
@@ -225,6 +226,12 @@ jobs:
             # runner-resolution error instead.
             PLUMBING=$(arch_plumbing "$ARCH") || { echo "Cannot resolve plumbing for arch: $ARCH" >&2; exit 1; }
             read -r RUNNER RUNTIME RUST_TARGET <<< "$PLUMBING"
+            # Same source-build flag as the push matrix (#1569), which picks
+            # the evidence job's timeout. Guarded like the plumbing above: a
+            # missing catalog entry must not fall back to the short timeout.
+            # shellcheck source=bin/lib/evidence-matrix.sh
+            source bin/lib/evidence-matrix.sh
+            SOURCE_BUILD=$(evidence_cell_source_build crates/luggage/testdata/catalog "$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE") || { echo "Cannot resolve the install method for $INPUT_TOOL@$INPUT_TOOL_VERSION on $INPUT_TUPLE" >&2; exit 1; }
             MATRIX=$(jq -cn \
               --arg tool "$INPUT_TOOL" \
               --arg version "$INPUT_TOOL_VERSION" \
@@ -234,7 +241,8 @@ jobs:
               --arg runtime "$RUNTIME" \
               --arg runner "$RUNNER" \
               --arg rust_target "$RUST_TARGET" \
-              '{include: [{tool: $tool, version: $version, tuple: $tuple, image_tag: $image_tag, arch: $arch, runtime: $runtime, runner: $runner, rust_target: $rust_target}]}')
+              --argjson source_build "$SOURCE_BUILD" \
+              '{include: [{tool: $tool, version: $version, tuple: $tuple, image_tag: $image_tag, arch: $arch, runtime: $runtime, runner: $runner, rust_target: $rust_target, source_build: $source_build}]}')
             DRY="$INPUT_DRY_RUN"
           else
             # Every pending evidence cell, from the catalog (#1111), for every
@@ -287,7 +295,9 @@ jobs:
           fi
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "dry_run=$DRY" >> "$GITHUB_OUTPUT"
-          if [ "$(jq '.include | length' <<<"$MATRIX")" -gt 0 ]; then
+          CELLS=$(jq '.include | length' <<<"$MATRIX")
+          echo "cells=$CELLS" >> "$GITHUB_OUTPUT"
+          if [ "$CELLS" -gt 0 ]; then
             echo "has_cells=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_cells=false" >> "$GITHUB_OUTPUT"
@@ -334,7 +344,14 @@ jobs:
     # An empty matrix is a hard error in Actions; skip when nothing is pending.
     if: needs.setup.outputs.has_cells == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    # Per cell (#1569): 180 when the cell's install method is a source build
+    # (node on alpine compiles from source), 30 otherwise. 180, not 120: the
+    # first hosted run of node@22.22.3 on alpine-3.22-amd64 took 116 minutes,
+    # leaving 4 minutes of headroom under 120. The matrix carries only the
+    # boolean (bin/lib/evidence-matrix.sh, _EM_SOURCE_BUILD_JQ), so this
+    # expression can only ever be 180 or 30, which is how
+    # tests/unit/workflow-timeouts.sh proves the job bounded.
+    timeout-minutes: ${{ matrix.source_build && 180 || 30 }}
     # issues: write is needed for the fail-row tracking-issue step below. Scoped
     # to this job (not the workflow root) so `setup` and `reconcile` stay
     # contents:read. The issue is filed on this repo, so the default
@@ -603,9 +620,30 @@ jobs:
     permissions:
       contents: read
       issues: write
+      # Count this run's successful evidence jobs (Count successful evidence cells).
+      actions: read
     steps:
       - name: Checkout containers
         uses: actions/checkout@v4
+
+      # Per-cell success count for ingest's zero-row decision (#1569). Not
+      # needs.evidence.result: that is `failure` when ANY cell fails, so one
+      # timed-out cell would hide a broken upload from the rest. Counted from
+      # the Jobs API, paginated; an API failure fails this step, never a 0.
+      - name: Count successful evidence cells
+        id: cells
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          JOBS=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name | startswith("Evidence ")) | .conclusion')
+          SUCCEEDED=$(command grep -cx success <<<"$JOBS" || true)
+          echo "succeeded=$SUCCEEDED" >> "$GITHUB_OUTPUT"
+          echo "evidence cells succeeded: $SUCCEEDED of ${{ needs.setup.outputs.cells }}"
 
       - name: Download evidence rows
         uses: actions/download-artifact@v4
@@ -624,10 +662,14 @@ jobs:
         if: ${{ needs.setup.outputs.dry_run == 'true' }}
         env:
           RUN_ID: ${{ github.run_id }}
+          # Lets ingest tell a run whose cells all died before upload (no rows) from
+          # a bad path or a broken upload (#1569).
+          EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}
+          SUCCEEDED_CELLS: ${{ steps.cells.outputs.succeeded }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
-            --run-id "$RUN_ID" --run-url "$RUN_URL" --dry-run
+            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS" --succeeded-cells "$SUCCEEDED_CELLS" --dry-run
 
       - name: Ingest (one PR, auto-merged)
         if: ${{ needs.setup.outputs.dry_run != 'true' }}
@@ -638,6 +680,10 @@ jobs:
           # is read-only.
           GH_TOKEN: ${{ secrets.CONTAINERS_DB_PAT }}
           RUN_ID: ${{ github.run_id }}
+          # Lets ingest tell a run whose cells all died before upload (no rows) from
+          # a bad path or a broken upload (#1569).
+          EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}
+          SUCCEEDED_CELLS: ${{ steps.cells.outputs.succeeded }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
@@ -645,7 +691,7 @@ jobs:
             exit 1
           fi
           ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
-            --run-id "$RUN_ID" --run-url "$RUN_URL"
+            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS" --succeeded-cells "$SUCCEEDED_CELLS"
 
       # ONE tracking issue per run listing every fail row, instead of one issue
       # per failing cell (a broken luggage build opened 47, then 83). Best-effort.

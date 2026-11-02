@@ -79,7 +79,7 @@ test_cells_carry_arch_plumbing() {
     _version "$r/catalog" 1.90.0 debian-13-arm64
     out="$(evidence_matrix "$r/catalog" rust "$r" v9)"
     assert_equals \
-        '{"tool":"rust","version":"1.90.0","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-24.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl"}' \
+        '{"tool":"rust","version":"1.90.0","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-24.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl","source_build":false}' \
         "$(command jq -c '.include[0]' <<<"$out")" \
         "each cell carries the same fields the dispatch path builds"
 }
@@ -704,6 +704,117 @@ test_vendored_future_fail_is_retried() {
         "a zero-padded EVIDENCE_NOW yields the same matrix as the unpadded one"
 }
 
+# _methods <version-file> <methods-json> — give a fixture version install_methods.
+_methods() {
+    local f="$1" tmp
+    tmp="$(command mktemp "$TEST_TEMP_DIR/m.XXXXXX")"
+    command jq --argjson m "$2" '. + {install_methods: $m}' "$f" >"$tmp"
+    command mv "$tmp" "$f"
+}
+
+# Shaped like the vendored node entry: a binary tarball for glibc distros,
+# then a source build for alpine (#1569).
+_NODE_LIKE_METHODS='[
+  {"name":"tarball","method_kind":"binary-tarball","platform":{"os":["debian","ubuntu","rhel"],"arch":["amd64","arm64"]}},
+  {"name":"source","method_kind":"source-build","platform":{"os":"alpine","arch":["amd64","arm64"]}}]'
+
+test_source_build_cells_get_the_long_timeout() {
+    local r out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
+    _methods "$r/catalog/tools/rust/versions/1.90.0.json" "$_NODE_LIKE_METHODS"
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'alpine-3.24-amd64 true\ndebian-13-amd64 false' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.source_build)"' <<<"$out" | command sort)" \
+        "the source-build tuple is flagged, the tarball tuple is not"
+}
+
+test_first_matching_method_decides_the_timeout() {
+    local r out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
+    # A catch-all tarball listed first wins everywhere, as luggage's
+    # first-match resolver would pick it; the later source build never runs.
+    _methods "$r/catalog/tools/rust/versions/1.90.0.json" '[
+      {"method_kind":"binary-tarball"},
+      {"method_kind":"source-build","platform":{"os":"alpine"}}]'
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "false false" "$(command jq -r '[.include[].source_build] | map(tostring) | join(" ")' <<<"$out")" \
+        "a predicate-less first method shadows the source build"
+    # An os_version-pinned source build applies only to that version.
+    _methods "$r/catalog/tools/rust/versions/1.90.0.json" '[
+      {"method_kind":"source-build","platform":{"os":"alpine","os_version":["3.24"]}},
+      {"method_kind":"binary-tarball"}]'
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'alpine-3.24-amd64 true\ndebian-13-amd64 false' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.source_build)"' <<<"$out" | command sort)" \
+        "an os_version-pinned source build matches its version"
+    # Pinned to another alpine release: 3.24 falls through to the tarball.
+    _methods "$r/catalog/tools/rust/versions/1.90.0.json" '[
+      {"method_kind":"source-build","platform":{"os":"alpine","os_version":"3.22"}},
+      {"method_kind":"binary-tarball"}]'
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'alpine-3.24-amd64 false\ndebian-13-amd64 false' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.source_build)"' <<<"$out" | command sort)" \
+        "a source build pinned to another os_version does not match"
+}
+
+test_arch_and_os_list_exclude_a_source_build() {
+    local r out f
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    f="$r/catalog/tools/rust/versions/1.90.0.json"
+    # A source build only for arm64, and only on an os list without alpine.
+    _methods "$f" '[
+      {"method_kind":"source-build","platform":{"os":["debian","ubuntu"],"arch":["arm64"]}},
+      {"method_kind":"binary-tarball"}]'
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'alpine-3.24-amd64 false\ndebian-13-amd64 false\ndebian-13-arm64 true' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.source_build)"' <<<"$out" | command sort)" \
+        "the arch predicate and the os list both exclude non-matching cells"
+    assert_equals "false" "$(evidence_cell_source_build "$r/catalog" rust 1.90.0 debian-13-amd64)" \
+        "the dispatch helper applies the arch predicate too"
+    assert_equals "true" "$(evidence_cell_source_build "$r/catalog" rust 1.90.0 debian-13-arm64)" \
+        "and matches the listed arch"
+}
+
+test_cell_timeout_helper_matches_the_matrix() {
+    local r f rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
+    f="$r/catalog/tools/rust/versions/1.90.0.json"
+    assert_equals "false" "$(evidence_cell_source_build "$r/catalog" rust 1.90.0 alpine-3.24-amd64)" \
+        "no install_methods is not a source build"
+    _methods "$f" "$_NODE_LIKE_METHODS"
+    assert_equals "true" "$(evidence_cell_source_build "$r/catalog" rust 1.90.0 alpine-3.24-arm64)" \
+        "a dispatched source-build cell is flagged"
+    assert_equals "false" "$(evidence_cell_source_build "$r/catalog" rust 1.90.0 debian-13-amd64)" \
+        "a dispatched tarball cell is not"
+    evidence_cell_source_build "$r/catalog" rust 9.9.9 alpine-3.24-amd64 >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a version missing from the catalog is an error, not a silent false"
+    rc=0
+    rc=0
+    local out
+    command printf '{' >"$r/catalog/tools/rust/versions/1.91.0.json"
+    out="$(evidence_cell_source_build "$r/catalog" rust 1.91.0 alpine-3.24-amd64 2>/dev/null)" || rc=$?
+    assert_equals "1:" "$rc:$out" "a corrupt version file is exit 1 with nothing printed"
+    rc=0
+    evidence_cell_source_build "$r/catalog" rust 1.90.0 alpine >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a malformed tuple is an error"
+}
+
+test_vendored_node_flags_only_alpine_as_source_build() {
+    # Ties #1569 to the catalog data that drives it: a reorder or a catch-all
+    # method added ahead of node-source would silently restore the 30-minute
+    # timeout for alpine node, and only the next evidence run would notice.
+    local c="$PROJECT_ROOT/crates/luggage/testdata/catalog" v f
+    f="$(command find "$c/tools/node/versions" -name '22.*.json' | command sort -V | command tail -n 1)"
+    v="$(command basename "$f" .json)"
+    assert_equals "true true false false" \
+        "$(evidence_cell_source_build "$c" node "$v" alpine-3.22-amd64) $(evidence_cell_source_build "$c" node "$v" alpine-3.22-arm64) $(evidence_cell_source_build "$c" node "$v" debian-13-amd64) $(evidence_cell_source_build "$c" node "$v" ubuntu-24.04-arm64)" \
+        "vendored node@$v builds from source on alpine only"
+}
+
 test_missing_index_is_an_error() {
     local rc=0
     evidence_matrix "$TEST_TEMP_DIR/nope" rust "$TEST_TEMP_DIR" >/dev/null 2>&1 || rc=$?
@@ -746,5 +857,10 @@ run_test test_fail_cooldown_override "EVIDENCE_FAIL_COOLDOWN_DAYS overrides the 
 run_test test_vendored_recent_fail_is_not_pending "the cooldown applies to vendored tested[]"
 run_test test_vendored_future_fail_is_retried "a future-dated vendored fail is retried, not held"
 run_test test_missing_index_is_an_error "missing index is an error"
+run_test test_vendored_node_flags_only_alpine_as_source_build "the vendored node entry is a source build on alpine only (#1569)"
+run_test test_source_build_cells_get_the_long_timeout "source-build cells get the long timeout (#1569)"
+run_test test_first_matching_method_decides_the_timeout "the first matching install method decides the timeout"
+run_test test_arch_and_os_list_exclude_a_source_build "arch and os-list predicates exclude a source build"
+run_test test_cell_timeout_helper_matches_the_matrix "evidence_cell_source_build gives the dispatch path the same flag"
 
 generate_report

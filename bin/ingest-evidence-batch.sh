@@ -18,15 +18,40 @@
 #
 # Usage:
 #   bin/ingest-evidence-batch.sh --rows-dir DIR --db-path DIR --run-id ID
-#                                [--run-url URL] [--dry-run] [--no-validate]
+#                                [--run-url URL]
+#                                [--expected-cells N --succeeded-cells S]
+#                                [--dry-run] [--no-validate]
 #
 #   --rows-dir   directory holding the run's rows (*.json, any depth; e.g. the
 #                merged download of every evidence-row-* artifact)
 #   --db-path    containers-db checkout (cloned when absent)
 #   --run-id     identifies the run; the branch is evidence/batch/<run-id>
+#   --expected-cells
+#                how many cells the run's matrix had (#1569)
+#   --succeeded-cells
+#                how many of this run's evidence jobs concluded `success`
+#                (counted per job from the Jobs API by evidence-run.yml).
+#                Required with --expected-cells; must not exceed it.
+#
+# Zero rows (--rows-dir absent or holding no *.json), with --expected-cells:
+#   succeeded 0   ->  `no evidence rows: none of N cells reached upload
+#       (cancelled, timed out, or failed)`, exit 0
+#   succeeded >0  ->  exit 1: a cell that succeeded uploaded a row, so zero
+#       rows means the row upload or download is broken
+# The count is per cell on purpose. needs.evidence.result is `failure` when
+# ANY cell fails, so one timed-out cell would hide a broken upload from every
+# other cell behind a neutral skip.
+# Without --expected-cells, an absent --rows-dir stays a usage error (exit 2),
+# so a mistyped path in a manual run still fails loudly.
 #
 # Prints the branch name on success, nothing when there was nothing to ingest.
 # Exit: 0 ok (incl. nothing to ingest), 1 runtime error, 2 usage/input error.
+#
+# Why the cancelled/failed case is a NEUTRAL skip: those cells already fail the
+# run with the real cause on each cell (job timeout, a failed build step).
+# Failing ingest too added a second red job that blamed --rows-dir instead.
+# Ingest cannot see which of those causes it was, so the message names them
+# all rather than claiming one.
 #
 # Per CLAUDE.md, bare external commands use `command` to bypass aliases.
 
@@ -50,6 +75,10 @@ ROWS_DIR=""
 DB_PATH=""
 RUN_ID=""
 RUN_URL=""
+EXPECTED_CELLS=""
+EXPECTED_GIVEN=false
+SUCCEEDED_CELLS=""
+SUCCEEDED_GIVEN=false
 DRY_RUN=false
 NO_VALIDATE=false
 REMOTE_URL="https://github.com/joshjhall/containers-db.git"
@@ -73,6 +102,16 @@ while [ $# -gt 0 ]; do
             RUN_URL="${2:-}"
             shift 2
             ;;
+        --expected-cells)
+            EXPECTED_CELLS="${2:-}"
+            EXPECTED_GIVEN=true
+            shift 2
+            ;;
+        --succeeded-cells)
+            SUCCEEDED_CELLS="${2:-}"
+            SUCCEEDED_GIVEN=true
+            shift 2
+            ;;
         --remote)
             REMOTE_URL="${2:-}"
             shift 2
@@ -86,7 +125,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -h | --help)
-            command sed -n '2,31p' "$0"
+            command sed -n '2,56p' "$0"
             exit 0
             ;;
         *) die "unknown argument: $1" 2 ;;
@@ -96,9 +135,31 @@ done
 [ -n "$ROWS_DIR" ] || die "--rows-dir is required" 2
 [ -n "$DB_PATH" ] || die "--db-path is required" 2
 [ -n "$RUN_ID" ] || die "--run-id is required" 2
-[ -d "$ROWS_DIR" ] || die "--rows-dir is not a directory: $ROWS_DIR" 2
 # The run id becomes a branch name component: keep it to a safe shape.
 [[ "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] || die "--run-id has unsafe characters: $RUN_ID" 2
+# Given but blank (an unset job output) is refused, not read as "flag absent".
+if $EXPECTED_GIVEN; then
+    [[ "$EXPECTED_CELLS" =~ ^[0-9]{1,6}$ ]] ||
+        die "--expected-cells must be a non-negative integer: $EXPECTED_CELLS" 2
+    $SUCCEEDED_GIVEN || die "--expected-cells needs --succeeded-cells" 2
+    [[ "$SUCCEEDED_CELLS" =~ ^[0-9]{1,6}$ ]] ||
+        die "--succeeded-cells must be a non-negative integer: $SUCCEEDED_CELLS" 2
+    [ "$((10#$SUCCEEDED_CELLS))" -le "$((10#$EXPECTED_CELLS))" ] ||
+        die "--succeeded-cells ($SUCCEEDED_CELLS) exceeds --expected-cells ($EXPECTED_CELLS)" 2
+    # actions/download-artifact creates no directory when no artifact matched,
+    # which is what a run whose every cell died before uploading leaves behind.
+    if [ ! -d "$ROWS_DIR" ] ||
+        [ -z "$(command find "$ROWS_DIR" -type f -name '*.json' -print -quit)" ]; then
+        if [ "$((10#$SUCCEEDED_CELLS))" -eq 0 ]; then
+            command echo "::warning::no evidence rows: none of $EXPECTED_CELLS cells reached upload (cancelled, timed out, or failed); nothing to ingest" >&2
+            exit 0
+        fi
+        die "no evidence rows, yet $SUCCEEDED_CELLS of $EXPECTED_CELLS evidence cells succeeded: the row upload or download is broken" 1
+    fi
+elif $SUCCEEDED_GIVEN; then
+    die "--succeeded-cells needs --expected-cells" 2
+fi
+[ -d "$ROWS_DIR" ] || die "--rows-dir is not a directory: $ROWS_DIR" 2
 
 if [ ! -d "$DB_PATH/.git" ]; then
     command echo "Cloning $REMOTE_URL into $DB_PATH" >&2

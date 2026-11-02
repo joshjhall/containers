@@ -7,8 +7,15 @@
 # release; the wrapper's retry never fired because a hang is not a failure.
 #
 # Three layers are checked:
-#   1. every job declares a positive integer `timeout-minutes` (a job that
-#      calls a reusable workflow via `uses:` cannot, and is exempt);
+#   1. every job declares a bounded `timeout-minutes` (a job that calls a
+#      reusable workflow via `uses:` cannot, and is exempt). Bounded means a
+#      positive integer literal, or exactly `${{ <cond> && N || M }}` with N
+#      and M positive integer literals and a <cond> holding no `&`, `|` or
+#      parentheses (#1569). A GitHub expression of that form can only yield N
+#      (cond truthy) or M (cond falsy or unset), whatever the matrix holds, so
+#      it is bounded by max(N, M) without the checker seeing the matrix. A
+#      bare `${{ matrix.x }}` is NOT accepted: its value comes from data the
+#      checker cannot see, and an empty one falls back to the 6h default;
 #   2. every step using setup-buildx-resilient sets its own step-level
 #      `timeout-minutes` — composite-action steps cannot bound themselves;
 #   3. the action's daemon probe is wrapped in `timeout`, so a hang becomes a
@@ -39,16 +46,34 @@ fi
 WORKFLOWS_DIR="$PROJECT_ROOT/.github/workflows"
 BUILDX_ACTION="$PROJECT_ROOT/.github/actions/setup-buildx-resilient/action.yml"
 
+# BOUNDED_TIMEOUT_RE — the timeout-minutes values accepted as bounded (see the
+# header): a positive integer literal, or `${{ <cond> && N || M }}`. <cond> is
+# one run of characters with no `&`, `|`, `(`, `)`, `{` or `}`, so a chained
+# `a && N || b && X || M` or a parenthesised sub-expression cannot slip in a
+# third, unbounded operand. N and M reject 0 (`timeout-minutes: 0` is no bound).
+BOUNDED_TIMEOUT_RE='^([1-9][0-9]*|\$\{\{ *[^&|(){}]+ *&& *[1-9][0-9]* *\|\| *[1-9][0-9]* *\}\})$'
+
 # jobs_without_timeout FILE — prints "FILE:job" for each non-reusable job whose
-# timeout-minutes is absent or not a positive integer.
+# timeout-minutes is absent or not bounded (BOUNDED_TIMEOUT_RE).
 jobs_without_timeout() {
-    local file="$1"
-    yq -r '
+    local file="$1" rows job value
+    # Raw value per job, matched in bash: yq's regex dialect differs across
+    # releases, and the exact accepted shape is what this guard asserts.
+    # Captured, not fed through `< <(yq ...)`: bash ignores a process
+    # substitution's exit status, so an unparsable workflow would read as
+    # zero jobs, i.e. "everything bounded". A yq failure is a FINDING here.
+    rows=$(yq -r '
         .jobs // {} | to_entries[]
         | select(.value.uses == null)
-        | select((.value["timeout-minutes"] // "" | tostring | test("^[1-9][0-9]*$")) | not)
-        | .key
-    ' "$file" | command sed "s|^|$(command basename "$file"):|"
+        | .key + "\t" + (.value["timeout-minutes"] // "" | tostring)
+    ' "$file" 2>/dev/null) || {
+        command echo "$(command basename "$file"):<yq could not parse>"
+        return 0
+    }
+    [ -n "$rows" ] || return 0
+    while IFS=$'\t' read -r job value; do
+        [[ "$value" =~ $BOUNDED_TIMEOUT_RE ]] || command echo "$(command basename "$file"):$job"
+    done <<<"$rows"
 }
 
 # buildx_steps_without_timeout FILE — prints "FILE:job" for each step using
@@ -97,6 +122,68 @@ EOF
     command rm -rf "$dir"
     assert_equals "fixture.yml:unbounded fixture.yml:expression " "$got" \
         "checker flags missing and zero timeouts, exempts reusable-workflow jobs"
+}
+
+test_checker_bounds_matrix_expressions() {
+    # #1569: a per-cell timeout must stay provably bounded. Only the
+    # `${{ cond && N || M }}` shape is accepted; anything that can yield an
+    # unseen value (or an empty one, i.e. the 6h default) is flagged.
+    local dir
+    dir=$(command mktemp -d)
+    command cat >"$dir/fixture.yml" <<'YAML'
+jobs:
+  ternary:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.source_build && 180 || 30 }}
+    steps: [{run: "true"}]
+  ternary_tight:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{matrix.slow&&90||20}}
+    steps: [{run: "true"}]
+  bare_matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout_minutes }}
+    steps: [{run: "true"}]
+  matrix_fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.slow && matrix.minutes || 30 }}
+    steps: [{run: "true"}]
+  zero_branch:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.slow && 0 || 30 }}
+    steps: [{run: "true"}]
+  chained:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.a && 120 || matrix.b && 9999 || 30 }}
+    steps: [{run: "true"}]
+  nested:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ (matrix.a || matrix.b) && 120 || 30 }}
+    steps: [{run: "true"}]
+  grouped:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ (matrix.slow) && 120 || 30 }}
+    steps: [{run: "true"}]
+  from_json:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.setup.outputs.minutes) }}
+    steps: [{run: "true"}]
+YAML
+    local got
+    got=$(jobs_without_timeout "$dir/fixture.yml" | command tr '\n' ' ')
+    command rm -rf "$dir"
+    assert_equals "fixture.yml:bare_matrix fixture.yml:matrix_fallback fixture.yml:zero_branch fixture.yml:chained fixture.yml:nested fixture.yml:grouped fixture.yml:from_json " \
+        "$got" "only a literal-branched cond && N || M is accepted as bounded"
+}
+
+test_checker_flags_unparsable_workflow() {
+    # A workflow yq cannot read must be flagged, never skipped as "no jobs".
+    local dir got
+    dir=$(command mktemp -d)
+    command printf 'jobs:\n  broken: [unclosed\n    timeout-minutes: 10\n' >"$dir/broken.yml"
+    got=$(jobs_without_timeout "$dir/broken.yml")
+    command rm -rf "$dir"
+    assert_equals "broken.yml:<yq could not parse>" "$got" "an unparsable workflow is a finding, not a pass"
 }
 
 test_checker_flags_unbounded_buildx_step() {
@@ -176,6 +263,8 @@ test_buildx_action_probes_daemon_with_timeout() {
 }
 
 run_test test_checker_flags_missing_timeout "Checker flags jobs without a timeout"
+run_test test_checker_bounds_matrix_expressions "Checker accepts only provably bounded timeout expressions"
+run_test test_checker_flags_unparsable_workflow "Checker flags a workflow yq cannot parse"
 run_test test_checker_flags_unbounded_buildx_step "Checker flags an unbounded buildx step"
 run_test test_every_job_has_timeout "Every workflow job declares timeout-minutes"
 run_test test_buildx_call_sites_bounded "Every setup-buildx-resilient step is bounded"

@@ -99,6 +99,68 @@ def em_evidence($now):
                 ($r | em_cell) as $c | .[$c] = ([.[$c] // 0, ($r | evidence_epoch_at($now))] | max))) };
 '
 
+# _EM_SOURCE_BUILD_JQ — whether a cell compiles its tool from source (#1569),
+# shared by the matrix (_em_tool_cells) and the dispatch path
+# (evidence_cell_source_build) so both judge a cell the same way. Applied to a
+# version object: the method luggage would pick for the tuple is the FIRST
+# install_methods[] whose platform predicate matches
+# (crates/luggage/src/resolver.rs, platform::matches_predicate: each of
+# os/os_version/arch is a string or an array, an absent field or predicate
+# matches anything). It is a source build when that method's method_kind is
+# `source-build`; no matching method is false (the install then fails fast).
+#
+# The matrix carries this boolean, NOT a minute count: evidence-run.yml turns
+# it into `timeout-minutes: ${{ matrix.source_build && 180 || 30 }}`, a form
+# tests/unit/workflow-timeouts.sh can prove bounded without seeing the matrix
+# (it can only ever be 180 or 30). Node on alpine runs `make` for far longer
+# than the 30 minutes every other method needs (116 minutes observed for
+# node@22.22.3 on a hosted runner); a fast tool never gets a 3h ceiling.
+_EM_SOURCE_BUILD_JQ='
+def em_in($want): . == null or (if type == "array" then index([$want]) != null else . == $want end);
+def em_source_build($os; $osv; $arch):
+    [ .install_methods[]?
+      | select((.platform // {}) as $p
+          | ($p.os | em_in($os)) and ($p.arch | em_in($arch))
+            and ($p.os_version == null or ($osv != null and ($p.os_version | em_in($osv))))) ]
+    | (.[0].method_kind // "") == "source-build";
+'
+
+# evidence_cell_source_build <catalog_dir> <tool> <version> <tuple> — prints
+# `true` or `false` for one cell (see _EM_SOURCE_BUILD_JQ). evidence-run.yml's
+# workflow_dispatch path calls it so a dispatched cell gets the same timeout
+# as the push matrix. Exit 1 when the version file is missing or unreadable,
+# or the tuple is not os-os_version-arch: the dispatched install would fail
+# against the same vendored catalog anyway, and a silent `false` would bring
+# back the timeout this exists to avoid.
+evidence_cell_source_build() {
+    local catalog="$1" tool="$2" version="$3" tuple="$4"
+    local file="$catalog/tools/$tool/versions/$version.json"
+    local os arch osv rest
+    os="${tuple%%-*}"
+    arch="${tuple##*-}"
+    rest="${tuple#*-}"
+    osv="${rest%-*}"
+    [ -n "$os" ] && [ -n "$arch" ] && [ -n "$osv" ] && [ "$os" != "$tuple" ] && [ "$osv" != "$rest" ] || {
+        command echo "evidence_cell_source_build: tuple must be <os>-<os_version>-<arch>, got '$tuple'" >&2
+        return 1
+    }
+    [ -f "$file" ] || {
+        command echo "evidence_cell_source_build: no catalog entry for $tool@$version at $file" >&2
+        return 1
+    }
+    # Not -e: `false` is a valid answer, and -e would turn it into exit 1.
+    # Captured so a corrupt file is exit 1 with nothing on stdout, never a
+    # partial or empty value handed to the caller's --argjson.
+    local out
+    out="$(command jq --arg os "$os" --arg osv "$osv" --arg arch "$arch" \
+        "$_EM_SOURCE_BUILD_JQ"'em_source_build($os; $osv; $arch)' "$file")" &&
+        { [ "$out" = true ] || [ "$out" = false ]; } || {
+        command echo "evidence_cell_source_build: unreadable catalog entry for $tool@$version at $file" >&2
+        return 1
+    }
+    command echo "$out"
+}
+
 # _em_published_evidence <tool> <out_file> <now> — writes the evidence per version
 # from EVIDENCE_TESTED_SOURCE to out_file, as {"<version>": <em_evidence>}.
 # now (epoch seconds) is the clock that decides a future tested_at (#1356).
@@ -415,7 +477,7 @@ _em_tool_cells() {
         --argjson now "$((10#$now))" \
         --argjson cooldown "$((10#$cooldown_days * 86400))" \
         --slurpfile evidence "$evidence" \
-        --slurpfile index "$index" "$_EM_EVIDENCE_JQ"'
+        --slurpfile index "$index" "$_EM_EVIDENCE_JQ$_EM_SOURCE_BUILD_JQ"'
         def vkey: split(".") | map(tonumber? // 0);
         $evidence[0] as $evidence
         | ($index[0].minimum_recommended // "0") as $floor
@@ -439,9 +501,12 @@ _em_tool_cells() {
             | select($ev.pass | index($tuple) | not)
             | $ev.fail[$tuple] as $failed_at
             | select($failed_at == null or $failed_at <= $now - $cooldown)
+            | . as $row
             | {tool: $tool, version: $v.version, tuple: $tuple, image_tag: $tag,
                arch: .arch, runner: $plumbing[.arch][0], runtime: $plumbing[.arch][1],
-               rust_target: $plumbing[.arch][2], retry: ($failed_at != null)} ]
+               rust_target: $plumbing[.arch][2],
+               source_build: ($v | em_source_build($row.os; $row.os_version; $row.arch)),
+               retry: ($failed_at != null)} ]
         | unique_by([.version, .tuple])
         # never-tested cells first, stale-failure retries last; oldest
         # version first within each
