@@ -246,9 +246,15 @@ In the workflow file, adjust priority levels:
    `just check-pr-checks <N>` says which.
 
    The agreed settings deliberately **do not** break this flow:
-   `enforce_admins` is `false`, so `post-merge`'s direct `git push origin
-   HEAD:main` (compatibility matrix) and its `v*` tag push still land; and no
-   review is required, so the bot's own PR is not waiting on a human approver.
+   `enforce_admins` is `false`, so `post-merge`'s `v*` tag push still lands;
+   and no review is required, so the bot's own PRs are not waiting on a human
+   approver. No bot commit reaches `main` unsigned or outside a PR (#1573):
+   the `auto-patch/*` branch commit and the compatibility-matrix update are
+   both created through the GitHub API (`bin/lib/github-api-commit.sh`,
+   GraphQL `createCommitOnBranch`), which GitHub signs, so `main` can add
+   `required_signatures`. The matrix update is its own auto-merging PR from
+   `chore/compat-matrix-v<version>` rather than a direct push. Tags are still
+   created with `git tag` and are not covered by a branch ruleset.
    Whoever applies protection should watch the next scheduled release run to
    confirm, and re-verify this flow first if either setting is tightened later.
    See

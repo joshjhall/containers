@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# A fake `gh` for suites that drive bin/lib/github-api-commit.sh (#1573):
+# tests/unit/bin/lib/github-api-commit.sh and tests/unit/ingest-evidence-batch.sh.
+# Sourced only — it lives outside tests/unit/ so the unit runner does not
+# execute it as a suite. Callers source tests/framework.sh first.
+#
+# gh_stub_install sets STUB_DIR (prepend it to PATH) and exports:
+#   GH_LOG       every argv, one line per call
+#   GH_PAYLOADS  directory; each `api graphql --input F` copies F to N.json
+# Behavior knobs (env, read at call time):
+#   GH_STUB_REF_EXISTS=1  `api repos/.../git/ref/heads/...` succeeds (else 404)
+#   GH_STUB_VERIFIED      the commit's verification.verified (default true)
+#   GH_STUB_TREE_MODE     mode every path reports in the tree (default: the
+#                         mode the payload implies, 100644)
+#   GH_STUB_GRAPHQL_FAIL=1  graphql exits 1
+# The tree response lists every addition path from the last payload.
+
+gh_stub_install() {
+    STUB_DIR="$(command mktemp -d "$TEST_TEMP_DIR/gh.XXXXXX")"
+    GH_LOG="$STUB_DIR/gh.log"
+    GH_PAYLOADS="$STUB_DIR/payloads"
+    command mkdir -p "$GH_PAYLOADS"
+    : >"$GH_LOG"
+    export GH_LOG GH_PAYLOADS
+    command cat >"$STUB_DIR/gh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$GH_LOG"
+last() { command ls "$GH_PAYLOADS" | command sort -n | command tail -1; }
+case "$1 $2" in
+    "pr create") printf 'https://github.com/joshjhall/containers-db/pull/9\n' ;;
+    "api graphql")
+        [ "${GH_STUB_GRAPHQL_FAIL:-}" = 1 ] && exit 1
+        n=$(( $(command ls "$GH_PAYLOADS" | command wc -l) + 1 ))
+        command cp "$4" "$GH_PAYLOADS/$n.json"
+        printf '{"data":{"createCommitOnBranch":{"commit":{"oid":"c0ffee%04d","url":"u"}}}}\n' "$n"
+        ;;
+    "api "*)
+        for a in "$@"; do path="$a"; case "$a" in repos/*) break ;; esac; done
+        case "$path" in
+            */git/ref/heads/*) [ "${GH_STUB_REF_EXISTS:-}" = 1 ] || exit 1; echo '{}' ;;
+            */git/trees/*)
+                command jq -c --arg m "${GH_STUB_TREE_MODE:-100644}" \
+                    '{truncated:false, tree: [.variables.input.fileChanges.additions[] | {path, mode:$m}]}' \
+                    "$GH_PAYLOADS/$(last)"
+                ;;
+            */commits/*)
+                printf '{"commit":{"verification":{"verified":%s}}}\n' "${GH_STUB_VERIFIED:-true}" ;;
+            *) echo '{}' ;;
+        esac
+        ;;
+esac
+exit 0
+STUB
+    command chmod +x "$STUB_DIR/gh"
+}
+
+# gh_stub_payload [n] — the n-th (default last) graphql payload's path.
+gh_stub_payload() {
+    local n="${1:-}"
+    if [ -z "$n" ]; then
+        n="$(command ls "$GH_PAYLOADS" | command sort -n | command tail -1)"
+        n="${n%.json}"
+    fi
+    command echo "$GH_PAYLOADS/$n.json"
+}
+
+# gh_stub_file <payload> <path> — the decoded contents of <path>'s addition.
+gh_stub_file() {
+    command jq -r --arg p "$2" '.variables.input.fileChanges.additions[] | select(.path == $p) | .contents' "$1" |
+        command base64 -d
+}

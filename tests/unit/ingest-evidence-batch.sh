@@ -3,13 +3,18 @@
 # lands in containers-db as ONE branch + ONE PR with auto-merge enabled.
 #
 # Hermetic: a local bare repo stands in for the containers-db origin and `gh`
-# is a stub on PATH that logs its argv, so the real push / PR / auto-merge
-# path runs without the network.
+# is a fake GitHub on PATH (tests/lib/gh-api-stub.sh) that logs its argv and
+# captures every createCommitOnBranch payload, so the real API-commit / PR /
+# auto-merge path runs without the network. The commit goes through the API
+# so GitHub signs it (#1573): nothing may reach the origin with `git push`.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../framework.sh"
+
+# shellcheck source=tests/lib/gh-api-stub.sh
+source "$SCRIPT_DIR/../lib/gh-api-stub.sh"
 
 init_test_framework
 
@@ -44,18 +49,10 @@ _row() {
         >"$1/$2.json"
 }
 
-# _gh_stub — a `gh` that logs argv to $GH_LOG and prints a PR URL on create.
-_gh_stub() {
-    STUB_DIR="$(command mktemp -d "$TEST_TEMP_DIR/gh.XXXXXX")"
-    GH_LOG="$STUB_DIR/gh.log"
-    export GH_LOG
-    command cat >"$STUB_DIR/gh" <<'STUB'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >>"$GH_LOG"
-[ "$1 $2" = "pr create" ] && printf 'https://github.com/joshjhall/containers-db/pull/9\n'
-exit 0
-STUB
-    command chmod +x "$STUB_DIR/gh"
+# _merged <db> — the checkout after the batch PR merged: commit what the
+# ingest left in the working tree, as containers-db main would now hold it.
+_merged() {
+    git -C "$1" -c user.email=t@t -c user.name=t commit -q -am merged
 }
 
 # _run <rows> <db> [run-id] — run id defaults to 4242; a later run in the
@@ -73,7 +70,7 @@ test_many_rows_one_pr_with_automerge() {
     db="$d/db"
     rows="$d/rows"
     _fake_db "$db"
-    _gh_stub
+    gh_stub_install
     # Five cells across two version files, nested like download-artifact
     # output (one subdirectory per artifact).
     _row "$rows/a" r1 1.82.0 debian 13 amd64 pass
@@ -87,13 +84,24 @@ test_many_rows_one_pr_with_automerge() {
     assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" "exactly ONE PR for five rows"
     assert_equals "1" "$(command grep -c '^pr merge .*--auto --squash --delete-branch' "$GH_LOG")" \
         "auto-merge is enabled on it"
-    assert_equals "3" "$(git -C "$d/db.git" show evidence/batch/4242:tools/rust/versions/1.82.0.json | command jq '.tested|length')" \
+    assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "in ONE API commit"
+    assert_equals "1" "$(command grep -c '^api -X POST repos/joshjhall/containers-db/git/refs -f ref=refs/heads/evidence/batch/4242 -f sha='"$(git -C "$db" rev-parse HEAD)"'$' "$GH_LOG")" \
+        "the branch is created through the API at the checkout's HEAD"
+    local p
+    p="$(gh_stub_payload)"
+    assert_equals "joshjhall/containers-db evidence/batch/4242 $(git -C "$db" rev-parse HEAD)" \
+        "$(command jq -r '.variables.input | "\(.branch.repositoryNameWithOwner) \(.branch.branchName) \(.expectedHeadOid)"' "$p")" \
+        "the commit targets the batch branch, expecting the checkout's HEAD"
+    assert_equals "feat(evidence): record 5 evidence row(s) across 2 version file(s)" \
+        "$(command jq -r '.variables.input.message.headline' "$p")" "headline carries the counts"
+    assert_equals "3" "$(gh_stub_file "$p" tools/rust/versions/1.82.0.json | command jq '.tested|length')" \
         "1.82.0 got all three of its rows"
-    assert_equals "2" "$(git -C "$d/db.git" show evidence/batch/4242:tools/rust/versions/1.83.0.json | command jq '.tested|length')" \
+    assert_equals "2" "$(gh_stub_file "$p" tools/rust/versions/1.83.0.json | command jq '.tested|length')" \
         "1.83.0 got both of its rows"
-    assert_equals "1" "$(git -C "$d/db.git" rev-list --count main..evidence/batch/4242)" "in one commit"
-    assert_equals "null" "$(git -C "$d/db.git" show evidence/batch/4242:tools/rust/versions/1.82.0.json | command jq '.tested[0].tool')" \
+    assert_equals "null" "$(gh_stub_file "$p" tools/rust/versions/1.82.0.json | command jq '.tested[0].tool')" \
         "routing fields are stripped from the stored TestEntry"
+    assert_equals "" "$(git -C "$d/db.git" branch --list 'evidence/*')" \
+        "nothing was pushed with git (an unsigned commit would be)"
 }
 
 test_nothing_new_is_a_clean_noop() {
@@ -102,17 +110,16 @@ test_nothing_new_is_a_clean_noop() {
     db="$d/db"
     rows="$d/rows"
     _fake_db "$db"
-    _gh_stub
+    gh_stub_install
     _row "$rows" r1 1.82.0 debian 13 amd64 pass
     _run "$rows" "$db"
-    # Same row again on a fresh checkout of the merged result: no PR.
-    git -C "$db" checkout -q main
-    git -C "$db" -c user.email=t@t -c user.name=t merge -q --ff-only evidence/batch/4242 2>/dev/null ||
-        git -C "$db" reset -q --hard evidence/batch/4242
+    # Same row again on a checkout of the merged result: no commit, no PR.
+    _merged "$db"
     : >"$GH_LOG"
     _run "$rows" "$db"
     assert_equals "0" "$RC" "re-ingesting recorded rows exits 0"
     assert_equals "" "$OUT" "prints no branch"
+    assert_equals "0" "$(command grep -c '^api graphql' "$GH_LOG" || true)" "makes no API commit"
     assert_equals "0" "$(command grep -c '^pr create' "$GH_LOG" || true)" "and opens no PR"
 }
 
@@ -126,11 +133,10 @@ test_repeated_fail_refreshes_and_identical_is_noop() {
     rows="$d/rows"
     rows2="$d/rows2"
     _fake_db "$db"
-    _gh_stub
+    gh_stub_install
     _row "$rows" r1 1.82.0 debian 13 amd64 fail
     _run "$rows" "$db"
-    git -C "$db" checkout -q main
-    git -C "$db" reset -q --hard evidence/batch/4242
+    _merged "$db"
 
     _row "$rows2" r1 1.82.0 debian 13 amd64 fail
     command jq '.tested_at = "2026-10-20T00:00:00Z"' "$rows2/r1.json" >"$rows2/r1.tmp"
@@ -140,11 +146,10 @@ test_repeated_fail_refreshes_and_identical_is_noop() {
     assert_equals "0" "$RC" "repeated-fail batch ingest exits 0"
     assert_equals "evidence/batch/4243" "$OUT" "the refresh is a change: a batch branch is printed"
     assert_equals "1 2026-10-20T00:00:00Z" \
-        "$(git -C "$d/db.git" show evidence/batch/4243:tools/rust/versions/1.82.0.json | command jq -r '"\(.tested | length) \(.tested[0].tested_at)"')" \
+        "$(gh_stub_file "$(gh_stub_payload)" tools/rust/versions/1.82.0.json | command jq -r '"\(.tested | length) \(.tested[0].tested_at)"')" \
         "one row, carrying the newer tested_at"
 
-    git -C "$db" checkout -q main
-    git -C "$db" reset -q --hard evidence/batch/4243
+    _merged "$db"
     : >"$GH_LOG"
     _run "$rows2" "$db" 4244
     assert_equals "0" "$RC" "identical fail re-ingest exits 0"
@@ -158,13 +163,42 @@ test_rows_for_unknown_versions_are_skipped() {
     db="$d/db"
     rows="$d/rows"
     _fake_db "$db"
-    _gh_stub
+    gh_stub_install
     _row "$rows" r1 9.9.9 debian 13 amd64 pass # not in containers-db
     _row "$rows" r2 1.82.0 debian 13 amd64 pass
     _run "$rows" "$db"
     assert_equals "0" "$RC" "an unknown version does not fail the batch"
-    assert_equals "1" "$(git -C "$d/db.git" show evidence/batch/4242:tools/rust/versions/1.82.0.json | command jq '.tested|length')" \
+    assert_equals "1" "$(gh_stub_file "$(gh_stub_payload)" tools/rust/versions/1.82.0.json | command jq '.tested|length')" \
         "the known row still lands"
+}
+
+test_dry_run_commits_locally_and_never_calls_github() {
+    local d db rows
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    db="$d/db"
+    rows="$d/rows"
+    _fake_db "$db"
+    gh_stub_install
+    _row "$rows" r1 1.82.0 debian 13 amd64 pass
+    OUT=$(PATH="$STUB_DIR:$PATH" BASH_ENV='' GH_TOKEN='' GITHUB_TOKEN='' \
+        "$BATCH" --rows-dir "$rows" --db-path "$db" --run-id 7 --no-validate --dry-run 2>/dev/null) || RC=$?
+    assert_equals "evidence/batch/7" "$OUT" "dry-run prints the branch"
+    assert_equals "1" "$(git -C "$db" show evidence/batch/7:tools/rust/versions/1.82.0.json | command jq '.tested|length')" \
+        "the merge is committed on the local branch"
+    assert_equals "0" "$(command wc -l <"$GH_LOG" | command tr -d ' ')" "gh is never called"
+}
+
+test_api_commit_failure_fails_the_ingest_and_opens_no_pr() {
+    local d db rows
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    db="$d/db"
+    rows="$d/rows"
+    _fake_db "$db"
+    gh_stub_install
+    _row "$rows" r1 1.82.0 debian 13 amd64 pass
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_FAIL=1 _run "$rows" "$db"
+    assert_equals "1" "$RC" "a failed API commit is a runtime error"
+    assert_equals "0" "$(command grep -c '^pr create' "$GH_LOG" || true)" "no PR is opened for a commit that never landed"
 }
 
 test_unsafe_run_id_is_refused() {
@@ -177,6 +211,8 @@ run_test test_many_rows_one_pr_with_automerge "many rows land as one PR with aut
 run_test test_nothing_new_is_a_clean_noop "re-ingesting recorded rows opens no PR"
 run_test test_repeated_fail_refreshes_and_identical_is_noop "a newer repeated fail refreshes; the identical row is a no-op"
 run_test test_rows_for_unknown_versions_are_skipped "rows for versions not in the db are skipped"
+run_test test_dry_run_commits_locally_and_never_calls_github "dry-run commits locally and never calls GitHub"
+run_test test_api_commit_failure_fails_the_ingest_and_opens_no_pr "a failed API commit fails the ingest with no PR"
 run_test test_unsafe_run_id_is_refused "unsafe run id is refused"
 
 generate_report

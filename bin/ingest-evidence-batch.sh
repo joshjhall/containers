@@ -12,6 +12,10 @@
 # Rows are machine-produced and schema-validated, so the PR auto-merges once
 # containers-db's own validation passes.
 #
+# The commit is created through the GitHub API (bin/lib/github-api-commit.sh),
+# so GitHub signs it; containers-db main requires signed commits (#1573).
+# --dry-run commits locally instead and never touches the remote.
+#
 # Usage:
 #   bin/ingest-evidence-batch.sh --rows-dir DIR --db-path DIR --run-id ID
 #                                [--run-url URL] [--dry-run] [--no-validate]
@@ -34,6 +38,8 @@ PROJECT_ROOT="$(command dirname "$SCRIPT_DIR")"
 
 # shellcheck source=bin/lib/evidence-merge.sh
 source "$SCRIPT_DIR/lib/evidence-merge.sh"
+# shellcheck source=bin/lib/github-api-commit.sh
+source "$SCRIPT_DIR/lib/github-api-commit.sh"
 
 die() {
     command echo "$SCRIPT_NAME: $*" >&2
@@ -80,7 +86,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -h | --help)
-            command sed -n '2,26p' "$0"
+            command sed -n '2,31p' "$0"
             exit 0
             ;;
         *) die "unknown argument: $1" 2 ;;
@@ -148,36 +154,32 @@ fi
 
 BRANCH="evidence/batch/$RUN_ID"
 changed="$(git -C "$DB_PATH" diff --name-only -- tools | command wc -l | command tr -d ' ')"
-git -C "$DB_PATH" config --local user.name "${GIT_AUTHOR_NAME:-github-actions[bot]}"
-git -C "$DB_PATH" config --local user.email "${GIT_AUTHOR_EMAIL:-github-actions[bot]@users.noreply.github.com}"
-git -C "$DB_PATH" checkout -B "$BRANCH" >&2
-git -C "$DB_PATH" add tools
 SUBJECT="feat(evidence): record $merged evidence row(s) across $changed version file(s)"
-git -C "$DB_PATH" commit -m "$SUBJECT" -m "Batched evidence from joshjhall/containers evidence-run ${RUN_URL:-$RUN_ID}." >&2
+MSG_FILE="$(command mktemp)"
+trap 'command rm -f "$MSG_FILE"' EXIT
+command printf '%s\n\nBatched evidence from joshjhall/containers evidence-run %s.\n' \
+    "$SUBJECT" "${RUN_URL:-$RUN_ID}" >"$MSG_FILE"
 
 if $DRY_RUN; then
-    command echo "Dry-run: $SUBJECT on $BRANCH in $DB_PATH; push and PR skipped." >&2
+    # A local commit exercises the whole merge without touching the remote.
+    git -C "$DB_PATH" checkout -B "$BRANCH" >&2
+    git -C "$DB_PATH" add tools
+    git -C "$DB_PATH" -c user.name=dry-run -c user.email=dry-run@localhost \
+        commit -q -F "$MSG_FILE" >&2
+    command echo "Dry-run: $SUBJECT on $BRANCH in $DB_PATH; API commit and PR skipped." >&2
     command echo "$BRANCH"
     exit 0
 fi
 
 [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] || die "GH_TOKEN or GITHUB_TOKEN must be set (use --dry-run locally)"
 
-retry() {
-    local i=1 delay=2
-    while [ $i -le 3 ]; do
-        "$@" && return 0
-        [ $i -lt 3 ] && {
-            command echo "Retry $i/3: $*" >&2
-            command sleep "$delay"
-            delay=$((delay * 2))
-        }
-        i=$((i + 1))
-    done
-    return 1
-}
-
-retry git -C "$DB_PATH" push --force-with-lease="refs/heads/$BRANCH:" origin "$BRANCH" >&2
+# Commit through the GitHub API, not git push: containers-db main requires
+# signed commits, and only an API-created commit is signed by GitHub (#1573).
+# The branch starts at the checkout's HEAD, which is on the remote's main.
+gh_api_ensure_branch "$DB_REPO" "$BRANCH" "$(git -C "$DB_PATH" rev-parse HEAD)" ||
+    die "could not create $BRANCH on $DB_REPO"
+gh_api_commit_worktree "$DB_REPO" "$BRANCH" "$DB_PATH" "$MSG_FILE" tools >/dev/null ||
+    die "could not commit evidence to $DB_REPO:$BRANCH"
 
 BODY="$(
     command cat <<EOF
@@ -191,10 +193,10 @@ Ingestion contract: [\`docs/operations/evidence-runs.md\`](https://github.com/jo
 EOF
 )"
 
-pr_url="$(retry gh pr create --repo "$DB_REPO" --base main --head "$BRANCH" --title "$SUBJECT" --body "$BODY")"
+pr_url="$(gh_api_retry gh pr create --repo "$DB_REPO" --base main --head "$BRANCH" --title "$SUBJECT" --body "$BODY")"
 command echo "$SCRIPT_NAME: opened $pr_url" >&2
 # Squash + delete branch once the required check passes. Best-effort: if
 # auto-merge is unavailable the PR is still open and correct.
-retry gh pr merge "$pr_url" --repo "$DB_REPO" --auto --squash --delete-branch >&2 ||
+gh_api_retry gh pr merge "$pr_url" --repo "$DB_REPO" --auto --squash --delete-branch >&2 ||
     command echo "::warning::could not enable auto-merge on $pr_url; merge it manually" >&2
 command echo "$BRANCH"
