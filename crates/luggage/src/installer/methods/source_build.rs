@@ -74,7 +74,7 @@ pub const COMPILER_LAUNCHER_ENV: &str = "LUGGAGE_COMPILER_LAUNCHER";
 /// # Errors
 ///
 /// [`LuggageError::Catalog`] when the value is set but not valid UTF-8, empty,
-/// or carries whitespace — see [`parse_compiler_launcher`].
+/// or not a plain program name or path — see [`parse_compiler_launcher`].
 pub fn compiler_launcher_from_env() -> Result<Option<String>> {
     parse_compiler_launcher(crate::installer::tuning_env_var(COMPILER_LAUNCHER_ENV)?.as_deref())
 }
@@ -85,17 +85,22 @@ pub fn compiler_launcher_from_env() -> Result<Option<String>> {
 /// Unlike the numeric tuning vars, an exported-but-empty value is an error,
 /// not "unset": the only reason to export this is to turn caching on, so an
 /// empty value is a mis-set opt-in that would otherwise silently cost a
-/// two-hour cold compile. Whitespace is refused because `make` word-splits
-/// `$(CC)`: `ccache --foo` would become a launcher plus a stray flag, which is
-/// not a launcher name.
+/// two-hour cold compile. Anything outside `[A-Za-z0-9._/+-]` is refused:
+/// `make` word-splits `$(CC)`, so `ccache --foo` would become a launcher plus
+/// a stray flag, and shell metacharacters would run as code in the build.
 ///
 /// # Errors
 ///
-/// [`LuggageError::Catalog`] naming the variable for an empty or
-/// whitespace-carrying value.
+/// [`LuggageError::Catalog`] naming the variable for an empty value or one
+/// with a character outside `[A-Za-z0-9._/+-]`.
 pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
     let Some(raw) = raw else { return Ok(None) };
-    if raw.is_empty() || raw.chars().any(char::is_whitespace) {
+    // A conservative charset: a bare program name or a path. `configure`
+    // and make recipes expand `$CC` through `/bin/sh` (sometimes via
+    // `eval`), and these steps run as root, so a `;`, `$(...)` or backtick
+    // here would execute as shell code rather than name a launcher.
+    let launcher_char = |c: char| c.is_ascii_alphanumeric() || "._/+-".contains(c);
+    if raw.is_empty() || !raw.chars().all(launcher_char) {
         return Err(LuggageError::Catalog(format!(
             "{COMPILER_LAUNCHER_ENV} must name a single launcher program (e.g. `ccache`), \
              got `{raw}`; unset it to build without one",
