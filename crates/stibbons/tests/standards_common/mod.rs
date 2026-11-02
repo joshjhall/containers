@@ -90,3 +90,57 @@ pub fn copy_dir(src: &Path, dst: &Path) {
         }
     }
 }
+
+/// The targets recorded under `accepted` in `root`'s state file, parsed rather
+/// than sliced out of the YAML so field order cannot change the answer.
+pub fn accepted_keys(root: &Path) -> std::collections::BTreeSet<String> {
+    #[derive(serde::Deserialize)]
+    struct State {
+        #[serde(default)]
+        accepted: std::collections::BTreeMap<String, String>,
+    }
+    let text = fs::read_to_string(root.join(".stibbons-standards.yml")).unwrap();
+    let state: State = serde_saphyr::from_str(&text).unwrap();
+    state.accepted.into_keys().collect()
+}
+
+/// Sets a directory's mode and restores 0755 on drop, so a panicking assertion
+/// cannot leave a read-only dir behind that the tempdir then fails to remove.
+#[cfg(unix)]
+pub struct ModeGuard(PathBuf);
+
+#[cfg(unix)]
+impl ModeGuard {
+    pub fn set(dir: &Path, mode: u32) -> Self {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(dir, fs::Permissions::from_mode(mode)).unwrap();
+        Self(dir.to_path_buf())
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ModeGuard {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+        // Not `unwrap`: a panic while already unwinding would abort the run.
+        let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+    }
+}
+
+/// Whether `dir` refuses writes, so a permission-based failure can be injected
+/// there. Root writes through mode 0555; CI runs unprivileged and sets
+/// `REQUIRE_UNPRIVILEGED_TESTS=1`, so there a writable dir fails the test rather
+/// than skipping it.
+pub fn refuses_writes(dir: &Path) -> bool {
+    let probe = dir.join(".probe");
+    if fs::write(&probe, b"").is_err() {
+        return true;
+    }
+    let _ = fs::remove_file(&probe);
+    assert!(
+        std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
+        "REQUIRE_UNPRIVILEGED_TESTS=1 but a 0555 dir is writable (running as root?)"
+    );
+    eprintln!("skipping: a 0555 dir is writable here (running as root?)");
+    false
+}

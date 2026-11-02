@@ -11,8 +11,11 @@ mod standards_common;
 use std::fs;
 use std::process::Command;
 
+#[cfg(unix)]
+use standards_common::{ModeGuard, refuses_writes};
 use standards_common::{
-    assert_ok, copy_dir, shell_python_repo, standards, stdout_of, stibbons_bin, vendored_templates,
+    accepted_keys, assert_ok, copy_dir, shell_python_repo, standards, stdout_of, stibbons_bin,
+    vendored_templates,
 };
 
 #[test]
@@ -120,8 +123,6 @@ fn preexisting_unrecorded_file_is_not_clobbered() {
 #[cfg(unix)]
 #[test]
 fn partial_init_failure_records_written_files() {
-    use std::os::unix::fs::PermissionsExt;
-
     let tmp = shell_python_repo();
     let root = tmp.path();
     let tpl = tempfile::tempdir().unwrap();
@@ -132,16 +133,8 @@ fn partial_init_failure_records_written_files() {
     // read-only `tests/` makes its write fail after those two are written.
     let tests_dir = root.join("tests");
     fs::create_dir(&tests_dir).unwrap();
-    fs::set_permissions(&tests_dir, fs::Permissions::from_mode(0o555)).unwrap();
-    // Control: root writes through mode 0555, so the failure cannot be
-    // injected there. CI runs unprivileged and sets
-    // REQUIRE_UNPRIVILEGED_TESTS=1, so there this skip is a failure.
-    if fs::write(tests_dir.join("probe"), b"").is_ok() {
-        assert!(
-            std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
-            "REQUIRE_UNPRIVILEGED_TESTS=1 but a 0555 dir is writable (running as root?)"
-        );
-        eprintln!("skipping: a 0555 dir is writable here (running as root?)");
+    let read_only = ModeGuard::set(&tests_dir, 0o555);
+    if !refuses_writes(&tests_dir) {
         return;
     }
 
@@ -167,7 +160,7 @@ fn partial_init_failure_records_written_files() {
 
     // Fix the cause and change a lefthook fragment: lefthook.yml is now an
     // unedited stibbons file the templates would change, so it updates.
-    fs::set_permissions(&tests_dir, fs::Permissions::from_mode(0o755)).unwrap();
+    drop(read_only);
     let frag = tpl.path().join("core/lefthook/10-pre-commit.yml.tmpl");
     fs::write(&frag, format!("{}\n", fs::read_to_string(&frag).unwrap())).unwrap();
 
@@ -183,32 +176,52 @@ fn partial_init_failure_records_written_files() {
 #[cfg(unix)]
 #[test]
 fn failed_state_save_still_reports_targets() {
-    use std::os::unix::fs::PermissionsExt;
-
     let tmp = shell_python_repo();
     let root = tmp.path();
     assert_ok(&standards(root, &["init"]), "init");
     // Every target is now unchanged; only the state save can touch the root.
     fs::remove_file(root.join(".stibbons-standards.yml")).unwrap();
-    fs::set_permissions(root, fs::Permissions::from_mode(0o555)).unwrap();
-    if fs::write(root.join("probe"), b"").is_ok() {
-        fs::set_permissions(root, fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(
-            std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
-            "REQUIRE_UNPRIVILEGED_TESTS=1 but a 0555 dir is writable (running as root?)"
-        );
-        eprintln!("skipping: a 0555 dir is writable here (running as root?)");
+    let read_only = ModeGuard::set(root, 0o555);
+    if !refuses_writes(root) {
         return;
     }
 
     let out = standards(root, &["init"]);
-    fs::set_permissions(root, fs::Permissions::from_mode(0o755)).unwrap();
+    drop(read_only);
     assert!(!out.status.success(), "init must fail when the state file cannot be saved");
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains(".stibbons-standards.yml"), "{err}");
     let s = stdout_of(&out);
     assert!(s.contains("ok         lefthook.yml\n"), "report lost on a failed save:\n{s}");
     assert!(!s.contains("Wrote .stibbons-standards.yml"), "{s}");
+}
+
+/// A failed write whose best-effort state save fails too reports both, and does
+/// not claim the written files were recorded.
+#[cfg(unix)]
+#[test]
+fn init_write_and_save_failure_reports_both() {
+    let tmp = shell_python_repo();
+    let root = tmp.path();
+    // A read-only root fails the first write and the state save after it.
+    let read_only = ModeGuard::set(root, 0o555);
+    if !refuses_writes(root) {
+        return;
+    }
+
+    let out = standards(root, &["init"]);
+    drop(read_only);
+    assert!(!out.status.success(), "init into a read-only root must fail");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("failed to write") && err.contains("lefthook.yml"), "{err}");
+    assert!(err.contains("; also failed to save .stibbons-standards.yml: "), "{err}");
+    assert!(
+        !err.contains("recorded the files written so far"),
+        "claimed a save that failed:\n{err}"
+    );
+    assert!(!root.join(".stibbons-standards.yml").exists(), "state file appeared");
+    let s = stdout_of(&out);
+    assert!(s.contains("failed     lefthook.yml\n"), "{s}");
 }
 
 #[test]
@@ -307,10 +320,9 @@ fn accept_ok_file_is_noop_with_note() {
     assert_ok(&out, "accept ok + modified");
     let s = stdout_of(&out);
     assert!(s.contains("skipped _typos.toml") && s.contains("accepted .gitleaks.toml"), "{s}");
-    let saved = fs::read_to_string(&state).unwrap();
-    let accepted = saved.split("accepted:").nth(1).unwrap_or("");
-    assert!(accepted.contains(".gitleaks.toml"), "{saved}");
-    assert!(!accepted.contains("_typos.toml"), "Ok file recorded as accepted:\n{saved}");
+    let accepted = accepted_keys(tmp.path());
+    assert!(accepted.contains(".gitleaks.toml"), "{accepted:?}");
+    assert!(!accepted.contains("_typos.toml"), "Ok file recorded as accepted: {accepted:?}");
 }
 
 #[test]
@@ -356,6 +368,27 @@ fn failed_accept_reports_and_saves_nothing() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("not a repo-baseline file"));
     let s = stdout_of(&out);
     assert!(!s.contains("cleared"), "reported a change that was not saved:\n{s}");
+    assert_eq!(fs::read(&state).unwrap(), before, "failed accept changed the state");
+}
+
+#[test]
+fn accept_with_later_missing_path_prints_and_saves_nothing() {
+    // `_typos.toml` is accepted into the buffer before the read of the deleted
+    // `.gitleaks.toml` fails: nothing may be printed or saved for it.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let edited = tmp.path().join("_typos.toml");
+    fs::write(&edited, format!("{}# edit\n", fs::read_to_string(&edited).unwrap())).unwrap();
+    fs::remove_file(tmp.path().join(".gitleaks.toml")).unwrap();
+    let state = tmp.path().join(".stibbons-standards.yml");
+    let before = fs::read(&state).unwrap();
+
+    let out = standards(tmp.path(), &["accept", "_typos.toml", ".gitleaks.toml"]);
+    assert!(!out.status.success(), "accepting a missing file must fail");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("cannot accept .gitleaks.toml"), "{err}");
+    let s = stdout_of(&out);
+    assert!(!s.contains("accepted"), "reported an acceptance that was not saved:\n{s}");
     assert_eq!(fs::read(&state).unwrap(), before, "failed accept changed the state");
 }
 
@@ -518,9 +551,11 @@ fn init_drops_acceptance_once_the_render_matches_it() {
 
     fs::write(&frag, format!("{original_frag}\n")).unwrap();
     assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "re-init");
-    let state = fs::read_to_string(tmp.path().join(".stibbons-standards.yml")).unwrap();
-    let accepted = state.split("accepted:").nth(1).unwrap_or("");
-    assert!(!accepted.contains("dprint.json"), "acceptance survived a matching render:\n{state}");
+    let accepted = accepted_keys(tmp.path());
+    assert!(
+        !accepted.contains("dprint.json"),
+        "acceptance survived a matching render: {accepted:?}"
+    );
 
     fs::write(&frag, format!("{original_frag}\n\n")).unwrap();
     let out = standards(tmp.path(), &["init", "--templates-dir", tpl_arg]);
