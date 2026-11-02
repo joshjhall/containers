@@ -163,6 +163,35 @@ test_falls_back_uncached_when_install_fails() {
     /usr/bin/rm -rf "$d"
 }
 
+test_install_success_without_ccache_falls_back() {
+    # A package manager can exit 0 yet leave no `ccache` on PATH. Opting
+    # luggage in then would make it spawn a missing launcher and fail the
+    # cell, so the post-install `command -v ccache` check must hold.
+    local d rc=0 err
+    d="$(_sandbox)"
+    printf '#!/bin/sh\nexit 0\n' >"$d/bin/apk"
+    /usr/bin/chmod +x "$d/bin/apk"
+    err="$(_run "$d" 2>&1 >/dev/null)" || rc=$?
+    assert_equals "0" "$rc" "a no-op install never fails the cell"
+    assert_equals "<unset>" "$(/usr/bin/cat "$d/launcher-seen")" "luggage builds without a launcher"
+    assert_contains "$err" "::warning::" "the fallback is surfaced as a warning"
+    /usr/bin/rm -rf "$d"
+}
+
+test_stats_write_failure_keeps_the_build_status() {
+    # Stats plumbing must never change the verdict: an unwritable stats path
+    # is reported, and luggage's own exit status still comes back.
+    local d rc=0 err
+    d="$(_sandbox)"
+    _stub_ccache "$d"
+    err="$(/usr/bin/env -i PATH="$d/bin:$d/sys" SANDBOX="$d" LUGGAGE_STUB_RC=3 \
+        CCACHE_STATS_OUT="$d/missing-dir/stats.txt" \
+        /bin/sh "$ENTRY" luggage install node@22.22.3 2>&1 >/dev/null)" || rc=$?
+    assert_equals "3" "$rc" "luggage's status survives a failed stats write"
+    assert_contains "$err" "could not write ccache stats" "the stats failure is reported"
+    /usr/bin/rm -rf "$d"
+}
+
 test_requires_a_command() {
     local rc=0
     /usr/bin/env -i PATH=/bin /bin/sh "$ENTRY" >/dev/null 2>&1 || rc=$?
@@ -177,6 +206,8 @@ run_test test_installs_ccache_via_dnf "installs ccache with dnf on rhel"
 run_test test_installs_ccache_via_microdnf "installs ccache with microdnf on ubi-minimal"
 run_test test_no_package_manager_falls_back "falls back uncached when no package manager exists"
 run_test test_falls_back_uncached_when_install_fails "falls back to an uncached build when ccache cannot install"
+run_test test_install_success_without_ccache_falls_back "falls back when an install exits 0 but leaves no ccache"
+run_test test_stats_write_failure_keeps_the_build_status "a failed stats write keeps luggage's exit status"
 run_test test_requires_a_command "refuses to run with no command"
 
 generate_report
