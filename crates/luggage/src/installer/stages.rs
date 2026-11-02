@@ -173,6 +173,7 @@ impl Installer {
                 strip_components: resolved.strip_components.unwrap_or(0),
                 max_extract_bytes: self.options.max_extract_bytes,
                 build_steps: resolved.build_steps.as_deref().unwrap_or(&[]),
+                compiler_launcher: self.options.compiler_launcher.as_deref(),
                 log: logger,
                 runner: self.runner.as_ref(),
             },

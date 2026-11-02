@@ -179,6 +179,7 @@ impl Fixture {
             strip_components: strip,
             max_extract_bytes,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &self.runner,
         })

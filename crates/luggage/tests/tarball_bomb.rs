@@ -86,6 +86,7 @@ fn real_scale_bomb_is_refused_without_materialising_it() {
         strip_components: 0,
         max_extract_bytes: CEILING,
         build_steps: &[],
+        compiler_launcher: None,
         log: None,
         runner: &runner,
     });

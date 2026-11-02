@@ -82,6 +82,7 @@ fn options_in(roots: &TempDir) -> InstallerOptions {
         max_extract_bytes: luggage::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
         version_probe_timeout: luggage::installer::idempotency::VERSION_PROBE_TIMEOUT,
         catalog_root: None,
+        compiler_launcher: None,
     }
 }
 
