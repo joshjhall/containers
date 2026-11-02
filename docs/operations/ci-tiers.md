@@ -57,6 +57,19 @@ the full multi-variant merge-tier cost.
 > whose label list predates the label.) Removing the label does not cancel a
 > run already in flight.
 
+### CI/CD Pipeline concurrency
+
+`ci.yml` cancels superseded PR runs (#1560): `pull_request` runs share one
+group per PR (`ci-pr-<PR number>`) with `cancel-in-progress`, so a review-fix
+push frees the runner slot the previous head's run was holding. Every other
+event — pushes to `main`/`v5`/`auto-patch/**`, tags, `workflow_dispatch` — gets
+a run-unique group (`ci-run-<run_id>`) and is never cancelled. A shared
+per-ref group would not be enough: GitHub displaces a *pending* run when a
+newer one joins its group even with `cancel-in-progress: false`, and release
+and auto-patch depend on those results. `test-pr.yml` has its own group (below);
+`evidence-run.yml` deliberately never cancels. Guarded by
+`tests/unit/ci-concurrency.sh`.
+
 ### Label events and concurrency
 
 GitHub cannot filter `labeled` by label name, so **every** label add creates a
