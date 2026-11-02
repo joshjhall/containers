@@ -218,7 +218,7 @@ test_open_reject_message_names_issue_filing() {
     # keeps the default "file issue" wording — pinned through the real caller
     # so a wrong action at the call site fails here (#1568).
     install_gh_stub
-    local rc=0 err
+    local rc=0 err issue_calls
     GH="$GH_STUB" GH_CALLS="$GH_CALLS" open_or_update_tracking_issue \
         "Bad Tool" "1.95.0" "debian-12-amd64" "verify" "https://example.com/run/1" \
         >/dev/null 2>"$TEST_TEMP_DIR/open-err" || rc=$?
@@ -226,8 +226,10 @@ test_open_reject_message_names_issue_filing() {
     err="$(command cat "$TEST_TEMP_DIR/open-err")"
     assert_equals "Refusing to file issue: unexpected tool slug 'Bad Tool'" "$err" \
         "the per-cell caller logs the exact issue-filing refusal"
-    assert_equals "0" "$(command grep -sc '^issue' "$GH_CALLS" || echo 0)" \
-        "no gh issue call on a rejected coordinate"
+    # grep -c prints "0" AND exits 1 on no match, so `|| echo 0` would yield
+    # "0\n0" once the log exists; default only the missing-file empty case.
+    issue_calls="$(command grep -sc '^issue' "$GH_CALLS")" || true
+    assert_equals "0" "${issue_calls:-0}" "no gh issue call on a rejected coordinate"
 }
 
 test_run_issue_reject_message_names_dropped_row() {
