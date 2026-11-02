@@ -68,6 +68,8 @@ struct Fixture {
     prefix: tempfile::TempDir,
     artifact: PathBuf,
     runner: RecordingRunner,
+    /// Compiler launcher handed to the method; `None` unless a test opts in.
+    launcher: Option<&'static str>,
 }
 
 impl Fixture {
@@ -82,6 +84,7 @@ impl Fixture {
             prefix: tempdir().unwrap(),
             artifact,
             runner: RecordingRunner::new(),
+            launcher: None,
         }
     }
 
@@ -114,6 +117,7 @@ impl Fixture {
             strip_components: strip,
             max_extract_bytes: DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: steps,
+            compiler_launcher: self.launcher,
             log: None,
             runner: &self.runner,
         })
@@ -207,6 +211,7 @@ fn each_step_sees_the_extracted_tree_in_its_cwd() {
         strip_components: 1,
         max_extract_bytes: DEFAULT_MAX_EXTRACT_BYTES,
         build_steps: &steps,
+        compiler_launcher: None,
         log: None,
         runner: &runner,
     })
@@ -250,6 +255,7 @@ fn relative_artifact_path_still_yields_absolute_cwd_and_command() {
         strip_components: 1,
         max_extract_bytes: DEFAULT_MAX_EXTRACT_BYTES,
         build_steps: &steps,
+        compiler_launcher: None,
         log: None,
         runner: &f.runner,
     })
@@ -398,6 +404,7 @@ fn failure_argv_uses_the_catalog_spelling_and_quotes_spaced_args() {
         strip_components: 1,
         max_extract_bytes: DEFAULT_MAX_EXTRACT_BYTES,
         build_steps: &steps,
+        compiler_launcher: None,
         log: None,
         runner: &AlwaysFails,
     })
@@ -577,6 +584,7 @@ fn steps_stream_banner_and_output_into_the_feature_log() {
         strip_components: 1,
         max_extract_bytes: DEFAULT_MAX_EXTRACT_BYTES,
         build_steps: &steps,
+        compiler_launcher: None,
         log: Some(&logger),
         runner: &f.runner,
     })
@@ -596,4 +604,103 @@ fn steps_stream_banner_and_output_into_the_feature_log() {
     // Order matters: step 2's output follows step 2's banner.
     let banner = log.find("build step 2/3").unwrap();
     assert!(log.find("gcc -c Python/ceval.c").unwrap() > banner, "{log}");
+}
+
+// ---- compiler launcher (#1594) -----------------------------------------
+
+/// Off by default: with no launcher every step's env is exactly what
+/// `build_env` produces — no `CC`/`CXX` appears. This is the production
+/// path, so it must stay byte-identical to the pre-#1594 behaviour.
+#[test]
+fn no_launcher_leaves_the_build_env_untouched() {
+    let f = Fixture::python();
+    let env = BTreeMap::from([("CFLAGS".to_owned(), "-O2".to_owned())]);
+    f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+
+    let calls = f.runner.streaming_calls();
+    assert_eq!(calls.len(), 3);
+    for call in calls {
+        assert_eq!(call.env, env, "{}: env must be the catalog's, unchanged", call.program);
+    }
+}
+
+/// Opted in, every step compiles through the launcher, wrapping the POSIX
+/// default compilers when the catalog names none.
+#[test]
+fn launcher_wraps_the_default_compilers_for_every_step() {
+    let mut f = Fixture::python();
+    f.launcher = Some("ccache");
+    f.run(&python_steps(), 1).unwrap();
+
+    let calls = f.runner.streaming_calls();
+    assert_eq!(calls.len(), 3);
+    for call in calls {
+        assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache cc"), "{}", call.program);
+        assert_eq!(call.env.get("CXX").map(String::as_str), Some("ccache c++"), "{}", call.program);
+    }
+}
+
+/// A catalog-chosen compiler is kept and wrapped, not replaced: the cached
+/// build must use the same toolchain the uncached one would.
+#[test]
+fn launcher_wraps_a_catalog_compiler_rather_than_replacing_it() {
+    let mut f = Fixture::python();
+    f.launcher = Some("ccache");
+    let env = BTreeMap::from([("CC".to_owned(), "gcc-13".to_owned())]);
+    f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+
+    let call = &f.runner.streaming_calls()[0];
+    assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc-13"));
+    assert_eq!(call.env.get("CXX").map(String::as_str), Some("ccache c++"));
+}
+
+/// The same holds for `CXX`, and for both at once: neither variable falls
+/// back to its default when the catalog names a compiler.
+#[test]
+fn launcher_wraps_a_catalog_cxx_and_both_together() {
+    for (env, want_cc, want_cxx) in [
+        (vec![("CXX", "g++-13")], "ccache cc", "ccache g++-13"),
+        (vec![("CC", "clang"), ("CXX", "clang++")], "ccache clang", "ccache clang++"),
+    ] {
+        let mut f = Fixture::python();
+        f.launcher = Some("ccache");
+        let env: BTreeMap<String, String> =
+            env.into_iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect();
+        f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+
+        let call = &f.runner.streaming_calls()[0];
+        assert_eq!(call.env.get("CC").map(String::as_str), Some(want_cc), "{env:?}");
+        assert_eq!(call.env.get("CXX").map(String::as_str), Some(want_cxx), "{env:?}");
+    }
+}
+
+#[test]
+fn launcher_env_unset_is_off() {
+    assert_eq!(parse_compiler_launcher(None).unwrap(), None);
+}
+
+#[test]
+fn launcher_env_names_the_program() {
+    assert_eq!(parse_compiler_launcher(Some("ccache")).unwrap().as_deref(), Some("ccache"));
+    assert_eq!(
+        parse_compiler_launcher(Some("/usr/bin/sccache")).unwrap().as_deref(),
+        Some("/usr/bin/sccache"),
+    );
+}
+
+/// Empty, multi-word, and shell-metacharacter values are refused by name
+/// rather than silently treated as "off" (a silent two-hour cold build),
+/// word-split by `make`, or run as shell code by `configure` as root.
+#[test]
+fn launcher_env_rejects_empty_and_whitespace() {
+    for bad in
+        ["", " ", "ccache --foo", "ccache\t", "ccache;id", "$(id)", "`id`", "cc&&id", "-x", "--foo"]
+    {
+        match parse_compiler_launcher(Some(bad)).unwrap_err() {
+            LuggageError::Catalog(msg) => {
+                assert!(msg.contains(COMPILER_LAUNCHER_ENV), "{bad:?}: {msg}");
+            }
+            other => panic!("{bad:?}: expected Catalog, got {other:?}"),
+        }
+    }
 }

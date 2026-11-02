@@ -47,6 +47,7 @@
 //! its `Drop` on every exit path: success, a failed step, or a rejected
 //! archive.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use containers_common::tooldb::BuildStep;
@@ -59,6 +60,69 @@ use crate::installer::template::{Substitutions, host_nproc, substitute_url};
 
 /// Prefix of the scratch directory the source tree is extracted into.
 pub const BUILD_DIR_PREFIX: &str = "luggage-build-";
+
+/// Env var that opts a source build into a compiler launcher (`ccache`).
+///
+/// Unset — the default, and every production install — changes nothing.
+/// Evidence runs set it so node's alpine compile is cached across runs
+/// (#1594). Kept luggage-side rather than in the catalog so the catalog stays
+/// tool-agnostic and a production image never grows a ccache dependency.
+pub const COMPILER_LAUNCHER_ENV: &str = "LUGGAGE_COMPILER_LAUNCHER";
+
+/// Read [`COMPILER_LAUNCHER_ENV`].
+///
+/// # Errors
+///
+/// [`LuggageError::Catalog`] when the value is set but not valid UTF-8, empty,
+/// or not a plain program name or path — see [`parse_compiler_launcher`].
+pub fn compiler_launcher_from_env() -> Result<Option<String>> {
+    parse_compiler_launcher(crate::installer::tuning_env_var(COMPILER_LAUNCHER_ENV)?.as_deref())
+}
+
+/// The value half of [`compiler_launcher_from_env`], split out so it is
+/// testable without `std::env::set_var` (forbidden here).
+///
+/// Unlike the numeric tuning vars, an exported-but-empty value is an error,
+/// not "unset": the only reason to export this is to turn caching on, so an
+/// empty value is a mis-set opt-in that would otherwise silently cost a
+/// two-hour cold compile. Anything outside `[A-Za-z0-9._/+-]` is refused:
+/// `make` word-splits `$(CC)`, so `ccache --foo` would become a launcher plus
+/// a stray flag, and shell metacharacters would run as code in the build.
+///
+/// # Errors
+///
+/// [`LuggageError::Catalog`] naming the variable for an empty value or one
+/// with a character outside `[A-Za-z0-9._/+-]`.
+pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
+    let Some(raw) = raw else { return Ok(None) };
+    // A conservative charset: a bare program name or a path. `configure`
+    // and make recipes expand `$CC` through `/bin/sh` (sometimes via
+    // `eval`), and these steps run as root, so a `;`, `$(...)` or backtick
+    // here would execute as shell code rather than name a launcher.
+    let launcher_char = |c: char| c.is_ascii_alphanumeric() || "._/+-".contains(c);
+    // A leading `-` would read as a flag, not a program (`--foo cc`).
+    if raw.is_empty() || raw.starts_with('-') || !raw.chars().all(launcher_char) {
+        return Err(LuggageError::Catalog(format!(
+            "{COMPILER_LAUNCHER_ENV} must name a single launcher program (e.g. `ccache`), \
+             got `{raw}`; unset it to build without one",
+        )));
+    }
+    Ok(Some(raw.to_owned()))
+}
+
+/// Prefix `launcher` onto the build's `CC` and `CXX`.
+///
+/// The compiler each wraps is the catalog's own `CC`/`CXX` when it exports
+/// one, else the POSIX defaults `cc`/`c++` — the names autoconf and node's
+/// gyp fall back to when neither is set, so the wrapped build compiles with
+/// the same toolchain the unwrapped one would.
+fn apply_compiler_launcher(env: &mut BTreeMap<String, String>, launcher: &str) {
+    for (var, default) in [("CC", "cc"), ("CXX", "c++")] {
+        let base = env.get(var).map_or(default, String::as_str);
+        let wrapped = format!("{launcher} {base}");
+        env.insert(var.to_owned(), wrapped);
+    }
+}
 
 /// Run the source-build flow.
 ///
@@ -140,7 +204,17 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
     )?;
 
     // 3. Run the steps in order; the first failure aborts the rest.
-    let env = build_env(ctx);
+    let mut env = build_env(ctx);
+    if let Some(launcher) = ctx.compiler_launcher {
+        apply_compiler_launcher(&mut env, launcher);
+        let note =
+            format!("compiler launcher: {launcher} (CC=`{}`, CXX=`{}`)", env["CC"], env["CXX"]);
+        if let Some(l) = ctx.log {
+            l.message(&note);
+        } else {
+            tracing::info!("{note}");
+        }
+    }
     let nproc = host_nproc();
     let subs = Substitutions { nproc: Some(&nproc), ..Substitutions::default() };
     let total = ctx.build_steps.len();

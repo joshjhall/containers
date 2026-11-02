@@ -254,6 +254,10 @@ same rule (`_EM_SOURCE_BUILD_JQ` and `evidence_cell_source_build` in
 for a version missing from the vendored catalog fails in `setup`. It does not
 fall back to the short timeout.
 
+**Compile cache (#1594).** Source-build cells compile through ccache, persisted
+with `actions/cache` and reported in the job summary; see
+[evidence-ccache.md](evidence-ccache.md).
+
 ### Ingest: one PR per run
 
 Cells only install, record, and upload their row (an envelope adding
