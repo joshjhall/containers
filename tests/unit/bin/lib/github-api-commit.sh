@@ -450,7 +450,7 @@ test_create_pr_reuses_an_open_pr() {
     assert_equals "0" "$RC" "an open PR for the head is success"
     assert_equals "https://x/pull/7" "$OUT" "and resolves to that PR"
     assert_equals "0" "$(command grep -c '^pr create' "$GH_LOG" || true)" "no second PR is created"
-    assert_equals "1" "$(command grep -cx 'pr list --repo o/r --head ev/b --state open --json url --jq .\[0\].url // empty' "$GH_LOG")" \
+    assert_equals "1" "$(command grep -c '^pr list --repo o/r --head ev/b --state open --json url,isCrossRepository ' "$GH_LOG")" \
         "the lookup is scoped to the repo and head"
 }
 
@@ -472,6 +472,74 @@ test_create_pr_failure_with_no_pr_fails() {
     gh_stub_install
     _pr
     assert_equals "https://github.com/joshjhall/containers-db/pull/9" "$OUT" "a plain create prints the new PR"
+}
+
+# _perm <stderr text> — "permanent" or "transient" per _gh_api_is_permanent.
+_perm() {
+    local f="$STUB_DIR/perm.err"
+    command printf '%b' "$1" >"$f"
+    if _gh_api_is_permanent "$f"; then command echo permanent; else command echo transient; fi
+}
+
+test_is_permanent_classifies_by_last_line() {
+    gh_stub_install
+    local want text
+    while IFS='|' read -r want text; do
+        assert_equals "$want" "$(_perm "$text")" "'$text' is $want"
+    done <<'TABLE'
+permanent|gh: Bad credentials (HTTP 401)
+permanent|gh: Not Found (HTTP 404)
+permanent|gh: Validation Failed (HTTP 422)
+permanent|GraphQL: No commits between main and x (createPullRequest)
+permanent|GraphQL: Could not resolve to a Repository
+permanent|gh: Resource not accessible by integration (HTTP 403)
+permanent|gh: Repository rule violations found
+transient|gh: Conflict (HTTP 409)
+transient|gh: Request Timeout (HTTP 408)
+transient|gh: API rate limit exceeded (HTTP 403)
+transient|gh: You have triggered an abuse detection mechanism (HTTP 403)
+transient|gh: Too Many Requests (HTTP 429)
+transient|gh: Bad Gateway (HTTP 502)
+transient|dial tcp: i/o timeout
+transient|
+transient|gh: Reference already exists (HTTP 422)\ngh: Bad Gateway (HTTP 502)\n\n
+permanent|gh: Bad Gateway (HTTP 502)\ngh: Forbidden (HTTP 403)
+TABLE
+}
+
+test_409_conflict_is_retried() {
+    gh_stub_install
+    _ensure 409
+    assert_equals "3" "$(command grep -c 'X POST' "$GH_LOG")" "a racing-update 409 is retried"
+    assert_not_contains "$ERR" "permanent error" "and is not called permanent"
+}
+
+test_replayed_stderr_cannot_issue_workflow_commands() {
+    gh_stub_install
+    _ensure 403
+    assert_contains "$ERR" "  gh: Failed (HTTP 403)" "gh's stderr is replayed indented"
+    assert_equals "0" "$(command grep -c '^gh:' <<<"$ERR" || true)" "never at column 0, where :: would be a command"
+}
+
+test_create_pr_requires_head_and_scopes_lookup_without_repo() {
+    gh_stub_install
+    local rc=0
+    PATH="$STUB_DIR:$PATH" gh_api_create_pr --base main --title t 2>"$STUB_DIR/err" || rc=$?
+    assert_equals "1" "$rc" "no --head is an error"
+    assert_contains "$(command cat "$STUB_DIR/err")" "gh_api_create_pr: --head is required" "and says why"
+    assert_equals "0" "$(command grep -c '^pr ' "$GH_LOG" || true)" "before any gh call"
+    local out
+    out="$(GH_STUB_PR_EXISTING=https://x/pull/3 PATH="$STUB_DIR:$PATH" gh_api_create_pr -H m/x --base main 2>/dev/null)"
+    assert_equals "https://x/pull/3" "$out" "the -H alias and the current repo work"
+    assert_equals "1" "$(command grep -c '^pr list --head m/x ' "$GH_LOG")" "the lookup carries no --repo"
+}
+
+test_create_pr_ignores_a_fork_pr_on_the_same_branch() {
+    gh_stub_install
+    GH_STUB_PR_EXISTING=https://x/pull/66 GH_STUB_PR_FORK=1 _pr
+    assert_equals "0" "$RC" "a fork PR does not block creating ours"
+    assert_equals "https://github.com/joshjhall/containers-db/pull/9" "$OUT" "ours is created, the fork PR never adopted"
+    assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" "with one create"
 }
 
 run_test test_payload_carries_additions_deletions_and_expected_head "payload carries additions, deletions and expected head"
@@ -510,5 +578,11 @@ run_test test_exit0_errors_body_is_logged_and_classified "an exit-0 errors body 
 run_test test_create_pr_reuses_an_open_pr "create_pr reuses an open PR"
 run_test test_create_pr_whose_attempt_landed_resolves_to_it "create_pr whose attempt landed resolves to it"
 run_test test_create_pr_failure_with_no_pr_fails "create_pr failure with no PR fails"
+
+run_test test_is_permanent_classifies_by_last_line "the classifier judges the last stderr line"
+run_test test_409_conflict_is_retried "a 409 conflict is retried"
+run_test test_replayed_stderr_cannot_issue_workflow_commands "replayed stderr cannot issue workflow commands"
+run_test test_create_pr_requires_head_and_scopes_lookup_without_repo "create_pr requires --head; works without --repo"
+run_test test_create_pr_ignores_a_fork_pr_on_the_same_branch "create_pr ignores a fork PR on the same branch"
 
 generate_report

@@ -23,16 +23,18 @@
 
 # _gh_api_is_permanent <stderr-file> — true when the LAST non-empty line of a
 # failed gh call's stderr is an error a retry cannot fix (#1583): an HTTP 4xx
-# other than 429 or a rate limit, or a GraphQL permission/validation/ruleset
-# message. Only the last line counts: _gh_api_create_or_move logs an expected
-# create 422 before a move that may have failed transiently. Anything
-# unrecognised (no status, network error, 5xx) is transient.
+# other than 408 (timeout), 409 (conflict, e.g. a racing ref update), 429 or
+# a rate/abuse limit (a 403 secondary limit), or a GraphQL permission,
+# validation or ruleset message. Only the last line counts:
+# _gh_api_create_or_move logs an expected create 422 before a move that may
+# have failed transiently. Anything unrecognised (no status, network error,
+# 5xx) is transient.
 _gh_api_is_permanent() {
     local line
     line="$(command sed '/^[[:space:]]*$/d' "$1" 2>/dev/null | command tail -n 1)"
     [ -n "$line" ] || return 1
     case "$line" in
-        *[Rr]ate\ limit* | *"HTTP 429"*) return 1 ;;
+        *[Rr]ate\ limit* | *[Aa]buse* | *"HTTP 408"* | *"HTTP 409"* | *"HTTP 429"*) return 1 ;;
         *"HTTP 4"[0-9][0-9]*) return 0 ;;
         *"Resource not accessible"* | *"Repository rule violations"* | \
             *"Could not resolve"* | *"No commits between"* | *"not permitted"*) return 0 ;;
@@ -42,19 +44,20 @@ _gh_api_is_permanent() {
 
 # gh_api_retry <cmd...> — run <cmd> up to 3 times with doubling backoff
 # starting at GH_API_RETRY_DELAY seconds (default 2; tests set 0). stdout
-# passes through; each attempt's stderr is captured, replayed to stderr, and
-# classified: a permanent error (_gh_api_is_permanent) fails at once instead
+# passes through; each attempt's stderr is captured, replayed to stderr
+# indented (so a "::" line from GitHub is never read as a workflow command),
+# and classified: a permanent error (_gh_api_is_permanent) fails at once instead
 # of being retried.
 gh_api_retry() {
     local i=1 delay="${GH_API_RETRY_DELAY:-2}" err rc=1
     err="$(command mktemp)" || return 1
     while [ "$i" -le 3 ]; do
         if "$@" 2>"$err"; then
-            command cat "$err" >&2
+            command sed 's/^/  /' "$err" >&2
             rc=0
             break
         fi
-        command cat "$err" >&2
+        command sed 's/^/  /' "$err" >&2
         if _gh_api_is_permanent "$err"; then
             command echo "gh_api_retry: permanent error from $1 $2, not retrying" >&2
             break
@@ -93,9 +96,12 @@ gh_api_create_pr() {
 }
 
 # _gh_api_find_pr <repo|""> <head> — print the URL of the open PR for <head>.
+# `--head` matches the branch name only, so a fork PR on a same-named branch
+# is skipped: only a same-repository PR is adopted (and later auto-merged).
 _gh_api_find_pr() {
     local url
-    url="$(gh pr list ${1:+--repo "$1"} --head "$2" --state open --json url --jq '.[0].url // empty' 2>/dev/null)" || return 1
+    url="$(gh pr list ${1:+--repo "$1"} --head "$2" --state open --json url,isCrossRepository \
+        --jq '[.[] | select(.isCrossRepository | not)][0].url // empty' 2>/dev/null)" || return 1
     [ -n "$url" ] || return 1
     command echo "$url"
 }

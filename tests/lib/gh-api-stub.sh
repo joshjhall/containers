@@ -29,6 +29,7 @@
 #   GH_STUB_FAIL_STATUS=N  a GH_STUB_FAIL_MATCH failure prints
 #                         "gh: Failed (HTTP N)" on stderr (default: silent)
 #   GH_STUB_PR_EXISTING   `pr list` prints this URL (default: no open PR)
+#   GH_STUB_PR_FORK=1     the GH_STUB_PR_EXISTING PR is cross-repository (a fork)
 #   GH_STUB_PR_CREATE_FAIL=1  `pr create` fails with "already exists"
 #   GH_STUB_PR_AFTER_CREATE  `pr list` prints this URL once `pr create` ran
 # The tree response lists every addition path from the last payload.
@@ -53,11 +54,23 @@ case "$1 $2" in
         fi
         printf 'https://github.com/joshjhall/containers-db/pull/9\n' ;;
     "pr list")
+        # Emulate --json url,isCrossRepository + --jq by applying the jq
+        # filter the caller passed to a one-PR (or empty) list.
+        url="" fork=false
         if [ -n "${GH_STUB_PR_EXISTING:-}" ]; then
-            printf '%s\n' "$GH_STUB_PR_EXISTING"
+            url="$GH_STUB_PR_EXISTING"
+            [ "${GH_STUB_PR_FORK:-}" = 1 ] && fork=true
         elif [ -n "${GH_STUB_PR_AFTER_CREATE:-}" ] && [ -e "$GH_PAYLOADS/.pr-created" ]; then
-            printf '%s\n' "$GH_STUB_PR_AFTER_CREATE"
+            url="$GH_STUB_PR_AFTER_CREATE"
         fi
+        jq_filter=""
+        prev=""
+        for a in "$@"; do
+            [ "$prev" = --jq ] && jq_filter="$a"
+            prev="$a"
+        done
+        command jq -rn --arg u "$url" --argjson f "$fork" \
+            "(if \$u == \"\" then [] else [{url: \$u, isCrossRepository: \$f}] end) | ${jq_filter:-.}"
         ;;
     "api graphql")
         if [ -n "${GH_STUB_GRAPHQL_ERRORS:-}" ]; then
