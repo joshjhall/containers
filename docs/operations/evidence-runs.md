@@ -230,20 +230,27 @@ Both arches run natively: arm64 on `ubuntu-24.04-arm`, amd64 on
 `ubuntu-latest`. The supported platform set lives in
 [`docs/reference/supported-platforms.md`](../reference/supported-platforms.md).
 
-**Per-cell job timeout (#1569).** Each cell carries `timeout_minutes`, and the
-`evidence` job uses it as its `timeout-minutes`. The value comes from the
-install method luggage would pick for that tuple, which is the first
-`install_methods[]` whose `platform` matches:
+**Per-cell job timeout (#1569).** Each cell carries a `source_build` flag, and
+the `evidence` job sets `timeout-minutes: ${{ matrix.source_build && 120 || 30 }}`.
+The flag comes from the install method luggage would pick for that tuple, which
+is the first `install_methods[]` whose `platform` matches:
 
 - A `source-build` method gets **120** minutes. Node on alpine compiles from
   source with `make -j4`, which takes longer than 30 minutes on a hosted runner.
-- Every other method gets **30**.
+- Every other method, or no matching method, gets **30**.
 
-The push matrix and a `workflow_dispatch` cell both read the timeout from the
-same rule (`_EM_TIMEOUT_JQ` and `evidence_cell_timeout` in
+The matrix carries the boolean rather than a minute count so the timeout stays
+provably bounded. That expression can only evaluate to 120 or 30, and
+[`tests/unit/workflow-timeouts.sh`](../../tests/unit/workflow-timeouts.sh)
+accepts only that `cond && N || M` shape with literal minutes. A bare
+`${{ matrix.x }}` could carry any value, and an empty one would inherit the
+6-hour default.
+
+The push matrix and a `workflow_dispatch` cell both compute the flag with the
+same rule (`_EM_SOURCE_BUILD_JQ` and `evidence_cell_source_build` in
 [`bin/lib/evidence-matrix.sh`](../../bin/lib/evidence-matrix.sh)). A dispatch
-for a version missing from the vendored catalog fails in `setup`; it does not
-fall back to 30.
+for a version missing from the vendored catalog fails in `setup`. It does not
+fall back to the short timeout.
 
 ### Ingest: one PR per run
 

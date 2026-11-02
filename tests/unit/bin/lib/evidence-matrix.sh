@@ -79,7 +79,7 @@ test_cells_carry_arch_plumbing() {
     _version "$r/catalog" 1.90.0 debian-13-arm64
     out="$(evidence_matrix "$r/catalog" rust "$r" v9)"
     assert_equals \
-        '{"tool":"rust","version":"1.90.0","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-24.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl","timeout_minutes":30}' \
+        '{"tool":"rust","version":"1.90.0","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-24.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl","source_build":false}' \
         "$(command jq -c '.include[0]' <<<"$out")" \
         "each cell carries the same fields the dispatch path builds"
 }
@@ -724,9 +724,9 @@ test_source_build_cells_get_the_long_timeout() {
     _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
     _methods "$r/catalog/tools/rust/versions/1.90.0.json" "$_NODE_LIKE_METHODS"
     out="$(evidence_matrix "$r/catalog" rust "$r")"
-    assert_equals $'alpine-3.24-amd64 120\ndebian-13-amd64 30' \
-        "$(command jq -r '.include[] | "\(.tuple) \(.timeout_minutes)"' <<<"$out" | command sort)" \
-        "the source-build tuple gets 120 minutes, the tarball tuple keeps 30"
+    assert_equals $'alpine-3.24-amd64 true\ndebian-13-amd64 false' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.source_build)"' <<<"$out" | command sort)" \
+        "the source-build tuple is flagged, the tarball tuple is not"
 }
 
 test_first_matching_method_decides_the_timeout() {
@@ -739,23 +739,23 @@ test_first_matching_method_decides_the_timeout() {
       {"method_kind":"binary-tarball"},
       {"method_kind":"source-build","platform":{"os":"alpine"}}]'
     out="$(evidence_matrix "$r/catalog" rust "$r")"
-    assert_equals "30 30" "$(command jq -r '[.include[].timeout_minutes] | map(tostring) | join(" ")' <<<"$out")" \
+    assert_equals "false false" "$(command jq -r '[.include[].source_build] | map(tostring) | join(" ")' <<<"$out")" \
         "a predicate-less first method shadows the source build"
     # An os_version-pinned source build applies only to that version.
     _methods "$r/catalog/tools/rust/versions/1.90.0.json" '[
       {"method_kind":"source-build","platform":{"os":"alpine","os_version":["3.24"]}},
       {"method_kind":"binary-tarball"}]'
     out="$(evidence_matrix "$r/catalog" rust "$r")"
-    assert_equals $'alpine-3.24-amd64 120\ndebian-13-amd64 30' \
-        "$(command jq -r '.include[] | "\(.tuple) \(.timeout_minutes)"' <<<"$out" | command sort)" \
+    assert_equals $'alpine-3.24-amd64 true\ndebian-13-amd64 false' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.source_build)"' <<<"$out" | command sort)" \
         "an os_version-pinned source build matches its version"
     # Pinned to another alpine release: 3.24 falls through to the tarball.
     _methods "$r/catalog/tools/rust/versions/1.90.0.json" '[
       {"method_kind":"source-build","platform":{"os":"alpine","os_version":"3.22"}},
       {"method_kind":"binary-tarball"}]'
     out="$(evidence_matrix "$r/catalog" rust "$r")"
-    assert_equals $'alpine-3.24-amd64 30\ndebian-13-amd64 30' \
-        "$(command jq -r '.include[] | "\(.tuple) \(.timeout_minutes)"' <<<"$out" | command sort)" \
+    assert_equals $'alpine-3.24-amd64 false\ndebian-13-amd64 false' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.source_build)"' <<<"$out" | command sort)" \
         "a source build pinned to another os_version does not match"
 }
 
@@ -769,12 +769,12 @@ test_arch_and_os_list_exclude_a_source_build() {
       {"method_kind":"source-build","platform":{"os":["debian","ubuntu"],"arch":["arm64"]}},
       {"method_kind":"binary-tarball"}]'
     out="$(evidence_matrix "$r/catalog" rust "$r")"
-    assert_equals $'alpine-3.24-amd64 30\ndebian-13-amd64 30\ndebian-13-arm64 120' \
-        "$(command jq -r '.include[] | "\(.tuple) \(.timeout_minutes)"' <<<"$out" | command sort)" \
+    assert_equals $'alpine-3.24-amd64 false\ndebian-13-amd64 false\ndebian-13-arm64 true' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.source_build)"' <<<"$out" | command sort)" \
         "the arch predicate and the os list both exclude non-matching cells"
-    assert_equals "30" "$(evidence_cell_timeout "$r/catalog" rust 1.90.0 debian-13-amd64)" \
+    assert_equals "false" "$(evidence_cell_source_build "$r/catalog" rust 1.90.0 debian-13-amd64)" \
         "the dispatch helper applies the arch predicate too"
-    assert_equals "120" "$(evidence_cell_timeout "$r/catalog" rust 1.90.0 debian-13-arm64)" \
+    assert_equals "true" "$(evidence_cell_source_build "$r/catalog" rust 1.90.0 debian-13-arm64)" \
         "and matches the listed arch"
 }
 
@@ -783,17 +783,17 @@ test_cell_timeout_helper_matches_the_matrix() {
     r="$(_fixture 1.0.0)"
     _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
     f="$r/catalog/tools/rust/versions/1.90.0.json"
-    assert_equals "30" "$(evidence_cell_timeout "$r/catalog" rust 1.90.0 alpine-3.24-amd64)" \
-        "no install_methods keeps the default 30"
+    assert_equals "false" "$(evidence_cell_source_build "$r/catalog" rust 1.90.0 alpine-3.24-amd64)" \
+        "no install_methods is not a source build"
     _methods "$f" "$_NODE_LIKE_METHODS"
-    assert_equals "120" "$(evidence_cell_timeout "$r/catalog" rust 1.90.0 alpine-3.24-arm64)" \
-        "a dispatched source-build cell gets 120"
-    assert_equals "30" "$(evidence_cell_timeout "$r/catalog" rust 1.90.0 debian-13-amd64)" \
-        "a dispatched tarball cell keeps 30"
-    evidence_cell_timeout "$r/catalog" rust 9.9.9 alpine-3.24-amd64 >/dev/null 2>&1 || rc=$?
-    assert_equals "1" "$rc" "a version missing from the catalog is an error, not a silent 30"
+    assert_equals "true" "$(evidence_cell_source_build "$r/catalog" rust 1.90.0 alpine-3.24-arm64)" \
+        "a dispatched source-build cell is flagged"
+    assert_equals "false" "$(evidence_cell_source_build "$r/catalog" rust 1.90.0 debian-13-amd64)" \
+        "a dispatched tarball cell is not"
+    evidence_cell_source_build "$r/catalog" rust 9.9.9 alpine-3.24-amd64 >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a version missing from the catalog is an error, not a silent false"
     rc=0
-    evidence_cell_timeout "$r/catalog" rust 1.90.0 alpine >/dev/null 2>&1 || rc=$?
+    evidence_cell_source_build "$r/catalog" rust 1.90.0 alpine >/dev/null 2>&1 || rc=$?
     assert_equals "1" "$rc" "a malformed tuple is an error"
 }
 
@@ -842,6 +842,6 @@ run_test test_missing_index_is_an_error "missing index is an error"
 run_test test_source_build_cells_get_the_long_timeout "source-build cells get the long timeout (#1569)"
 run_test test_first_matching_method_decides_the_timeout "the first matching install method decides the timeout"
 run_test test_arch_and_os_list_exclude_a_source_build "arch and os-list predicates exclude a source build"
-run_test test_cell_timeout_helper_matches_the_matrix "evidence_cell_timeout gives the dispatch path the same ceiling"
+run_test test_cell_timeout_helper_matches_the_matrix "evidence_cell_source_build gives the dispatch path the same flag"
 
 generate_report

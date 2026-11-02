@@ -64,15 +64,15 @@ test_cell_timeout_comes_from_the_matrix() {
     local evidence setup
     evidence="$(_job_block evidence)"
     setup="$(_job_block setup)"
-    assert_contains "$evidence" 'timeout-minutes: ${{ matrix.timeout_minutes }}' "the cell timeout is per cell"
+    assert_contains "$evidence" 'timeout-minutes: ${{ matrix.source_build && 120 || 30 }}' "the cell timeout is per cell, bounded"
     if command grep -qE '^    timeout-minutes: [0-9]+$' <<<"$evidence"; then
         assert_true false "the evidence job must not carry a literal job timeout"
     else
         assert_true true "no literal job timeout on the evidence job"
     fi
-    assert_contains "$setup" 'TIMEOUT=$(evidence_cell_timeout crates/luggage/testdata/catalog "$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE") || {' \
-        "the dispatch cell resolves its timeout, guarded"
-    assert_contains "$setup" 'timeout_minutes: $timeout}' "and carries it in the matrix cell"
+    assert_contains "$setup" 'SOURCE_BUILD=$(evidence_cell_source_build crates/luggage/testdata/catalog "$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE") || {' \
+        "the dispatch cell resolves its source-build flag, guarded"
+    assert_contains "$setup" 'source_build: $source_build}' "and carries it in the matrix cell"
 }
 
 test_collect_passes_the_cell_count() {

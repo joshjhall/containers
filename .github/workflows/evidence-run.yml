@@ -226,12 +226,12 @@ jobs:
             # runner-resolution error instead.
             PLUMBING=$(arch_plumbing "$ARCH") || { echo "Cannot resolve plumbing for arch: $ARCH" >&2; exit 1; }
             read -r RUNNER RUNTIME RUST_TARGET <<< "$PLUMBING"
-            # Same per-cell ceiling as the push matrix (#1569): a source-build
-            # method gets 120 minutes, everything else 30. Guarded like the
-            # plumbing above: a missing catalog entry must not fall back to 30.
+            # Same source-build flag as the push matrix (#1569), which picks
+            # the evidence job's timeout. Guarded like the plumbing above: a
+            # missing catalog entry must not fall back to the short timeout.
             # shellcheck source=bin/lib/evidence-matrix.sh
             source bin/lib/evidence-matrix.sh
-            TIMEOUT=$(evidence_cell_timeout crates/luggage/testdata/catalog "$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE") || { echo "Cannot resolve the job timeout for $INPUT_TOOL@$INPUT_TOOL_VERSION on $INPUT_TUPLE" >&2; exit 1; }
+            SOURCE_BUILD=$(evidence_cell_source_build crates/luggage/testdata/catalog "$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE") || { echo "Cannot resolve the install method for $INPUT_TOOL@$INPUT_TOOL_VERSION on $INPUT_TUPLE" >&2; exit 1; }
             MATRIX=$(jq -cn \
               --arg tool "$INPUT_TOOL" \
               --arg version "$INPUT_TOOL_VERSION" \
@@ -241,8 +241,8 @@ jobs:
               --arg runtime "$RUNTIME" \
               --arg runner "$RUNNER" \
               --arg rust_target "$RUST_TARGET" \
-              --argjson timeout "$TIMEOUT" \
-              '{include: [{tool: $tool, version: $version, tuple: $tuple, image_tag: $image_tag, arch: $arch, runtime: $runtime, runner: $runner, rust_target: $rust_target, timeout_minutes: $timeout}]}')
+              --argjson source_build "$SOURCE_BUILD" \
+              '{include: [{tool: $tool, version: $version, tuple: $tuple, image_tag: $image_tag, arch: $arch, runtime: $runtime, runner: $runner, rust_target: $rust_target, source_build: $source_build}]}')
             DRY="$INPUT_DRY_RUN"
           else
             # Every pending evidence cell, from the catalog (#1111), for every
@@ -344,10 +344,12 @@ jobs:
     # An empty matrix is a hard error in Actions; skip when nothing is pending.
     if: needs.setup.outputs.has_cells == 'true'
     runs-on: ${{ matrix.runner }}
-    # Per cell, from the matrix (#1569): 120 for a source-build method (node on
-    # alpine compiles from source), 30 for everything else. See _EM_TIMEOUT_JQ
-    # in bin/lib/evidence-matrix.sh.
-    timeout-minutes: ${{ matrix.timeout_minutes }}
+    # Per cell (#1569): 120 when the cell's install method is a source build
+    # (node on alpine compiles from source), 30 otherwise. The matrix carries
+    # only the boolean (bin/lib/evidence-matrix.sh, _EM_SOURCE_BUILD_JQ), so
+    # this expression can only ever be 120 or 30, which is how
+    # tests/unit/workflow-timeouts.sh proves the job bounded.
+    timeout-minutes: ${{ matrix.source_build && 120 || 30 }}
     # issues: write is needed for the fail-row tracking-issue step below. Scoped
     # to this job (not the workflow root) so `setup` and `reconcile` stay
     # contents:read. The issue is filed on this repo, so the default
