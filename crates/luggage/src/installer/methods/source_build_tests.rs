@@ -654,6 +654,26 @@ fn launcher_wraps_a_catalog_compiler_rather_than_replacing_it() {
     assert_eq!(call.env.get("CXX").map(String::as_str), Some("ccache c++"));
 }
 
+/// The same holds for `CXX`, and for both at once: neither variable falls
+/// back to its default when the catalog names a compiler.
+#[test]
+fn launcher_wraps_a_catalog_cxx_and_both_together() {
+    for (env, want_cc, want_cxx) in [
+        (vec![("CXX", "g++-13")], "ccache cc", "ccache g++-13"),
+        (vec![("CC", "clang"), ("CXX", "clang++")], "ccache clang", "ccache clang++"),
+    ] {
+        let mut f = Fixture::python();
+        f.launcher = Some("ccache");
+        let env: BTreeMap<String, String> =
+            env.into_iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect();
+        f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+
+        let call = &f.runner.streaming_calls()[0];
+        assert_eq!(call.env.get("CC").map(String::as_str), Some(want_cc), "{env:?}");
+        assert_eq!(call.env.get("CXX").map(String::as_str), Some(want_cxx), "{env:?}");
+    }
+}
+
 #[test]
 fn launcher_env_unset_is_off() {
     assert_eq!(parse_compiler_launcher(None).unwrap(), None);
