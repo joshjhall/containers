@@ -65,6 +65,41 @@ test_artifact_name_is_per_cell() {
         "artifact name includes tool, version, and tuple"
 }
 
+# _annotate_step — the "Annotate fail verdict" step block, comments dropped.
+_annotate_step() {
+    /usr/bin/awk '
+        /- name: Annotate fail verdict/ { on = 1 }
+        on && /- name: / && !/Annotate fail verdict/ { exit }
+        on { print }
+    ' "$WF" | /usr/bin/grep -vE '^[[:space:]]*#'
+}
+
+test_fail_cells_are_annotated_without_failing() {
+    # A fail cell's job stays green by design; this step is what makes it
+    # visible (#1549). It must gate on the fail verdict, pass the class via
+    # env (no inline expression in run:), call the tested helper with the
+    # coordinates in order, and never be able to skip the row upload.
+    local step
+    step="$(_annotate_step)"
+    assert_contains "$step" "if: steps.verdict.outputs.result == 'fail'" "gated on the fail verdict"
+    assert_contains "$step" "continue-on-error: true" "a rejected input cannot drop the row upload"
+    assert_contains "$step" 'VERDICT_ERROR_CLASS: ${{ steps.verdict.outputs.error_class }}' \
+        "error_class arrives via env"
+    assert_contains "$step" 'annotate_fail_verdict fail "$VERDICT_ERROR_CLASS" \' "calls the helper"
+    assert_contains "$step" '"$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE"' \
+        "coordinates passed in tool/version/tuple order"
+    # Ordering: after the verdict is read, before the row is wrapped/uploaded.
+    local verdict_ln annotate_ln wrap_ln
+    verdict_ln="$(/usr/bin/grep -n -- '- name: Read evidence verdict' "$WF" | /usr/bin/cut -d: -f1)"
+    annotate_ln="$(/usr/bin/grep -n -- '- name: Annotate fail verdict' "$WF" | /usr/bin/cut -d: -f1)"
+    wrap_ln="$(/usr/bin/grep -n -- '- name: Wrap row for batch ingest' "$WF" | /usr/bin/cut -d: -f1)"
+    if [ -n "$annotate_ln" ] && [ "$verdict_ln" -lt "$annotate_ln" ] && [ "$annotate_ln" -lt "$wrap_ln" ]; then
+        assert_true true "annotate runs between verdict and wrap"
+    else
+        assert_true false "annotate must run after 'Read evidence verdict' and before 'Wrap row' (got $verdict_ln/$annotate_ln/$wrap_ln)"
+    fi
+}
+
 # _db_sources_run — the executable lines of the "Collect open evidence PRs"
 # step's run: block (comments dropped, so prose cannot satisfy a pin).
 _db_sources_run() {
@@ -158,6 +193,7 @@ run_test test_cells_install_as_the_container_user "cells install as the containe
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
 run_test test_artifact_name_is_per_cell "artifact name is per cell"
+run_test test_fail_cells_are_annotated_without_failing "fail cells are annotated, never failing the upload (#1549)"
 run_test test_open_pr_sources_step_calls_the_lib "open-PR sources step calls evidence_db_sources (#1328)"
 run_test test_open_pr_sources_count_only_added_rows "open-PR sources count only the rows each PR adds (#1327)"
 run_test test_open_pr_sources_pin_the_main_read "open-PR sources take merge-bases against the fetched main"

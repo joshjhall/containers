@@ -557,8 +557,11 @@ jobs:
       # job-summary line. Runs on dry-run legs too: it files nothing. The
       # coordinates come in via env (never inlined into the script) and the
       # helper re-validates them before they reach a workflow command (#1549).
+      # continue-on-error: the annotation is cosmetic, so a rejected input must
+      # never skip the wrap/upload steps below and drop the evidence row.
       - name: Annotate fail verdict
         if: steps.verdict.outputs.result == 'fail'
+        continue-on-error: true
         env:
           VERDICT_ERROR_CLASS: ${{ steps.verdict.outputs.error_class }}
         run: |

@@ -145,12 +145,20 @@ test_annotate_non_fail_is_silent() {
 
 test_annotate_rejects_injected_coordinates() {
     local out rc summary="$TEST_TEMP_DIR/summary.md" bad
-    for bad in 'node::add-mask::x' $'node\n::stop-commands::t'; do
-        rc=0
-        out="$(GITHUB_STEP_SUMMARY="$summary" \
-            annotate_fail_verdict fail unknown "$bad" 20.13.1 alpine-3.22-amd64 2>/dev/null)" || rc=$?
-        assert_equals "1" "$rc" "injected tool $(command printf '%q' "$bad") → rc 1"
-        assert_not_contains "$out" "::" "no workflow command emitted for an injected tool"
+    local -a args
+    local pos
+    # Each coordinate position (tool=3, version=4, tuple=5) is a free-text
+    # dispatch input, so inject into each in turn.
+    for pos in 3 4 5; do
+        for bad in 'x::add-mask::x' $'x\n::stop-commands::t'; do
+            args=(fail unknown node 20.13.1 alpine-3.22-amd64)
+            args[pos - 1]="$bad"
+            rc=0
+            out="$(GITHUB_STEP_SUMMARY="$summary" \
+                annotate_fail_verdict "${args[@]}" 2>/dev/null)" || rc=$?
+            assert_equals "1" "$rc" "injected arg \$$pos $(command printf '%q' "$bad") → rc 1"
+            assert_not_contains "$out" "::" "no workflow command emitted for injected arg \$$pos"
+        done
     done
     rc=0
     out="$(GITHUB_STEP_SUMMARY="$summary" \
