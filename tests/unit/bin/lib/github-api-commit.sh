@@ -208,7 +208,9 @@ test_publish_branch_real_ref_failure_cleans_up_staging() {
     gh_stub_install
     command printf 'changed\n' >"$REPO/keep.txt"
     local rc=0 out
-    out="$(GH_API_RETRY_DELAY=0 GH_STUB_FAIL_MATCH='ref=refs/heads/auto-patch/x' \
+    # Both create and force-move of the real ref fail ("/auto-patch/x" is in
+    # both argvs, never in the staging ref's "auto-patch-staging/x").
+    out="$(GH_API_RETRY_DELAY=0 GH_STUB_FAIL_MATCH='heads/auto-patch/x' \
         PATH="$STUB_DIR:$PATH" gh_api_publish_branch o/r auto-patch/x "$REPO" "$MSG" 2>"$REPO.err")" || rc=$?
     assert_equals "1" "$rc" "failing to create the real ref fails the publish"
     assert_contains "$(command cat "$REPO.err")" "could not point auto-patch/x at c0ffee0001" "and names the branch and commit"
@@ -223,7 +225,7 @@ test_publish_branch_force_move_failure_cleans_up_staging() {
     command printf 'changed\n' >"$REPO/keep.txt"
     local rc=0 out
     out="$(GH_API_RETRY_DELAY=0 GH_STUB_REF_EXISTS=1 GH_STUB_REF_EXISTS_ONLY=heads/auto-patch/x \
-        GH_STUB_FAIL_MATCH='-X PATCH' PATH="$STUB_DIR:$PATH" \
+        GH_STUB_FAIL_MATCH='heads/auto-patch/x' PATH="$STUB_DIR:$PATH" \
         gh_api_publish_branch o/r auto-patch/x "$REPO" "$MSG" 2>"$REPO.err")" || rc=$?
     assert_equals "1" "$rc" "a refused force-move of an existing branch fails the publish"
     assert_equals "" "$out" "and prints no oid"
@@ -262,8 +264,41 @@ test_branch_moved_elsewhere_is_an_error() {
     GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_FAIL=1 GH_STUB_REF_EXISTS=1 \
         GH_STUB_BRANCH_HEAD=0ther GH_STUB_PARENT=unrelated _commit
     assert_equals "1" "$RC" "a branch moved by someone else is not adopted"
-    assert_contains "$ERR" "moved to 0ther, not a child of" "and says so"
+    assert_contains "$ERR" "moved to 0ther, not our commit on" "and says so"
     assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "nor retried into an expectedHeadOid failure"
+}
+
+test_foreign_child_of_base_is_not_adopted() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_FAIL=1 GH_STUB_REF_EXISTS=1 GH_STUB_BRANCH_HEAD=feedbeef \
+        GH_STUB_PARENT="$(git -C "$REPO" rev-parse HEAD)" GH_STUB_MESSAGE='someone else' _commit
+    assert_equals "1" "$RC" "a child of base with another message is not ours"
+    assert_equals "" "$OUT" "and is not adopted"
+    assert_contains "$ERR" "moved to feedbeef, not our commit on" "it is refused as foreign"
+    assert_not_contains "$ERR" "landed on" "never adopted first and failed later"
+}
+
+test_transient_failure_then_success_returns_the_new_oid() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_FAIL_FIRST=1 GH_STUB_REF_EXISTS=1 \
+        GH_STUB_BRANCH_HEAD="$(git -C "$REPO" rev-parse HEAD)" _commit
+    assert_equals "0" "$RC" "a transient failure with nothing landed recovers"
+    assert_equals "c0ffee0001" "$OUT" "with the retried attempt's oid"
+    assert_equals "2" "$(command grep -c '^api graphql' "$GH_LOG")" "after exactly one retry"
+}
+
+test_failed_probe_on_existing_branch_still_force_moves() {
+    gh_stub_install
+    local rc=0
+    # Probe fails (reads as absent), create is refused (422): must force-move.
+    GH_STUB_FAIL_MATCH='-X POST' PATH="$STUB_DIR:$PATH" gh_api_ensure_branch o/r chore/m abc123 || rc=$?
+    assert_equals "0" "$rc" "an existing branch behind a failed probe is still pointed at the sha"
+    assert_equals "1" "$(command grep -cx 'api -X PATCH repos/o/r/git/refs/heads/chore/m -f sha=abc123 -F force=true' "$GH_LOG")" \
+        "by falling back from create to force-move"
 }
 
 test_staging_delete_failure_only_warns() {
@@ -311,6 +346,9 @@ run_test test_publish_branch_force_move_failure_cleans_up_staging "publish_branc
 run_test test_lost_response_adopts_the_commit_that_landed "a lost response adopts the commit that landed"
 run_test test_failed_mutation_with_unmoved_branch_is_retried "a failed mutation with an unmoved branch is retried"
 run_test test_branch_moved_elsewhere_is_an_error "a branch moved elsewhere is an error"
+run_test test_foreign_child_of_base_is_not_adopted "a foreign child of base is not adopted"
+run_test test_transient_failure_then_success_returns_the_new_oid "a transient failure then success returns the new oid"
+run_test test_failed_probe_on_existing_branch_still_force_moves "a failed probe on an existing branch still force-moves"
 run_test test_staging_delete_failure_only_warns "a staging delete failure only warns"
 run_test test_truncated_tree_warns_and_tree_read_failure_errors "truncated tree warns; unreadable tree errors"
 

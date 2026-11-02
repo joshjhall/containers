@@ -15,6 +15,8 @@
 #   GH_STUB_TREE_TRUNCATED=1  the tree response reports truncated:true
 #   GH_STUB_BRANCH_HEAD   object.sha an existing ref reports (default empty)
 #   GH_STUB_PARENT        parents[0].sha of any `git/commits/<sha>` lookup
+#   GH_STUB_MESSAGE       message of that commit (default "chore: headline")
+#   GH_STUB_GRAPHQL_FAIL_FIRST=N  the first N graphql calls exit 1
 #   GH_STUB_GRAPHQL_LANDED=1  graphql records the payload, then exits 1 (the
 #                         commit landed but the response was lost)
 #   GH_STUB_VERIFIED      the commit's verification.verified (default true)
@@ -38,6 +40,11 @@ case "$1 $2" in
     "pr create") printf 'https://github.com/joshjhall/containers-db/pull/9\n' ;;
     "api graphql")
         [ "${GH_STUB_GRAPHQL_FAIL:-}" = 1 ] && exit 1
+        if [ -n "${GH_STUB_GRAPHQL_FAIL_FIRST:-}" ]; then
+            tries=$(( $(command cat "$GH_PAYLOADS/.tries" 2>/dev/null || echo 0) + 1 ))
+            echo "$tries" >"$GH_PAYLOADS/.tries"
+            [ "$tries" -le "$GH_STUB_GRAPHQL_FAIL_FIRST" ] && exit 1
+        fi
         n=$(( $(command ls "$GH_PAYLOADS" | command wc -l) + 1 ))
         command cp "$4" "$GH_PAYLOADS/$n.json"
         [ "${GH_STUB_GRAPHQL_LANDED:-}" = 1 ] && exit 1
@@ -61,7 +68,8 @@ case "$1 $2" in
                     "$GH_PAYLOADS/$(last)"
                 ;;
             */git/commits/*)
-                printf '{"parents":[{"sha":"%s"}]}\n' "${GH_STUB_PARENT:-}" ;;
+                command jq -cn --arg p "${GH_STUB_PARENT:-}" --arg m "${GH_STUB_MESSAGE-chore: headline}" \
+                    '{parents: [{sha: $p}], message: $m}' ;;
             */commits/*)
                 printf '{"commit":{"verification":{"verified":%s}}}\n' "${GH_STUB_VERIFIED:-true}" ;;
             *) echo '{}' ;;

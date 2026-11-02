@@ -41,16 +41,28 @@ gh_api_retry() {
 #
 # Points refs/heads/<branch> at <sha>: creates it, or force-moves an existing
 # one (a re-run with the same name starts clean, as the old force push did).
+# The existence probe is only a hint for which call to try first: a probe that
+# fails transiently reads as "absent", so each attempt falls back to the other
+# call, and a 422 "already exists" on create still ends in a force-move.
 gh_api_ensure_branch() {
     local repo="$1" branch="$2" sha="$3"
     if gh api "repos/$repo/git/ref/heads/$branch" >/dev/null 2>&1; then
-        gh_api_retry gh api -X PATCH "repos/$repo/git/refs/heads/$branch" \
-            -f "sha=$sha" -F force=true >/dev/null
+        gh_api_retry _gh_api_move_or_create "$repo" "$branch" "$sha"
     else
-        gh_api_retry gh api -X POST "repos/$repo/git/refs" \
-            -f "ref=refs/heads/$branch" -f "sha=$sha" >/dev/null
+        gh_api_retry _gh_api_create_or_move "$repo" "$branch" "$sha"
     fi
 }
+
+_gh_api_create_ref() {
+    gh api -X POST "repos/$1/git/refs" -f "ref=refs/heads/$2" -f "sha=$3" >/dev/null
+}
+
+_gh_api_move_ref() {
+    gh api -X PATCH "repos/$1/git/refs/heads/$2" -f "sha=$3" -F force=true >/dev/null
+}
+
+_gh_api_create_or_move() { _gh_api_create_ref "$@" || _gh_api_move_ref "$@"; }
+_gh_api_move_or_create() { _gh_api_move_ref "$@" || _gh_api_create_ref "$@"; }
 
 # gh_api_publish_branch <owner/repo> <branch> <dir> <message-file> [pathspec...]
 #
@@ -200,11 +212,13 @@ _gh_api_commit_worktree() {
 # GitHub and still fail here (a lost response), and re-sending it would then
 # fail on expectedHeadOid and hide the commit that landed. So after each
 # failure the branch head is read back: moved to a commit whose parent is
-# <base> means the earlier attempt landed (adopt it); still at <base> means
-# nothing landed (retry); anything else is an error. Prints the oid.
+# <base> and whose headline is ours means the earlier attempt landed (adopt
+# it); still at <base> means nothing landed (retry); anything else is an
+# error, never adopted. Prints the oid.
 _gh_api_create_commit() {
     local repo="$1" branch="$2" base="$3" payload="$4"
-    local i=1 delay="${GH_API_RETRY_DELAY:-2}" resp oid head parent
+    local i=1 delay="${GH_API_RETRY_DELAY:-2}" resp oid head commit parent headline want
+    want="$(command jq -r '.variables.input.message.headline' "$payload")"
     while [ "$i" -le 3 ]; do
         if resp="$(gh api graphql --input "$payload")"; then
             oid="$(command jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"$resp" 2>/dev/null || true)"
@@ -212,19 +226,20 @@ _gh_api_create_commit() {
                 command echo "$oid"
                 return 0
             fi
-            command echo "gh_api_commit_worktree: no commit oid in response: $resp" >&2
+            command echo "gh_api_commit_worktree: no commit oid in response: $(command jq -rc '[.errors[]?.message]' <<<"$resp" 2>/dev/null || command echo unparseable)" >&2
         fi
         head="$(gh api "repos/$repo/git/ref/heads/$branch" 2>/dev/null |
             command jq -r '.object.sha // empty' 2>/dev/null || true)"
         if [ -n "$head" ] && [ "$head" != "$base" ]; then
-            parent="$(gh api "repos/$repo/git/commits/$head" 2>/dev/null |
-                command jq -r '.parents[0].sha // empty' 2>/dev/null || true)"
-            if [ "$parent" = "$base" ]; then
+            commit="$(gh api "repos/$repo/git/commits/$head" 2>/dev/null || true)"
+            parent="$(command jq -r '.parents[0].sha // empty' <<<"$commit" 2>/dev/null || true)"
+            headline="$(command jq -r '.message // "" | split("\n")[0]' <<<"$commit" 2>/dev/null || true)"
+            if [ "$parent" = "$base" ] && [ "$headline" = "$want" ]; then
                 command echo "gh_api_commit_worktree: attempt $i failed but $head landed on $branch; using it" >&2
                 command echo "$head"
                 return 0
             fi
-            command echo "gh_api_commit_worktree: $repo:$branch moved to $head, not a child of $base" >&2
+            command echo "gh_api_commit_worktree: $repo:$branch moved to $head, not our commit on $base" >&2
             return 1
         fi
         if [ "$i" -lt 3 ]; then
