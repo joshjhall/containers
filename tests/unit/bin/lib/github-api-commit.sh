@@ -339,6 +339,19 @@ test_symlink_and_submodule_changes_are_refused() {
     assert_equals "0" "$(command grep -c '^api graphql' "$GH_LOG" || true)" "nothing is sent"
 }
 
+test_staging_create_failure_still_cleans_up_staging() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    local rc=0
+    GH_API_RETRY_DELAY=0 GH_STUB_FAIL_MATCH='auto-patch-staging/x -f sha' PATH="$STUB_DIR:$PATH" \
+        gh_api_publish_branch o/r auto-patch/x "$REPO" "$MSG" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "failing to set the staging ref fails the publish"
+    assert_equals "0" "$(command grep -c '^api graphql' "$GH_LOG" || true)" "no commit is attempted"
+    assert_equals "1" "$(command grep -cx 'api -X DELETE repos/o/r/git/refs/heads/auto-patch-staging/x' "$GH_LOG")" \
+        "a staging ref that may have landed is still removed"
+}
+
 test_staging_delete_failure_only_warns() {
     _repo
     gh_stub_install
@@ -390,6 +403,7 @@ run_test test_failed_probe_on_existing_branch_still_force_moves "a failed probe 
 run_test test_probe_hit_then_vanished_branch_is_created "a branch that vanished after the probe is created"
 run_test test_unreadable_file_never_becomes_an_empty_addition "an unreadable file never becomes an empty addition"
 run_test test_symlink_and_submodule_changes_are_refused "symlink and submodule changes are refused"
+run_test test_staging_create_failure_still_cleans_up_staging "a staging create failure still cleans up staging"
 run_test test_staging_delete_failure_only_warns "a staging delete failure only warns"
 run_test test_truncated_tree_warns_and_tree_read_failure_errors "truncated tree warns; unreadable tree errors"
 

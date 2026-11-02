@@ -80,8 +80,10 @@ gh_api_publish_branch() {
         */*) staging="${branch%%/*}-staging/${branch#*/}" ;;
         *) staging="$branch-staging" ;;
     esac
-    gh_api_ensure_branch "$repo" "$staging" "$(git -C "$dir" rev-parse HEAD)" || return 1
-    if ! oid="$(gh_api_commit_worktree "$repo" "$staging" "$dir" "$msg_file" "$@")"; then
+    if ! gh_api_ensure_branch "$repo" "$staging" "$(git -C "$dir" rev-parse HEAD)"; then
+        # It may still exist (the call landed, its response was lost).
+        rc=1
+    elif ! oid="$(gh_api_commit_worktree "$repo" "$staging" "$dir" "$msg_file" "$@")"; then
         rc=1
     elif ! gh_api_ensure_branch "$repo" "$branch" "$oid"; then
         command echo "gh_api_publish_branch: could not point $branch at $oid on $repo" >&2
