@@ -24,7 +24,13 @@ ENTRY="$PROJECT_ROOT/bin/lib/evidence-ccache-entry.sh"
 _sandbox() {
     local d
     d="$(/usr/bin/mktemp -d)"
-    /usr/bin/mkdir -p "$d/bin" "$d/out"
+    /usr/bin/mkdir -p "$d/bin" "$d/out" "$d/sys"
+    # PATH gets only these, never all of /bin: a host /bin/apt-get would
+    # otherwise shadow the dnf/microdnf stubs and the no-manager case.
+    local t
+    for t in sh cp printf cat; do
+        /usr/bin/ln -s "$(command -v "$t")" "$d/sys/$t"
+    done
     /usr/bin/cat >"$d/bin/luggage" <<'STUB'
 #!/bin/sh
 printf '%s\n' "${LUGGAGE_COMPILER_LAUNCHER-<unset>}" >"$SANDBOX/launcher-seen"
@@ -45,13 +51,13 @@ STUB
     /usr/bin/chmod +x "$1/bin/ccache"
 }
 
-# _run <dir> [env...] — run the entry with ONLY the sandbox bin + /bin on
-# PATH (so the host's real apk/apt-get/ccache are invisible), under env -i so
-# BASH_ENV cannot rebuild PATH.
+# _run <dir> [env...] — run the entry with ONLY the sandbox stubs + a few
+# symlinked core tools on PATH (so the host's real apk/apt-get/ccache are
+# invisible), under env -i so BASH_ENV cannot rebuild PATH.
 _run() {
     local d="$1"
     shift
-    /usr/bin/env -i PATH="$d/bin:/bin" SANDBOX="$d" CCACHE_STATS_OUT="$d/out/stats.txt" "$@" \
+    /usr/bin/env -i PATH="$d/bin:$d/sys" SANDBOX="$d" CCACHE_STATS_OUT="$d/out/stats.txt" "$@" \
         /bin/sh "$ENTRY" luggage install node@22.22.3
 }
 
@@ -96,6 +102,48 @@ STUB
     /usr/bin/rm -rf "$d"
 }
 
+# _pm_installs <manager> <expected argv> — a stub <manager> that records its
+# argv and "installs" ccache; asserts the exact argv and the opt-in.
+_pm_installs() {
+    local pm="$1" want="$2" d rc=0
+    d="$(_sandbox)"
+    _stub_ccache "$d"
+    /usr/bin/mv "$d/bin/ccache" "$d/ccache.pending"
+    /usr/bin/cat >"$d/bin/$pm" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >>"\$SANDBOX/pm-args"
+/bin/cp "$d/ccache.pending" "$d/bin/ccache"
+STUB
+    /usr/bin/chmod +x "$d/bin/$pm"
+    _run "$d" || rc=$?
+    assert_equals "0" "$rc" "$pm: install + build succeed"
+    assert_equals "$want" "$(/usr/bin/cat "$d/pm-args")" "$pm argv"
+    assert_equals "ccache" "$(/usr/bin/cat "$d/launcher-seen")" "$pm: launcher set after install"
+    /usr/bin/rm -rf "$d"
+}
+
+test_installs_ccache_via_apt_get() {
+    _pm_installs apt-get $'update\ninstall -y --no-install-recommends ccache'
+}
+
+test_installs_ccache_via_dnf() {
+    _pm_installs dnf "install -y ccache"
+}
+
+test_installs_ccache_via_microdnf() {
+    _pm_installs microdnf "install -y ccache"
+}
+
+test_no_package_manager_falls_back() {
+    local d rc=0 err
+    d="$(_sandbox)"
+    err="$(_run "$d" 2>&1 >/dev/null)" || rc=$?
+    assert_equals "0" "$rc" "no package manager never fails the cell"
+    assert_contains "$err" "no known package manager" "the missing manager is named"
+    assert_equals "<unset>" "$(/usr/bin/cat "$d/launcher-seen")" "luggage builds without a launcher"
+    /usr/bin/rm -rf "$d"
+}
+
 test_falls_back_uncached_when_install_fails() {
     local d rc=0 err
     d="$(_sandbox)"
@@ -124,6 +172,10 @@ test_requires_a_command() {
 run_test test_opts_in_when_ccache_is_present "opts luggage into ccache when it is present"
 run_test test_failure_status_passes_through "a failed build's exit status passes through"
 run_test test_installs_ccache_via_apk "installs ccache with apk on alpine"
+run_test test_installs_ccache_via_apt_get "installs ccache with apt-get on debian/ubuntu"
+run_test test_installs_ccache_via_dnf "installs ccache with dnf on rhel"
+run_test test_installs_ccache_via_microdnf "installs ccache with microdnf on ubi-minimal"
+run_test test_no_package_manager_falls_back "falls back uncached when no package manager exists"
 run_test test_falls_back_uncached_when_install_fails "falls back to an uncached build when ccache cannot install"
 run_test test_requires_a_command "refuses to run with no command"
 

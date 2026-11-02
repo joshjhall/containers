@@ -668,12 +668,12 @@ fn launcher_env_names_the_program() {
     );
 }
 
-/// Empty and multi-word values are mis-set opt-ins, refused by name rather
-/// than silently treated as "off" (a silent two-hour cold build) or passed
-/// through for `make` to word-split.
+/// Empty, multi-word, and shell-metacharacter values are refused by name
+/// rather than silently treated as "off" (a silent two-hour cold build),
+/// word-split by `make`, or run as shell code by `configure` as root.
 #[test]
 fn launcher_env_rejects_empty_and_whitespace() {
-    for bad in ["", " ", "ccache --foo", "ccache\t"] {
+    for bad in ["", " ", "ccache --foo", "ccache\t", "ccache;id", "$(id)", "`id`", "cc&&id"] {
         match parse_compiler_launcher(Some(bad)).unwrap_err() {
             LuggageError::Catalog(msg) => {
                 assert!(msg.contains(COMPILER_LAUNCHER_ENV), "{bad:?}: {msg}");
