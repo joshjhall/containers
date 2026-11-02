@@ -137,6 +137,27 @@ test_non_tag_value_rejected() {
     done
 }
 
+# No argument: the script reads ./Dockerfile from its cwd.
+test_default_dockerfile_argument() {
+    command printf 'ARG LIBRARIAN_REF=v2.3.4\n' | write_dockerfile >/dev/null
+    RC=0
+    OUT=$(cd "$TEST_TEMP_DIR" && bash "$PIN_SCRIPT" 2>/dev/null) || RC=$?
+    assert_equals "0" "$RC" "no-argument run exits 0"
+    assert_equals "v2.3.4" "$OUT" "no-argument run reads ./Dockerfile"
+}
+
+# A CRLF checkout or trailing blank leaves junk after the tag; it must fail
+# closed on the shape check rather than reach a checkout `ref:`.
+test_trailing_junk_rejected() {
+    local df
+    for suffix in $'\r' ' '; do
+        df=$(command printf 'ARG LIBRARIAN_REF=v1.2.3%s\n' "$suffix" | write_dockerfile)
+        run_pin "$df"
+        assert_equals "1" "$RC" "trailing junk after the tag exits 1"
+        assert_contains "$ERR" "is not a vX.Y.Z tag" "trailing junk hits the shape check"
+    done
+}
+
 test_missing_file_rejected() {
     run_pin "$TEST_TEMP_DIR/does-not-exist"
     assert_equals "1" "$RC" "unreadable Dockerfile exits 1"
@@ -169,6 +190,8 @@ run_test test_two_identical_lines_rejected "two identical ARG lines are rejected
 run_test test_valid_plus_invalid_line_rejected "valid + invalid ARG lines are rejected (#1555)"
 run_test test_zero_lines_rejected "missing ARG line is rejected"
 run_test test_non_tag_value_rejected "non-vX.Y.Z values are rejected"
+run_test test_default_dockerfile_argument "no argument defaults to ./Dockerfile"
+run_test test_trailing_junk_rejected "CRLF / trailing whitespace after the tag is rejected"
 run_test test_missing_file_rejected "unreadable Dockerfile is rejected"
 run_test test_repo_dockerfile_passes "repo Dockerfile carries exactly one valid pin"
 run_test test_ci_steps_use_shared_script "ci.yml pin steps share bin/read-librarian-pin.sh"
