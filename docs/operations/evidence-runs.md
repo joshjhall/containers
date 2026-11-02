@@ -300,6 +300,37 @@ Reading `main` raced every DB change that needed a matching luggage change: in
 the window between the two merges, every cell recorded a false failure
 (#1164's `util_linux`). containers-db is only the ingest target.
 
+### Concurrency and cancellation
+
+The workflow uses different concurrency rules for different events (#1591, the
+same split #1560 made for `ci.yml`):
+
+| Event | Group | Cancel in-progress |
+| --- | --- | --- |
+| `pull_request` | `evidence-pr-<number>` | yes |
+| `push` to `main`, `workflow_dispatch` | `evidence-<ref>` | never |
+
+- **PR runs are always dry runs.** They validate rows but never push to
+  containers-db, so cancelling one loses nothing. A new push to a PR cancels
+  the old head's run. This matters because a source-build cell (node on alpine)
+  can hold a runner for about two hours.
+- **`main` and dispatch runs ingest.** Two pushes to `main` stay serialized per
+  ref, so they cannot race to open duplicate containers-db PRs. These runs are
+  never cancelled, because an interrupted ingest could leave a half-pushed
+  branch behind.
+- **Merged or closed PRs.** A merged or closed PR gets no new push, so the
+  workflow also triggers on `pull_request` `closed`. That run joins the PR's
+  group, and starting it cancels the in-flight dry run. Every job is guarded
+  with `if: github.event.action != 'closed'`. `collect` runs under `always()`,
+  so it carries the guard explicitly. As a result, the close-event run does no
+  work.
+
+  This needs no `actions: write` token and no matching on branch names, and it
+  works for PRs from forks. It also cannot reach a `main` run, because `main`
+  runs use a different group.
+
+`tests/unit/evidence-run-shape.sh` pins these rules.
+
 ## Dispatching evidence on a version bump
 
 When the auto-patch pipeline bumps a luggage-managed tool's `ARG <TOOL>_VERSION`

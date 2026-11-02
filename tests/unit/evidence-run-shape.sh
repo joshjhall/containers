@@ -234,6 +234,76 @@ test_cells_install_from_the_vendored_catalog() {
     fi
 }
 
+# _concurrency_block — the top-level `concurrency:` block, comments dropped.
+_concurrency_block() {
+    /usr/bin/awk '
+        /^concurrency:$/ { on = 1; next }
+        on && /^[^ ]/ { exit }
+        on && !/^ *#/ { print }
+    ' "$WF"
+}
+
+# _concurrency_value <key> — the value of one concurrency key, verbatim.
+_concurrency_value() {
+    _concurrency_block | /usr/bin/sed -n "s/^  $1: //p"
+}
+
+test_pr_runs_cancel_per_pr() {
+    # #1591: a PR's dry runs share one group per PR and cancel each other, so
+    # a new push drops the old head's run instead of holding a runner.
+    assert_equals \
+        "evidence-\${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}" \
+        "$(_concurrency_value group)" \
+        "PR runs group per PR number; everything else groups per ref"
+    assert_equals "\${{ github.event_name == 'pull_request' }}" \
+        "$(_concurrency_value cancel-in-progress)" \
+        "cancel-in-progress is true for pull_request events only"
+}
+
+test_main_runs_never_cancel() {
+    # push/dispatch runs ingest; cancelling one can leave a half-pushed
+    # containers-db branch, so they must stay serialized per ref and never
+    # cancel. Only a pull_request-gated expression may enable cancellation.
+    local group cancel
+    group="$(_concurrency_value group)"
+    cancel="$(_concurrency_value cancel-in-progress)"
+    assert_true "$([[ $group == *"|| github.ref }}" ]] && echo true || echo false)" \
+        "non-PR runs fall back to the per-ref group (two main pushes serialize)"
+    case "$cancel" in
+        "\${{ github.event_name == 'pull_request' }}" | false)
+            assert_true true "cancel-in-progress cannot be true for push/dispatch"
+            ;;
+        *)
+            assert_true false "cancel-in-progress must be pull_request-gated, got: $cancel"
+            ;;
+    esac
+}
+
+test_closed_pr_runs_do_nothing() {
+    # A closed/merged PR's run joins the per-PR group only to cancel the
+    # in-flight dry run; no job of its own may run.
+    local types job block
+    types="$(/usr/bin/awk '
+        /^  pull_request:$/ { on = 1; next }
+        on && /^  [a-z_]+:$/ { exit }
+        on && /^    types:/ { print }
+    ' "$WF")"
+    assert_contains "$types" 'closed' "pull_request triggers on closed"
+    for job in $(/usr/bin/awk '/^jobs:$/ { on = 1; next } on && /^  [a-z_-]+:$/ { sub(/:$/, ""); sub(/^  /, ""); print }' "$WF"); do
+        block="$(_job_block "$job")"
+        if /usr/bin/grep -q "^    if:.*github.event.action != 'closed'" <<<"$block" ||
+            { /usr/bin/grep -qE '^    needs: (setup|\[setup[],])' <<<"$block" &&
+                ! /usr/bin/grep -q '^    if:.*always()' <<<"$block"; }; then
+            assert_true true "job $job is skipped on a closed PR"
+        else
+            assert_true false "job $job must skip on a closed PR (if: github.event.action != 'closed', or needs setup without always())"
+        fi
+    done
+    # collect runs under always(), which overrides a skipped setup.
+    assert_contains "$(_job_block collect | /usr/bin/grep '^    if:')" \
+        "github.event.action != 'closed'" "collect (always()) guards closed explicitly"
+}
+
 run_test test_cells_install_as_the_container_user "cells install as the container user (--user runner)"
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
@@ -246,5 +316,8 @@ run_test test_open_pr_sources_count_only_added_rows "open-PR sources count only 
 run_test test_open_pr_sources_pin_the_main_read "open-PR sources take merge-bases against the fetched main"
 run_test test_open_pr_sources_skip_via_the_decision "open-PR sources skip through evidence_pr_skip (#1446)"
 run_test test_cells_install_from_the_vendored_catalog "cells install from the vendored catalog"
+run_test test_pr_runs_cancel_per_pr "PR runs cancel per PR (#1591)"
+run_test test_main_runs_never_cancel "main/dispatch runs never cancel (#1591)"
+run_test test_closed_pr_runs_do_nothing "a closed PR run cancels and does nothing (#1591)"
 
 generate_report
