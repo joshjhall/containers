@@ -793,8 +793,26 @@ test_cell_timeout_helper_matches_the_matrix() {
     evidence_cell_source_build "$r/catalog" rust 9.9.9 alpine-3.24-amd64 >/dev/null 2>&1 || rc=$?
     assert_equals "1" "$rc" "a version missing from the catalog is an error, not a silent false"
     rc=0
+    rc=0
+    local out
+    command printf '{' >"$r/catalog/tools/rust/versions/1.91.0.json"
+    out="$(evidence_cell_source_build "$r/catalog" rust 1.91.0 alpine-3.24-amd64 2>/dev/null)" || rc=$?
+    assert_equals "1:" "$rc:$out" "a corrupt version file is exit 1 with nothing printed"
+    rc=0
     evidence_cell_source_build "$r/catalog" rust 1.90.0 alpine >/dev/null 2>&1 || rc=$?
     assert_equals "1" "$rc" "a malformed tuple is an error"
+}
+
+test_vendored_node_flags_only_alpine_as_source_build() {
+    # Ties #1569 to the catalog data that drives it: a reorder or a catch-all
+    # method added ahead of node-source would silently restore the 30-minute
+    # timeout for alpine node, and only the next evidence run would notice.
+    local c="$PROJECT_ROOT/crates/luggage/testdata/catalog" v f
+    f="$(command find "$c/tools/node/versions" -name '22.*.json' | command sort -V | command tail -n 1)"
+    v="$(command basename "$f" .json)"
+    assert_equals "true true false false" \
+        "$(evidence_cell_source_build "$c" node "$v" alpine-3.22-amd64) $(evidence_cell_source_build "$c" node "$v" alpine-3.22-arm64) $(evidence_cell_source_build "$c" node "$v" debian-13-amd64) $(evidence_cell_source_build "$c" node "$v" ubuntu-24.04-arm64)" \
+        "vendored node@$v builds from source on alpine only"
 }
 
 test_missing_index_is_an_error() {
@@ -839,6 +857,7 @@ run_test test_fail_cooldown_override "EVIDENCE_FAIL_COOLDOWN_DAYS overrides the 
 run_test test_vendored_recent_fail_is_not_pending "the cooldown applies to vendored tested[]"
 run_test test_vendored_future_fail_is_retried "a future-dated vendored fail is retried, not held"
 run_test test_missing_index_is_an_error "missing index is an error"
+run_test test_vendored_node_flags_only_alpine_as_source_build "the vendored node entry is a source build on alpine only (#1569)"
 run_test test_source_build_cells_get_the_long_timeout "source-build cells get the long timeout (#1569)"
 run_test test_first_matching_method_decides_the_timeout "the first matching install method decides the timeout"
 run_test test_arch_and_os_list_exclude_a_source_build "arch and os-list predicates exclude a source build"

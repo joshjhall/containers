@@ -148,8 +148,16 @@ evidence_cell_source_build() {
         return 1
     }
     # Not -e: `false` is a valid answer, and -e would turn it into exit 1.
-    command jq --arg os "$os" --arg osv "$osv" --arg arch "$arch" \
-        "$_EM_SOURCE_BUILD_JQ"'em_source_build($os; $osv; $arch)' "$file"
+    # Captured so a corrupt file is exit 1 with nothing on stdout, never a
+    # partial or empty value handed to the caller's --argjson.
+    local out
+    out="$(command jq --arg os "$os" --arg osv "$osv" --arg arch "$arch" \
+        "$_EM_SOURCE_BUILD_JQ"'em_source_build($os; $osv; $arch)' "$file")" &&
+        { [ "$out" = true ] || [ "$out" = false ]; } || {
+        command echo "evidence_cell_source_build: unreadable catalog entry for $tool@$version at $file" >&2
+        return 1
+    }
+    command echo "$out"
 }
 
 # _em_published_evidence <tool> <out_file> <now> — writes the evidence per version

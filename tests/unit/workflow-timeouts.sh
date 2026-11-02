@@ -56,16 +56,24 @@ BOUNDED_TIMEOUT_RE='^([1-9][0-9]*|\$\{\{ *[^&|(){}]+ *&& *[1-9][0-9]* *\|\| *[1-
 # jobs_without_timeout FILE — prints "FILE:job" for each non-reusable job whose
 # timeout-minutes is absent or not bounded (BOUNDED_TIMEOUT_RE).
 jobs_without_timeout() {
-    local file="$1" job value
+    local file="$1" rows job value
     # Raw value per job, matched in bash: yq's regex dialect differs across
     # releases, and the exact accepted shape is what this guard asserts.
-    while IFS=$'\t' read -r job value; do
-        [[ "$value" =~ $BOUNDED_TIMEOUT_RE ]] || command echo "$(command basename "$file"):$job"
-    done < <(yq -r '
+    # Captured, not fed through `< <(yq ...)`: bash ignores a process
+    # substitution's exit status, so an unparsable workflow would read as
+    # zero jobs, i.e. "everything bounded". A yq failure is a FINDING here.
+    rows=$(yq -r '
         .jobs // {} | to_entries[]
         | select(.value.uses == null)
         | .key + "\t" + (.value["timeout-minutes"] // "" | tostring)
-    ' "$file")
+    ' "$file" 2>/dev/null) || {
+        command echo "$(command basename "$file"):<yq could not parse>"
+        return 0
+    }
+    [ -n "$rows" ] || return 0
+    while IFS=$'\t' read -r job value; do
+        [[ "$value" =~ $BOUNDED_TIMEOUT_RE ]] || command echo "$(command basename "$file"):$job"
+    done <<<"$rows"
 }
 
 # buildx_steps_without_timeout FILE — prints "FILE:job" for each step using
@@ -168,6 +176,16 @@ YAML
         "$got" "only a literal-branched cond && N || M is accepted as bounded"
 }
 
+test_checker_flags_unparsable_workflow() {
+    # A workflow yq cannot read must be flagged, never skipped as "no jobs".
+    local dir got
+    dir=$(command mktemp -d)
+    command printf 'jobs:\n  broken: [unclosed\n    timeout-minutes: 10\n' >"$dir/broken.yml"
+    got=$(jobs_without_timeout "$dir/broken.yml")
+    command rm -rf "$dir"
+    assert_equals "broken.yml:<yq could not parse>" "$got" "an unparsable workflow is a finding, not a pass"
+}
+
 test_checker_flags_unbounded_buildx_step() {
     local dir
     dir=$(command mktemp -d)
@@ -246,6 +264,7 @@ test_buildx_action_probes_daemon_with_timeout() {
 
 run_test test_checker_flags_missing_timeout "Checker flags jobs without a timeout"
 run_test test_checker_bounds_matrix_expressions "Checker accepts only provably bounded timeout expressions"
+run_test test_checker_flags_unparsable_workflow "Checker flags a workflow yq cannot parse"
 run_test test_checker_flags_unbounded_buildx_step "Checker flags an unbounded buildx step"
 run_test test_every_job_has_timeout "Every workflow job declares timeout-minutes"
 run_test test_buildx_call_sites_bounded "Every setup-buildx-resilient step is bounded"
