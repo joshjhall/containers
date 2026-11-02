@@ -218,7 +218,7 @@ test_open_reject_message_names_issue_filing() {
     # keeps the default "file issue" wording — pinned through the real caller
     # so a wrong action at the call site fails here (#1568).
     install_gh_stub
-    local rc=0 err issue_calls
+    local rc=0 err
     GH="$GH_STUB" GH_CALLS="$GH_CALLS" open_or_update_tracking_issue \
         "Bad Tool" "1.95.0" "debian-12-amd64" "verify" "https://example.com/run/1" \
         >/dev/null 2>"$TEST_TEMP_DIR/open-err" || rc=$?
@@ -226,10 +226,9 @@ test_open_reject_message_names_issue_filing() {
     err="$(command cat "$TEST_TEMP_DIR/open-err")"
     assert_equals "Refusing to file issue: unexpected tool slug 'Bad Tool'" "$err" \
         "the per-cell caller logs the exact issue-filing refusal"
-    # grep -c prints "0" AND exits 1 on no match, so `|| echo 0` would yield
-    # "0\n0" once the log exists; default only the missing-file empty case.
-    issue_calls="$(command grep -sc '^issue' "$GH_CALLS")" || true
-    assert_equals "0" "${issue_calls:-0}" "no gh issue call on a rejected coordinate"
+    # The stub logs every invocation, so no log file at all means validation
+    # ran before ANY gh call — label create included, not just issue calls.
+    assert_file_not_exists "$GH_CALLS" "no gh call of any kind on a rejected coordinate"
 }
 
 test_run_issue_reject_message_names_dropped_row() {
@@ -253,6 +252,16 @@ test_run_issue_reject_message_names_dropped_row() {
         assert_true false "expected the exact include-fail-row line, got: $(command printf '%q' "$err")"
     fi
     assert_not_contains "$err" "file issue" "the dropped-row log does not claim issue filing was refused"
+    # The log promises the row was dropped; prove the body agrees: the good
+    # row's exact table line is present and the bad tuple never reached gh.
+    local calls
+    calls="$(command cat "$GH_CALLS")"
+    if command grep -qF '| `rust@1.83.0` | `rhel-10-arm64` | `infra` |' <<<"$calls"; then
+        assert_true true "the good row's table line reached the issue body"
+    else
+        assert_true false "good row's table line missing from gh calls: $(command printf '%q' "$calls")"
+    fi
+    assert_not_contains "$calls" "in:title" "the dropped row's tuple never reached gh"
 }
 
 run_test test_valid_inputs_pass_regexes "well-formed inputs pass all three regexes"
