@@ -81,6 +81,12 @@ pub struct InstallerOptions {
     /// guessing a location: a guessed root could silently pick up a different
     /// keyring than the one the catalog entry was reviewed against.
     pub catalog_root: Option<PathBuf>,
+    /// Compiler launcher a `source-build` prefixes onto `CC`/`CXX` (e.g.
+    /// `ccache`). `None` by default, so production installs compile exactly
+    /// as the catalog says; the CLI reads
+    /// [`methods::source_build::COMPILER_LAUNCHER_ENV`] to opt in. Evidence
+    /// runs use it to cache node's ~2h alpine compile across runs (#1594).
+    pub compiler_launcher: Option<String>,
 }
 
 impl Default for InstallerOptions {
@@ -100,6 +106,7 @@ impl Default for InstallerOptions {
             max_extract_bytes: methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             version_probe_timeout: idempotency::VERSION_PROBE_TIMEOUT,
             catalog_root: None,
+            compiler_launcher: None,
         }
     }
 }

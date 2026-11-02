@@ -256,6 +256,12 @@ pub struct MethodContext<'a> {
     /// Catalog `build_steps` — the ordered commands a `source-build` runs in
     /// the extracted source tree. Empty for every other kind.
     pub build_steps: &'a [BuildStep],
+    /// Opt-in compiler launcher (`ccache`) a `source-build` prefixes onto
+    /// `CC`/`CXX`. `None` — the default, and every production install —
+    /// leaves the build env exactly as the catalog wrote it. Set only from
+    /// [`super::source_build::COMPILER_LAUNCHER_ENV`]; ignored by every
+    /// other method.
+    pub compiler_launcher: Option<&'a str>,
     /// Per-feature log that long-running steps stream their output into.
     /// `None` when the log could not be opened; output then goes to
     /// `tracing` only.
@@ -331,6 +337,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner,
         }

@@ -492,11 +492,74 @@ jobs:
         if: ${{ matrix.runtime == 'emulated' }}
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
+      # Source-build cells compile through ccache (#1594): a cold node build
+      # on alpine is ~2h of C++ (#1571), and every main run used to repeat it.
+      # Keyed per tool + tuple so one tool's objects never mix with another's;
+      # the key puts version last so the restore-keys are true prefixes — an
+      # exact version first, then the same major (a new patch reuses most
+      # objects), then any version of the tool on this tuple. Non-source cells
+      # skip every ccache step and keep the plain docker run below.
+      - name: Prepare ccache (source-build cells)
+        id: ccache
+        if: ${{ matrix.source_build }}
+        run: |
+          set -euo pipefail
+          # The major is the leading run of digits; refuse anything else
+          # rather than build a key from an unexpected string.
+          if [[ ! "$INPUT_TOOL_VERSION" =~ ^([0-9]+)\. ]]; then
+            echo "Cannot derive a major from version: $INPUT_TOOL_VERSION" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/ccache"
+          {
+            echo "major=${BASH_REMATCH[1]}"
+            echo "dir=$RUNNER_TEMP/ccache"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore ccache
+        id: ccache-restore
+        if: ${{ matrix.source_build }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.ccache.outputs.dir }}
+          key: ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-${{ matrix.version }}
+          restore-keys: |
+            ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-
+            ccache-${{ matrix.tool }}-${{ matrix.tuple }}-
+
       - name: Run luggage install inside the base image
         env:
           IMAGE: ${{ steps.digest.outputs.image_ref }}@${{ steps.digest.outputs.digest }}
+          # Empty on a non-source cell, which leaves both arrays below empty.
+          CCACHE_HOST_DIR: ${{ steps.ccache.outputs.dir }}
         run: |
           mkdir -p out
+          # Source-build cells mount the host ccache dir and run luggage
+          # through bin/lib/evidence-ccache-entry.sh, which installs ccache in
+          # the throwaway container and only then sets
+          # LUGGAGE_COMPILER_LAUNCHER=ccache (an opt-in luggage never takes on
+          # its own, so production installs are unchanged). BASEDIR +
+          # NOHASHDIR are what make hits possible at all: luggage extracts each
+          # build into a random /tmp/.../luggage-build-* dir, so without them
+          # every absolute path, and so every hash, differs run to run.
+          # COMPILERCHECK=content because the compiler is reinstalled into a
+          # fresh container each run, so its mtime proves nothing. 2G per
+          # tool+tuple entry keeps a few entries inside the repo's 10 GB cache.
+          CCACHE_FLAGS=()
+          CCACHE_WRAP=()
+          if [ -n "$CCACHE_HOST_DIR" ]; then
+            CCACHE_FLAGS=(
+              -v "$CCACHE_HOST_DIR:/ccache"
+              -v "$PWD/bin/lib/evidence-ccache-entry.sh:/usr/local/bin/evidence-ccache-entry:ro"
+              -e CCACHE_DIR=/ccache
+              -e CCACHE_MAXSIZE=2G
+              -e CCACHE_BASEDIR=/tmp
+              -e CCACHE_NOHASHDIR=1
+              -e CCACHE_COMPILERCHECK=content
+              -e CCACHE_STATS_OUT=/out/ccache-stats.txt
+            )
+            CCACHE_WRAP=(/usr/local/bin/evidence-ccache-entry)
+          fi
           # Emulated legs pin the container platform so QEMU runs the foreign
           # arch; native legs leave the array empty (no --platform), which
           # makes the amd64 path byte-identical to the pre-arch behavior.
@@ -534,7 +597,9 @@ jobs:
             -v "$PWD/crates/luggage/testdata/catalog:/catalog:ro" \
             -v "$PWD/out:/out" \
             -e CONTAINERS_DB=/catalog \
+            "${CCACHE_FLAGS[@]}" \
             "$IMAGE" \
+            "${CCACHE_WRAP[@]}" \
             luggage install "${INPUT_TOOL}@${INPUT_TOOL_VERSION}" --user runner --json-report /out/luggage-report.json
           INSTALL_RC=$?
           set -e
@@ -543,6 +608,38 @@ jobs:
             echo "luggage did not write a report" >&2
             exit 1
           }
+
+      # The container wrote the cache as root; hand it back to the runner user
+      # so actions/cache can read every object. Then publish the hit rate, so
+      # the cache's effect shows on every run. always(): a failed or timed-out
+      # cold build has still populated objects worth saving.
+      - name: Report ccache stats
+        if: ${{ always() && matrix.source_build && steps.ccache.outputs.dir != '' }}
+        env:
+          CCACHE_HOST_DIR: ${{ steps.ccache.outputs.dir }}
+          CCACHE_RESTORED_KEY: ${{ steps.ccache-restore.outputs.cache-matched-key }}
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$CCACHE_HOST_DIR"
+          {
+            echo "### ccache: ${INPUT_TOOL}@${INPUT_TOOL_VERSION} on ${INPUT_TUPLE}"
+            echo
+            echo "Restored from: \`${CCACHE_RESTORED_KEY:-none (cold)}\`"
+            echo
+            if [ -s out/ccache-stats.txt ]; then
+              echo '```text'
+              cat out/ccache-stats.txt
+              echo '```'
+            else
+              echo "No ccache stats written (ccache unavailable, or the build never ran)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save ccache
+        if: ${{ always() && matrix.source_build && steps.ccache.outputs.dir != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.ccache.outputs.dir }}
+          key: ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-${{ matrix.version }}
 
       - name: Build evidence row
         env:

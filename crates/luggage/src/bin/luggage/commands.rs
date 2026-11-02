@@ -23,6 +23,7 @@ use crate::{
 };
 use luggage::installer::idempotency::version_probe_timeout_from_env;
 use luggage::installer::methods::archive_limit::max_extract_bytes_from_env;
+use luggage::installer::methods::source_build::compiler_launcher_from_env;
 
 /// `luggage catalog add-version <tool>@<version>` — clone the latest existing
 /// version entry into a new one and list it in `available[]`.
@@ -117,6 +118,8 @@ pub fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         // Same malformed-is-fatal contract as the extract ceiling above.
         version_probe_timeout: version_probe_timeout_from_env()?,
         catalog_root: Some(common.catalog),
+        // Opt-in only (#1594): unset leaves source builds untouched.
+        compiler_launcher: compiler_launcher_from_env()?,
     };
     let installer = Installer::with_options(opts)?;
 
