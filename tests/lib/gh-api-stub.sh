@@ -27,10 +27,14 @@
 #                         stdout and "gh: message" on stderr, then exits 1
 #   GH_STUB_GRAPHQL_ERRORS_EXIT0=1  with GRAPHQL_ERRORS, exit 0 instead
 #   GH_STUB_FAIL_STATUS=N  a GH_STUB_FAIL_MATCH failure prints
-#                         "gh: Failed (HTTP N)" on stderr (default: silent)
+#                         "gh: <GH_STUB_FAIL_MSG|Failed> (HTTP N)" on stderr
+#                         (default: silent)
 #   GH_STUB_PR_EXISTING   `pr list` prints this URL (default: no open PR)
 #   GH_STUB_PR_FORK=1     the GH_STUB_PR_EXISTING PR is cross-repository (a fork)
 #   GH_STUB_PR_LIST_FAIL=1  `pr list` exits 1 (the lookup itself fails)
+#   GH_STUB_PR_BASE       baseRefName of the listed PR (default main)
+#   GH_STUB_PR_CREATE_URL  with PR_CREATE_FAIL, the "already exists" message
+#                         names this PR URL on its next line
 #   GH_STUB_PR_CREATE_FAIL=1  `pr create` fails with "already exists"
 #   GH_STUB_PR_AFTER_CREATE  `pr list` prints this URL once `pr create` ran
 # The tree response lists every addition path from the last payload.
@@ -50,7 +54,8 @@ case "$1 $2" in
     "pr create")
         : >"$GH_PAYLOADS/.pr-created"
         if [ "${GH_STUB_PR_CREATE_FAIL:-}" = 1 ]; then
-            echo "a pull request for branch already exists" >&2
+            echo "a pull request for branch already exists:" >&2
+            [ -n "${GH_STUB_PR_CREATE_URL:-}" ] && printf '%s\n' "$GH_STUB_PR_CREATE_URL" >&2
             exit 1
         fi
         printf 'https://github.com/joshjhall/containers-db/pull/9\n' ;;
@@ -71,8 +76,8 @@ case "$1 $2" in
             [ "$prev" = --jq ] && jq_filter="$a"
             prev="$a"
         done
-        command jq -rn --arg u "$url" --argjson f "$fork" \
-            "(if \$u == \"\" then [] else [{url: \$u, isCrossRepository: \$f}] end) | ${jq_filter:-.}"
+        command jq -rn --arg u "$url" --argjson f "$fork" --arg b "${GH_STUB_PR_BASE:-main}" \
+            "(if \$u == \"\" then [] else [{url: \$u, isCrossRepository: \$f, baseRefName: \$b}] end) | ${jq_filter:-.}"
         ;;
     "api graphql")
         if [ -n "${GH_STUB_GRAPHQL_ERRORS:-}" ]; then
@@ -98,7 +103,7 @@ case "$1 $2" in
     "api "*)
         if [ -n "${GH_STUB_FAIL_MATCH:-}" ]; then
             case "$*" in *"$GH_STUB_FAIL_MATCH"*)
-                [ -n "${GH_STUB_FAIL_STATUS:-}" ] && echo "gh: Failed (HTTP $GH_STUB_FAIL_STATUS)" >&2
+                [ -n "${GH_STUB_FAIL_STATUS:-}" ] && echo "gh: ${GH_STUB_FAIL_MSG:-Failed} (HTTP $GH_STUB_FAIL_STATUS)" >&2
                 exit 1 ;;
             esac
         fi

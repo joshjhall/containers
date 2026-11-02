@@ -451,7 +451,7 @@ test_create_pr_reuses_an_open_pr() {
     assert_equals "0" "$RC" "an open PR for the head is success"
     assert_equals "https://x/pull/7" "$OUT" "and resolves to that PR"
     assert_equals "0" "$(command grep -c '^pr create' "$GH_LOG" || true)" "no second PR is created"
-    assert_equals "1" "$(command grep -c '^pr list --repo o/r --head ev/b --state open --json url,isCrossRepository ' "$GH_LOG")" \
+    assert_equals "1" "$(command grep -c '^pr list --repo o/r --head ev/b --state open --json url,isCrossRepository,baseRefName ' "$GH_LOG")" \
         "the lookup is scoped to the repo and head"
 }
 
@@ -495,6 +495,9 @@ permanent|GraphQL: No commits between main and x (createPullRequest)
 permanent|GraphQL: Could not resolve to a Repository
 permanent|gh: Resource not accessible by integration (HTTP 403)
 permanent|gh: Repository rule violations found
+permanent|gh: Merge not permitted
+transient|gh: Object does not exist (HTTP 422)
+transient|gh: Reference does not exist (HTTP 422)
 transient|gh: Conflict (HTTP 409)
 transient|gh: Request Timeout (HTTP 408)
 transient|gh: API rate limit exceeded (HTTP 403)
@@ -590,6 +593,37 @@ test_create_pr_with_failing_lookup_still_creates_or_fails() {
     assert_equals "3" "$(command grep -c '^pr create' "$GH_LOG")" "after the transient retries"
 }
 
+test_ref_replication_lag_422_is_retried_until_it_clears() {
+    gh_stub_install
+    local rc=0 n
+    # create and move both fail with a lag 422 on the first two attempts.
+    GH_STUB_FAIL_MATCH='git/refs' GH_STUB_FAIL_STATUS=422 GH_STUB_FAIL_MSG='Reference does not exist' \
+        GH_API_RETRY_DELAY=0 PATH="$STUB_DIR:$PATH" gh_api_ensure_branch o/r feat/x abc123 2>"$STUB_DIR/err" || rc=$?
+    n="$(command grep -c 'X POST' "$GH_LOG")"
+    assert_equals "3" "$n" "a lag 422 is retried, not failed after one attempt"
+    assert_not_contains "$(command cat "$STUB_DIR/err")" "permanent error" "and is not called permanent"
+}
+
+test_create_pr_uses_the_url_gh_reports_when_lookup_fails() {
+    gh_stub_install
+    GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 GH_STUB_PR_CREATE_URL=https://github.com/o/r/pull/12 _pr
+    assert_equals "0" "$RC" "an 'already exists' create is success"
+    assert_equals "https://github.com/o/r/pull/12" "$OUT" "resolving to the PR gh names"
+    assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" "without re-sending the create"
+}
+
+test_create_pr_parses_equals_forms_and_filters_on_base() {
+    gh_stub_install
+    local out
+    out="$(GH_STUB_PR_EXISTING=https://x/pull/5 PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr --repo=o/r --head=ev/b --base=main --title t 2>/dev/null)"
+    assert_equals "https://x/pull/5" "$out" "--repo=/--head=/--base= are understood"
+    assert_equals "1" "$(command grep -c '^pr list --repo o/r --head ev/b ' "$GH_LOG")" "the lookup targets that repo and head"
+    gh_stub_install
+    GH_STUB_PR_EXISTING=https://x/pull/6 GH_STUB_PR_BASE=release _pr
+    assert_equals "https://github.com/joshjhall/containers-db/pull/9" "$OUT" "a PR into another base is not adopted"
+}
+
 run_test test_payload_carries_additions_deletions_and_expected_head "payload carries additions, deletions and expected head"
 run_test test_pathspec_limits_what_is_committed "pathspec limits what is committed"
 run_test test_new_executable_is_refused_before_any_api_call "a new executable is refused before any API call"
@@ -637,5 +671,8 @@ run_test test_graphql_errors_cannot_issue_workflow_commands "GraphQL errors cann
 run_test test_not_found_graphql_error_is_retried "a NOT_FOUND GraphQL error is retried"
 run_test test_permanent_error_does_not_preempt_adopting_a_landed_commit "a permanent error does not pre-empt adopting a landed commit"
 run_test test_create_pr_with_failing_lookup_still_creates_or_fails "create_pr with a failing lookup still creates or fails"
+run_test test_ref_replication_lag_422_is_retried_until_it_clears "a ref replication-lag 422 is retried"
+run_test test_create_pr_uses_the_url_gh_reports_when_lookup_fails "create_pr uses the URL gh reports when the lookup fails"
+run_test test_create_pr_parses_equals_forms_and_filters_on_base "create_pr parses --x= forms and filters on base"
 
 generate_report

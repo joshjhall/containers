@@ -28,13 +28,15 @@
 # validation or ruleset message. Only the last line counts:
 # _gh_api_create_or_move logs an expected create 422 before a move that may
 # have failed transiently. Anything unrecognised (no status, network error,
-# 5xx) is transient.
+# 5xx) is transient, as is a 422 "Object/Reference does not exist": a ref or
+# commit created moments earlier can lag on GitHub's replicas.
 _gh_api_is_permanent() {
     local line
     line="$(command sed '/^[[:space:]]*$/d' "$1" 2>/dev/null | command tail -n 1)"
     [ -n "$line" ] || return 1
     case "$line" in
-        *[Rr]ate\ limit* | *[Aa]buse* | *"HTTP 408"* | *"HTTP 409"* | *"HTTP 429"*) return 1 ;;
+        *[Rr]ate\ limit* | *[Aa]buse* | *"HTTP 408"* | *"HTTP 409"* | *"HTTP 429"* | \
+            *"Object does not exist"* | *"Reference does not exist"*) return 1 ;;
         *"HTTP 4"[0-9][0-9]*) return 0 ;;
         *"Resource not accessible"* | *"Repository rule violations"* | \
             *"Could not resolve to a"* | *"No commits between"* | *"not permitted"*) return 0 ;;
@@ -75,16 +77,23 @@ gh_api_retry() {
 
 # gh_api_create_pr <gh pr create args...> — `gh pr create` that tolerates a
 # lost response (#1583): every attempt first looks for an open PR on the
-# --head branch (in --repo, when given) and prints its URL instead of
-# creating a second one; a failed create is looked up once more before it
-# counts as a failure (GitHub answers "already exists" to a re-send).
+# --head branch into --base (in --repo, when given) and prints its URL
+# instead of creating a second one; a failed create is looked up once more
+# before it counts as a failure (GitHub answers "already exists" to a
+# re-send, naming the PR, which is used if the lookup itself is failing).
 gh_api_create_pr() {
-    local repo="" head="" prev=""
+    local repo="" head="" base="" prev=""
     local a
     for a in "$@"; do
         case "$prev" in
             --repo | -R) repo="$a" ;;
             --head | -H) head="$a" ;;
+            --base | -B) base="$a" ;;
+        esac
+        case "$a" in
+            --repo=*) repo="${a#*=}" ;;
+            --head=*) head="${a#*=}" ;;
+            --base=*) base="${a#*=}" ;;
         esac
         prev="$a"
     done
@@ -92,31 +101,49 @@ gh_api_create_pr() {
         command echo "gh_api_create_pr: --head is required" >&2
         return 1
     }
-    gh_api_retry _gh_api_pr_create_or_find "$repo" "$head" "$@"
+    gh_api_retry _gh_api_pr_create_or_find "$repo" "$head" "$base" "$@"
 }
 
-# _gh_api_find_pr <repo|""> <head> — print the URL of the open PR for <head>.
-# `--head` matches the branch name only, so a fork PR on a same-named branch
-# is skipped: only a same-repository PR is adopted (and later auto-merged).
+# _gh_api_find_pr <repo|""> <head> <base|""> — print the URL of the open PR
+# for <head> (into <base>, when given). `--head` matches the branch name only,
+# so a fork PR on a same-named branch is skipped: only a same-repository PR
+# is adopted (and later auto-merged).
 _gh_api_find_pr() {
     local url
-    url="$(gh pr list ${1:+--repo "$1"} --head "$2" --state open --json url,isCrossRepository \
-        --jq '[.[] | select(.isCrossRepository | not)][0].url // empty' 2>/dev/null)" || return 1
+    # The base reaches jq through the environment, never spliced into the
+    # filter text.
+    url="$(GH_API_PR_BASE="$3" gh pr list ${1:+--repo "$1"} --head "$2" --state open \
+        --json url,isCrossRepository,baseRefName \
+        --jq '[.[] | select((.isCrossRepository | not) and (env.GH_API_PR_BASE == "" or .baseRefName == env.GH_API_PR_BASE))][0].url // empty' \
+        2>/dev/null)" || return 1
     [ -n "$url" ] || return 1
     command echo "$url"
 }
 
 _gh_api_pr_create_or_find() {
-    local repo="$1" head="$2" out rc=0
-    shift 2
-    _gh_api_find_pr "$repo" "$head" && return 0
-    out="$(gh pr create "$@")" || rc=$?
+    local repo="$1" head="$2" base="$3" out rc=0 err url
+    shift 3
+    _gh_api_find_pr "$repo" "$head" "$base" && return 0
+    err="$(command mktemp)" || return 1
+    out="$(gh pr create "$@" 2>"$err")" || rc=$?
+    command cat "$err" >&2
     if [ "$rc" -eq 0 ]; then
+        command rm -f "$err"
         command echo "$out"
         return 0
     fi
-    if _gh_api_find_pr "$repo" "$head"; then
+    url=""
+    if command grep -q 'already exists' "$err"; then
+        url="$(command grep -oE 'https://[^[:space:]]+/pull/[0-9]+' "$err" | command head -n 1)"
+    fi
+    command rm -f "$err"
+    if _gh_api_find_pr "$repo" "$head" "$base"; then
         command echo "gh_api_create_pr: create failed but a PR for $head is open; using it" >&2
+        return 0
+    fi
+    if [ -n "$url" ]; then
+        command echo "gh_api_create_pr: create failed but GitHub reports $url for $head already; using it" >&2
+        command echo "$url"
         return 0
     fi
     return "$rc"
