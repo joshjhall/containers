@@ -11,6 +11,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Supersede stale PR runs (#1560). PR events share one group per PR and cancel
+# the in-flight run for the old head, freeing the runner slot. Every other
+# event (push to main/v5/auto-patch/**, tags, workflow_dispatch) gets a
+# run-unique group, so it is never cancelled: GitHub cancels a *pending* run
+# when a newer one joins its group even with cancel-in-progress false, so a
+# shared per-ref group would still drop main/tag runs that release and
+# auto-patch depend on. Workflow-level only — no job names change (#904).
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
