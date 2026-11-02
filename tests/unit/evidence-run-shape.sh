@@ -280,6 +280,14 @@ test_ccache_key_is_per_tool_and_tuple() {
     assert_contains "$(_step "Save ccache")" "$key" "save key matches the restore key"
     assert_contains "$(_step "Restore ccache")" "${prefix}"'${{ steps.ccache.outputs.major }}-' \
         "restore falls back to the same major"
+    # Cache entries are immutable: a fixed save key would freeze the first
+    # (possibly timed-out, partial) cold build's objects for that version
+    # forever. The save key must be unique per run.
+    if /usr/bin/grep -qE '^ +key: ccache-.*\$\{\{ github\.run_id \}\}' <<<"$(_step "Save ccache")"; then
+        assert_true true "save key is unique per run"
+    else
+        assert_true false "Save ccache key must carry github.run_id (entries are immutable)"
+    fi
 }
 
 test_ccache_run_wires_the_cache_into_the_container() {

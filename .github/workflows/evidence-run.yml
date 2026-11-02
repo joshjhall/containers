@@ -485,22 +485,28 @@ jobs:
       # Keyed per tool + tuple so one tool's objects never mix with another's;
       # the key puts version last so the restore-keys are true prefixes — an
       # exact version first, then the same major (a new patch reuses most
-      # objects), then any version of the tool on this tuple. Non-source cells
+      # objects), then any version of the tool on this tuple. Cache entries
+      # are immutable, so every save gets a run-unique suffix: a fixed key
+      # would freeze a timed-out cold build's partial cache forever, and the
+      # next run could never extend it. Prefix restore returns the newest. Non-source cells
       # skip every ccache step and keep the plain docker run below.
       - name: Prepare ccache (source-build cells)
         id: ccache
         if: ${{ matrix.source_build }}
         run: |
           set -euo pipefail
-          # The major is the leading run of digits; refuse anything else
-          # rather than build a key from an unexpected string.
-          if [[ ! "$INPUT_TOOL_VERSION" =~ ^([0-9]+)\. ]]; then
-            echo "Cannot derive a major from version: $INPUT_TOOL_VERSION" >&2
-            exit 1
+          # The major is the leading run of digits. A version without one
+          # still builds (cache plumbing never decides a verdict); it just
+          # gets the `x` major, so it only shares objects with itself.
+          MAJOR=x
+          if [[ "$INPUT_TOOL_VERSION" =~ ^([0-9]+)(\.|$) ]]; then
+            MAJOR="${BASH_REMATCH[1]}"
+          else
+            echo "::warning::no numeric major in $INPUT_TOOL_VERSION; ccache major key is 'x'"
           fi
           mkdir -p "$RUNNER_TEMP/ccache"
           {
-            echo "major=${BASH_REMATCH[1]}"
+            echo "major=$MAJOR"
             echo "dir=$RUNNER_TEMP/ccache"
           } >> "$GITHUB_OUTPUT"
 
@@ -510,8 +516,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ steps.ccache.outputs.dir }}
-          key: ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-${{ matrix.version }}
+          key: ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-${{ matrix.version }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
+            ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-${{ matrix.version }}-
             ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-
             ccache-${{ matrix.tool }}-${{ matrix.tuple }}-
 
@@ -627,7 +634,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.ccache.outputs.dir }}
-          key: ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-${{ matrix.version }}
+          key: ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-${{ matrix.version }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Build evidence row
         env:
