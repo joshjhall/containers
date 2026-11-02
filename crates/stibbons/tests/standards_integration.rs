@@ -11,7 +11,9 @@ mod standards_common;
 use std::fs;
 use std::process::Command;
 
-use standards_common::{assert_ok, shell_python_repo, standards, stdout_of, stibbons_bin};
+use standards_common::{
+    assert_ok, copy_dir, shell_python_repo, standards, stdout_of, stibbons_bin, vendored_templates,
+};
 
 #[test]
 fn init_writes_baseline_for_detected_slices() {
@@ -112,6 +114,65 @@ fn preexisting_unrecorded_file_is_not_clobbered() {
     );
 }
 
+/// A write failure partway through `init` must still record the files it
+/// already wrote, so a later run updates them rather than reporting them as
+/// user edits (#1542).
+#[cfg(unix)]
+#[test]
+fn partial_init_failure_records_written_files() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = shell_python_repo();
+    let root = tmp.path();
+    let tpl = tempfile::tempdir().unwrap();
+    copy_dir(&vendored_templates(), tpl.path());
+    let tpl_arg = tpl.path().to_str().unwrap();
+
+    // `tests/run.sh` follows lefthook.yml and justfile in manifest order; a
+    // read-only `tests/` makes its write fail after those two are written.
+    let tests_dir = root.join("tests");
+    fs::create_dir(&tests_dir).unwrap();
+    fs::set_permissions(&tests_dir, fs::Permissions::from_mode(0o555)).unwrap();
+    // Control: root writes through mode 0555, so the failure cannot be
+    // injected there. CI runs unprivileged and sets
+    // REQUIRE_UNPRIVILEGED_TESTS=1, so there this skip is a failure.
+    if fs::write(tests_dir.join("probe"), b"").is_ok() {
+        assert!(
+            std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
+            "REQUIRE_UNPRIVILEGED_TESTS=1 but a 0555 dir is writable (running as root?)"
+        );
+        eprintln!("skipping: a 0555 dir is writable here (running as root?)");
+        return;
+    }
+
+    let out = standards(root, &["init", "--templates-dir", tpl_arg]);
+    assert!(!out.status.success(), "init into a read-only dir must fail");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("failed to write") && err.contains("tests/run.sh"), "{err}");
+    assert!(err.contains("recorded the files written so far"), "{err}");
+    assert!(root.join("lefthook.yml").is_file(), "lefthook.yml should precede the failure");
+    assert!(root.join(".stibbons-standards.yml").is_file(), "no state saved after failure");
+
+    let out = standards(root, &["check", "--templates-dir", tpl_arg]);
+    let s = stdout_of(&out);
+    assert!(s.contains("✓ lefthook.yml\n"), "{s}");
+    assert!(s.contains("tests/run.sh (missing)"), "{s}");
+
+    // Fix the cause and change a lefthook fragment: lefthook.yml is now an
+    // unedited stibbons file the templates would change, so it updates.
+    fs::set_permissions(&tests_dir, fs::Permissions::from_mode(0o755)).unwrap();
+    let frag = tpl.path().join("core/lefthook/10-pre-commit.yml.tmpl");
+    fs::write(&frag, format!("{}\n", fs::read_to_string(&frag).unwrap())).unwrap();
+
+    let out = standards(root, &["init", "--templates-dir", tpl_arg]);
+    assert_ok(&out, "re-init after fixing the failure");
+    let s = stdout_of(&out);
+    assert!(s.contains("update     lefthook.yml"), "{s}");
+    assert!(s.contains("create     tests/run.sh"), "{s}");
+    assert!(!s.contains("skip "), "re-init treated a stibbons-written file as a user edit:\n{s}");
+    assert_ok(&standards(root, &["check", "--templates-dir", tpl_arg]), "check");
+}
+
 #[test]
 fn rerun_restores_deleted_file() {
     let tmp = shell_python_repo();
@@ -185,6 +246,248 @@ fn accept_without_paths_takes_every_modified_file() {
     let s = stdout_of(&out);
     assert!(s.contains("accepted _typos.toml") && s.contains("accepted .gitleaks.toml"), "{s}");
     assert_ok(&standards(tmp.path(), &["check"]), "check");
+}
+
+#[test]
+fn accept_ok_file_is_noop_with_note() {
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let state = tmp.path().join(".stibbons-standards.yml");
+    let before = fs::read(&state).unwrap();
+
+    let out = standards(tmp.path(), &["accept", "_typos.toml"]);
+    assert_ok(&out, "accept ok file");
+    let s = stdout_of(&out);
+    assert!(s.contains("skipped _typos.toml (already matches the baseline"), "{s}");
+    assert!(!s.contains("accepted _typos.toml"), "{s}");
+    assert_eq!(fs::read(&state).unwrap(), before, "accepting an Ok file changed the state");
+
+    // A skipped Ok path must not stop a modified one named alongside it.
+    let edited = tmp.path().join(".gitleaks.toml");
+    fs::write(&edited, format!("{}# edit\n", fs::read_to_string(&edited).unwrap())).unwrap();
+    let out = standards(tmp.path(), &["accept", "_typos.toml", ".gitleaks.toml"]);
+    assert_ok(&out, "accept ok + modified");
+    let s = stdout_of(&out);
+    assert!(s.contains("skipped _typos.toml") && s.contains("accepted .gitleaks.toml"), "{s}");
+    let saved = fs::read_to_string(&state).unwrap();
+    let accepted = saved.split("accepted:").nth(1).unwrap_or("");
+    assert!(accepted.contains(".gitleaks.toml"), "{saved}");
+    assert!(!accepted.contains("_typos.toml"), "Ok file recorded as accepted:\n{saved}");
+}
+
+#[test]
+fn accept_ok_file_clears_earlier_acceptance() {
+    // Accept an edit, revert it, then `accept` the now-clean file: the old
+    // acceptance must go, so re-applying the edit is flagged again.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let path = tmp.path().join("_typos.toml");
+    let original = fs::read_to_string(&path).unwrap();
+    let edited = format!("{original}# per-repo edit\n");
+    fs::write(&path, &edited).unwrap();
+    assert_ok(&standards(tmp.path(), &["accept", "_typos.toml"]), "accept edit");
+
+    fs::write(&path, &original).unwrap();
+    let out = standards(tmp.path(), &["accept", "_typos.toml"]);
+    assert_ok(&out, "accept reverted file");
+    let s = stdout_of(&out);
+    assert!(s.contains("cleared the earlier accepted edit of _typos.toml"), "{s}");
+
+    fs::write(&path, &edited).unwrap();
+    let out = standards(tmp.path(), &["check"]);
+    assert_eq!(out.status.code(), Some(1), "re-applied edit must be drift again");
+    assert!(stdout_of(&out).contains("_typos.toml (modified)"), "{}", stdout_of(&out));
+}
+
+#[test]
+fn failed_accept_reports_and_saves_nothing() {
+    // A later bad path aborts the whole call: no "cleared" line for an
+    // acceptance that was never removed from disk, and the state is untouched.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let path = tmp.path().join("_typos.toml");
+    let original = fs::read_to_string(&path).unwrap();
+    fs::write(&path, format!("{original}# per-repo edit\n")).unwrap();
+    assert_ok(&standards(tmp.path(), &["accept", "_typos.toml"]), "accept edit");
+    fs::write(&path, &original).unwrap();
+    let state = tmp.path().join(".stibbons-standards.yml");
+    let before = fs::read(&state).unwrap();
+
+    let out = standards(tmp.path(), &["accept", "_typos.toml", "app.py"]);
+    assert!(!out.status.success(), "unknown path must fail the call");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not a repo-baseline file"));
+    let s = stdout_of(&out);
+    assert!(!s.contains("cleared"), "reported a change that was not saved:\n{s}");
+    assert_eq!(fs::read(&state).unwrap(), before, "failed accept changed the state");
+}
+
+#[test]
+fn bare_accept_clears_acceptance_of_stale_and_missing_files() {
+    // The accepted edit is gone from disk in both cases: `dprint.json` is
+    // reverted to stibbons' bytes after the templates changed (Stale), and
+    // `_typos.toml` is deleted (Missing). Re-applying either edit must be
+    // flagged, not silently re-approved.
+    let tmp = shell_python_repo();
+    let tpl = tempfile::tempdir().unwrap();
+    copy_dir(&vendored_templates(), tpl.path());
+    let tpl_arg = tpl.path().to_str().unwrap();
+    assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "init");
+
+    let mut edits = Vec::new();
+    for f in ["dprint.json", "_typos.toml"] {
+        let p = tmp.path().join(f);
+        let original = fs::read(&p).unwrap();
+        let mut edited = original.clone();
+        edited.extend_from_slice(b"\n");
+        fs::write(&p, &edited).unwrap();
+        edits.push((p, original, edited));
+    }
+    assert_ok(&standards(tmp.path(), &["accept", "--templates-dir", tpl_arg]), "accept edits");
+
+    let frag = tpl.path().join("core/dprint.json.tmpl");
+    fs::write(&frag, format!("{}\n\n\n", fs::read_to_string(&frag).unwrap())).unwrap();
+    fs::write(&edits[0].0, &edits[0].1).unwrap(); // revert: now Stale
+    fs::remove_file(&edits[1].0).unwrap(); // delete: now Missing
+
+    let out = standards(tmp.path(), &["accept", "--templates-dir", tpl_arg]);
+    assert_ok(&out, "bare accept");
+    let s = stdout_of(&out);
+    assert!(s.contains("cleared the earlier accepted edit of dprint.json"), "{s}");
+    assert!(s.contains("cleared the earlier accepted edit of _typos.toml"), "{s}");
+
+    for (p, _, edited) in &edits {
+        fs::write(p, edited).unwrap();
+    }
+    let out = standards(tmp.path(), &["check", "--templates-dir", tpl_arg]);
+    assert_eq!(out.status.code(), Some(1), "re-applied edits must be drift again");
+    let s = stdout_of(&out);
+    assert!(s.contains("dprint.json (modified)"), "{s}");
+    assert!(s.contains("_typos.toml (modified)"), "{s}");
+}
+
+#[test]
+fn accept_reports_a_repeated_path_once() {
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let path = tmp.path().join("_typos.toml");
+    fs::write(&path, format!("{}# edit\n", fs::read_to_string(&path).unwrap())).unwrap();
+    let out = standards(tmp.path(), &["accept", "_typos.toml", "./_typos.toml"]);
+    assert_ok(&out, "accept repeated path");
+    let s = stdout_of(&out);
+    assert_eq!(s.matches("accepted _typos.toml").count(), 1, "{s}");
+}
+
+#[test]
+fn bare_accept_saves_a_cleared_acceptance_alone() {
+    // Nothing is modified, so the clear is the only change bare `accept`
+    // makes — it must still be saved.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let path = tmp.path().join("_typos.toml");
+    let original = fs::read_to_string(&path).unwrap();
+    let edited = format!("{original}# per-repo edit\n");
+    fs::write(&path, &edited).unwrap();
+    assert_ok(&standards(tmp.path(), &["accept"]), "accept edit");
+    fs::write(&path, &original).unwrap();
+
+    let out = standards(tmp.path(), &["accept"]);
+    assert_ok(&out, "bare accept");
+    assert!(stdout_of(&out).contains("cleared the earlier accepted edit of _typos.toml"));
+
+    fs::write(&path, &edited).unwrap();
+    let out = standards(tmp.path(), &["check"]);
+    assert_eq!(out.status.code(), Some(1), "re-applied edit must be drift again");
+    assert!(stdout_of(&out).contains("_typos.toml (modified)"), "{}", stdout_of(&out));
+}
+
+#[test]
+fn bare_accept_clears_earlier_acceptance_of_reverted_file() {
+    // Same hazard as above, via `accept` with no paths, while another file is
+    // modified: the reverted file's acceptance is cleared, the other accepted.
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let path = tmp.path().join("_typos.toml");
+    let original = fs::read_to_string(&path).unwrap();
+    let edited = format!("{original}# per-repo edit\n");
+    fs::write(&path, &edited).unwrap();
+    assert_ok(&standards(tmp.path(), &["accept", "_typos.toml"]), "accept edit");
+    assert_ok(&standards(tmp.path(), &["check"]), "check after accept");
+
+    fs::write(&path, &original).unwrap();
+    let other = tmp.path().join(".gitleaks.toml");
+    fs::write(&other, format!("{}# edit\n", fs::read_to_string(&other).unwrap())).unwrap();
+    let out = standards(tmp.path(), &["accept"]);
+    assert_ok(&out, "bare accept");
+    let s = stdout_of(&out);
+    assert!(s.contains("cleared the earlier accepted edit of _typos.toml"), "{s}");
+    assert!(s.contains("accepted .gitleaks.toml"), "{s}");
+
+    fs::write(&path, &edited).unwrap();
+    let out = standards(tmp.path(), &["check"]);
+    assert_eq!(out.status.code(), Some(1), "re-applied edit must be drift again");
+    let s = stdout_of(&out);
+    assert!(s.contains("_typos.toml (modified)"), "{s}");
+    assert!(s.contains(".gitleaks.toml (accepted local edit)"), "{s}");
+}
+
+#[test]
+fn accept_stale_file_warns() {
+    let tmp = shell_python_repo();
+    let tpl = tempfile::tempdir().unwrap();
+    copy_dir(&vendored_templates(), tpl.path());
+    let tpl_arg = tpl.path().to_str().unwrap();
+    assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "init");
+    let frag = tpl.path().join("core/dprint.json.tmpl");
+    fs::write(&frag, format!("{}\n", fs::read_to_string(&frag).unwrap())).unwrap();
+
+    let out = standards(tmp.path(), &["accept", "dprint.json", "--templates-dir", tpl_arg]);
+    assert_ok(&out, "accept stale file");
+    let s = stdout_of(&out);
+    assert!(s.contains("warning: dprint.json is stale"), "{s}");
+    assert!(s.contains("pins it against template updates"), "{s}");
+    assert!(s.contains("accepted dprint.json"), "{s}");
+
+    let out = standards(tmp.path(), &["check", "--templates-dir", tpl_arg]);
+    assert_ok(&out, "check after accepting stale file");
+    assert!(stdout_of(&out).contains("dprint.json (accepted local edit)"), "{}", stdout_of(&out));
+}
+
+#[test]
+fn init_drops_acceptance_once_the_render_matches_it() {
+    // Accept an edit, then change the templates so they render exactly the
+    // accepted bytes: the acceptance is no longer needed, and `init` drops it,
+    // so a later template change updates the file instead of keeping it.
+    let tpl = tempfile::tempdir().unwrap();
+    copy_dir(&vendored_templates(), tpl.path());
+    let tpl_arg = tpl.path().to_str().unwrap();
+    let frag = tpl.path().join("core/dprint.json.tmpl");
+    let original_frag = fs::read_to_string(&frag).unwrap();
+
+    // The bytes the changed templates will render, from a scratch repo.
+    fs::write(&frag, format!("{original_frag}\n")).unwrap();
+    let probe = shell_python_repo();
+    assert_ok(&standards(probe.path(), &["init", "--templates-dir", tpl_arg]), "probe init");
+    let new_render = fs::read(probe.path().join("dprint.json")).unwrap();
+    fs::write(&frag, &original_frag).unwrap();
+
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "init");
+    fs::write(tmp.path().join("dprint.json"), &new_render).unwrap();
+    assert_ok(
+        &standards(tmp.path(), &["accept", "dprint.json", "--templates-dir", tpl_arg]),
+        "accept edit",
+    );
+
+    fs::write(&frag, format!("{original_frag}\n")).unwrap();
+    assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "re-init");
+    let state = fs::read_to_string(tmp.path().join(".stibbons-standards.yml")).unwrap();
+    let accepted = state.split("accepted:").nth(1).unwrap_or("");
+    assert!(!accepted.contains("dprint.json"), "acceptance survived a matching render:\n{state}");
+
+    fs::write(&frag, format!("{original_frag}\n\n")).unwrap();
+    let out = standards(tmp.path(), &["init", "--templates-dir", tpl_arg]);
+    assert_ok(&out, "init after a further template change");
+    assert!(stdout_of(&out).contains("update     dprint.json"), "{}", stdout_of(&out));
 }
 
 #[test]

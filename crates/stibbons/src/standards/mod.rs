@@ -131,7 +131,11 @@ impl CheckReport {
 ///
 /// Returns an error on an invalid manifest, an unknown `--lang`/`--ci`, an
 /// unreadable state file, a target reached through a symlink, or a write
-/// failure. Validation happens before any file is written.
+/// failure. Validation happens before any file is written. A write or chmod
+/// failure still saves the state, recording the targets written so far, so a
+/// re-run after fixing the cause does not mistake them for user edits. A file
+/// left truncated by a failed write is not recorded and reads as modified;
+/// `--force` resolves that.
 pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std::error::Error>> {
     let state_path = opts.root.join(STATE_FILE);
     let old = StandardsState::load(&state_path)?;
@@ -189,46 +193,20 @@ pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std:
         return Ok(());
     }
 
-    for (file, action) in rendered.iter().zip(&actions) {
-        let path = opts.root.join(&file.target);
-        if action.writes() {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
-            }
-            std::fs::write(&path, &file.content)
-                .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
-        }
-        if file.executable && touches(file, *action) {
-            set_executable(&path)?;
-        }
-    }
-
     let mut new = StandardsState::new();
     new.source = opts.templates.label();
     new.slices = slices.into_iter().collect();
     new.ci = ci.iter().map(|c| c.as_str().to_string()).collect();
-    for (file, action) in rendered.iter().zip(&actions) {
-        let t = &file.target;
-        match action {
-            // Not overwritten: keep the provenance hash (if any) so a later
-            // run still recognizes the user's edit as theirs, and keep an
-            // accepted edit accepted.
-            InitAction::Skipped | InitAction::Accepted => {
-                if let Some(h) = prev.files.get(t) {
-                    new.files.insert(t.clone(), h.clone());
-                }
-                if let Some(h) = prev.accepted.get(t) {
-                    new.accepted.insert(t.clone(), h.clone());
-                }
-            }
-            InitAction::Created
-            | InitAction::Updated
-            | InitAction::Unchanged
-            | InitAction::Forced => {
-                new.files.insert(t.clone(), hash_bytes(&file.content));
-            }
-        }
+    seed_state(&mut new, prev, &rendered, &actions);
+
+    // Save on failure too: the state then records exactly what is on disk, so
+    // a re-run (after fixing the cause) recognizes the files this run already
+    // wrote instead of reporting them as user edits.
+    if let Err(e) = write_targets(&opts.root, &rendered, &actions, &mut new) {
+        return Err(match new.save(&opts.root) {
+            Ok(()) => format!("{e} (recorded the files written so far in {STATE_FILE})").into(),
+            Err(save) => format!("{e}; also failed to save {STATE_FILE}: {save}").into(),
+        });
     }
     new.save(&opts.root)?;
 
@@ -300,7 +278,9 @@ pub fn check(
 }
 
 /// Record the current on-disk bytes of `paths` (default: every modified
-/// target) as accepted local edits.
+/// target) as accepted local edits. A named target that already matches the
+/// baseline is skipped with a note; a stale one is accepted with a warning,
+/// since that pins it against template updates.
 ///
 /// # Errors
 ///
@@ -313,28 +293,82 @@ pub fn accept(
     out: &mut impl Write,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut state, rendered) = load_and_render(root, templates)?;
-    let targets: Vec<String> = if paths.is_empty() {
-        classify_all(root, &state, &rendered)?
-            .files
-            .into_iter()
-            .filter(|(_, s)| matches!(s, FileState::Modified))
-            .map(|(t, _)| t)
-            .collect()
+    // Buffer the report and print it only once the state is saved: a later
+    // path that errors must not leave "accepted"/"cleared" lines behind for a
+    // change that never reached disk.
+    let mut log = Vec::new();
+    accept_into(root, &mut state, &rendered, paths, &mut log)?;
+    out.write_all(&log)?;
+    Ok(())
+}
+
+/// The body of [`accept`], reporting into `out` and saving `state` on success.
+fn accept_into(
+    root: &Path,
+    state: &mut StandardsState,
+    rendered: &[RenderedFile],
+    paths: &[String],
+    out: &mut impl Write,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cleared = false;
+    let mut targets: Vec<String> = Vec::new();
+    if paths.is_empty() {
+        for (t, s) in classify_all(root, state, rendered)?.files {
+            match s {
+                FileState::Modified => targets.push(t),
+                // Each of these means disk no longer holds the accepted bytes
+                // (Ok/Stale: reverted; Missing: deleted), so any acceptance is
+                // of an edit that is gone.
+                FileState::Ok | FileState::Stale | FileState::Missing => {
+                    cleared |= clear_reverted_acceptance(state, &t, out)?;
+                }
+                // An acceptance still matching disk is live, even when the render
+                // has caught up to it: `init` then sees the file as unchanged and
+                // drops the acceptance itself (see `seed_state`).
+                FileState::Accepted => {}
+            }
+        }
     } else {
-        let known: BTreeSet<&str> = rendered.iter().map(|f| f.target.as_str()).collect();
-        let mut v = Vec::new();
+        let mut seen = BTreeSet::new();
         for p in paths {
             let t = p.strip_prefix("./").unwrap_or(p);
-            if !known.contains(t) {
+            let Some(file) = rendered.iter().find(|f| f.target == t) else {
                 return Err(format!("`{p}` is not a repo-baseline file").into());
+            };
+            // `x` and `./x` name one target: classify and report it once.
+            if !seen.insert(t) {
+                continue;
             }
-            v.push(t.to_string());
+            match classify_check(root, file, state)? {
+                FileState::Ok => {
+                    writeln!(
+                        out,
+                        "  skipped {t} (already matches the baseline; nothing to accept)"
+                    )?;
+                    cleared |= clear_reverted_acceptance(state, t, out)?;
+                }
+                FileState::Stale => {
+                    writeln!(
+                        out,
+                        "  warning: {t} is stale (unedited, but the templates changed); accepting \
+                         pins it against template updates — `stibbons setup standards init` \
+                         would update it instead"
+                    )?;
+                    targets.push(t.to_string());
+                }
+                FileState::Accepted | FileState::Missing | FileState::Modified => {
+                    targets.push(t.to_string());
+                }
+            }
         }
-        v
-    };
+    }
 
     if targets.is_empty() {
-        writeln!(out, "No modified baseline files to accept.")?;
+        if cleared {
+            state.save(root)?;
+        } else {
+            writeln!(out, "No modified baseline files to accept.")?;
+        }
         return Ok(());
     }
     for t in &targets {
@@ -344,6 +378,82 @@ pub fn accept(
         writeln!(out, "  accepted {t}")?;
     }
     state.save(root)?;
+    Ok(())
+}
+
+/// Drop the accepted hash of a target whose accepted edit is no longer on disk
+/// (reverted or deleted). Left in place, it would silently re-approve that edit
+/// if it ever returned.
+/// Only an acceptance of bytes no longer on disk is stale; one that still
+/// matches disk stays until `init` finds the render has caught up to it.
+/// Returns whether anything was cleared.
+fn clear_reverted_acceptance(
+    state: &mut StandardsState,
+    target: &str,
+    out: &mut impl Write,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if state.accepted.remove(target).is_none() {
+        return Ok(false);
+    }
+    writeln!(
+        out,
+        "  cleared the earlier accepted edit of {target} (that edit is no longer on disk)"
+    )?;
+    Ok(true)
+}
+
+/// Seed the new state with what is true on disk *before* any write: an
+/// unchanged target already holds the rendered bytes; every other target keeps
+/// its previous provenance/accepted hash, so a write that never happens leaves
+/// the old record intact. [`write_targets`] upgrades each entry it writes.
+fn seed_state(
+    new: &mut StandardsState,
+    prev: &StandardsState,
+    rendered: &[RenderedFile],
+    actions: &[InitAction],
+) {
+    for (file, action) in rendered.iter().zip(actions) {
+        let t = &file.target;
+        if *action == InitAction::Unchanged {
+            new.files.insert(t.clone(), hash_bytes(&file.content));
+            continue;
+        }
+        // Skipped/Accepted are never overwritten: keeping the hashes lets a
+        // later run still recognize the user's edit as theirs, and keeps an
+        // accepted edit accepted.
+        if let Some(h) = prev.files.get(t) {
+            new.files.insert(t.clone(), h.clone());
+        }
+        if let Some(h) = prev.accepted.get(t) {
+            new.accepted.insert(t.clone(), h.clone());
+        }
+    }
+}
+
+/// Write (and chmod) every target `init` touches, recording each write in
+/// `new` as soon as its bytes are on disk.
+fn write_targets(
+    root: &Path,
+    rendered: &[RenderedFile],
+    actions: &[InitAction],
+    new: &mut StandardsState,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for (file, action) in rendered.iter().zip(actions) {
+        let path = root.join(&file.target);
+        if action.writes() {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
+            }
+            std::fs::write(&path, &file.content)
+                .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+            new.files.insert(file.target.clone(), hash_bytes(&file.content));
+            new.accepted.remove(&file.target);
+        }
+        if file.executable && touches(file, *action) {
+            set_executable(&path)?;
+        }
+    }
     Ok(())
 }
 
