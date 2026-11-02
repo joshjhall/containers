@@ -52,9 +52,7 @@ pub enum ErrorClass {
 impl From<&LuggageError> for ErrorClass {
     fn from(err: &LuggageError) -> Self {
         match err {
-            LuggageError::PackageManagerFailed { .. } | LuggageError::UnknownDependency { .. } => {
-                Self::Infra
-            }
+            LuggageError::PackageManagerFailed { .. } => Self::Infra,
             // An oversized response is refused by the download layer, before
             // any verification logic sees a byte — so it classifies with the
             // fetch that produced it, not with the tier that would have
@@ -90,6 +88,10 @@ impl From<&LuggageError> for ErrorClass {
             | LuggageError::PlatformDetectionFailed(_)
             | LuggageError::NotImplemented(_)
             | LuggageError::Catalog(_)
+            // A dep id with no `system_package` mapping for the host's
+            // manager is a catalog data gap, raised before any shell-out —
+            // not a runner/network/registry fault, so not `Infra` (#1549).
+            | LuggageError::UnknownDependency { .. }
             | LuggageError::TemplateMissingKey(_) => Self::Unknown,
         }
     }
@@ -659,13 +661,6 @@ mod tests {
         let cases: &[(LuggageError, ErrorClass)] = &[
             (LuggageError::PackageManagerFailed { message: "apt".into() }, ErrorClass::Infra),
             (
-                LuggageError::UnknownDependency {
-                    manager: "Apt".into(),
-                    ids: "frobnicator".into(),
-                },
-                ErrorClass::Infra,
-            ),
-            (
                 LuggageError::DownloadFailed {
                     url: "https://x".into(),
                     attempts: 1,
@@ -782,6 +777,7 @@ mod tests {
             LuggageError::PlatformDetectionFailed("missing /etc/os-release".into()),
             LuggageError::NotImplemented("x"),
             LuggageError::Catalog("x".into()),
+            LuggageError::UnknownDependency { manager: "Apt".into(), ids: "frobnicator".into() },
             LuggageError::TemplateMissingKey("x".into()),
         ];
         for err in &cases {

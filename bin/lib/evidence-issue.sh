@@ -19,6 +19,10 @@
 #       primary injection defense for the gh --search title and issue body.
 #   open_or_update_tracking_issue <tool> <version> <tuple> <error_class> <run_url>
 #       Search-or-create the per-cell regression tracking issue.
+#   annotate_fail_verdict <result> <error_class> <tool> <version> <tuple>
+#       On a `fail` verdict, print an `::error` workflow annotation and append
+#       a line to $GITHUB_STEP_SUMMARY, so a fail cell is visible in the
+#       Actions UI while its job stays green (#1549).
 #
 # Usage:
 #   source "$GITHUB_WORKSPACE/bin/lib/evidence-issue.sh"
@@ -111,6 +115,46 @@ validate_issue_inputs() {
         return 1
     fi
     return 0
+}
+
+# annotate_fail_verdict - Make a `fail` cell visible without failing its job.
+#
+# Arguments:
+#   $1 - result (pass|fail|skip, from read_evidence_verdict)
+#   $2 - error_class (bare slug, from read_evidence_verdict)
+#   $3 - tool slug
+#   $4 - tool version
+#   $5 - tuple slug
+#
+# Output (stdout):
+#   On `fail`: one `::error title=...::...` workflow command. Nothing otherwise.
+#   Also appends one markdown line to the file named by $GITHUB_STEP_SUMMARY
+#   when that variable is set.
+#
+# Returns:
+#   0 on success or a non-fail result; 1 (nothing emitted) when a coordinate
+#   or the error_class fails validation.
+#
+# The cell job deliberately concludes `success` on an install failure —
+# recording the fail row is the point of an evidence run — so without this a
+# failing cell is green in the UI. Stdout is parsed by the runner as workflow
+# commands, so every interpolated value is re-validated against a tight slug
+# first: a `::` or newline smuggled through a free-text dispatch input could
+# otherwise inject an arbitrary command (e.g. `::add-mask::`, `::stop-commands::`).
+annotate_fail_verdict() {
+    local result="$1" error_class="$2" tool="$3" version="$4" tuple="$5"
+    [ "$result" = "fail" ] || return 0
+    validate_issue_inputs "$tool" "$version" "$tuple" || return 1
+    if [[ ! "$error_class" =~ ^[a-z_]+$ ]]; then
+        echo "Refusing to annotate: unexpected error_class '$error_class'" >&2
+        return 1
+    fi
+    printf '::error title=Evidence fail: %s@%s on %s::install failed (error_class=%s); a fail row was recorded and the job stays green by design\n' \
+        "$tool" "$version" "$tuple" "$error_class"
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        printf -- '- :x: `%s@%s` on `%s` recorded **fail** (`error_class: %s`)\n' \
+            "$tool" "$version" "$tuple" "$error_class" >>"$GITHUB_STEP_SUMMARY"
+    fi
 }
 
 # open_or_update_tracking_issue - Search-or-create the regression issue.

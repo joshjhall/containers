@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for read_evidence_verdict() in bin/lib/evidence-issue.sh — the
+# Unit tests for read_evidence_verdict() and annotate_fail_verdict() in bin/lib/evidence-issue.sh — the
 # evidence fail-row verdict read+sanitize logic extracted from
 # .github/workflows/evidence-run.yml's "Read evidence verdict" step (#653,
 # logic from #652).
@@ -112,6 +112,64 @@ test_crlf_and_case_normalize_error_class() {
     fi
 }
 
+# --- annotate_fail_verdict (#1549) ----------------------------------------
+# A fail cell's job concludes `success` by design; annotate_fail_verdict is
+# what makes it visible in the Actions UI. Its stdout is parsed by the runner
+# as workflow commands, so the injection guard is part of the contract.
+
+test_annotate_fail_emits_error_and_summary() {
+    local out rc=0 summary="$TEST_TEMP_DIR/summary.md"
+    out="$(GITHUB_STEP_SUMMARY="$summary" \
+        annotate_fail_verdict fail unknown node 20.13.1 alpine-3.22-amd64)" || rc=$?
+    assert_equals "0" "$rc" "fail verdict returns 0"
+    assert_equals \
+        "::error title=Evidence fail: node@20.13.1 on alpine-3.22-amd64::install failed (error_class=unknown); a fail row was recorded and the job stays green by design" \
+        "$out" "exactly one ::error annotation naming the cell and class"
+    assert_file_exists "$summary" "summary file written"
+    assert_equals \
+        '- :x: `node@20.13.1` on `alpine-3.22-amd64` recorded **fail** (`error_class: unknown`)' \
+        "$(command cat "$summary")" "summary line names the cell and class"
+}
+
+test_annotate_non_fail_is_silent() {
+    local verdict out rc summary="$TEST_TEMP_DIR/summary.md"
+    for verdict in pass skip; do
+        rc=0
+        out="$(GITHUB_STEP_SUMMARY="$summary" \
+            annotate_fail_verdict "$verdict" unknown node 20.13.1 alpine-3.22-amd64)" || rc=$?
+        assert_equals "0" "$rc" "$verdict verdict returns 0"
+        assert_empty "$out" "$verdict verdict emits no annotation"
+    done
+    assert_file_not_exists "$summary" "no summary line for pass/skip"
+}
+
+test_annotate_rejects_injected_coordinates() {
+    local out rc summary="$TEST_TEMP_DIR/summary.md" bad
+    for bad in 'node::add-mask::x' $'node\n::stop-commands::t'; do
+        rc=0
+        out="$(GITHUB_STEP_SUMMARY="$summary" \
+            annotate_fail_verdict fail unknown "$bad" 20.13.1 alpine-3.22-amd64 2>/dev/null)" || rc=$?
+        assert_equals "1" "$rc" "injected tool $(command printf '%q' "$bad") → rc 1"
+        assert_not_contains "$out" "::" "no workflow command emitted for an injected tool"
+    done
+    rc=0
+    out="$(GITHUB_STEP_SUMMARY="$summary" \
+        annotate_fail_verdict fail 'infra::x' node 20.13.1 alpine-3.22-amd64 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "non-slug error_class → rc 1"
+    assert_empty "$out" "no annotation for a non-slug error_class"
+    assert_file_not_exists "$summary" "no summary line on a rejected input"
+}
+
+test_annotate_without_step_summary() {
+    local out rc=0
+    out="$(env -u GITHUB_STEP_SUMMARY bash -c \
+        'source "$1"; annotate_fail_verdict fail infra node 20.13.1 alpine-3.22-amd64' \
+        _ "$PROJECT_ROOT/bin/lib/evidence-issue.sh")" || rc=$?
+    assert_equals "0" "$rc" "unset GITHUB_STEP_SUMMARY is not an error"
+    assert_contains "$out" "::error title=Evidence fail: node@20.13.1" \
+        "annotation still printed without a step summary"
+}
+
 # --- Run -------------------------------------------------------------------
 
 run_test test_pass_row "valid pass row → result=pass, error_class=unknown"
@@ -120,5 +178,9 @@ run_test test_skip_row "valid skip row → result=skip"
 run_test test_unexpected_result_exits_1 "unexpected result → rc 1, no result= emitted"
 run_test test_crlf_stripped_from_result "CR/LF stripped from result, no injected line"
 run_test test_crlf_and_case_normalize_error_class "CRLF/uppercase error_class → unknown"
+run_test test_annotate_fail_emits_error_and_summary "fail verdict → ::error annotation + summary line"
+run_test test_annotate_non_fail_is_silent "pass/skip verdict → no annotation, no summary"
+run_test test_annotate_rejects_injected_coordinates "injected coordinate/class → rc 1, nothing emitted"
+run_test test_annotate_without_step_summary "unset GITHUB_STEP_SUMMARY → annotation only"
 
 generate_report
