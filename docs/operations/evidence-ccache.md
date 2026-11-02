@@ -34,14 +34,19 @@ How it is wired:
   `CCACHE_NOHASHDIR=1` keep that path out of the hash. Without them every run
   would miss. `CCACHE_COMPILERCHECK=content` is set because the compiler is
   reinstalled into a fresh container each run, so its mtime proves nothing.
-- **Key.** The key is `ccache-<tool>-<tuple>-<major>-<version>`. Restore tries an
-  exact match first, then `ccache-<tool>-<tuple>-<major>-` (a new patch reuses
-  most of the previous one's objects), then `ccache-<tool>-<tuple>-`. Tool and
-  tuple lead the key, so no restore ever crosses tools or platforms. Version
-  comes last, so the fallbacks are true prefixes.
+- **Key.** Each save writes `ccache-<tool>-<tuple>-<major>-<version>-<run_id>-<attempt>`.
+  Cache entries are immutable, so a fixed key would freeze the first cold
+  build's objects (even a timed-out, partial one) and no later run could add
+  to them. Restore is prefix-only and returns the newest match: the same
+  version first, then `ccache-<tool>-<tuple>-<major>-` (a new patch reuses most
+  of the previous one's objects), then `ccache-<tool>-<tuple>-`. Tool and tuple
+  lead the key, so no restore ever crosses tools or platforms. A version with
+  no numeric major gets the major `x`, with a warning, rather than failing the
+  cell.
 - **Size.** `CCACHE_MAXSIZE=2G` per entry. GitHub's repository cache budget is
-  10 GB and evicts least-recently-used entries past it. Keying per tool and tuple
-  means a single node entry can never grow past its own 2 GB.
+  10 GB and evicts least-recently-used entries past it. Since every run saves a
+  new entry, superseded entries for the same cell age out first; ccache's own
+  cap keeps any single entry at or under 2 GB.
 - **Save.** The save step runs under `always()`, so a cold build that fails or
   times out still keeps the objects it compiled.
 
