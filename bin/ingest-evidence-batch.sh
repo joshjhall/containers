@@ -125,7 +125,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -h | --help)
-            command sed -n '2,43p' "$0"
+            command sed -n '2,56p' "$0"
             exit 0
             ;;
         *) die "unknown argument: $1" 2 ;;

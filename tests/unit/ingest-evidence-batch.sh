@@ -224,17 +224,14 @@ test_all_cancelled_run_is_a_neutral_skip() {
     d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
     db="$d/db"
     _fake_db "$db"
-    _gh_stub
+    gh_stub_install
     _run_expected "$d/rows" "$db" 3
     assert_equals "0" "$RC" "an all-cancelled run exits 0 (neutral skip)"
     assert_contains "$ERR" "no evidence rows: none of 3 cells reached upload (cancelled, timed out, or failed)" "says why there is nothing to ingest"
     assert_not_contains "$ERR" "is not a directory" "not the misleading path error"
     assert_equals "" "$OUT" "prints no branch"
-    if [ -e "$GH_LOG" ]; then
-        assert_true false "gh must not be called on an all-cancelled run (got: $(command cat "$GH_LOG"))"
-    else
-        assert_true true "gh is never called"
-    fi
+    # gh_stub_install creates GH_LOG empty, so "never called" is "still empty".
+    assert_equals "" "$(command cat "$GH_LOG")" "gh is never called: no API commit, no PR"
     # An existing but empty download dir is the same state.
     command mkdir -p "$d/rows/evidence-row-x"
     _run_expected "$d/rows" "$db" 3
@@ -252,7 +249,7 @@ test_all_cancelled_skip_edge_cases() {
     d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
     db="$d/db"
     _fake_db "$db"
-    _gh_stub
+    gh_stub_install
     command mkdir -p "$d/rows/evidence-row-x"
     command printf 'not a row\n' >"$d/rows/evidence-row-x/manifest.txt"
     _run_expected "$d/rows" "$db" 4 0
@@ -276,7 +273,7 @@ test_no_rows_after_successful_cells_fails_loud() {
     d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
     db="$d/db"
     _fake_db "$db"
-    _gh_stub
+    gh_stub_install
     # 3/3 succeeded, and the PR-review case: 1 of 3 succeeded while the other
     # two timed out (the aggregate result would read `failure` and hide it).
     local s
@@ -314,7 +311,7 @@ test_expected_cells_with_rows_still_ingests() {
     d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
     db="$d/db"
     _fake_db "$db"
-    _gh_stub
+    gh_stub_install
     _row "$d/rows" r1 1.82.0 debian 13 amd64 pass
     _run_expected "$d/rows" "$db" 2 1
     assert_equals "0" "$RC" "a partial run ingests normally"
