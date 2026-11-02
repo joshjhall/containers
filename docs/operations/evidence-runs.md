@@ -587,9 +587,13 @@ is not stable across multiple producers anyway.
 
 1. **Network flake on push or PR open.**
    The script retries `git push` and `gh pr create` up to 3 times with
-   exponential backoff (2s, 4s). Final failure exits non-zero; the
-   workflow surfaces `gh`'s stderr verbatim so the next operator can
-   read the upstream error.
+   exponential backoff (2s, 4s). Only transient failures are retried: an
+   HTTP 4xx other than 429/rate limiting, or a GraphQL permission,
+   validation or ruleset error, fails after one attempt. Before each
+   `gh pr create` attempt the open PR for the branch is looked up, so a
+   create whose response was lost resolves to that PR. Final failure
+   exits non-zero; `gh`'s stderr and the GraphQL `errors` messages are
+   logged verbatim so the next operator can read the upstream error.
 
 1. **Validate workflow timeout on the consumer side.**
    Out of scope for the producer — if containers-db's `validate.yml`

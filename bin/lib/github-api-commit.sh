@@ -21,12 +21,44 @@
 # Requires gh (authenticated via GH_TOKEN/GITHUB_TOKEN), git, jq, base64.
 # Per CLAUDE.md, bare external commands use `command` to bypass aliases.
 
+# _gh_api_is_permanent <stderr-file> — true when the LAST non-empty line of a
+# failed gh call's stderr is an error a retry cannot fix (#1583): an HTTP 4xx
+# other than 429 or a rate limit, or a GraphQL permission/validation/ruleset
+# message. Only the last line counts: _gh_api_create_or_move logs an expected
+# create 422 before a move that may have failed transiently. Anything
+# unrecognised (no status, network error, 5xx) is transient.
+_gh_api_is_permanent() {
+    local line
+    line="$(command sed '/^[[:space:]]*$/d' "$1" 2>/dev/null | command tail -n 1)"
+    [ -n "$line" ] || return 1
+    case "$line" in
+        *[Rr]ate\ limit* | *"HTTP 429"*) return 1 ;;
+        *"HTTP 4"[0-9][0-9]*) return 0 ;;
+        *"Resource not accessible"* | *"Repository rule violations"* | \
+            *"Could not resolve"* | *"No commits between"* | *"not permitted"*) return 0 ;;
+    esac
+    return 1
+}
+
 # gh_api_retry <cmd...> — run <cmd> up to 3 times with doubling backoff
-# starting at GH_API_RETRY_DELAY seconds (default 2; tests set 0).
+# starting at GH_API_RETRY_DELAY seconds (default 2; tests set 0). stdout
+# passes through; each attempt's stderr is captured, replayed to stderr, and
+# classified: a permanent error (_gh_api_is_permanent) fails at once instead
+# of being retried.
 gh_api_retry() {
-    local i=1 delay="${GH_API_RETRY_DELAY:-2}"
+    local i=1 delay="${GH_API_RETRY_DELAY:-2}" err rc=1
+    err="$(command mktemp)" || return 1
     while [ "$i" -le 3 ]; do
-        "$@" && return 0
+        if "$@" 2>"$err"; then
+            command cat "$err" >&2
+            rc=0
+            break
+        fi
+        command cat "$err" >&2
+        if _gh_api_is_permanent "$err"; then
+            command echo "gh_api_retry: permanent error from $1 $2, not retrying" >&2
+            break
+        fi
         if [ "$i" -lt 3 ]; then
             command echo "Retry $i/3: $1 $2" >&2
             command sleep "$delay"
@@ -34,7 +66,54 @@ gh_api_retry() {
         fi
         i=$((i + 1))
     done
-    return 1
+    command rm -f "$err"
+    return "$rc"
+}
+
+# gh_api_create_pr <gh pr create args...> — `gh pr create` that tolerates a
+# lost response (#1583): every attempt first looks for an open PR on the
+# --head branch (in --repo, when given) and prints its URL instead of
+# creating a second one; a failed create is looked up once more before it
+# counts as a failure (GitHub answers "already exists" to a re-send).
+gh_api_create_pr() {
+    local repo="" head="" prev=""
+    local a
+    for a in "$@"; do
+        case "$prev" in
+            --repo | -R) repo="$a" ;;
+            --head | -H) head="$a" ;;
+        esac
+        prev="$a"
+    done
+    [ -n "$head" ] || {
+        command echo "gh_api_create_pr: --head is required" >&2
+        return 1
+    }
+    gh_api_retry _gh_api_pr_create_or_find "$repo" "$head" "$@"
+}
+
+# _gh_api_find_pr <repo|""> <head> — print the URL of the open PR for <head>.
+_gh_api_find_pr() {
+    local url
+    url="$(gh pr list ${1:+--repo "$1"} --head "$2" --state open --json url --jq '.[0].url // empty' 2>/dev/null)" || return 1
+    [ -n "$url" ] || return 1
+    command echo "$url"
+}
+
+_gh_api_pr_create_or_find() {
+    local repo="$1" head="$2" out rc=0
+    shift 2
+    _gh_api_find_pr "$repo" "$head" && return 0
+    out="$(gh pr create "$@")" || rc=$?
+    if [ "$rc" -eq 0 ]; then
+        command echo "$out"
+        return 0
+    fi
+    if _gh_api_find_pr "$repo" "$head"; then
+        command echo "gh_api_create_pr: create failed but a PR for $head is open; using it" >&2
+        return 0
+    fi
+    return "$rc"
 }
 
 # gh_api_ensure_branch <owner/repo> <branch> <sha>
@@ -231,19 +310,34 @@ _gh_api_commit_worktree() {
 # failure the branch head is read back: moved to a commit whose parent is
 # <base> and whose headline is ours means the earlier attempt landed (adopt
 # it); still at <base> means nothing landed (retry); anything else is an
-# error, never adopted. Prints the oid.
+# error, never adopted. GitHub's error text (the `errors` body and gh's
+# stderr) is logged on every failure, and a permission, validation or ruleset
+# error stops the retries (#1583). Prints the oid.
 _gh_api_create_commit() {
     local repo="$1" branch="$2" base="$3" payload="$4"
     local i=1 delay="${GH_API_RETRY_DELAY:-2}" resp oid head commit parent headline want
+    local err errors rc permanent
     want="$(command jq -r '.variables.input.message.headline' "$payload")"
+    err="${payload%/*}/graphql.err"
     while [ "$i" -le 3 ]; do
-        if resp="$(gh api graphql --input "$payload")"; then
+        rc=0
+        # gh prints the response body on stdout even when it exits non-zero.
+        resp="$(gh api graphql --input "$payload" 2>"$err")" || rc=$?
+        if [ "$rc" -eq 0 ]; then
             oid="$(command jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"$resp" 2>/dev/null || true)"
             if [ -n "$oid" ]; then
                 command echo "$oid"
                 return 0
             fi
-            command echo "gh_api_commit_worktree: no commit oid in response: $(command jq -rc '[.errors[]?.message]' <<<"$resp" 2>/dev/null || command echo unparsable)" >&2
+        fi
+        errors="$(command jq -r '.errors[]? | "\(.type // "ERROR"): \(.message)"' <<<"$resp" 2>/dev/null || true)"
+        command echo "gh_api_commit_worktree: createCommitOnBranch attempt $i failed (exit $rc):" \
+            "${errors:-no errors in response}" >&2
+        [ -s "$err" ] && command sed 's/^/  gh: /' "$err" >&2
+        permanent=0
+        if command grep -qE '^(FORBIDDEN|UNPROCESSABLE|NOT_FOUND|INSUFFICIENT_SCOPES):|Repository rule violations' <<<"$errors" ||
+            _gh_api_is_permanent "$err"; then
+            permanent=1
         fi
         head="$(gh api "repos/$repo/git/ref/heads/$branch" 2>/dev/null |
             command jq -r '.object.sha // empty' 2>/dev/null || true)"
@@ -257,6 +351,10 @@ _gh_api_create_commit() {
                 return 0
             fi
             command echo "gh_api_commit_worktree: $repo:$branch moved to $head, not our commit on $base" >&2
+            return 1
+        fi
+        if [ "$permanent" -eq 1 ]; then
+            command echo "gh_api_commit_worktree: permanent error on $repo:$branch, not retrying" >&2
             return 1
         fi
         if [ "$i" -lt 3 ]; then

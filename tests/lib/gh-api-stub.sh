@@ -23,6 +23,14 @@
 #   GH_STUB_TREE_MODE     mode every path reports in the tree (default: the
 #                         mode the payload implies, 100644)
 #   GH_STUB_GRAPHQL_FAIL=1  graphql exits 1
+#   GH_STUB_GRAPHQL_ERRORS="TYPE:message"  graphql prints {"errors":[...]} on
+#                         stdout and "gh: message" on stderr, then exits 1
+#   GH_STUB_GRAPHQL_ERRORS_EXIT0=1  with GRAPHQL_ERRORS, exit 0 instead
+#   GH_STUB_FAIL_STATUS=N  a GH_STUB_FAIL_MATCH failure prints
+#                         "gh: Failed (HTTP N)" on stderr (default: silent)
+#   GH_STUB_PR_EXISTING   `pr list` prints this URL (default: no open PR)
+#   GH_STUB_PR_CREATE_FAIL=1  `pr create` fails with "already exists"
+#   GH_STUB_PR_AFTER_CREATE  `pr list` prints this URL once `pr create` ran
 # The tree response lists every addition path from the last payload.
 
 gh_stub_install() {
@@ -37,8 +45,28 @@ gh_stub_install() {
 printf '%s\n' "$*" >>"$GH_LOG"
 last() { command ls "$GH_PAYLOADS" | command sort -n | command tail -1; }
 case "$1 $2" in
-    "pr create") printf 'https://github.com/joshjhall/containers-db/pull/9\n' ;;
+    "pr create")
+        : >"$GH_PAYLOADS/.pr-created"
+        if [ "${GH_STUB_PR_CREATE_FAIL:-}" = 1 ]; then
+            echo "a pull request for branch already exists" >&2
+            exit 1
+        fi
+        printf 'https://github.com/joshjhall/containers-db/pull/9\n' ;;
+    "pr list")
+        if [ -n "${GH_STUB_PR_EXISTING:-}" ]; then
+            printf '%s\n' "$GH_STUB_PR_EXISTING"
+        elif [ -n "${GH_STUB_PR_AFTER_CREATE:-}" ] && [ -e "$GH_PAYLOADS/.pr-created" ]; then
+            printf '%s\n' "$GH_STUB_PR_AFTER_CREATE"
+        fi
+        ;;
     "api graphql")
+        if [ -n "${GH_STUB_GRAPHQL_ERRORS:-}" ]; then
+            command jq -cn --arg t "${GH_STUB_GRAPHQL_ERRORS%%:*}" --arg m "${GH_STUB_GRAPHQL_ERRORS#*:}" \
+                '{data: {createCommitOnBranch: null}, errors: [{type: $t, message: $m}]}'
+            [ "${GH_STUB_GRAPHQL_ERRORS_EXIT0:-}" = 1 ] && exit 0
+            echo "gh: ${GH_STUB_GRAPHQL_ERRORS#*:}" >&2
+            exit 1
+        fi
         [ "${GH_STUB_GRAPHQL_FAIL:-}" = 1 ] && exit 1
         if [ -n "${GH_STUB_GRAPHQL_FAIL_FIRST:-}" ]; then
             tries=$(( $(command cat "$GH_PAYLOADS/.tries" 2>/dev/null || echo 0) + 1 ))
@@ -52,7 +80,10 @@ case "$1 $2" in
         ;;
     "api "*)
         if [ -n "${GH_STUB_FAIL_MATCH:-}" ]; then
-            case "$*" in *"$GH_STUB_FAIL_MATCH"*) exit 1 ;; esac
+            case "$*" in *"$GH_STUB_FAIL_MATCH"*)
+                [ -n "${GH_STUB_FAIL_STATUS:-}" ] && echo "gh: Failed (HTTP $GH_STUB_FAIL_STATUS)" >&2
+                exit 1 ;;
+            esac
         fi
         for a in "$@"; do path="$a"; case "$a" in repos/*) break ;; esac; done
         case "$path" in
