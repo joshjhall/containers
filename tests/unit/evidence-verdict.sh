@@ -174,8 +174,30 @@ test_annotate_without_step_summary() {
         'source "$1"; annotate_fail_verdict fail infra node 20.13.1 alpine-3.22-amd64' \
         _ "$PROJECT_ROOT/bin/lib/evidence-issue.sh")" || rc=$?
     assert_equals "0" "$rc" "unset GITHUB_STEP_SUMMARY is not an error"
-    assert_contains "$out" "::error title=Evidence fail: node@20.13.1" \
-        "annotation still printed without a step summary"
+    assert_equals \
+        "::error title=Evidence fail: node@20.13.1 on alpine-3.22-amd64::install failed (error_class=infra); a fail row was recorded and the job stays green by design" \
+        "$out" "exact annotation still printed without a step summary"
+}
+
+test_empty_error_class_reaches_annotation() {
+    # Cross-helper contract: a fail row with an empty error_class must still
+    # produce an annotation. `// "unknown"` does not replace "", so
+    # read_evidence_verdict has to normalize it, or annotate_fail_verdict's
+    # slug check rejects it and the fail cell stays invisible.
+    local row out rc=0 ec annotation
+    row="$(write_row '{"result":"fail","error_class":""}')"
+    out="$(read_evidence_verdict "$row")" || rc=$?
+    assert_equals "0" "$rc" "empty error_class row still validates"
+    if command grep -qxF "error_class=unknown" <<<"$out"; then
+        assert_true true "empty error_class normalizes to exactly 'error_class=unknown'"
+    else
+        assert_true false "expected 'error_class=unknown', got: $(command printf '%q' "$out")"
+    fi
+    ec="$(command sed -n 's/^error_class=//p' <<<"$out")"
+    rc=0
+    annotation="$(annotate_fail_verdict fail "$ec" node 20.13.1 alpine-3.22-amd64)" || rc=$?
+    assert_equals "0" "$rc" "normalized class is accepted by annotate_fail_verdict"
+    assert_contains "$annotation" "(error_class=unknown)" "annotation carries the normalized class"
 }
 
 # --- Run -------------------------------------------------------------------
@@ -190,5 +212,6 @@ run_test test_annotate_fail_emits_error_and_summary "fail verdict → ::error an
 run_test test_annotate_non_fail_is_silent "pass/skip verdict → no annotation, no summary"
 run_test test_annotate_rejects_injected_coordinates "injected coordinate/class → rc 1, nothing emitted"
 run_test test_annotate_without_step_summary "unset GITHUB_STEP_SUMMARY → annotation only"
+run_test test_empty_error_class_reaches_annotation "empty error_class → unknown, still annotated"
 
 generate_report

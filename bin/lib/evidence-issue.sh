@@ -78,8 +78,11 @@ read_evidence_verdict() {
     # value to "unknown" rather than failing the row (a future luggage
     # ErrorClass variant shouldn't drop a regression). Restricting it to a
     # bare slug also keeps it safe as a literal gh-comment argument later.
+    # An empty string is normalized too: `// "unknown"` only replaces
+    # null/false, and an empty class would fail annotate_fail_verdict's slug
+    # check and silently drop the fail annotation (#1549).
     case "$ERROR_CLASS" in
-        *[!a-z_]*) ERROR_CLASS="unknown" ;;
+        '' | *[!a-z_]*) ERROR_CLASS="unknown" ;;
     esac
     printf '%s\n' "result=$RESULT" "error_class=$ERROR_CLASS"
 }
