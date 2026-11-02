@@ -206,6 +206,93 @@ test_empty_error_class_reaches_annotation() {
         "$(command cat "$summary")" "summary line carries the normalized class"
 }
 
+test_annotate_underscore_error_classes() {
+    # luggage's ErrorClass has underscore variants (install_method,
+    # post_install). The annotate guard must accept them: a tightening to
+    # ^[a-z]+$ would silently drop their annotations, and the workflow step is
+    # continue-on-error, so only this test would notice (#1568). Each class is
+    # fed through a real row → read_evidence_verdict → annotate_fail_verdict.
+    local ec row out rc annotation summary="$TEST_TEMP_DIR/summary.md"
+    for ec in install_method post_install; do
+        command rm -f "$summary"
+        row="$(write_row "{\"result\":\"fail\",\"error_class\":\"$ec\"}")"
+        rc=0
+        out="$(read_evidence_verdict "$row")" || rc=$?
+        assert_equals "0" "$rc" "$ec row validates"
+        if command grep -qxF "error_class=$ec" <<<"$out"; then
+            assert_true true "$ec is preserved as exactly 'error_class=$ec'"
+        else
+            assert_true false "expected 'error_class=$ec', got: $(command printf '%q' "$out")"
+        fi
+        rc=0
+        annotation="$(GITHUB_STEP_SUMMARY="$summary" annotate_fail_verdict fail \
+            "$(command sed -n 's/^error_class=//p' <<<"$out")" \
+            node 20.13.1 alpine-3.22-amd64)" || rc=$?
+        assert_equals "0" "$rc" "annotate_fail_verdict accepts $ec"
+        assert_equals \
+            "::error title=Evidence fail: node@20.13.1 on alpine-3.22-amd64::install failed (error_class=$ec); a fail row was recorded and the job stays green by design" \
+            "$annotation" "exact annotation for $ec"
+        assert_equals \
+            "- :x: \`node@20.13.1\` on \`alpine-3.22-amd64\` recorded **fail** (\`error_class: $ec\`)" \
+            "$(command cat "$summary" 2>/dev/null)" "exact summary line for $ec"
+    done
+}
+
+test_annotate_reject_message_names_annotation() {
+    # A rejected annotation must say so: the shared validator used to log
+    # "Refusing to file issue", pointing the annotate step's log at the wrong
+    # operation (#1568). Each coordinate has its own message, so every branch
+    # is checked for the exact annotate wording.
+    local out rc err i summary="$TEST_TEMP_DIR/summary.md"
+    local -a args
+    local -a bad_pos=(3 4 5) bad_val=('Bad Tool' '!1' 'not a tuple')
+    local -a want=(
+        "Refusing to annotate: unexpected tool slug 'Bad Tool'"
+        "Refusing to annotate: unexpected version '!1'"
+        "Refusing to annotate: unexpected tuple 'not a tuple'"
+    )
+    for i in 0 1 2; do
+        args=(fail unknown node 20.13.1 alpine-3.22-amd64)
+        args[bad_pos[i] - 1]="${bad_val[i]}"
+        rc=0
+        # Pin the summary to scratch: a write-before-validate regression must
+        # fail here, not append a fake line to CI's real step summary.
+        out="$(GITHUB_STEP_SUMMARY="$summary" \
+            annotate_fail_verdict "${args[@]}" 2>"$TEST_TEMP_DIR/err")" || rc=$?
+        assert_equals "1" "$rc" "bad arg \$${bad_pos[i]} → rc 1"
+        assert_empty "$out" "no annotation for bad arg \$${bad_pos[i]}"
+        err="$(command cat "$TEST_TEMP_DIR/err")"
+        assert_equals "${want[i]}" "$err" "reject message for \$${bad_pos[i]} names annotation"
+    done
+    assert_file_not_exists "$summary" "no summary line on a rejected annotation"
+}
+
+test_validate_default_action_is_file_issue() {
+    # The issue-filing callers pass no action (or an empty one); every
+    # branch's message must stay byte-identical to the pre-#1568 wording.
+    local rc err i action_arg
+    local -a args
+    local -a want=(
+        "Refusing to file issue: unexpected tool slug 'Bad Tool'"
+        "Refusing to file issue: unexpected version '!1'"
+        "Refusing to file issue: unexpected tuple 'not a tuple'"
+    )
+    local -a bad_val=('Bad Tool' '!1' 'not a tuple')
+    for action_arg in none empty; do
+        for i in 0 1 2; do
+            args=(node 20.13.1 alpine-3.22-amd64)
+            args[i]="${bad_val[i]}"
+            [ "$action_arg" = empty ] && args+=("")
+            rc=0
+            validate_issue_inputs "${args[@]}" 2>"$TEST_TEMP_DIR/err" || rc=$?
+            assert_equals "1" "$rc" "bad arg $((i + 1)) ($action_arg action) → rc 1"
+            err="$(command cat "$TEST_TEMP_DIR/err")"
+            assert_equals "${want[i]}" "$err" \
+                "default message for arg $((i + 1)) ($action_arg action) names issue filing"
+        done
+    done
+}
+
 # --- Run -------------------------------------------------------------------
 
 run_test test_pass_row "valid pass row → result=pass, error_class=unknown"
@@ -219,5 +306,8 @@ run_test test_annotate_non_fail_is_silent "pass/skip verdict → no annotation, 
 run_test test_annotate_rejects_injected_coordinates "injected coordinate/class → rc 1, nothing emitted"
 run_test test_annotate_without_step_summary "unset GITHUB_STEP_SUMMARY → annotation only"
 run_test test_empty_error_class_reaches_annotation "empty error_class → unknown, still annotated"
+run_test test_annotate_underscore_error_classes "install_method/post_install → exact annotation"
+run_test test_annotate_reject_message_names_annotation "rejected annotation → 'Refusing to annotate'"
+run_test test_validate_default_action_is_file_issue "validator default message still names issue filing"
 
 generate_report
