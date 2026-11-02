@@ -241,16 +241,26 @@ test_annotate_underscore_error_classes() {
 test_annotate_reject_message_names_annotation() {
     # A rejected annotation must say so: the shared validator used to log
     # "Refusing to file issue", pointing the annotate step's log at the wrong
-    # operation (#1568).
-    local out rc=0 err
-    out="$(annotate_fail_verdict fail unknown 'Bad Tool' 20.13.1 alpine-3.22-amd64 \
-        2>"$TEST_TEMP_DIR/err")" || rc=$?
-    assert_equals "1" "$rc" "bad tool slug → rc 1"
-    assert_empty "$out" "no annotation for a bad tool slug"
-    err="$(command cat "$TEST_TEMP_DIR/err")"
-    assert_contains "$err" "Refusing to annotate: unexpected tool slug 'Bad Tool'" \
-        "reject message names annotation"
-    assert_not_contains "$err" "file issue" "reject message does not mention issue filing"
+    # operation (#1568). Each coordinate has its own message, so every branch
+    # is checked for the exact annotate wording.
+    local out rc err i
+    local -a args
+    local -a bad_pos=(3 4 5) bad_val=('Bad Tool' '!1' 'not a tuple')
+    local -a want=(
+        "Refusing to annotate: unexpected tool slug 'Bad Tool'"
+        "Refusing to annotate: unexpected version '!1'"
+        "Refusing to annotate: unexpected tuple 'not a tuple'"
+    )
+    for i in 0 1 2; do
+        args=(fail unknown node 20.13.1 alpine-3.22-amd64)
+        args[bad_pos[i] - 1]="${bad_val[i]}"
+        rc=0
+        out="$(annotate_fail_verdict "${args[@]}" 2>"$TEST_TEMP_DIR/err")" || rc=$?
+        assert_equals "1" "$rc" "bad arg \$${bad_pos[i]} → rc 1"
+        assert_empty "$out" "no annotation for bad arg \$${bad_pos[i]}"
+        err="$(command cat "$TEST_TEMP_DIR/err")"
+        assert_equals "${want[i]}" "$err" "reject message for \$${bad_pos[i]} names annotation"
+    done
 }
 
 test_validate_default_action_is_file_issue() {
