@@ -141,6 +141,22 @@ test_bare_redeclaration_allowed() {
     assert_equals "v0.18.0" "$OUT" "the single valued pin is printed"
 }
 
+# A Dockerfile whose last line is a pin with no trailing newline: `read`
+# returns non-zero on that line, and a loop that drops it under-counts. A
+# duplicate there would then pass as one pin.
+test_unterminated_last_line_counted() {
+    local df
+    df=$(command printf 'ARG LIBRARIAN_REF=v0.18.0\nARG LIBRARIAN_REF=v0.19.0' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "unterminated duplicate pin"
+    assert_contains "$ERR" "found 2" "an unterminated last pin is still counted"
+
+    df=$(command printf 'FROM debian:13\nARG LIBRARIAN_REF=v0.18.0' | write_dockerfile)
+    run_pin "$df"
+    assert_equals "0" "$RC" "a lone unterminated pin is accepted"
+    assert_equals "v0.18.0" "$OUT" "a lone unterminated pin is printed"
+}
+
 # ...and a bare re-declaration alone is zero pins, not one.
 test_bare_only_rejected() {
     local df
@@ -226,6 +242,7 @@ run_test test_two_identical_lines_rejected "two identical ARG lines are rejected
 run_test test_valid_plus_invalid_line_rejected "valid + invalid ARG lines are rejected (#1555)"
 run_test test_indented_or_lowercase_duplicate_rejected "indented / lowercase duplicate ARG lines are rejected"
 run_test test_bare_redeclaration_allowed "bare ARG re-declaration is not a second pin"
+run_test test_unterminated_last_line_counted "a pin on an unterminated last line is counted"
 run_test test_bare_only_rejected "bare-only ARG re-declaration is rejected as zero pins"
 run_test test_zero_lines_rejected "missing ARG line is rejected"
 run_test test_non_tag_value_rejected "non-vX.Y.Z values are rejected"

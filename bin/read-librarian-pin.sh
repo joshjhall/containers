@@ -13,6 +13,11 @@
 # also be a vX.Y.Z release tag (CLAUDE.md: LIBRARIAN_REF is a signed tag)
 # before it reaches a checkout `ref:`.
 #
+# Supported form: one `ARG LIBRARIAN_REF=<tag>` per instruction, on one line
+# (any case, any indent). A multi-key `ARG A=1 LIBRARIAN_REF=...` or a
+# backslash-continued `ARG \` is NOT recognised as a pin; keep the pin in the
+# single-key form so this count stays authoritative.
+#
 # Prints the ref on stdout and exits 0; prints a `::error::` line and exits 1
 # otherwise.
 set -euo pipefail
@@ -28,9 +33,11 @@ fi
 # may be indented, so `  arg LIBRARIAN_REF=...` is a pin too and must be
 # counted; a bare `ARG LIBRARIAN_REF` (re-declaration, no `=`) sets no value
 # and is not. A read loop rather than `mapfile` keeps this working on bash 3.2
-# (macOS). `|| true`: zero matches is handled below as its own error.
+# (macOS). `|| [ -n "$line" ]` keeps a final line with no trailing newline,
+# which `read` returns non-zero on: without it an unterminated last pin is
+# silently dropped from the count. `|| true`: zero matches is handled below.
 refs=()
-while IFS= read -r line; do
+while IFS= read -r line || [ -n "$line" ]; do
     refs+=("$line")
 done < <(command sed -nE 's/^[[:space:]]*[Aa][Rr][Gg][[:space:]]+LIBRARIAN_REF=//p' "$dockerfile" | command tr -d '"' || true)
 
