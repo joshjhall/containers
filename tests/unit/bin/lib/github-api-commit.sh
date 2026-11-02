@@ -191,10 +191,12 @@ test_publish_branch_rerun_force_moves_an_existing_branch() {
     _repo
     gh_stub_install
     command printf 'changed\n' >"$REPO/keep.txt"
-    local rc=0
-    GH_STUB_REF_EXISTS=1 GH_STUB_REF_EXISTS_ONLY=heads/chore/m \
-        PATH="$STUB_DIR:$PATH" gh_api_publish_branch o/r chore/m "$REPO" "$MSG" >/dev/null 2>&1 || rc=$?
+    local rc=0 out
+    out="$(GH_STUB_REF_EXISTS=1 GH_STUB_REF_EXISTS_ONLY=heads/chore/m \
+        PATH="$STUB_DIR:$PATH" gh_api_publish_branch o/r chore/m "$REPO" "$MSG" 2>/dev/null)" || rc=$?
     assert_equals "0" "$rc" "a re-run whose branch already exists still publishes"
+    assert_equals "c0ffee0001" "$out" "and prints the oid"
+    assert_equals "0" "$(command grep -c 'ref=refs/heads/chore/m' "$GH_LOG" || true)" "the existing branch is never re-created"
     assert_equals "1" "$(command grep -cx 'api -X PATCH repos/o/r/git/refs/heads/chore/m -f sha=c0ffee0001 -F force=true' "$GH_LOG")" \
         "the existing branch is force-moved to the new commit"
     assert_equals "1" "$(command grep -cx 'api -X DELETE repos/o/r/git/refs/heads/chore-staging/m' "$GH_LOG")" \
@@ -207,11 +209,61 @@ test_publish_branch_real_ref_failure_cleans_up_staging() {
     command printf 'changed\n' >"$REPO/keep.txt"
     local rc=0 out
     out="$(GH_API_RETRY_DELAY=0 GH_STUB_FAIL_MATCH='ref=refs/heads/auto-patch/x' \
-        PATH="$STUB_DIR:$PATH" gh_api_publish_branch o/r auto-patch/x "$REPO" "$MSG" 2>/dev/null)" || rc=$?
+        PATH="$STUB_DIR:$PATH" gh_api_publish_branch o/r auto-patch/x "$REPO" "$MSG" 2>"$REPO.err")" || rc=$?
     assert_equals "1" "$rc" "failing to create the real ref fails the publish"
+    assert_contains "$(command cat "$REPO.err")" "could not point auto-patch/x at c0ffee0001" "and names the branch and commit"
     assert_equals "" "$out" "and prints no oid"
     assert_equals "1" "$(command grep -cx 'api -X DELETE repos/o/r/git/refs/heads/auto-patch-staging/x' "$GH_LOG")" \
         "the staging ref is still removed"
+}
+
+test_publish_branch_force_move_failure_cleans_up_staging() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    local rc=0 out
+    out="$(GH_API_RETRY_DELAY=0 GH_STUB_REF_EXISTS=1 GH_STUB_REF_EXISTS_ONLY=heads/auto-patch/x \
+        GH_STUB_FAIL_MATCH='-X PATCH' PATH="$STUB_DIR:$PATH" \
+        gh_api_publish_branch o/r auto-patch/x "$REPO" "$MSG" 2>"$REPO.err")" || rc=$?
+    assert_equals "1" "$rc" "a refused force-move of an existing branch fails the publish"
+    assert_equals "" "$out" "and prints no oid"
+    assert_contains "$(command cat "$REPO.err")" "could not point auto-patch/x at c0ffee0001" "and says so"
+    assert_equals "1" "$(command grep -cx 'api -X DELETE repos/o/r/git/refs/heads/auto-patch-staging/x' "$GH_LOG")" \
+        "the staging ref is still removed"
+}
+
+test_lost_response_adopts_the_commit_that_landed() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    local head
+    head="$(git -C "$REPO" rev-parse HEAD)"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_LANDED=1 GH_STUB_REF_EXISTS=1 \
+        GH_STUB_BRANCH_HEAD=feedbeef GH_STUB_PARENT="$head" GH_STUB_TREE_MODE=100644 _commit
+    assert_equals "0" "$RC" "a commit that landed despite a failed response is success"
+    assert_equals "feedbeef" "$OUT" "its oid is the branch head"
+    assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "and the mutation is not re-sent"
+}
+
+test_failed_mutation_with_unmoved_branch_is_retried() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_FAIL=1 GH_STUB_REF_EXISTS=1 \
+        GH_STUB_BRANCH_HEAD="$(git -C "$REPO" rev-parse HEAD)" _commit
+    assert_equals "1" "$RC" "nothing landed after three attempts"
+    assert_equals "3" "$(command grep -c '^api graphql' "$GH_LOG")" "a branch still at base is retried"
+}
+
+test_branch_moved_elsewhere_is_an_error() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_FAIL=1 GH_STUB_REF_EXISTS=1 \
+        GH_STUB_BRANCH_HEAD=0ther GH_STUB_PARENT=unrelated _commit
+    assert_equals "1" "$RC" "a branch moved by someone else is not adopted"
+    assert_contains "$ERR" "moved to 0ther, not a child of" "and says so"
+    assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "nor retried into an expectedHeadOid failure"
 }
 
 test_staging_delete_failure_only_warns() {
@@ -255,6 +307,10 @@ run_test test_publish_branch_creates_the_real_ref_only_at_the_signed_commit "pub
 run_test test_publish_branch_failure_cleans_up_staging "publish_branch failure cleans up staging"
 run_test test_publish_branch_rerun_force_moves_an_existing_branch "publish_branch re-run force-moves an existing branch"
 run_test test_publish_branch_real_ref_failure_cleans_up_staging "publish_branch real-ref failure cleans up staging"
+run_test test_publish_branch_force_move_failure_cleans_up_staging "publish_branch force-move failure cleans up staging"
+run_test test_lost_response_adopts_the_commit_that_landed "a lost response adopts the commit that landed"
+run_test test_failed_mutation_with_unmoved_branch_is_retried "a failed mutation with an unmoved branch is retried"
+run_test test_branch_moved_elsewhere_is_an_error "a branch moved elsewhere is an error"
 run_test test_staging_delete_failure_only_warns "a staging delete failure only warns"
 run_test test_truncated_tree_warns_and_tree_read_failure_errors "truncated tree warns; unreadable tree errors"
 

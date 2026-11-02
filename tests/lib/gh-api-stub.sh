@@ -13,6 +13,10 @@
 #                         this string exist
 #   GH_STUB_FAIL_MATCH    any `api` call whose argv contains this string exits 1
 #   GH_STUB_TREE_TRUNCATED=1  the tree response reports truncated:true
+#   GH_STUB_BRANCH_HEAD   object.sha an existing ref reports (default empty)
+#   GH_STUB_PARENT        parents[0].sha of any `git/commits/<sha>` lookup
+#   GH_STUB_GRAPHQL_LANDED=1  graphql records the payload, then exits 1 (the
+#                         commit landed but the response was lost)
 #   GH_STUB_VERIFIED      the commit's verification.verified (default true)
 #   GH_STUB_TREE_MODE     mode every path reports in the tree (default: the
 #                         mode the payload implies, 100644)
@@ -36,6 +40,7 @@ case "$1 $2" in
         [ "${GH_STUB_GRAPHQL_FAIL:-}" = 1 ] && exit 1
         n=$(( $(command ls "$GH_PAYLOADS" | command wc -l) + 1 ))
         command cp "$4" "$GH_PAYLOADS/$n.json"
+        [ "${GH_STUB_GRAPHQL_LANDED:-}" = 1 ] && exit 1
         printf '{"data":{"createCommitOnBranch":{"commit":{"oid":"c0ffee%04d","url":"u"}}}}\n' "$n"
         ;;
     "api "*)
@@ -47,7 +52,7 @@ case "$1 $2" in
             */git/ref/heads/*)
                 [ "${GH_STUB_REF_EXISTS:-}" = 1 ] || exit 1
                 case "$path" in *"${GH_STUB_REF_EXISTS_ONLY:-}"*) ;; *) exit 1 ;; esac
-                echo '{}'
+                printf '{"object":{"sha":"%s"}}\n' "${GH_STUB_BRANCH_HEAD:-}"
                 ;;
             */git/trees/*)
                 command jq -c --arg m "${GH_STUB_TREE_MODE:-100644}" \
@@ -55,6 +60,8 @@ case "$1 $2" in
                     '{truncated:$t, tree: [.variables.input.fileChanges.additions[] | {path, mode:$m}]}' \
                     "$GH_PAYLOADS/$(last)"
                 ;;
+            */git/commits/*)
+                printf '{"parents":[{"sha":"%s"}]}\n' "${GH_STUB_PARENT:-}" ;;
             */commits/*)
                 printf '{"commit":{"verification":{"verified":%s}}}\n' "${GH_STUB_VERIFIED:-true}" ;;
             *) echo '{}' ;;

@@ -181,16 +181,8 @@ _gh_api_commit_worktree() {
             expectedHeadOid: $base,
             fileChanges: {additions: $add, deletions: $del}}}}' >"$work/payload.json" || return 1
 
-    local resp oid
-    resp="$(gh_api_retry gh api graphql --input "$work/payload.json")" || {
-        command echo "gh_api_commit_worktree: createCommitOnBranch failed on $repo:$branch" >&2
-        return 1
-    }
-    oid="$(command jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"$resp" 2>/dev/null || true)"
-    if [ -z "$oid" ]; then
-        command echo "gh_api_commit_worktree: no commit oid in response: $resp" >&2
-        return 1
-    fi
+    local oid
+    oid="$(_gh_api_create_commit "$repo" "$branch" "$base" "$work/payload.json")" || return 1
 
     _gh_api_check_modes "$repo" "$oid" "$work/modes.tsv" || return 1
 
@@ -201,6 +193,49 @@ _gh_api_commit_worktree() {
         command echo "::warning::commit $oid on $repo:$branch is not reported as verified (signed)" >&2
     fi
     command echo "$oid"
+}
+
+# _gh_api_create_commit <owner/repo> <branch> <base> <payload> — send the
+# mutation, up to 3 attempts. Not a blind retry: a request can succeed on
+# GitHub and still fail here (a lost response), and re-sending it would then
+# fail on expectedHeadOid and hide the commit that landed. So after each
+# failure the branch head is read back: moved to a commit whose parent is
+# <base> means the earlier attempt landed (adopt it); still at <base> means
+# nothing landed (retry); anything else is an error. Prints the oid.
+_gh_api_create_commit() {
+    local repo="$1" branch="$2" base="$3" payload="$4"
+    local i=1 delay="${GH_API_RETRY_DELAY:-2}" resp oid head parent
+    while [ "$i" -le 3 ]; do
+        if resp="$(gh api graphql --input "$payload")"; then
+            oid="$(command jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"$resp" 2>/dev/null || true)"
+            if [ -n "$oid" ]; then
+                command echo "$oid"
+                return 0
+            fi
+            command echo "gh_api_commit_worktree: no commit oid in response: $resp" >&2
+        fi
+        head="$(gh api "repos/$repo/git/ref/heads/$branch" 2>/dev/null |
+            command jq -r '.object.sha // empty' 2>/dev/null || true)"
+        if [ -n "$head" ] && [ "$head" != "$base" ]; then
+            parent="$(gh api "repos/$repo/git/commits/$head" 2>/dev/null |
+                command jq -r '.parents[0].sha // empty' 2>/dev/null || true)"
+            if [ "$parent" = "$base" ]; then
+                command echo "gh_api_commit_worktree: attempt $i failed but $head landed on $branch; using it" >&2
+                command echo "$head"
+                return 0
+            fi
+            command echo "gh_api_commit_worktree: $repo:$branch moved to $head, not a child of $base" >&2
+            return 1
+        fi
+        if [ "$i" -lt 3 ]; then
+            command echo "Retry $i/3: createCommitOnBranch on $repo:$branch" >&2
+            command sleep "$delay"
+            delay=$((delay * 2))
+        fi
+        i=$((i + 1))
+    done
+    command echo "gh_api_commit_worktree: createCommitOnBranch failed on $repo:$branch" >&2
+    return 1
 }
 
 # _gh_api_check_modes <owner/repo> <oid> <modes.tsv> — every path in
