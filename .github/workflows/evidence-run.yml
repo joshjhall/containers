@@ -550,6 +550,26 @@ jobs:
           source "$GITHUB_WORKSPACE/bin/lib/evidence-issue.sh"
           read_evidence_verdict out/evidence-row.json >> "$GITHUB_OUTPUT"
 
+      # A fail cell's job still concludes `success`: recording the fail row is
+      # the point of an evidence run, and a red job would bury real runner
+      # breakage among expected tool failures. So surface the fail here
+      # instead, as an `::error` annotation (run page + checks summary) and a
+      # job-summary line. Runs on dry-run legs too: it files nothing. The
+      # coordinates come in via env (never inlined into the script) and the
+      # helper re-validates them before they reach a workflow command (#1549).
+      # continue-on-error: the annotation is cosmetic, so a rejected input must
+      # never skip the wrap/upload steps below and drop the evidence row.
+      - name: Annotate fail verdict
+        if: steps.verdict.outputs.result == 'fail'
+        continue-on-error: true
+        env:
+          VERDICT_ERROR_CLASS: ${{ steps.verdict.outputs.error_class }}
+        run: |
+          set -euo pipefail
+          source "$GITHUB_WORKSPACE/bin/lib/evidence-issue.sh"
+          annotate_fail_verdict fail "$VERDICT_ERROR_CLASS" \
+              "$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE"
+
       # The row is a bare TestEntry; the collect job also needs to know which
       # tool/version file it belongs to, so wrap it in an envelope. Named per
       # CELL (tool, version, tuple): with many versions per tuple, a per-tuple

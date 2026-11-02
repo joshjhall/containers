@@ -598,8 +598,8 @@ fn strict_install_errors_on_unknown_dependency() {
     }
     assert_eq!(
         report.error_class,
-        Some(luggage::ErrorClass::Infra),
-        "UnknownDependency maps to the Infra error class",
+        Some(luggage::ErrorClass::Unknown),
+        "UnknownDependency (a catalog gap) maps to Unknown, not Infra (#1549)",
     );
 }
 

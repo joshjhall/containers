@@ -546,6 +546,20 @@ fails: luggage's `--json-report` writes a `result: fail` row, and recording that
 row is the whole point of an evidence run (the install runs under `set +e`). The
 verdict lives in the row's `result` field, with `error_class` set on failure.
 
+A green job does not mean a passing cell. To keep a `fail` cell visible in the
+Actions UI without failing the job, the `Annotate fail verdict` step
+(`annotate_fail_verdict` in `bin/lib/evidence-issue.sh`) emits an `::error`
+annotation naming the cell and its `error_class`, and appends a line to the
+job summary. It runs on dry-run legs too. The job stays green on purpose: a red
+job per expected tool failure would bury real runner breakage, and the collect
+job must still ingest every row.
+
+`error_class: infra` means the runner, network, registry, or host package
+manager failed (`PackageManagerFailed`). A strict-mode refusal on a catalog dep
+id with no `system_package` mapping (`UnknownDependency`, e.g. `unknown
+dependency id(s) for Apk: gxx, make, …`) is a **catalog data gap** and records
+as `unknown` (#1549). Fix it in the catalog, not the runner.
+
 That row flows into containers-db as evidence — but on its own it is quiet data a
 reviewer might rubber-stamp. So on a **non-dry-run** leg, a `result: fail` row
 opens or updates a tracking issue in **this** repo, matching the cadence tiers'
