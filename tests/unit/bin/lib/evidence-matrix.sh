@@ -759,6 +759,25 @@ test_first_matching_method_decides_the_timeout() {
         "a source build pinned to another os_version does not match"
 }
 
+test_arch_and_os_list_exclude_a_source_build() {
+    local r out f
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    f="$r/catalog/tools/rust/versions/1.90.0.json"
+    # A source build only for arm64, and only on an os list without alpine.
+    _methods "$f" '[
+      {"method_kind":"source-build","platform":{"os":["debian","ubuntu"],"arch":["arm64"]}},
+      {"method_kind":"binary-tarball"}]'
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'alpine-3.24-amd64 30\ndebian-13-amd64 30\ndebian-13-arm64 120' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.timeout_minutes)"' <<<"$out" | command sort)" \
+        "the arch predicate and the os list both exclude non-matching cells"
+    assert_equals "30" "$(evidence_cell_timeout "$r/catalog" rust 1.90.0 debian-13-amd64)" \
+        "the dispatch helper applies the arch predicate too"
+    assert_equals "120" "$(evidence_cell_timeout "$r/catalog" rust 1.90.0 debian-13-arm64)" \
+        "and matches the listed arch"
+}
+
 test_cell_timeout_helper_matches_the_matrix() {
     local r f rc=0
     r="$(_fixture 1.0.0)"
@@ -822,6 +841,7 @@ run_test test_vendored_future_fail_is_retried "a future-dated vendored fail is r
 run_test test_missing_index_is_an_error "missing index is an error"
 run_test test_source_build_cells_get_the_long_timeout "source-build cells get the long timeout (#1569)"
 run_test test_first_matching_method_decides_the_timeout "the first matching install method decides the timeout"
+run_test test_arch_and_os_list_exclude_a_source_build "arch and os-list predicates exclude a source build"
 run_test test_cell_timeout_helper_matches_the_matrix "evidence_cell_timeout gives the dispatch path the same ceiling"
 
 generate_report

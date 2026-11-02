@@ -207,11 +207,13 @@ test_unsafe_run_id_is_refused() {
     assert_equals "2" "$rc" "a run id with shell metacharacters is a usage error"
 }
 
-# _run_expected <rows> <db> <cells> — _run with --expected-cells; also keeps stderr.
+# _run_expected <rows> <db> <cells> [cells-result] — _run with --expected-cells
+# and --cells-result (default cancelled); also keeps stderr.
 _run_expected() {
     local rc=0
     OUT=$(PATH="$STUB_DIR:$PATH" GH_TOKEN=dummy BASH_ENV='' \
-        "$BATCH" --rows-dir "$1" --db-path "$2" --run-id 4242 --expected-cells "$3" --no-validate 2>"$STUB_DIR/err") || rc=$?
+        "$BATCH" --rows-dir "$1" --db-path "$2" --run-id 4242 --expected-cells "$3" \
+        --cells-result "${4:-cancelled}" --no-validate 2>"$STUB_DIR/err") || rc=$?
     RC="$rc"
     ERR="$(command cat "$STUB_DIR/err")"
 }
@@ -225,7 +227,7 @@ test_all_cancelled_run_is_a_neutral_skip() {
     _gh_stub
     _run_expected "$d/rows" "$db" 3
     assert_equals "0" "$RC" "an all-cancelled run exits 0 (neutral skip)"
-    assert_contains "$ERR" "no evidence rows: all 3 cells cancelled/timed out" "says why there is nothing to ingest"
+    assert_contains "$ERR" "no evidence rows: all 3 cells cancelled/timed out or failed before upload (evidence jobs: cancelled)" "says why there is nothing to ingest"
     assert_not_contains "$ERR" "is not a directory" "not the misleading path error"
     assert_equals "" "$OUT" "prints no branch"
     if [ -e "$GH_LOG" ]; then
@@ -237,7 +239,7 @@ test_all_cancelled_run_is_a_neutral_skip() {
     command mkdir -p "$d/rows/evidence-row-x"
     _run_expected "$d/rows" "$db" 3
     assert_equals "0" "$RC" "an empty rows dir is also a neutral skip"
-    assert_contains "$ERR" "no evidence rows: all 3 cells cancelled/timed out" "with the same message"
+    assert_contains "$ERR" "no evidence rows: all 3 cells cancelled/timed out or failed before upload" "with the same message"
     assert_equals "0" "$(git -C "$db" branch --list 'evidence/batch/*' | command wc -l | command tr -d ' ')" \
         "no batch branch is created"
 }
@@ -253,18 +255,50 @@ test_all_cancelled_skip_edge_cases() {
     _gh_stub
     command mkdir -p "$d/rows/evidence-row-x"
     command printf 'not a row\n' >"$d/rows/evidence-row-x/manifest.txt"
-    _run_expected "$d/rows" "$db" 4
-    assert_equals "0" "$RC" "a rows dir with only non-JSON files is a neutral skip"
-    assert_contains "$ERR" "no evidence rows: all 4 cells cancelled/timed out" "with the all-cancelled message"
+    _run_expected "$d/rows" "$db" 4 failure
+    assert_equals "0" "$RC" "a rows dir with only non-JSON files, after failed cells, is a neutral skip"
+    assert_contains "$ERR" "no evidence rows: all 4 cells cancelled/timed out or failed before upload (evidence jobs: failure)" \
+        "naming the evidence jobs' result"
     err="$(PATH="$STUB_DIR:$PATH" GH_TOKEN=dummy BASH_ENV='' "$BATCH" --rows-dir "$d/none" --db-path "$db" \
-        --run-id 4242 --expected-cells 2 --dry-run --no-validate 2>&1 >/dev/null)" || rc=$?
+        --run-id 4242 --expected-cells 2 --cells-result cancelled --dry-run --no-validate 2>&1 >/dev/null)" || rc=$?
     assert_equals "0" "$rc" "--dry-run with no rows is the same neutral skip"
-    assert_contains "$err" "no evidence rows: all 2 cells cancelled/timed out" "and says so"
+    assert_contains "$err" "no evidence rows: all 2 cells cancelled/timed out or failed before upload" "and says so"
     _run_expected "$d/none" "$db" 0
     assert_equals "0" "$RC" "--expected-cells 0 is accepted"
-    assert_contains "$ERR" "no evidence rows: all 0 cells cancelled/timed out" "and reported as given"
+    assert_contains "$ERR" "no evidence rows: all 0 cells cancelled/timed out or failed before upload" "and reported as given"
     assert_equals "0" "$(git -C "$db" branch --list 'evidence/batch/*' | command wc -l | command tr -d ' ')" \
         "none of them creates a batch branch"
+}
+
+test_no_rows_after_successful_cells_fails_loud() {
+    # Cells that all passed but left no rows mean the upload/download is
+    # broken (e.g. a renamed artifact pattern): that must not read as a skip.
+    local d db r
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    db="$d/db"
+    _fake_db "$db"
+    _gh_stub
+    for r in success skipped; do
+        _run_expected "$d/rows" "$db" 3 "$r"
+        assert_equals "1" "$RC" "no rows with evidence jobs '$r' is a runtime error"
+        assert_contains "$ERR" "no evidence rows from 3 cells, yet the evidence jobs report '$r'" "and names the contradiction"
+        assert_not_contains "$ERR" "nothing to ingest" "not the neutral skip"
+    done
+}
+
+test_cells_result_is_validated() {
+    local d rc=0 err
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    err="$("$BATCH" --rows-dir "$d/nope" --db-path "$d/db" --run-id 1 --expected-cells 3 2>&1 >/dev/null)" || rc=$?
+    assert_equals "2" "$rc" "--expected-cells without --cells-result is a usage error"
+    assert_contains "$err" "--cells-result must be success, failure, cancelled, or skipped" "and says what is accepted"
+    rc=0
+    err="$("$BATCH" --rows-dir "$d/nope" --db-path "$d/db" --run-id 1 --expected-cells 3 --cells-result bogus 2>&1 >/dev/null)" || rc=$?
+    assert_equals "2" "$rc" "an unknown --cells-result is a usage error"
+    rc=0
+    err="$("$BATCH" --rows-dir "$d/nope" --db-path "$d/db" --run-id 1 --cells-result cancelled 2>&1 >/dev/null)" || rc=$?
+    assert_equals "2" "$rc" "--cells-result alone is a usage error"
+    assert_contains "$err" "--cells-result needs --expected-cells" "and says so"
 }
 
 test_expected_cells_with_rows_still_ingests() {
@@ -274,7 +308,7 @@ test_expected_cells_with_rows_still_ingests() {
     _fake_db "$db"
     _gh_stub
     _row "$d/rows" r1 1.82.0 debian 13 amd64 pass
-    _run_expected "$d/rows" "$db" 2
+    _run_expected "$d/rows" "$db" 2 failure
     assert_equals "0" "$RC" "a partial run ingests normally"
     assert_equals "evidence/batch/4242" "$OUT" "and prints its branch"
     assert_not_contains "$ERR" "no evidence rows" "no all-cancelled message when a row exists"
@@ -309,6 +343,8 @@ run_test test_api_commit_failure_fails_the_ingest_and_opens_no_pr "a failed API 
 run_test test_unsafe_run_id_is_refused "unsafe run id is refused"
 run_test test_all_cancelled_run_is_a_neutral_skip "an all-cancelled run (no rows) is a clear neutral skip"
 run_test test_all_cancelled_skip_edge_cases "all-cancelled skip: non-JSON-only dir, --dry-run, zero cells"
+run_test test_no_rows_after_successful_cells_fails_loud "no rows from cells that report success fails loudly"
+run_test test_cells_result_is_validated "--cells-result is validated and paired with --expected-cells"
 run_test test_expected_cells_with_rows_still_ingests "--expected-cells does not change a run with rows"
 run_test test_missing_rows_dir_without_expected_cells_is_a_usage_error "absent --rows-dir without --expected-cells is exit 2"
 run_test test_bad_expected_cells_is_refused "a bad --expected-cells is refused"

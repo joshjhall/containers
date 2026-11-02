@@ -259,17 +259,27 @@ Cells only install, record, and upload their row (an envelope adding
 1. files **one** tracking issue listing the run's `fail` rows, if any.
 
 It runs even when cells failed, since a fail row is evidence too. Rows already
-recorded make it a no-op: no PR.
-
-If **every** cell was cancelled or timed out, no row artifact exists and there
-is no `rows/` directory. `collect` passes `--expected-cells <N>`, so ingest
-prints `no evidence rows: all N cells cancelled/timed out` and exits 0. This is
-a **neutral skip** (#1569). The cancelled cells already fail the run with the
-real cause, and a second red job that blamed `--rows-dir` only hid it. Without
-`--expected-cells`, a missing `--rows-dir` is still a usage error (exit 2), so a
-mistyped path in a manual run still fails loudly. Before this, every cell opened its own PR and
+recorded make it a no-op: no PR. Before this, every cell opened its own PR and
 its own issue, so one push could open 200 PRs that conflicted on shared version
 files, and one luggage bug filed dozens of duplicate issues.
+
+If **every** cell died before uploading a row, no row artifact exists and there
+is no `rows/` directory. The cause might be cancellation, a timeout, or a build
+step that failed before upload. `collect` passes `--expected-cells <N>` and
+`--cells-result` (the evidence job's aggregate `needs.evidence.result`), and
+ingest acts on that result (#1569):
+
+| Evidence jobs | Rows | Ingest |
+| --- | --- | --- |
+| `cancelled` / `failure` | none | `no evidence rows: all N cells cancelled/timed out or failed before upload`, exit 0 (neutral skip) |
+| `success` / `skipped` | none | exit 1: the cells passed but uploaded nothing, so the row upload or download is broken |
+| any | some | ingests normally |
+
+The skip is neutral because the cells have already failed the run with the
+real cause. A second red job that blamed `--rows-dir` only hid that cause.
+Ingest can't see which cause it was, so the message lists all of them.
+Without `--expected-cells`, a missing `--rows-dir` is still a usage error
+(exit 2), so a mistyped path in a manual run still fails loudly.
 
 **Cells install against the vendored catalog** (`crates/luggage/testdata/catalog`,
 the one luggage was built and shipped with), not containers-db `main`.

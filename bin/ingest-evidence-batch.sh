@@ -18,7 +18,8 @@
 #
 # Usage:
 #   bin/ingest-evidence-batch.sh --rows-dir DIR --db-path DIR --run-id ID
-#                                [--run-url URL] [--expected-cells N]
+#                                [--run-url URL]
+#                                [--expected-cells N --cells-result RESULT]
 #                                [--dry-run] [--no-validate]
 #
 #   --rows-dir   directory holding the run's rows (*.json, any depth; e.g. the
@@ -26,19 +27,28 @@
 #   --db-path    containers-db checkout (cloned when absent)
 #   --run-id     identifies the run; the branch is evidence/batch/<run-id>
 #   --expected-cells
-#                how many cells the run's matrix had. With it, a --rows-dir
-#                that is absent or holds no *.json means every cell was
-#                cancelled or timed out before uploading a row: that prints
-#                `no evidence rows: all N cells cancelled/timed out` and exits
-#                0 (#1569). Without it, an absent --rows-dir stays exit 2.
+#                how many cells the run's matrix had (#1569)
+#   --cells-result
+#                the evidence job's aggregate result (needs.evidence.result:
+#                success, failure, cancelled, or skipped). Required with
+#                --expected-cells.
+#
+# Zero rows (--rows-dir absent or holding no *.json), with --expected-cells:
+#   cells-result cancelled|failure  ->  `no evidence rows: all N cells
+#       cancelled/timed out or failed before upload (evidence jobs: R)`, exit 0
+#   cells-result success|skipped    ->  exit 1: cells that report success but
+#       uploaded nothing mean the row upload or download is broken
+# Without --expected-cells, an absent --rows-dir stays a usage error (exit 2),
+# so a mistyped path in a manual run still fails loudly.
 #
 # Prints the branch name on success, nothing when there was nothing to ingest.
 # Exit: 0 ok (incl. nothing to ingest), 1 runtime error, 2 usage/input error.
 #
-# Zero rows is a NEUTRAL skip, not a failure: the cancelled cells already fail
-# the run with the real cause (job timeout) on each cell. Failing ingest too
-# added a second red job that blamed --rows-dir instead. The flag is required
-# for the skip so a mistyped path in a manual run still fails as a usage error.
+# Why the cancelled/failed case is a NEUTRAL skip: those cells already fail the
+# run with the real cause on each cell (job timeout, a failed build step).
+# Failing ingest too added a second red job that blamed --rows-dir instead.
+# Ingest cannot see which of those causes it was, so the message names them
+# all rather than claiming one.
 #
 # Per CLAUDE.md, bare external commands use `command` to bypass aliases.
 
@@ -64,6 +74,7 @@ RUN_ID=""
 RUN_URL=""
 EXPECTED_CELLS=""
 EXPECTED_GIVEN=false
+CELLS_RESULT=""
 DRY_RUN=false
 NO_VALIDATE=false
 REMOTE_URL="https://github.com/joshjhall/containers-db.git"
@@ -90,6 +101,10 @@ while [ $# -gt 0 ]; do
         --expected-cells)
             EXPECTED_CELLS="${2:-}"
             EXPECTED_GIVEN=true
+            shift 2
+            ;;
+        --cells-result)
+            CELLS_RESULT="${2:-}"
             shift 2
             ;;
         --remote)
@@ -121,13 +136,24 @@ done
 if $EXPECTED_GIVEN; then
     [[ "$EXPECTED_CELLS" =~ ^[0-9]{1,6}$ ]] ||
         die "--expected-cells must be a non-negative integer: $EXPECTED_CELLS" 2
+    case "$CELLS_RESULT" in
+        success | failure | cancelled | skipped) ;;
+        *) die "--cells-result must be success, failure, cancelled, or skipped with --expected-cells, got '$CELLS_RESULT'" 2 ;;
+    esac
     # actions/download-artifact creates no directory when no artifact matched,
-    # which is exactly what an all-cancelled run leaves behind.
+    # which is what a run whose every cell died before uploading leaves behind.
     if [ ! -d "$ROWS_DIR" ] ||
         [ -z "$(command find "$ROWS_DIR" -type f -name '*.json' -print -quit)" ]; then
-        command echo "::warning::no evidence rows: all $EXPECTED_CELLS cells cancelled/timed out; nothing to ingest" >&2
-        exit 0
+        case "$CELLS_RESULT" in
+            cancelled | failure)
+                command echo "::warning::no evidence rows: all $EXPECTED_CELLS cells cancelled/timed out or failed before upload (evidence jobs: $CELLS_RESULT); nothing to ingest" >&2
+                exit 0
+                ;;
+            *) die "no evidence rows from $EXPECTED_CELLS cells, yet the evidence jobs report '$CELLS_RESULT': the row upload or download is broken" 1 ;;
+        esac
     fi
+elif [ -n "$CELLS_RESULT" ]; then
+    die "--cells-result needs --expected-cells" 2
 fi
 [ -d "$ROWS_DIR" ] || die "--rows-dir is not a directory: $ROWS_DIR" 2
 

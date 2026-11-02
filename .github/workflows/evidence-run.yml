@@ -637,12 +637,14 @@ jobs:
         if: ${{ needs.setup.outputs.dry_run == 'true' }}
         env:
           RUN_ID: ${{ github.run_id }}
-          # Lets ingest tell an all-cancelled run (no rows) from a bad path (#1569).
+          # Lets ingest tell a run whose cells all died before upload (no rows) from
+          # a bad path or a broken upload (#1569).
           EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}
+          CELLS_RESULT: ${{ needs.evidence.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
-            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS" --dry-run
+            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS" --cells-result "$CELLS_RESULT" --dry-run
 
       - name: Ingest (one PR, auto-merged)
         if: ${{ needs.setup.outputs.dry_run != 'true' }}
@@ -653,8 +655,10 @@ jobs:
           # is read-only.
           GH_TOKEN: ${{ secrets.CONTAINERS_DB_PAT }}
           RUN_ID: ${{ github.run_id }}
-          # Lets ingest tell an all-cancelled run (no rows) from a bad path (#1569).
+          # Lets ingest tell a run whose cells all died before upload (no rows) from
+          # a bad path or a broken upload (#1569).
           EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}
+          CELLS_RESULT: ${{ needs.evidence.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
@@ -662,7 +666,7 @@ jobs:
             exit 1
           fi
           ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
-            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS"
+            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS" --cells-result "$CELLS_RESULT"
 
       # ONE tracking issue per run listing every fail row, instead of one issue
       # per failing cell (a broken luggage build opened 47, then 83). Best-effort.

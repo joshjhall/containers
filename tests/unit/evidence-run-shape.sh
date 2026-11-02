@@ -83,8 +83,10 @@ test_collect_passes_the_cell_count() {
     assert_contains "$collect" 'EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}' "collect reads it"
     n="$(command grep -c 'ingest-evidence-batch.sh --rows-dir rows' <<<"$collect")"
     assert_equals "2" "$n" "both ingest steps call the batch script"
-    assert_equals "$n" "$(command grep -c -- '--expected-cells "$EXPECTED_CELLS"' <<<"$collect")" \
-        "every ingest call passes --expected-cells, so an all-cancelled run is a clear skip"
+    assert_equals "$n" "$(command grep -c -- '--expected-cells "$EXPECTED_CELLS" --cells-result "$CELLS_RESULT"' <<<"$collect")" \
+        "every ingest call passes the cell count and the cells' result"
+    assert_equals "$n" "$(command grep -c 'CELLS_RESULT: ${{ needs.evidence.result }}' <<<"$collect")" \
+        "each ingest step reads the evidence job's result"
 }
 
 test_artifact_name_is_per_cell() {
