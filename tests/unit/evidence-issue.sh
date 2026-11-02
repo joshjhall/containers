@@ -213,6 +213,46 @@ test_run_issue_drops_rows_failing_validation() {
         "a row failing validation is dropped (so nothing is filed)"
 }
 
+test_open_reject_message_names_issue_filing() {
+    # open_or_update_tracking_issue really does refuse to file, so its log
+    # keeps the default "file issue" wording — pinned through the real caller
+    # so a wrong action at the call site fails here (#1568).
+    install_gh_stub
+    local rc=0 err
+    GH="$GH_STUB" GH_CALLS="$GH_CALLS" open_or_update_tracking_issue \
+        "Bad Tool" "1.95.0" "debian-12-amd64" "verify" "https://example.com/run/1" \
+        >/dev/null 2>"$TEST_TEMP_DIR/open-err" || rc=$?
+    assert_equals "1" "$rc" "a bad tool slug makes the helper return 1"
+    err="$(command cat "$TEST_TEMP_DIR/open-err")"
+    assert_equals "Refusing to file issue: unexpected tool slug 'Bad Tool'" "$err" \
+        "the per-cell caller logs the exact issue-filing refusal"
+    assert_equals "0" "$(command grep -sc '^issue' "$GH_CALLS" || echo 0)" \
+        "no gh issue call on a rejected coordinate"
+}
+
+test_run_issue_reject_message_names_dropped_row() {
+    # open_run_tracking_issue drops a bad row but still files for the rest,
+    # so its log must not claim it refused to file an issue (#1568).
+    install_gh_stub
+    local rows="$TEST_TEMP_DIR/run-rows-msg" rc=0 err
+    command rm -rf "$rows"
+    command mkdir -p "$rows"
+    command jq -n '{tool:"rust", version:"1.82.0", os:"debian", os_version:"13 in:title", arch:"amd64", result:"fail"}' \
+        >"$rows/bad.json"
+    _envelope "$rows/a" good 1.83.0 rhel-10-arm64 fail infra
+    GH="$GH_STUB" GH_CALLS="$GH_CALLS" open_run_tracking_issue "$rows" "https://x/run/10" \
+        >/dev/null 2>"$TEST_TEMP_DIR/run-err" || rc=$?
+    assert_equals "0" "$rc" "the run issue is still filed"
+    assert_equals "1" "$(command grep -c '^issue create' "$GH_CALLS")" "one issue for the remaining good row"
+    err="$(command cat "$TEST_TEMP_DIR/run-err")"
+    if command grep -qxF "Refusing to include fail row: unexpected tuple 'debian-13 in:title-amd64'" <<<"$err"; then
+        assert_true true "the dropped row is logged as an excluded row"
+    else
+        assert_true false "expected the exact include-fail-row line, got: $(command printf '%q' "$err")"
+    fi
+    assert_not_contains "$err" "file issue" "the dropped-row log does not claim issue filing was refused"
+}
+
 run_test test_valid_inputs_pass_regexes "well-formed inputs pass all three regexes"
 run_test test_reject_tool_metachar "tool with a shell metacharacter is rejected"
 run_test test_reject_tool_uppercase "uppercase tool slug is rejected"
@@ -227,5 +267,7 @@ run_test test_create_path "EXISTING empty → create with all three labels, no e
 run_test test_run_issue_one_issue_for_many_fails "one tracking issue for a run's many fail rows"
 run_test test_run_issue_none_when_all_pass "no tracking issue when every row passed"
 run_test test_run_issue_drops_rows_failing_validation "rows failing validation never reach the issue"
+run_test test_open_reject_message_names_issue_filing "per-cell caller logs the exact 'Refusing to file issue'"
+run_test test_run_issue_reject_message_names_dropped_row "run caller logs a dropped row, not a refused filing"
 
 generate_report

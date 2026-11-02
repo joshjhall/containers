@@ -96,8 +96,9 @@ read_evidence_verdict() {
 #   $2 - tool version
 #   $3 - tuple slug
 #   $4 - action named in the rejection message (optional, default
-#        "file issue"); annotate_fail_verdict passes "annotate" so its log
-#        does not misreport a refused annotation as issue filing (#1568)
+#        "file issue"); annotate_fail_verdict passes "annotate" and
+#        open_run_tracking_issue "include fail row", so neither log misreports
+#        what was refused as issue filing (#1568)
 #
 # Returns:
 #   0 if all three pass their anchored regexes, 1 (with a message to stderr)
@@ -265,7 +266,9 @@ open_run_tracking_issue() {
         version="$(command jq -r '.version // empty' "$f")"
         tuple="$(command jq -r 'if (.os_version // "") != "" then "\(.os)-\(.os_version)-\(.arch)" else "" end' "$f")"
         ec="$(command jq -r '.error_class // "unknown"' "$f")"
-        validate_issue_inputs "$tool" "$version" "$tuple" || continue
+        # Name the real action: a bad row is dropped, but the issue for the
+        # remaining rows is still filed, so "file issue" would mislead (#1568).
+        validate_issue_inputs "$tool" "$version" "$tuple" "include fail row" || continue
         [[ "$ec" =~ ^[a-z_]+$ ]] || ec="unknown"
         table="${table}| \`${tool}@${version}\` | \`${tuple}\` | \`${ec}\` |"$'\n'
         count=$((count + 1))
