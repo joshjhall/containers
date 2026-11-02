@@ -283,11 +283,39 @@ test_ccache_key_is_per_tool_and_tuple() {
     # Cache entries are immutable: a fixed save key would freeze the first
     # (possibly timed-out, partial) cold build's objects for that version
     # forever. The save key must be unique per run.
-    if /usr/bin/grep -qE '^ +key: ccache-.*\$\{\{ github\.run_id \}\}' <<<"$(_step "Save ccache")"; then
-        assert_true true "save key is unique per run"
+    local unique='-${{ github.run_id }}-${{ github.run_attempt }}'
+    assert_contains "$(_step "Save ccache")" "key: ${key#key: }${unique}" \
+        "save key is unique per run and attempt (entries are immutable)"
+    # With a run-unique key the exact key never exists, so the FIRST
+    # restore-key must be the exact-version prefix, or a warm rerun of the
+    # same version would restore a sibling version's objects instead.
+    local first
+    first="$(_step "Restore ccache" | /usr/bin/awk '/restore-keys:/ { getline; print; exit }')"
+    assert_equals "${prefix}"'${{ steps.ccache.outputs.major }}-${{ matrix.version }}-' \
+        "${first#"${first%%[![:space:]]*}"}" "first restore-key is the exact-version prefix"
+}
+
+test_ccache_major_never_fails_the_cell() {
+    # Cache plumbing never decides a verdict: a version with no numeric
+    # major falls back to `x` instead of exiting.
+    local prep
+    prep="$(_step "Prepare ccache")"
+    assert_contains "$prep" 'MAJOR=x' "non-numeric versions fall back to major x"
+    if /usr/bin/grep -qE '^[[:space:]]+exit [1-9]' <<<"$prep"; then
+        assert_true false "Prepare ccache must not exit non-zero"
     else
-        assert_true false "Save ccache key must carry github.run_id (entries are immutable)"
+        assert_true true "Prepare ccache never fails the cell"
     fi
+    # Pin the step's regex, then prove that exact pattern on sample versions.
+    local re='^([0-9]+)(\.|$)'
+    assert_contains "$prep" "=~ ${re} ]]" "major regex is the pinned pattern"
+    local v want got
+    for v in "22.22.3:22" "7:7" "nightly:x" "v1.2:x"; do
+        want="${v#*:}"
+        got=x
+        if [[ "${v%%:*}" =~ $re ]]; then got="${BASH_REMATCH[1]}"; fi
+        assert_equals "$want" "$got" "major of ${v%%:*}"
+    done
 }
 
 test_ccache_run_wires_the_cache_into_the_container() {
@@ -342,6 +370,7 @@ run_test test_cells_install_from_the_vendored_catalog "cells install from the ve
 run_test test_ccache_steps_gate_on_source_build "ccache steps run only for source-build cells (#1594)"
 run_test test_ccache_save_runs_on_failure "ccache stats + save run even when the build fails (#1594)"
 run_test test_ccache_key_is_per_tool_and_tuple "ccache key is tool-tuple-major-version (#1594)"
+run_test test_ccache_major_never_fails_the_cell "a version with no numeric major never fails the cell (#1594)"
 run_test test_ccache_run_wires_the_cache_into_the_container "docker run mounts the cache and wraps luggage (#1594)"
 run_test test_ccache_guards_discriminate "ccache gate assertion catches a dropped gate"
 
