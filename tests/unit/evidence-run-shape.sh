@@ -417,7 +417,8 @@ test_ccache_run_wires_the_cache_into_the_container() {
     run="$(_step "Run luggage install inside the base image")"
     local want
     for want in '"$CCACHE_HOST_DIR:/ccache"' 'CCACHE_DIR=/ccache' 'CCACHE_MAXSIZE=' \
-        'CCACHE_BASEDIR=/tmp' 'CCACHE_NOHASHDIR=1' 'evidence-ccache-entry.sh:/usr/local/bin/evidence-ccache-entry:ro' \
+        'CCACHE_BASEDIR=/tmp' 'CCACHE_NOHASHDIR=1' 'CCACHE_COMPILERCHECK=content' \
+        'CCACHE_STATS_OUT=/out/ccache-stats.txt' 'evidence-ccache-entry.sh:/usr/local/bin/evidence-ccache-entry:ro' \
         '"${CCACHE_FLAGS[@]}"' '"${CCACHE_WRAP[@]}"' 'if [ -n "$CCACHE_HOST_DIR" ]; then'; do
         assert_contains "$run" "$want" "source-build docker run carries $want"
     done

@@ -693,7 +693,9 @@ fn launcher_env_names_the_program() {
 /// word-split by `make`, or run as shell code by `configure` as root.
 #[test]
 fn launcher_env_rejects_empty_and_whitespace() {
-    for bad in ["", " ", "ccache --foo", "ccache\t", "ccache;id", "$(id)", "`id`", "cc&&id"] {
+    for bad in
+        ["", " ", "ccache --foo", "ccache\t", "ccache;id", "$(id)", "`id`", "cc&&id", "-x", "--foo"]
+    {
         match parse_compiler_launcher(Some(bad)).unwrap_err() {
             LuggageError::Catalog(msg) => {
                 assert!(msg.contains(COMPILER_LAUNCHER_ENV), "{bad:?}: {msg}");

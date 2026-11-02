@@ -100,7 +100,8 @@ pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
     // `eval`), and these steps run as root, so a `;`, `$(...)` or backtick
     // here would execute as shell code rather than name a launcher.
     let launcher_char = |c: char| c.is_ascii_alphanumeric() || "._/+-".contains(c);
-    if raw.is_empty() || !raw.chars().all(launcher_char) {
+    // A leading `-` would read as a flag, not a program (`--foo cc`).
+    if raw.is_empty() || raw.starts_with('-') || !raw.chars().all(launcher_char) {
         return Err(LuggageError::Catalog(format!(
             "{COMPILER_LAUNCHER_ENV} must name a single launcher program (e.g. `ccache`), \
              got `{raw}`; unset it to build without one",
