@@ -37,7 +37,7 @@ test_all_tools_covers_every_versioned_tool() {
     assert_equals $'go 1.23.4 debian-13-arm64\nrust 1.90.0 debian-13-amd64' "$(_tool_cells "$out")" \
         "one leg per pending cell of each tool with a versions/ dir"
     assert_equals \
-        '{"tool":"go","version":"1.23.4","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-24.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl"}' \
+        '{"tool":"go","version":"1.23.4","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-24.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl","timeout_minutes":30}' \
         "$(command jq -c '.include[0]' <<<"$out")" \
         "a go leg carries the same arch plumbing (rust_target builds luggage itself)"
 }

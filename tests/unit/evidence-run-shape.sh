@@ -59,6 +59,34 @@ test_collect_job_batches_into_one_pr() {
     assert_contains "$collect" "always()" "collect runs even when some cells failed"
 }
 
+test_cell_timeout_comes_from_the_matrix() {
+    # #1569: a flat 30 cancelled every source-build cell (node on alpine).
+    local evidence setup
+    evidence="$(_job_block evidence)"
+    setup="$(_job_block setup)"
+    assert_contains "$evidence" 'timeout-minutes: ${{ matrix.timeout_minutes }}' "the cell timeout is per cell"
+    if command grep -qE '^    timeout-minutes: [0-9]+$' <<<"$evidence"; then
+        assert_true false "the evidence job must not carry a literal job timeout"
+    else
+        assert_true true "no literal job timeout on the evidence job"
+    fi
+    assert_contains "$setup" 'TIMEOUT=$(evidence_cell_timeout crates/luggage/testdata/catalog "$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE") || {' \
+        "the dispatch cell resolves its timeout, guarded"
+    assert_contains "$setup" 'timeout_minutes: $timeout}' "and carries it in the matrix cell"
+}
+
+test_collect_passes_the_cell_count() {
+    local collect setup n
+    collect="$(_job_block collect)"
+    setup="$(_job_block setup)"
+    assert_contains "$setup" 'cells: ${{ steps.gen.outputs.cells }}' "setup exports the cell count"
+    assert_contains "$collect" 'EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}' "collect reads it"
+    n="$(command grep -c 'ingest-evidence-batch.sh --rows-dir rows' <<<"$collect")"
+    assert_equals "2" "$n" "both ingest steps call the batch script"
+    assert_equals "$n" "$(command grep -c -- '--expected-cells "$EXPECTED_CELLS"' <<<"$collect")" \
+        "every ingest call passes --expected-cells, so an all-cancelled run is a clear skip"
+}
+
 test_artifact_name_is_per_cell() {
     # Per-tuple names collided once a tuple had many versions.
     assert_file_contains "$WF" 'name: evidence-row-${{ matrix.tool }}-${{ matrix.version }}-${{ matrix.tuple }}' \
@@ -202,6 +230,8 @@ run_test test_cells_install_as_the_container_user "cells install as the containe
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
 run_test test_artifact_name_is_per_cell "artifact name is per cell"
+run_test test_cell_timeout_comes_from_the_matrix "the cell timeout comes from the matrix (#1569)"
+run_test test_collect_passes_the_cell_count "collect passes the cell count to ingest (#1569)"
 run_test test_fail_cells_are_annotated_without_failing "fail cells are annotated, never failing the upload (#1549)"
 run_test test_open_pr_sources_step_calls_the_lib "open-PR sources step calls evidence_db_sources (#1328)"
 run_test test_open_pr_sources_count_only_added_rows "open-PR sources count only the rows each PR adds (#1327)"

@@ -79,7 +79,7 @@ test_cells_carry_arch_plumbing() {
     _version "$r/catalog" 1.90.0 debian-13-arm64
     out="$(evidence_matrix "$r/catalog" rust "$r" v9)"
     assert_equals \
-        '{"tool":"rust","version":"1.90.0","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-24.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl"}' \
+        '{"tool":"rust","version":"1.90.0","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-24.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl","timeout_minutes":30}' \
         "$(command jq -c '.include[0]' <<<"$out")" \
         "each cell carries the same fields the dispatch path builds"
 }
@@ -704,6 +704,80 @@ test_vendored_future_fail_is_retried() {
         "a zero-padded EVIDENCE_NOW yields the same matrix as the unpadded one"
 }
 
+# _methods <version-file> <methods-json> — give a fixture version install_methods.
+_methods() {
+    local f="$1" tmp
+    tmp="$(command mktemp "$TEST_TEMP_DIR/m.XXXXXX")"
+    command jq --argjson m "$2" '. + {install_methods: $m}' "$f" >"$tmp"
+    command mv "$tmp" "$f"
+}
+
+# Shaped like the vendored node entry: a binary tarball for glibc distros,
+# then a source build for alpine (#1569).
+_NODE_LIKE_METHODS='[
+  {"name":"tarball","method_kind":"binary-tarball","platform":{"os":["debian","ubuntu","rhel"],"arch":["amd64","arm64"]}},
+  {"name":"source","method_kind":"source-build","platform":{"os":"alpine","arch":["amd64","arm64"]}}]'
+
+test_source_build_cells_get_the_long_timeout() {
+    local r out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
+    _methods "$r/catalog/tools/rust/versions/1.90.0.json" "$_NODE_LIKE_METHODS"
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'alpine-3.24-amd64 120\ndebian-13-amd64 30' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.timeout_minutes)"' <<<"$out" | command sort)" \
+        "the source-build tuple gets 120 minutes, the tarball tuple keeps 30"
+}
+
+test_first_matching_method_decides_the_timeout() {
+    local r out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
+    # A catch-all tarball listed first wins everywhere, as luggage's
+    # first-match resolver would pick it; the later source build never runs.
+    _methods "$r/catalog/tools/rust/versions/1.90.0.json" '[
+      {"method_kind":"binary-tarball"},
+      {"method_kind":"source-build","platform":{"os":"alpine"}}]'
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals "30 30" "$(command jq -r '[.include[].timeout_minutes] | map(tostring) | join(" ")' <<<"$out")" \
+        "a predicate-less first method shadows the source build"
+    # An os_version-pinned source build applies only to that version.
+    _methods "$r/catalog/tools/rust/versions/1.90.0.json" '[
+      {"method_kind":"source-build","platform":{"os":"alpine","os_version":["3.24"]}},
+      {"method_kind":"binary-tarball"}]'
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'alpine-3.24-amd64 120\ndebian-13-amd64 30' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.timeout_minutes)"' <<<"$out" | command sort)" \
+        "an os_version-pinned source build matches its version"
+    # Pinned to another alpine release: 3.24 falls through to the tarball.
+    _methods "$r/catalog/tools/rust/versions/1.90.0.json" '[
+      {"method_kind":"source-build","platform":{"os":"alpine","os_version":"3.22"}},
+      {"method_kind":"binary-tarball"}]'
+    out="$(evidence_matrix "$r/catalog" rust "$r")"
+    assert_equals $'alpine-3.24-amd64 30\ndebian-13-amd64 30' \
+        "$(command jq -r '.include[] | "\(.tuple) \(.timeout_minutes)"' <<<"$out" | command sort)" \
+        "a source build pinned to another os_version does not match"
+}
+
+test_cell_timeout_helper_matches_the_matrix() {
+    local r f rc=0
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
+    f="$r/catalog/tools/rust/versions/1.90.0.json"
+    assert_equals "30" "$(evidence_cell_timeout "$r/catalog" rust 1.90.0 alpine-3.24-amd64)" \
+        "no install_methods keeps the default 30"
+    _methods "$f" "$_NODE_LIKE_METHODS"
+    assert_equals "120" "$(evidence_cell_timeout "$r/catalog" rust 1.90.0 alpine-3.24-arm64)" \
+        "a dispatched source-build cell gets 120"
+    assert_equals "30" "$(evidence_cell_timeout "$r/catalog" rust 1.90.0 debian-13-amd64)" \
+        "a dispatched tarball cell keeps 30"
+    evidence_cell_timeout "$r/catalog" rust 9.9.9 alpine-3.24-amd64 >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a version missing from the catalog is an error, not a silent 30"
+    rc=0
+    evidence_cell_timeout "$r/catalog" rust 1.90.0 alpine >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "a malformed tuple is an error"
+}
+
 test_missing_index_is_an_error() {
     local rc=0
     evidence_matrix "$TEST_TEMP_DIR/nope" rust "$TEST_TEMP_DIR" >/dev/null 2>&1 || rc=$?
@@ -746,5 +820,8 @@ run_test test_fail_cooldown_override "EVIDENCE_FAIL_COOLDOWN_DAYS overrides the 
 run_test test_vendored_recent_fail_is_not_pending "the cooldown applies to vendored tested[]"
 run_test test_vendored_future_fail_is_retried "a future-dated vendored fail is retried, not held"
 run_test test_missing_index_is_an_error "missing index is an error"
+run_test test_source_build_cells_get_the_long_timeout "source-build cells get the long timeout (#1569)"
+run_test test_first_matching_method_decides_the_timeout "the first matching install method decides the timeout"
+run_test test_cell_timeout_helper_matches_the_matrix "evidence_cell_timeout gives the dispatch path the same ceiling"
 
 generate_report

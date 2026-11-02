@@ -131,6 +131,7 @@ jobs:
       matrix: ${{ steps.gen.outputs.matrix }}
       dry_run: ${{ steps.gen.outputs.dry_run }}
       has_cells: ${{ steps.gen.outputs.has_cells }}
+      cells: ${{ steps.gen.outputs.cells }}
     steps:
       # The push/PR matrix is derived from the vendored catalog and the
       # base-images tree (bin/lib/evidence-matrix.sh), so it needs both.
@@ -225,6 +226,12 @@ jobs:
             # runner-resolution error instead.
             PLUMBING=$(arch_plumbing "$ARCH") || { echo "Cannot resolve plumbing for arch: $ARCH" >&2; exit 1; }
             read -r RUNNER RUNTIME RUST_TARGET <<< "$PLUMBING"
+            # Same per-cell ceiling as the push matrix (#1569): a source-build
+            # method gets 120 minutes, everything else 30. Guarded like the
+            # plumbing above: a missing catalog entry must not fall back to 30.
+            # shellcheck source=bin/lib/evidence-matrix.sh
+            source bin/lib/evidence-matrix.sh
+            TIMEOUT=$(evidence_cell_timeout crates/luggage/testdata/catalog "$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE") || { echo "Cannot resolve the job timeout for $INPUT_TOOL@$INPUT_TOOL_VERSION on $INPUT_TUPLE" >&2; exit 1; }
             MATRIX=$(jq -cn \
               --arg tool "$INPUT_TOOL" \
               --arg version "$INPUT_TOOL_VERSION" \
@@ -234,7 +241,8 @@ jobs:
               --arg runtime "$RUNTIME" \
               --arg runner "$RUNNER" \
               --arg rust_target "$RUST_TARGET" \
-              '{include: [{tool: $tool, version: $version, tuple: $tuple, image_tag: $image_tag, arch: $arch, runtime: $runtime, runner: $runner, rust_target: $rust_target}]}')
+              --argjson timeout "$TIMEOUT" \
+              '{include: [{tool: $tool, version: $version, tuple: $tuple, image_tag: $image_tag, arch: $arch, runtime: $runtime, runner: $runner, rust_target: $rust_target, timeout_minutes: $timeout}]}')
             DRY="$INPUT_DRY_RUN"
           else
             # Every pending evidence cell, from the catalog (#1111), for every
@@ -287,7 +295,9 @@ jobs:
           fi
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "dry_run=$DRY" >> "$GITHUB_OUTPUT"
-          if [ "$(jq '.include | length' <<<"$MATRIX")" -gt 0 ]; then
+          CELLS=$(jq '.include | length' <<<"$MATRIX")
+          echo "cells=$CELLS" >> "$GITHUB_OUTPUT"
+          if [ "$CELLS" -gt 0 ]; then
             echo "has_cells=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_cells=false" >> "$GITHUB_OUTPUT"
@@ -334,7 +344,10 @@ jobs:
     # An empty matrix is a hard error in Actions; skip when nothing is pending.
     if: needs.setup.outputs.has_cells == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    # Per cell, from the matrix (#1569): 120 for a source-build method (node on
+    # alpine compiles from source), 30 for everything else. See _EM_TIMEOUT_JQ
+    # in bin/lib/evidence-matrix.sh.
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     # issues: write is needed for the fail-row tracking-issue step below. Scoped
     # to this job (not the workflow root) so `setup` and `reconcile` stay
     # contents:read. The issue is filed on this repo, so the default
@@ -624,10 +637,12 @@ jobs:
         if: ${{ needs.setup.outputs.dry_run == 'true' }}
         env:
           RUN_ID: ${{ github.run_id }}
+          # Lets ingest tell an all-cancelled run (no rows) from a bad path (#1569).
+          EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
-            --run-id "$RUN_ID" --run-url "$RUN_URL" --dry-run
+            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS" --dry-run
 
       - name: Ingest (one PR, auto-merged)
         if: ${{ needs.setup.outputs.dry_run != 'true' }}
@@ -638,6 +653,8 @@ jobs:
           # is read-only.
           GH_TOKEN: ${{ secrets.CONTAINERS_DB_PAT }}
           RUN_ID: ${{ github.run_id }}
+          # Lets ingest tell an all-cancelled run (no rows) from a bad path (#1569).
+          EXPECTED_CELLS: ${{ needs.setup.outputs.cells }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
@@ -645,7 +662,7 @@ jobs:
             exit 1
           fi
           ./bin/ingest-evidence-batch.sh --rows-dir rows --db-path "$PWD/_db" \
-            --run-id "$RUN_ID" --run-url "$RUN_URL"
+            --run-id "$RUN_ID" --run-url "$RUN_URL" --expected-cells "$EXPECTED_CELLS"
 
       # ONE tracking issue per run listing every fail row, instead of one issue
       # per failing cell (a broken luggage build opened 47, then 83). Best-effort.

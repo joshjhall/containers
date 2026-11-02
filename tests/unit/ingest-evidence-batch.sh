@@ -207,6 +207,74 @@ test_unsafe_run_id_is_refused() {
     assert_equals "2" "$rc" "a run id with shell metacharacters is a usage error"
 }
 
+# _run_expected <rows> <db> <cells> — _run with --expected-cells; also keeps stderr.
+_run_expected() {
+    local rc=0
+    OUT=$(PATH="$STUB_DIR:$PATH" GH_TOKEN=dummy BASH_ENV='' \
+        "$BATCH" --rows-dir "$1" --db-path "$2" --run-id 4242 --expected-cells "$3" --no-validate 2>"$STUB_DIR/err") || rc=$?
+    RC="$rc"
+    ERR="$(command cat "$STUB_DIR/err")"
+}
+
+test_all_cancelled_run_is_a_neutral_skip() {
+    # #1569: every cell timed out, so download-artifact made no rows/ dir.
+    local d db
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    db="$d/db"
+    _fake_db "$db"
+    _gh_stub
+    _run_expected "$d/rows" "$db" 3
+    assert_equals "0" "$RC" "an all-cancelled run exits 0 (neutral skip)"
+    assert_contains "$ERR" "no evidence rows: all 3 cells cancelled/timed out" "says why there is nothing to ingest"
+    assert_not_contains "$ERR" "is not a directory" "not the misleading path error"
+    assert_equals "" "$OUT" "prints no branch"
+    if [ -e "$GH_LOG" ]; then
+        assert_true false "gh must not be called on an all-cancelled run (got: $(command cat "$GH_LOG"))"
+    else
+        assert_true true "gh is never called"
+    fi
+    # An existing but empty download dir is the same state.
+    command mkdir -p "$d/rows/evidence-row-x"
+    _run_expected "$d/rows" "$db" 3
+    assert_equals "0" "$RC" "an empty rows dir is also a neutral skip"
+    assert_contains "$ERR" "no evidence rows: all 3 cells cancelled/timed out" "with the same message"
+    assert_equals "0" "$(git -C "$db" branch --list 'evidence/batch/*' | command wc -l | command tr -d ' ')" \
+        "no batch branch is created"
+}
+
+test_expected_cells_with_rows_still_ingests() {
+    local d db
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    db="$d/db"
+    _fake_db "$db"
+    _gh_stub
+    _row "$d/rows" r1 1.82.0 debian 13 amd64 pass
+    _run_expected "$d/rows" "$db" 2
+    assert_equals "0" "$RC" "a partial run ingests normally"
+    assert_equals "evidence/batch/4242" "$OUT" "and prints its branch"
+    assert_not_contains "$ERR" "no evidence rows" "no all-cancelled message when a row exists"
+}
+
+test_missing_rows_dir_without_expected_cells_is_a_usage_error() {
+    local d rc=0 err
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    err="$("$BATCH" --rows-dir "$d/nope" --db-path "$d/db" --run-id 1 2>&1 >/dev/null)" || rc=$?
+    assert_equals "2" "$rc" "a mistyped --rows-dir without --expected-cells stays exit 2"
+    assert_contains "$err" "--rows-dir is not a directory" "with the path error"
+}
+
+test_bad_expected_cells_is_refused() {
+    local d rc=0 err
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    err="$("$BATCH" --rows-dir "$d/nope" --db-path "$d/db" --run-id 1 --expected-cells 'x1' 2>&1 >/dev/null)" || rc=$?
+    assert_equals "2" "$rc" "a non-integer --expected-cells is a usage error"
+    assert_contains "$err" "--expected-cells must be a non-negative integer" "and says so"
+    rc=0
+    err="$("$BATCH" --rows-dir "$d/nope" --db-path "$d/db" --run-id 1 --expected-cells '' 2>&1 >/dev/null)" || rc=$?
+    assert_equals "2" "$rc" "an empty --expected-cells (blank job output) is not a skip"
+    assert_contains "$err" "--expected-cells must be a non-negative integer" "refused as a bad value, not as a missing dir"
+}
+
 run_test test_many_rows_one_pr_with_automerge "many rows land as one PR with auto-merge"
 run_test test_nothing_new_is_a_clean_noop "re-ingesting recorded rows opens no PR"
 run_test test_repeated_fail_refreshes_and_identical_is_noop "a newer repeated fail refreshes; the identical row is a no-op"
@@ -214,5 +282,9 @@ run_test test_rows_for_unknown_versions_are_skipped "rows for versions not in th
 run_test test_dry_run_commits_locally_and_never_calls_github "dry-run commits locally and never calls GitHub"
 run_test test_api_commit_failure_fails_the_ingest_and_opens_no_pr "a failed API commit fails the ingest with no PR"
 run_test test_unsafe_run_id_is_refused "unsafe run id is refused"
+run_test test_all_cancelled_run_is_a_neutral_skip "an all-cancelled run (no rows) is a clear neutral skip"
+run_test test_expected_cells_with_rows_still_ingests "--expected-cells does not change a run with rows"
+run_test test_missing_rows_dir_without_expected_cells_is_a_usage_error "absent --rows-dir without --expected-cells is exit 2"
+run_test test_bad_expected_cells_is_refused "a bad --expected-cells is refused"
 
 generate_report

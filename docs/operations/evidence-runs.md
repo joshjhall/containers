@@ -230,6 +230,21 @@ Both arches run natively: arm64 on `ubuntu-24.04-arm`, amd64 on
 `ubuntu-latest`. The supported platform set lives in
 [`docs/reference/supported-platforms.md`](../reference/supported-platforms.md).
 
+**Per-cell job timeout (#1569).** Each cell carries `timeout_minutes`, and the
+`evidence` job uses it as its `timeout-minutes`. The value comes from the
+install method luggage would pick for that tuple, which is the first
+`install_methods[]` whose `platform` matches:
+
+- A `source-build` method gets **120** minutes. Node on alpine compiles from
+  source with `make -j4`, which takes longer than 30 minutes on a hosted runner.
+- Every other method gets **30**.
+
+The push matrix and a `workflow_dispatch` cell both read the timeout from the
+same rule (`_EM_TIMEOUT_JQ` and `evidence_cell_timeout` in
+[`bin/lib/evidence-matrix.sh`](../../bin/lib/evidence-matrix.sh)). A dispatch
+for a version missing from the vendored catalog fails in `setup`; it does not
+fall back to 30.
+
 ### Ingest: one PR per run
 
 Cells only install, record, and upload their row (an envelope adding
@@ -244,7 +259,15 @@ Cells only install, record, and upload their row (an envelope adding
 1. files **one** tracking issue listing the run's `fail` rows, if any.
 
 It runs even when cells failed, since a fail row is evidence too. Rows already
-recorded make it a no-op: no PR. Before this, every cell opened its own PR and
+recorded make it a no-op: no PR.
+
+If **every** cell was cancelled or timed out, no row artifact exists and there
+is no `rows/` directory. `collect` passes `--expected-cells <N>`, so ingest
+prints `no evidence rows: all N cells cancelled/timed out` and exits 0. This is
+a **neutral skip** (#1569). The cancelled cells already fail the run with the
+real cause, and a second red job that blamed `--rows-dir` only hid it. Without
+`--expected-cells`, a missing `--rows-dir` is still a usage error (exit 2), so a
+mistyped path in a manual run still fails loudly. Before this, every cell opened its own PR and
 its own issue, so one push could open 200 PRs that conflicted on shared version
 files, and one luggage bug filed dozens of duplicate issues.
 
