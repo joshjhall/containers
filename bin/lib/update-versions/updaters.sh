@@ -136,6 +136,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/gitleaks-pins.sh"
 # shellcheck source=bin/lib/update-versions/catalog.sh
 source "$(dirname "${BASH_SOURCE[0]}")/catalog.sh"
 
+# shellcheck source=bin/lib/update-versions/repo-baseline.sh
+source "$(dirname "${BASH_SOURCE[0]}")/repo-baseline.sh"
+
 # Function to update a version in a file
 update_version() {
     local tool="$1"
@@ -300,6 +303,9 @@ update_version() {
                     # Also update the fallback default in claude-code-setup.sh so it
                     # stays in sync with the ARG (enforced by version-drift.sh).
                     sed_inplace "s/LIBRARIAN_REF=\"\${LIBRARIAN_REF:-[^}]*}\"/LIBRARIAN_REF=\"\${LIBRARIAN_REF:-v$latest}\"/" "$PROJECT_ROOT/lib/features/claude-code-setup.sh" || return "$RC_UPDATE_FAILED"
+                    # Re-vendor the repo-baseline templates stibbons embeds, so
+                    # they track the new pin instead of silently lagging (#1543).
+                    sync_repo_baseline "$latest" || return "$RC_UPDATE_FAILED"
                     ;;
                 *)
                     echo -e "${RED}    ERROR: Unknown Dockerfile tool: $tool — add a case in updaters.sh${NC}" >&2
