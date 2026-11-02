@@ -243,7 +243,7 @@ test_annotate_reject_message_names_annotation() {
     # "Refusing to file issue", pointing the annotate step's log at the wrong
     # operation (#1568). Each coordinate has its own message, so every branch
     # is checked for the exact annotate wording.
-    local out rc err i
+    local out rc err i summary="$TEST_TEMP_DIR/summary.md"
     local -a args
     local -a bad_pos=(3 4 5) bad_val=('Bad Tool' '!1' 'not a tuple')
     local -a want=(
@@ -255,22 +255,42 @@ test_annotate_reject_message_names_annotation() {
         args=(fail unknown node 20.13.1 alpine-3.22-amd64)
         args[bad_pos[i] - 1]="${bad_val[i]}"
         rc=0
-        out="$(annotate_fail_verdict "${args[@]}" 2>"$TEST_TEMP_DIR/err")" || rc=$?
+        # Pin the summary to scratch: a write-before-validate regression must
+        # fail here, not append a fake line to CI's real step summary.
+        out="$(GITHUB_STEP_SUMMARY="$summary" \
+            annotate_fail_verdict "${args[@]}" 2>"$TEST_TEMP_DIR/err")" || rc=$?
         assert_equals "1" "$rc" "bad arg \$${bad_pos[i]} → rc 1"
         assert_empty "$out" "no annotation for bad arg \$${bad_pos[i]}"
         err="$(command cat "$TEST_TEMP_DIR/err")"
         assert_equals "${want[i]}" "$err" "reject message for \$${bad_pos[i]} names annotation"
     done
+    assert_file_not_exists "$summary" "no summary line on a rejected annotation"
 }
 
 test_validate_default_action_is_file_issue() {
-    # The issue-filing callers pass no action; their message is unchanged.
-    local rc=0 err
-    validate_issue_inputs node 20.13.1 'not a tuple' 2>"$TEST_TEMP_DIR/err" || rc=$?
-    assert_equals "1" "$rc" "bad tuple → rc 1"
-    err="$(command cat "$TEST_TEMP_DIR/err")"
-    assert_equals "Refusing to file issue: unexpected tuple 'not a tuple'" "$err" \
-        "default action keeps the issue-filing message"
+    # The issue-filing callers pass no action (or an empty one); every
+    # branch's message must stay byte-identical to the pre-#1568 wording.
+    local rc err i action_arg
+    local -a args
+    local -a want=(
+        "Refusing to file issue: unexpected tool slug 'Bad Tool'"
+        "Refusing to file issue: unexpected version '!1'"
+        "Refusing to file issue: unexpected tuple 'not a tuple'"
+    )
+    local -a bad_val=('Bad Tool' '!1' 'not a tuple')
+    for action_arg in none empty; do
+        for i in 0 1 2; do
+            args=(node 20.13.1 alpine-3.22-amd64)
+            args[i]="${bad_val[i]}"
+            [ "$action_arg" = empty ] && args+=("")
+            rc=0
+            validate_issue_inputs "${args[@]}" 2>"$TEST_TEMP_DIR/err" || rc=$?
+            assert_equals "1" "$rc" "bad arg $((i + 1)) ($action_arg action) → rc 1"
+            err="$(command cat "$TEST_TEMP_DIR/err")"
+            assert_equals "${want[i]}" "$err" \
+                "default message for arg $((i + 1)) ($action_arg action) names issue filing"
+        done
+    done
 }
 
 # --- Run -------------------------------------------------------------------
