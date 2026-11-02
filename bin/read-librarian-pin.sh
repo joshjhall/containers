@@ -24,13 +24,20 @@ if [ ! -r "$dockerfile" ]; then
     exit 1
 fi
 
-# One element per matching line. `|| true`: zero matches is handled below as
-# its own error, not as a sed failure.
-mapfile -t refs < <(command sed -n 's/^ARG LIBRARIAN_REF=//p' "$dockerfile" | command tr -d '"' || true)
+# One element per matching line. Docker instructions are case-insensitive and
+# may be indented, so `  arg LIBRARIAN_REF=...` is a pin too and must be
+# counted; a bare `ARG LIBRARIAN_REF` (re-declaration, no `=`) sets no value
+# and is not. A read loop rather than `mapfile` keeps this working on bash 3.2
+# (macOS). `|| true`: zero matches is handled below as its own error.
+refs=()
+while IFS= read -r line; do
+    refs+=("$line")
+done < <(command sed -nE 's/^[[:space:]]*[Aa][Rr][Gg][[:space:]]+LIBRARIAN_REF=//p' "$dockerfile" | command tr -d '"' || true)
 
-if [ "${#refs[@]}" -ne 1 ]; then
+count=${#refs[@]}
+if [ "$count" -ne 1 ]; then
     printf '::error::expected exactly one ARG LIBRARIAN_REF line in %s, found %d\n' \
-        "$dockerfile" "${#refs[@]}" >&2
+        "$dockerfile" "$count" >&2
     exit 1
 fi
 
