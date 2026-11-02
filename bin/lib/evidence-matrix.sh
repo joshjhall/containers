@@ -110,10 +110,11 @@ def em_evidence($now):
 # `source-build`; no matching method is false (the install then fails fast).
 #
 # The matrix carries this boolean, NOT a minute count: evidence-run.yml turns
-# it into `timeout-minutes: ${{ matrix.source_build && 120 || 30 }}`, a form
+# it into `timeout-minutes: ${{ matrix.source_build && 180 || 30 }}`, a form
 # tests/unit/workflow-timeouts.sh can prove bounded without seeing the matrix
-# (it can only ever be 120 or 30). Node on alpine runs `make` for well over the
-# 30 minutes every other method needs; a fast tool never gets a 2h ceiling.
+# (it can only ever be 180 or 30). Node on alpine runs `make` for far longer
+# than the 30 minutes every other method needs (116 minutes observed for
+# node@22.22.3 on a hosted runner); a fast tool never gets a 3h ceiling.
 _EM_SOURCE_BUILD_JQ='
 def em_in($want): . == null or (if type == "array" then index([$want]) != null else . == $want end);
 def em_source_build($os; $osv; $arch):

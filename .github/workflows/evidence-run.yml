@@ -344,12 +344,14 @@ jobs:
     # An empty matrix is a hard error in Actions; skip when nothing is pending.
     if: needs.setup.outputs.has_cells == 'true'
     runs-on: ${{ matrix.runner }}
-    # Per cell (#1569): 120 when the cell's install method is a source build
-    # (node on alpine compiles from source), 30 otherwise. The matrix carries
-    # only the boolean (bin/lib/evidence-matrix.sh, _EM_SOURCE_BUILD_JQ), so
-    # this expression can only ever be 120 or 30, which is how
+    # Per cell (#1569): 180 when the cell's install method is a source build
+    # (node on alpine compiles from source), 30 otherwise. 180, not 120: the
+    # first hosted run of node@22.22.3 on alpine-3.22-amd64 took 116 minutes,
+    # leaving 4 minutes of headroom under 120. The matrix carries only the
+    # boolean (bin/lib/evidence-matrix.sh, _EM_SOURCE_BUILD_JQ), so this
+    # expression can only ever be 180 or 30, which is how
     # tests/unit/workflow-timeouts.sh proves the job bounded.
-    timeout-minutes: ${{ matrix.source_build && 120 || 30 }}
+    timeout-minutes: ${{ matrix.source_build && 180 || 30 }}
     # issues: write is needed for the fail-row tracking-issue step below. Scoped
     # to this job (not the workflow root) so `setup` and `reconcile` stay
     # contents:read. The issue is filed on this repo, so the default

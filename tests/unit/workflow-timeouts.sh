@@ -134,7 +134,7 @@ test_checker_bounds_matrix_expressions() {
 jobs:
   ternary:
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.source_build && 120 || 30 }}
+    timeout-minutes: ${{ matrix.source_build && 180 || 30 }}
     steps: [{run: "true"}]
   ternary_tight:
     runs-on: ubuntu-latest

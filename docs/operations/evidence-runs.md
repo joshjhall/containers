@@ -231,16 +231,18 @@ Both arches run natively: arm64 on `ubuntu-24.04-arm`, amd64 on
 [`docs/reference/supported-platforms.md`](../reference/supported-platforms.md).
 
 **Per-cell job timeout (#1569).** Each cell carries a `source_build` flag, and
-the `evidence` job sets `timeout-minutes: ${{ matrix.source_build && 120 || 30 }}`.
+the `evidence` job sets `timeout-minutes: ${{ matrix.source_build && 180 || 30 }}`.
 The flag comes from the install method luggage would pick for that tuple, which
 is the first `install_methods[]` whose `platform` matches:
 
-- A `source-build` method gets **120** minutes. Node on alpine compiles from
-  source with `make -j4`, which takes longer than 30 minutes on a hosted runner.
+- A `source-build` method gets **180** minutes. Node on alpine compiles from
+  source with `make -j4`. The first hosted run of `node@22.22.3` on
+  `alpine-3.22-amd64` took **116 minutes**, which left only 4 minutes of
+  headroom under an earlier 120-minute cap, so the cap is 180.
 - Every other method, or no matching method, gets **30**.
 
 The matrix carries the boolean rather than a minute count so the timeout stays
-provably bounded. That expression can only evaluate to 120 or 30, and
+provably bounded. That expression can only evaluate to 180 or 30, and
 [`tests/unit/workflow-timeouts.sh`](../../tests/unit/workflow-timeouts.sh)
 accepts only that `cond && N || M` shape with literal minutes. A bare
 `${{ matrix.x }}` could carry any value, and an empty one would inherit the

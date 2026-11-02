@@ -64,7 +64,7 @@ test_cell_timeout_comes_from_the_matrix() {
     local evidence setup
     evidence="$(_job_block evidence)"
     setup="$(_job_block setup)"
-    assert_contains "$evidence" 'timeout-minutes: ${{ matrix.source_build && 120 || 30 }}' "the cell timeout is per cell, bounded"
+    assert_contains "$evidence" 'timeout-minutes: ${{ matrix.source_build && 180 || 30 }}' "the cell timeout is per cell, bounded"
     if command grep -qE '^    timeout-minutes: [0-9]+$' <<<"$evidence"; then
         assert_true false "the evidence job must not carry a literal job timeout"
     else
