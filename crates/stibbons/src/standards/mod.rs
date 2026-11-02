@@ -317,6 +317,9 @@ fn accept_into(
             match s {
                 FileState::Modified => targets.push(t),
                 FileState::Ok => cleared |= clear_reverted_acceptance(state, &t, out)?,
+                // An acceptance still matching disk is live, even when the render
+                // has caught up to it: `init` then sees the file as unchanged and
+                // drops the acceptance itself (see `seed_state`).
                 FileState::Accepted | FileState::Missing | FileState::Stale => {}
             }
         }
@@ -375,6 +378,8 @@ fn accept_into(
 
 /// Drop the accepted hash of a target that matches the baseline again. Left in
 /// place, it would silently re-approve the reverted edit if it ever returned.
+/// Only an acceptance of bytes no longer on disk is stale; one that still
+/// matches disk stays until `init` finds the render has caught up to it.
 /// Returns whether anything was cleared.
 fn clear_reverted_acceptance(
     state: &mut StandardsState,

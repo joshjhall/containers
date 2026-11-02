@@ -409,6 +409,44 @@ fn accept_stale_file_warns() {
 }
 
 #[test]
+fn init_drops_acceptance_once_the_render_matches_it() {
+    // Accept an edit, then change the templates so they render exactly the
+    // accepted bytes: the acceptance is no longer needed, and `init` drops it,
+    // so a later template change updates the file instead of keeping it.
+    let tpl = tempfile::tempdir().unwrap();
+    copy_dir(&vendored_templates(), tpl.path());
+    let tpl_arg = tpl.path().to_str().unwrap();
+    let frag = tpl.path().join("core/dprint.json.tmpl");
+    let original_frag = fs::read_to_string(&frag).unwrap();
+
+    // The bytes the changed templates will render, from a scratch repo.
+    fs::write(&frag, format!("{original_frag}\n")).unwrap();
+    let probe = shell_python_repo();
+    assert_ok(&standards(probe.path(), &["init", "--templates-dir", tpl_arg]), "probe init");
+    let new_render = fs::read(probe.path().join("dprint.json")).unwrap();
+    fs::write(&frag, &original_frag).unwrap();
+
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "init");
+    fs::write(tmp.path().join("dprint.json"), &new_render).unwrap();
+    assert_ok(
+        &standards(tmp.path(), &["accept", "dprint.json", "--templates-dir", tpl_arg]),
+        "accept edit",
+    );
+
+    fs::write(&frag, format!("{original_frag}\n")).unwrap();
+    assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "re-init");
+    let state = fs::read_to_string(tmp.path().join(".stibbons-standards.yml")).unwrap();
+    let accepted = state.split("accepted:").nth(1).unwrap_or("");
+    assert!(!accepted.contains("dprint.json"), "acceptance survived a matching render:\n{state}");
+
+    fs::write(&frag, format!("{original_frag}\n\n")).unwrap();
+    let out = standards(tmp.path(), &["init", "--templates-dir", tpl_arg]);
+    assert_ok(&out, "init after a further template change");
+    assert!(stdout_of(&out).contains("update     dprint.json"), "{}", stdout_of(&out));
+}
+
+#[test]
 fn accept_rejects_non_baseline_path() {
     let tmp = shell_python_repo();
     assert_ok(&standards(tmp.path(), &["init"]), "init");
