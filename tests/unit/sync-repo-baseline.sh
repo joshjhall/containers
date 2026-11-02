@@ -91,10 +91,11 @@ test_dropped_fragment_does_not_linger() {
 _hook() {
     local rc=0
     (
+        # shellcheck disable=SC2034 # read by the sourced repo-baseline.sh
         BLUE='' RED='' NC=''
         # shellcheck source=bin/lib/update-versions/repo-baseline.sh
         source "$HOOK_LIB"
-        # shellcheck disable=SC2034 # consumed by sync_repo_baseline
+        # shellcheck disable=SC2030,SC2034 # consumed by sync_repo_baseline
         PROJECT_ROOT="$3" DRY_RUN="${4:-false}" LIBRARIAN_SRC="$1" \
             sync_repo_baseline "$2"
     ) >/dev/null 2>&1 || rc=$?
@@ -143,12 +144,136 @@ test_hook_fails_on_broken_source() {
     command rm -rf "$src" "$root"
 }
 
-test_librarian_arm_calls_hook() {
-    # The re-vendor only helps if the auto-patch path reaches it, guarded so a
-    # failure becomes RC_UPDATE_FAILED (exit 3) instead of a half-updated branch.
-    assert_file_contains "$UPDATERS" \
-        'sync_repo_baseline "$latest" || return "$RC_UPDATE_FAILED"' \
-        "librarian updater arm re-vendors the templates"
+# _arm_fixture <root> — a project tree the librarian updater arm can rewrite.
+_arm_fixture() {
+    command mkdir -p "$1/lib/features"
+    command printf 'ARG LIBRARIAN_REF=v9.9.8\n' >"$1/Dockerfile"
+    command printf 'LIBRARIAN_REF="${LIBRARIAN_REF:-v9.9.8}"\n' \
+        >"$1/lib/features/claude-code-setup.sh"
+}
+
+# _arm <root> <librarian-src> — run update_version for librarian 9.9.8 -> 9.9.9
+# against <root>; prints its exit code.
+_arm() {
+    local rc=0
+    (
+        source "$PROJECT_ROOT/bin/lib/common.sh"
+        source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+        source "$UPDATERS"
+        # shellcheck disable=SC2030,SC2034 # consumed by update_version()
+        PROJECT_ROOT="$1" DRY_RUN=false LIBRARIAN_SRC="$2"
+        update_version librarian 9.9.8 9.9.9 Dockerfile
+    ) >/dev/null 2>&1 || rc=$?
+    command echo "$rc"
+}
+
+test_librarian_arm_revendors() {
+    # Behavioural, not a grep: the real arm bumps the pin AND re-vendors.
+    local src root
+    src="$(command mktemp -d)"
+    root="$(command mktemp -d)"
+    _fixture "$src" 9.9.9 $'pytest==9.1.1\n'
+    _arm_fixture "$root"
+    assert_equals "0" "$(_arm "$root" "$src")" "librarian bump succeeds"
+    assert_equals "ARG LIBRARIAN_REF=v9.9.9" "$(command cat "$root/Dockerfile")" "pin bumped"
+    assert_equals "librarian 9.9.9 +pygments-pin" \
+        "$(command cat "$root/crates/stibbons/assets/repo-baseline/SOURCE" 2>/dev/null)" \
+        "templates re-vendored from the new librarian"
+    command rm -rf "$src" "$root"
+}
+
+test_librarian_arm_failed_revendor_is_update_failed() {
+    # A pin bumped without its templates must be RC_UPDATE_FAILED (auto-patch
+    # exit 3, fatal), never a clean bump that reaches auto-merge.
+    local src root expected
+    expected="$(command sed -nE 's/^RC_UPDATE_FAILED=([0-9]+).*/\1/p' "$UPDATERS")"
+    src="$(command mktemp -d)"
+    root="$(command mktemp -d)"
+    _fixture "$src" 9.9.8 $'pytest==9.1.1\n' # wrong release
+    _arm_fixture "$root"
+    assert_not_equals "" "$expected" "RC_UPDATE_FAILED read from updaters.sh"
+    assert_equals "$expected" "$(_arm "$root" "$src")" \
+        "a failed re-vendor returns RC_UPDATE_FAILED"
+    command rm -rf "$src" "$root"
+}
+
+# _clone_hook <stub-mode> <root> <argfile> — run sync_repo_baseline down the
+# real clone path with a stub `git` first on PATH. The stub records its args
+# and either fails or lays down a fixture tree at the clone destination.
+_clone_hook() {
+    local bindir rc=0
+    bindir="$(command mktemp -d)"
+    command cat >"$bindir/git" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$3"
+[ "$1" = fail ] && exit 128
+dest="\${@: -1}"
+t="\$dest/plugins/dev-core/skills/repo-baseline/templates"
+mkdir -p "\$t/python"
+printf '9.9.9\\n' >"\$dest/VERSION"
+printf 'requirements.txt\\tpython\\talways\\tpython/requirements.txt\\n' >"\$t/manifest.tsv"
+printf 'pytest==9.1.1\\n' >"\$t/python/requirements.txt"
+EOF
+    command chmod +x "$bindir/git"
+    (
+        # shellcheck disable=SC2034 # read by the sourced repo-baseline.sh
+        BLUE='' RED='' NC=''
+        # shellcheck source=bin/lib/update-versions/repo-baseline.sh
+        source "$HOOK_LIB"
+        unset LIBRARIAN_SRC
+        # shellcheck disable=SC2030,SC2034 # consumed by sync_repo_baseline
+        PATH="$bindir:$PATH" PROJECT_ROOT="$2" DRY_RUN=false
+        export TMPDIR="$bindir"
+        sync_repo_baseline 9.9.9
+    ) >/dev/null 2>&1 || rc=$?
+    # Anything left in bindir besides the stub is a leaked clone dir.
+    command echo "$rc $(command find "$bindir" -mindepth 1 -maxdepth 1 ! -name git | command wc -l)"
+    command rm -rf "$bindir"
+}
+
+test_clone_path_success() {
+    local root args
+    root="$(command mktemp -d)"
+    args="$(command mktemp)"
+    assert_equals "0 0" "$(_clone_hook ok "$root" "$args")" "clone path succeeds and cleans its temp dir"
+    assert_equals "1" "$(command grep -cx -- '--branch' "$args")" "clone passes --branch"
+    assert_equals "v9.9.9" "$(command grep -x -A1 -- '--branch' "$args" | command tail -n 1)" \
+        "clone checks out tag v<version>"
+    assert_equals "librarian 9.9.9 +pygments-pin" \
+        "$(command cat "$root/crates/stibbons/assets/repo-baseline/SOURCE" 2>/dev/null)" \
+        "cloned tree is vendored"
+    command rm -rf "$root" "$args"
+}
+
+test_clone_path_failure() {
+    local root args
+    root="$(command mktemp -d)"
+    args="$(command mktemp)"
+    assert_equals "1 0" "$(_clone_hook fail "$root" "$args")" "clone failure returns 1 and cleans its temp dir"
+    assert_dir_not_exists "$root/crates" "nothing vendored when the clone fails"
+    command rm -rf "$root" "$args"
+}
+
+# _escape <manifest-source> — sync a fixture whose manifest names <source>;
+# prints the exit code.
+_escape() {
+    local src dest rc=0
+    src="$(command mktemp -d)"
+    dest="$(command mktemp -d)/out"
+    _fixture "$src" 9.9.9 $'pytest==9.1.1\n'
+    command printf 'x\tcore\talways\t%s\n' "$1" \
+        >>"$src/plugins/dev-core/skills/repo-baseline/templates/manifest.tsv"
+    command printf 'secret\n' >"$src/outside.txt"
+    command ln -s "$src/outside.txt" "$src/plugins/dev-core/skills/repo-baseline/templates/core/link.txt"
+    REPO_BASELINE_DEST="$dest" "$SYNC" "$src" >/dev/null 2>&1 || rc=$?
+    command echo "$rc $([ -e "$dest" ] && command echo written || command echo none)"
+    command rm -rf "$src" "$(command dirname "$dest")"
+}
+
+test_rejects_escaping_sources() {
+    assert_equals "2 none" "$(_escape '../../../../../outside.txt')" "a .. source is refused"
+    assert_equals "2 none" "$(_escape "$(command mktemp -u)")" "an absolute source is refused"
+    assert_equals "2 none" "$(_escape 'core/link.txt')" "a symlinked source is refused"
 }
 
 test_tracked_copy_round_trips() {
@@ -179,7 +304,11 @@ run_test test_hook_vendors_into_project_root "sync_repo_baseline vendors into PR
 run_test test_hook_dry_run_writes_nothing "sync_repo_baseline dry run writes nothing"
 run_test test_hook_rejects_version_mismatch "sync_repo_baseline rejects a version mismatch"
 run_test test_hook_fails_on_broken_source "sync_repo_baseline fails on a broken source"
-run_test test_librarian_arm_calls_hook "librarian updater arm calls sync_repo_baseline"
+run_test test_librarian_arm_revendors "librarian updater arm bumps the pin and re-vendors"
+run_test test_librarian_arm_failed_revendor_is_update_failed "failed re-vendor is RC_UPDATE_FAILED"
+run_test test_clone_path_success "clone path: tag, vendor, temp cleanup"
+run_test test_clone_path_failure "clone path: failure returns 1, temp cleanup"
+run_test test_rejects_escaping_sources "manifest sources cannot escape the templates dir"
 run_test test_tracked_copy_round_trips "re-vendor reproduces the tracked copy"
 
 generate_report

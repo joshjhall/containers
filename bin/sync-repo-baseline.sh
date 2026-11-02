@@ -50,6 +50,19 @@ trap 'command rm -rf "$stage"' EXIT
 command cp "$manifest" "$stage/manifest.tsv"
 while IFS="$(printf '\t')" read -r target _slice _when source || [ -n "${target:-}" ]; do
     case "$target" in '' | '#'*) continue ;; esac
+    # Auto-patch feeds this a freshly cloned tree, so keep every copy inside
+    # the templates dir: no absolute or `..` source, no symlink (cp would
+    # dereference it and vendor whatever it points at).
+    case "/$source/" in
+        //* | */../*)
+            printf 'sync-repo-baseline: manifest source escapes the templates dir: %s\n' "$source" >&2
+            exit 2
+            ;;
+    esac
+    if [ -L "$templates/$source" ]; then
+        printf 'sync-repo-baseline: manifest source is a symlink: %s\n' "$source" >&2
+        exit 2
+    fi
     if [ ! -f "$templates/$source" ]; then
         printf 'sync-repo-baseline: manifest names a missing source: %s\n' "$source" >&2
         exit 2
