@@ -241,7 +241,8 @@ test_lost_response_adopts_the_commit_that_landed() {
     local head
     head="$(git -C "$REPO" rev-parse HEAD)"
     GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_LANDED=1 GH_STUB_REF_EXISTS=1 \
-        GH_STUB_BRANCH_HEAD=feedbeef GH_STUB_PARENT="$head" GH_STUB_TREE_MODE=100644 _commit
+        GH_STUB_BRANCH_HEAD=feedbeef GH_STUB_PARENT="$head" GH_STUB_TREE_MODE=100644 \
+        GH_STUB_MESSAGE=$'chore: headline\n\nbody line 1\nbody line 2' _commit
     assert_equals "0" "$RC" "a commit that landed despite a failed response is success"
     assert_equals "feedbeef" "$OUT" "its oid is the branch head"
     assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "and the mutation is not re-sent"
@@ -301,6 +302,43 @@ test_failed_probe_on_existing_branch_still_force_moves() {
         "by falling back from create to force-move"
 }
 
+test_probe_hit_then_vanished_branch_is_created() {
+    gh_stub_install
+    local rc=0
+    # Probe sees the branch, it is deleted before the force-move: must create.
+    GH_STUB_REF_EXISTS=1 GH_STUB_FAIL_MATCH='-X PATCH' PATH="$STUB_DIR:$PATH" \
+        gh_api_ensure_branch o/r chore/m abc123 || rc=$?
+    assert_equals "0" "$rc" "a branch that vanished after the probe is still pointed at the sha"
+    assert_equals "1" "$(command grep -cx 'api -X POST repos/o/r/git/refs -f ref=refs/heads/chore/m -f sha=abc123' "$GH_LOG")" \
+        "by falling back from force-move to create"
+}
+
+test_unreadable_file_never_becomes_an_empty_addition() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    # A base64 that fails stands in for a file that cannot be read.
+    command printf '#!/usr/bin/env bash\nexit 1\n' >"$STUB_DIR/base64"
+    command chmod +x "$STUB_DIR/base64"
+    _commit
+    assert_equals "1" "$RC" "a failed read fails the commit"
+    assert_contains "$ERR" "could not encode keep.txt" "and names the file"
+    assert_equals "0" "$(command grep -c '^api graphql' "$GH_LOG" || true)" "nothing (and no empty contents) is sent"
+}
+
+test_symlink_and_submodule_changes_are_refused() {
+    _repo
+    gh_stub_install
+    command ln -s keep.txt "$REPO/link"
+    git -C "$REPO" add link
+    git -C "$REPO" -c user.email=t@t -c user.name=t commit -q -m link
+    command ln -sfn gone.txt "$REPO/link"
+    _commit
+    assert_equals "1" "$RC" "a modified symlink is refused (the API would commit it as a file)"
+    assert_contains "$ERR" "link has mode 120000; the API commits only regular files" "and says why"
+    assert_equals "0" "$(command grep -c '^api graphql' "$GH_LOG" || true)" "nothing is sent"
+}
+
 test_staging_delete_failure_only_warns() {
     _repo
     gh_stub_install
@@ -349,6 +387,9 @@ run_test test_branch_moved_elsewhere_is_an_error "a branch moved elsewhere is an
 run_test test_foreign_child_of_base_is_not_adopted "a foreign child of base is not adopted"
 run_test test_transient_failure_then_success_returns_the_new_oid "a transient failure then success returns the new oid"
 run_test test_failed_probe_on_existing_branch_still_force_moves "a failed probe on an existing branch still force-moves"
+run_test test_probe_hit_then_vanished_branch_is_created "a branch that vanished after the probe is created"
+run_test test_unreadable_file_never_becomes_an_empty_addition "an unreadable file never becomes an empty addition"
+run_test test_symlink_and_submodule_changes_are_refused "symlink and submodule changes are refused"
 run_test test_staging_delete_failure_only_warns "a staging delete failure only warns"
 run_test test_truncated_tree_warns_and_tree_read_failure_errors "truncated tree warns; unreadable tree errors"
 

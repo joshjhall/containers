@@ -160,9 +160,24 @@ _gh_api_commit_worktree() {
                     bad=1
                     continue
                 fi
-                command base64 <"$dir/$path" | command tr -d '\n' >"$work/blob"
-                command jq -cn --arg p "$path" --rawfile c "$work/blob" \
-                    '{path: $p, contents: $c}' >>"$work/add.jsonl"
+                case "$new_mode" in
+                    100644 | 100755) ;;
+                    *)
+                        # 120000 symlink, 160000 submodule: no file bytes to send.
+                        command echo "gh_api_commit_worktree: $path has mode $new_mode; the API commits only regular files" >&2
+                        bad=1
+                        continue
+                        ;;
+                esac
+                # Each stage checked on its own: a failed read must never turn
+                # into an empty addition, which would truncate the file.
+                if ! command base64 <"$dir/$path" >"$work/b64" ||
+                    ! command tr -d '\n' <"$work/b64" >"$work/blob" ||
+                    ! command jq -cn --arg p "$path" --rawfile c "$work/blob" \
+                        '{path: $p, contents: $c}' >>"$work/add.jsonl"; then
+                    command echo "gh_api_commit_worktree: could not encode $path" >&2
+                    return 1
+                fi
                 command printf '%s\t%s\n' "$path" "$new_mode" >>"$work/modes.tsv"
                 ;;
             *)
