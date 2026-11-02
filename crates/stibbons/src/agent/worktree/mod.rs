@@ -14,10 +14,9 @@
 //!
 //! Layering mirrors the sibling `agent` commands:
 //!
-//! - [`GitRunner`](super::git::GitRunner) — a trait over the `git` CLI (with a
-//!   test double), the git analogue of [`super::docker::DockerRunner`]. It and
-//!   [`resolve_git_dir`](super::git::resolve_git_dir) live in the sibling
-//!   [`super::git`] module (#843).
+//! - [`GitRunner`] — a trait over the `git` CLI (with a test double), the git
+//!   analogue of [`super::docker::DockerRunner`]. It and [`resolve_git_dir`]
+//!   live in the sibling [`super::git`] module (#843).
 //! - [`detect_worktree_mounts`] — a pure filesystem helper, directly
 //!   unit-testable.
 //! - [`create_worktree`] / [`remove_worktree`] — orchestration over a

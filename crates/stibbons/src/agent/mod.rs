@@ -9,7 +9,7 @@
 //!
 //! - [`docker`] — the [`DockerRunner`](docker::DockerRunner) abstraction over
 //!   the `docker` CLI (with a test double).
-//! - [`context`] — [`AgentContext`](context::AgentContext) config resolution and
+//! - [`context`] — [`AgentContext`] config resolution and
 //!   container-naming/validation helpers.
 //! - [`db`] — per-agent `PostgreSQL` provisioning.
 //! - [`scripts_dir`] — the user-private host directory the agent scripts are

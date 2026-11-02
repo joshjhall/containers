@@ -1,10 +1,9 @@
 //! The four `stibbons services` subcommands.
 //!
-//! Each `run_*` function takes an already-resolved
-//! [`AgentContext`](crate::agent::context::AgentContext), an injected
-//! `&dyn DockerRunner`, and a `&mut dyn Write` sink so tests can drive them with
-//! a [`MockDocker`](crate::agent::docker::MockDocker) and a captured buffer — no
-//! real Docker or stdout needed. They port the Go `runServices*` bodies from the
+//! Each `run_*` function takes an already-resolved [`AgentContext`], an
+//! injected `&dyn DockerRunner`, and a `&mut dyn Write` sink so tests can drive
+//! them with a `MockDocker` and a captured buffer — no real Docker or stdout
+//! needed. They port the Go `runServices*` bodies from the
 //! retired `cmd/igor/internal/cmd/services*.go`.
 
 use std::io::Write;
@@ -161,7 +160,7 @@ fn wait_for_ready(
 
 /// Blocks until a TCP port inside `container` accepts a connection, up to
 /// `timeout_secs`, by exec-ing a `nc -z` loop. Runs inside the container so it
-/// needs no host tooling and stays [`MockDocker`](crate::agent::docker::MockDocker)-testable.
+/// needs no host tooling and stays `MockDocker`-testable.
 ///
 /// # Errors
 ///

@@ -7,7 +7,7 @@
 //!
 //! It deliberately reuses the agent module's Docker layer rather than
 //! duplicating it: the [`DockerRunner`](crate::agent::docker::DockerRunner)
-//! abstraction, the [`AgentContext`](crate::agent::context::AgentContext) config
+//! abstraction, the [`AgentContext`] config
 //! resolution (which already parses `services` and the shared network), and the
 //! per-agent database helpers in [`crate::agent::db`]. [`run`] is the single
 //! entry point wired into `main.rs`.
