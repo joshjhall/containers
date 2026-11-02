@@ -322,6 +322,50 @@ fn failed_accept_reports_and_saves_nothing() {
 }
 
 #[test]
+fn bare_accept_clears_acceptance_of_stale_and_missing_files() {
+    // The accepted edit is gone from disk in both cases: `dprint.json` is
+    // reverted to stibbons' bytes after the templates changed (Stale), and
+    // `_typos.toml` is deleted (Missing). Re-applying either edit must be
+    // flagged, not silently re-approved.
+    let tmp = shell_python_repo();
+    let tpl = tempfile::tempdir().unwrap();
+    copy_dir(&vendored_templates(), tpl.path());
+    let tpl_arg = tpl.path().to_str().unwrap();
+    assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "init");
+
+    let mut edits = Vec::new();
+    for f in ["dprint.json", "_typos.toml"] {
+        let p = tmp.path().join(f);
+        let original = fs::read(&p).unwrap();
+        let mut edited = original.clone();
+        edited.extend_from_slice(b"\n");
+        fs::write(&p, &edited).unwrap();
+        edits.push((p, original, edited));
+    }
+    assert_ok(&standards(tmp.path(), &["accept", "--templates-dir", tpl_arg]), "accept edits");
+
+    let frag = tpl.path().join("core/dprint.json.tmpl");
+    fs::write(&frag, format!("{}\n\n\n", fs::read_to_string(&frag).unwrap())).unwrap();
+    fs::write(&edits[0].0, &edits[0].1).unwrap(); // revert: now Stale
+    fs::remove_file(&edits[1].0).unwrap(); // delete: now Missing
+
+    let out = standards(tmp.path(), &["accept", "--templates-dir", tpl_arg]);
+    assert_ok(&out, "bare accept");
+    let s = stdout_of(&out);
+    assert!(s.contains("cleared the earlier accepted edit of dprint.json"), "{s}");
+    assert!(s.contains("cleared the earlier accepted edit of _typos.toml"), "{s}");
+
+    for (p, _, edited) in &edits {
+        fs::write(p, edited).unwrap();
+    }
+    let out = standards(tmp.path(), &["check", "--templates-dir", tpl_arg]);
+    assert_eq!(out.status.code(), Some(1), "re-applied edits must be drift again");
+    let s = stdout_of(&out);
+    assert!(s.contains("dprint.json (modified)"), "{s}");
+    assert!(s.contains("_typos.toml (modified)"), "{s}");
+}
+
+#[test]
 fn accept_reports_a_repeated_path_once() {
     let tmp = shell_python_repo();
     assert_ok(&standards(tmp.path(), &["init"]), "init");

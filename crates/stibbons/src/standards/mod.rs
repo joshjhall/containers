@@ -316,11 +316,16 @@ fn accept_into(
         for (t, s) in classify_all(root, state, rendered)?.files {
             match s {
                 FileState::Modified => targets.push(t),
-                FileState::Ok => cleared |= clear_reverted_acceptance(state, &t, out)?,
+                // Each of these means disk no longer holds the accepted bytes
+                // (Ok/Stale: reverted; Missing: deleted), so any acceptance is
+                // of an edit that is gone.
+                FileState::Ok | FileState::Stale | FileState::Missing => {
+                    cleared |= clear_reverted_acceptance(state, &t, out)?;
+                }
                 // An acceptance still matching disk is live, even when the render
                 // has caught up to it: `init` then sees the file as unchanged and
                 // drops the acceptance itself (see `seed_state`).
-                FileState::Accepted | FileState::Missing | FileState::Stale => {}
+                FileState::Accepted => {}
             }
         }
     } else {
@@ -376,8 +381,9 @@ fn accept_into(
     Ok(())
 }
 
-/// Drop the accepted hash of a target that matches the baseline again. Left in
-/// place, it would silently re-approve the reverted edit if it ever returned.
+/// Drop the accepted hash of a target whose accepted edit is no longer on disk
+/// (reverted or deleted). Left in place, it would silently re-approve that edit
+/// if it ever returned.
 /// Only an acceptance of bytes no longer on disk is stale; one that still
 /// matches disk stays until `init` finds the render has caught up to it.
 /// Returns whether anything was cleared.
@@ -391,7 +397,7 @@ fn clear_reverted_acceptance(
     }
     writeln!(
         out,
-        "  cleared the earlier accepted edit of {target} (it matches the baseline again)"
+        "  cleared the earlier accepted edit of {target} (that edit is no longer on disk)"
     )?;
     Ok(true)
 }
