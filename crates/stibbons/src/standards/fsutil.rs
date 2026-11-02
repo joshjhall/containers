@@ -35,12 +35,11 @@ pub fn ensure_no_symlink(root: &Path, target: &str) -> Result<(), Box<dyn std::e
 }
 
 #[cfg(unix)]
-pub fn set_executable(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub fn set_executable(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let mut perms = std::fs::metadata(path)?.permissions();
     perms.set_mode(perms.mode() | 0o755);
     std::fs::set_permissions(path, perms)
-        .map_err(|e| format!("failed to chmod {}: {e}", path.display()).into())
 }
 
 #[cfg(not(unix))]
@@ -48,7 +47,7 @@ pub fn set_executable(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     clippy::unnecessary_wraps,
     reason = "must match the fallible unix signature; there is no executable bit to set here"
 )]
-pub fn set_executable(_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub const fn set_executable(_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 

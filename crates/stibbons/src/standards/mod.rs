@@ -138,7 +138,10 @@ impl CheckReport {
 /// failure still saves the state, recording the targets written so far, so a
 /// re-run after fixing the cause does not mistake them for user edits. A file
 /// left truncated by a failed write is not recorded and reads as modified;
-/// `--force` resolves that.
+/// `--force` resolves that. The per-target report on `out` is printed after
+/// the writes, so on failure it marks the failed target and every later one it
+/// never reached instead of claiming them created/updated; the returned
+/// [`InitWriteError`] keeps the underlying [`std::io::Error`] as its `source()`.
 pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std::error::Error>> {
     let state_path = opts.root.join(STATE_FILE);
     let old = StandardsState::load(&state_path)?;
@@ -176,24 +179,9 @@ pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std:
         join(ci.iter().map(|c| c.as_str())),
         if opts.dry_run { " — dry run, nothing written" } else { "" }
     )?;
-    for (file, action) in rendered.iter().zip(&actions) {
-        writeln!(out, "  {:<10} {}", action_mark(*action), file.target)?;
-        if !matches!(action, InitAction::Created | InitAction::Unchanged | InitAction::Updated) {
-            writeln!(out, "             {}", action.verb())?;
-        }
-    }
-
-    let rendered_targets: BTreeSet<&str> = rendered.iter().map(|f| f.target.as_str()).collect();
-    for dropped in prev.files.keys().filter(|t| !rendered_targets.contains(t.as_str())) {
-        writeln!(
-            out,
-            "  {:<10} {dropped} (no longer part of the baseline; left in place)",
-            "untracked"
-        )?;
-    }
 
     if opts.dry_run {
-        return Ok(());
+        return report_targets(out, &rendered, &actions, prev, None);
     }
 
     let mut new = StandardsState::new();
@@ -205,13 +193,16 @@ pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std:
     // Save on failure too: the state then records exactly what is on disk, so
     // a re-run (after fixing the cause) recognizes the files this run already
     // wrote instead of reporting them as user edits.
-    if let Err(e) = write_targets(&opts.root, &rendered, &actions, &mut new) {
-        return Err(match new.save(&opts.root) {
-            Ok(()) => format!("{e} (recorded the files written so far in {STATE_FILE})").into(),
-            Err(save) => format!("{e}; also failed to save {STATE_FILE}: {save}").into(),
-        });
+    if let Err((stopped_at, mut e)) = write_targets(&opts.root, &rendered, &actions, &mut new) {
+        e.save = new.save(&opts.root).err();
+        // Best effort: the write error is the one to surface, not a broken pipe.
+        let _ = report_targets(out, &rendered, &actions, prev, Some(stopped_at));
+        return Err(Box::new(e));
     }
-    new.save(&opts.root)?;
+    // Every target is on disk now, so report them even if the save fails.
+    let saved = new.save(&opts.root);
+    report_targets(out, &rendered, &actions, prev, None)?;
+    saved?;
 
     let skipped = actions.iter().filter(|a| matches!(a, InitAction::Skipped)).count();
     writeln!(out, "\nWrote {STATE_FILE}.")?;
@@ -308,29 +299,102 @@ fn seed_state(
     }
 }
 
+/// A write, directory-create, or chmod failure partway through [`init`].
+///
+/// Keeps the [`std::io::Error`] as [`source`](std::error::Error::source) so a
+/// caller can tell, say, a permission error from a full disk, and adds whether
+/// the state file recording the targets written so far was saved.
+#[derive(Debug)]
+pub struct InitWriteError {
+    /// What failed: `"create"` (a parent directory), `"write"`, or `"chmod"`.
+    op: &'static str,
+    path: PathBuf,
+    source: std::io::Error,
+    /// Why saving [`STATE_FILE`] afterwards failed too, if it did.
+    save: Option<Box<dyn std::error::Error>>,
+}
+
+impl InitWriteError {
+    fn new(op: &'static str, path: &Path, source: std::io::Error) -> Self {
+        Self { op, path: path.to_path_buf(), source, save: None }
+    }
+}
+
+impl std::fmt::Display for InitWriteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "failed to {} {}: {}", self.op, self.path.display(), self.source)?;
+        match &self.save {
+            None => write!(f, " (recorded the files written so far in {STATE_FILE})"),
+            Some(save) => write!(f, "; also failed to save {STATE_FILE}: {save}"),
+        }
+    }
+}
+
+impl std::error::Error for InitWriteError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
 /// Write (and chmod) every target `init` touches, recording each write in
-/// `new` as soon as its bytes are on disk.
+/// `new` as soon as its bytes are on disk. On failure, returns the index of
+/// the target that failed alongside the error.
 fn write_targets(
     root: &Path,
     rendered: &[RenderedFile],
     actions: &[InitAction],
     new: &mut StandardsState,
-) -> Result<(), Box<dyn std::error::Error>> {
-    for (file, action) in rendered.iter().zip(actions) {
+) -> Result<(), (usize, InitWriteError)> {
+    for (i, (file, action)) in rendered.iter().zip(actions).enumerate() {
         let path = root.join(&file.target);
         if action.writes() {
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
+                    .map_err(|e| (i, InitWriteError::new("create", parent, e)))?;
             }
             std::fs::write(&path, &file.content)
-                .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+                .map_err(|e| (i, InitWriteError::new("write", &path, e)))?;
             new.files.insert(file.target.clone(), hash_bytes(&file.content));
             new.accepted.remove(&file.target);
         }
         if file.executable && touches(file, *action) {
-            set_executable(&path)?;
+            set_executable(&path).map_err(|e| (i, InitWriteError::new("chmod", &path, e)))?;
         }
+    }
+    Ok(())
+}
+
+/// Print one line per target (plus the dropped ones). With `stopped_at`, the
+/// write of that target failed: it is marked `failed`, and every later target
+/// `init` would have touched is marked `not run` rather than claimed done.
+fn report_targets(
+    out: &mut impl Write,
+    rendered: &[RenderedFile],
+    actions: &[InitAction],
+    prev: &StandardsState,
+    stopped_at: Option<usize>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for (i, (file, action)) in rendered.iter().zip(actions).enumerate() {
+        let mark = match stopped_at {
+            Some(s) if i == s => "failed",
+            Some(s) if i > s && touches(file, *action) => "not run",
+            _ => action_mark(*action),
+        };
+        writeln!(out, "  {mark:<10} {}", file.target)?;
+        if mark == action_mark(*action)
+            && !matches!(action, InitAction::Created | InitAction::Unchanged | InitAction::Updated)
+        {
+            writeln!(out, "             {}", action.verb())?;
+        }
+    }
+
+    let rendered_targets: BTreeSet<&str> = rendered.iter().map(|f| f.target.as_str()).collect();
+    for dropped in prev.files.keys().filter(|t| !rendered_targets.contains(t.as_str())) {
+        writeln!(
+            out,
+            "  {:<10} {dropped} (no longer part of the baseline; left in place)",
+            "untracked"
+        )?;
     }
     Ok(())
 }
@@ -452,4 +516,91 @@ const fn action_mark(a: InitAction) -> &'static str {
 fn join<'a>(items: impl Iterator<Item = &'a str>) -> String {
     let v: Vec<&str> = items.collect();
     if v.is_empty() { "none".to_string() } else { v.join(", ") }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error as _;
+
+    use super::*;
+
+    fn file(target: &str) -> RenderedFile {
+        RenderedFile { target: target.to_string(), content: b"x\n".to_vec(), executable: false }
+    }
+
+    #[test]
+    fn init_write_error_exposes_io_source_and_context() {
+        let io = std::io::Error::from(std::io::ErrorKind::StorageFull);
+        let mut e = InitWriteError::new("write", Path::new("/r/a"), io);
+        let src = e.source().and_then(|s| s.downcast_ref::<std::io::Error>());
+        assert_eq!(src.map(std::io::Error::kind), Some(std::io::ErrorKind::StorageFull));
+        assert!(e.to_string().starts_with("failed to write /r/a: "), "{e}");
+        assert!(
+            e.to_string()
+                .ends_with(&format!("(recorded the files written so far in {STATE_FILE})")),
+            "{e}"
+        );
+
+        e.save = Some("disk gone".into());
+        assert!(
+            e.to_string().ends_with(&format!("; also failed to save {STATE_FILE}: disk gone")),
+            "{e}"
+        );
+        assert!(e.source().expect("source").is::<std::io::Error>());
+    }
+
+    #[test]
+    fn write_targets_reports_failing_index_and_io_kind() {
+        let tmp = tempfile::tempdir().unwrap();
+        // A regular file where a directory is needed fails for root too.
+        std::fs::write(tmp.path().join("blocker"), b"").unwrap();
+        let rendered = [file("a"), file("blocker/b"), file("c")];
+        let actions = [InitAction::Created; 3];
+        let mut new = StandardsState::new();
+
+        let (at, e) = write_targets(tmp.path(), &rendered, &actions, &mut new).unwrap_err();
+        assert_eq!(at, 1);
+        assert!(e.source().expect("source").is::<std::io::Error>(), "{e}");
+        assert!(e.to_string().starts_with("failed to create "), "{e}");
+        assert!(new.files.contains_key("a") && !new.files.contains_key("c"));
+        assert!(!tmp.path().join("c").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_targets_reports_chmod_failure_with_io_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        // A dangling symlink: the write is skipped (Unchanged), the chmod's
+        // metadata lookup then fails with NotFound — for root too.
+        std::os::unix::fs::symlink(tmp.path().join("gone"), tmp.path().join("s.sh")).unwrap();
+        let rendered = [RenderedFile { executable: true, ..file("s.sh") }];
+        let (at, e) = write_targets(
+            tmp.path(),
+            &rendered,
+            &[InitAction::Unchanged],
+            &mut StandardsState::new(),
+        )
+        .unwrap_err();
+        assert_eq!(at, 0);
+        assert!(e.to_string().starts_with("failed to chmod "), "{e}");
+        let src = e.source().and_then(|s| s.downcast_ref::<std::io::Error>());
+        assert_eq!(src.map(std::io::Error::kind), Some(std::io::ErrorKind::NotFound));
+    }
+
+    #[test]
+    fn report_after_failure_claims_nothing_past_the_failed_target() {
+        let rendered = [file("a"), file("b"), file("c"), file("d")];
+        let actions =
+            [InitAction::Created, InitAction::Updated, InitAction::Created, InitAction::Skipped];
+        let mut out = Vec::new();
+        report_targets(&mut out, &rendered, &actions, &StandardsState::new(), Some(1)).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert_eq!(
+            s,
+            format!(
+                "  create     a\n  failed     b\n  not run    c\n  skip       d\n             {}\n",
+                InitAction::Skipped.verb()
+            )
+        );
+    }
 }

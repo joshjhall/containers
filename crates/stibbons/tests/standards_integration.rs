@@ -150,6 +150,13 @@ fn partial_init_failure_records_written_files() {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("failed to write") && err.contains("tests/run.sh"), "{err}");
     assert!(err.contains("recorded the files written so far"), "{err}");
+    // Stdout reports what happened, not the plan: nothing from the failed
+    // write on is claimed created.
+    let s = stdout_of(&out);
+    assert!(s.contains("create     lefthook.yml\n"), "{s}");
+    assert!(s.contains("failed     tests/run.sh\n"), "{s}");
+    assert!(s.contains("not run    dprint.json\n"), "{s}");
+    assert!(!s.contains("create     tests/run.sh") && !s.contains("create     dprint.json"), "{s}");
     assert!(root.join("lefthook.yml").is_file(), "lefthook.yml should precede the failure");
     assert!(root.join(".stibbons-standards.yml").is_file(), "no state saved after failure");
 
@@ -171,6 +178,37 @@ fn partial_init_failure_records_written_files() {
     assert!(s.contains("create     tests/run.sh"), "{s}");
     assert!(!s.contains("skip "), "re-init treated a stibbons-written file as a user edit:\n{s}");
     assert_ok(&standards(root, &["check", "--templates-dir", tpl_arg]), "check");
+}
+
+#[cfg(unix)]
+#[test]
+fn failed_state_save_still_reports_targets() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = shell_python_repo();
+    let root = tmp.path();
+    assert_ok(&standards(root, &["init"]), "init");
+    // Every target is now unchanged; only the state save can touch the root.
+    fs::remove_file(root.join(".stibbons-standards.yml")).unwrap();
+    fs::set_permissions(root, fs::Permissions::from_mode(0o555)).unwrap();
+    if fs::write(root.join("probe"), b"").is_ok() {
+        fs::set_permissions(root, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
+            "REQUIRE_UNPRIVILEGED_TESTS=1 but a 0555 dir is writable (running as root?)"
+        );
+        eprintln!("skipping: a 0555 dir is writable here (running as root?)");
+        return;
+    }
+
+    let out = standards(root, &["init"]);
+    fs::set_permissions(root, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(!out.status.success(), "init must fail when the state file cannot be saved");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains(".stibbons-standards.yml"), "{err}");
+    let s = stdout_of(&out);
+    assert!(s.contains("ok         lefthook.yml\n"), "report lost on a failed save:\n{s}");
+    assert!(!s.contains("Wrote .stibbons-standards.yml"), "{s}");
 }
 
 #[test]
