@@ -49,7 +49,16 @@ set -euo pipefail
 # Locate the staged forwarder hook relative to this script, so the installer
 # works from any cwd and from a bare-repo `sync-host` checkout.
 # --------------------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Parameter expansion, not `dirname`: the jq-absent tests run this under an
+# empty PATH, where a missing `dirname` yields `cd ""` — a no-op on bash <5.3
+# but a hard error ("null directory") on 5.3+.
+_self="${BASH_SOURCE[0]}"
+case "$_self" in
+    */*) _self_dir="${_self%/*}" ;;
+    *) _self_dir="." ;;
+esac
+SCRIPT_DIR="$(cd "${_self_dir:-/}" && pwd)"
+unset _self _self_dir
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 HOOK_SRC="$REPO_ROOT/lib/features/templates/claude/hooks/claude-host-event.sh"
 

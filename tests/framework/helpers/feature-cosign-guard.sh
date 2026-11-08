@@ -112,6 +112,13 @@ log_message() { echo "$*"; }
 log_error() { echo "ERROR: $*"; }
 log_warning() { echo "WARNING: $*"; }
 STUB
+    # docker.sh does `BUILD_TEMP=$(create_secure_temp_dir); cd "$BUILD_TEMP"`
+    # before its guard. Left to the no-op handler it returns "", and bash 5.3+
+    # fails `cd ""` ("null directory") under set -e before the guard is reached.
+    # Hand back a real, pre-created sandbox directory instead.
+    command mkdir -p "$dir/build-temp"
+    command printf 'create_secure_temp_dir() { echo "%s"; }\n' "$dir/build-temp" \
+        >>"$dir/build-scripts/base/feature-header.sh"
 
     # The real guard, with its build-scripts paths pointed at the sandbox. In
     # "present" mode the pinned base path is widened to the stub, which is the
