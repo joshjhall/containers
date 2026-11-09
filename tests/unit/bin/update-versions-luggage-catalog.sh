@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Unit tests for update-versions' luggage catalog-failure propagation: every
 # luggage-installed tool's updater arm must turn a failed
-# `luggage catalog add-version` into RC_UPDATE_FAILED and exit 3.
+# `luggage catalog add-version` into RC_UPDATE_FAILED and exit 3 — and, on a
+# successful add-version, leave every pin rewritten and return 0 (#1513).
 # Split from tests/unit/bin/update-versions.sh (#1512). Each later luggage port
-# (python, ruby, ...) adds its catalog-failure test here, not to the main suite.
+# (python, ruby, ...) adds its catalog failure and success tests here, not to
+# the main suite.
 
 set -euo pipefail
 
@@ -306,9 +308,115 @@ EOF
     assert_true "$ok" "A failed Node.js luggage catalog update returns RC_UPDATE_FAILED and exits 3"
 }
 
+# ============================================================================
+# Success path: a clean catalog update leaves every pin rewritten (#1513)
+# ============================================================================
+# The failure tests above prove the arms stop on a failed add-version, but a
+# broken pin `sed` on a SUCCESSFUL bump went unnoticed: the arm still returns 0.
+# These drive each luggage-backed arm with a stub luggage that exits 0 and check
+# every rewrite as an exact full line, plus the exact recorded argv.
+#
+# _run_luggage_success <dir> <label> <var> <feature> <current> <latest>
+# Writes the fixture into <dir> and runs update_version; returns its rc. The
+# stub records argv to <dir>/luggage-argv.log. CONTAINERS_DB_SRC points at an
+# empty upstream fixture so the post-add-version mirror stays offline.
+_run_luggage_success() {
+    local test_dir="$1" label="$2" var="$3" feature="$4" current="$5" latest="$6"
+
+    command mkdir -p "$test_dir/lib/features" "$test_dir/.devcontainer" "$test_dir/upstream/tools"
+    printf 'ARG %s=%s\n' "$var" "$current" >"$test_dir/Dockerfile"
+    printf '#!/bin/bash\n%s="${%s:-%s}"\n' "$var" "$var" "$current" >"$test_dir/lib/features/$feature.sh"
+    # Only the Rust arm rewrites this; harmless for the others.
+    printf 'services:\n  dev:\n    build:\n      args:\n        RUST_VERSION: "%s"\n' "$current" \
+        >"$test_dir/.devcontainer/docker-compose.yml"
+
+    command cat >"$test_dir/luggage-stub" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >>"$(dirname "$0")/luggage-argv.log"
+exit 0
+EOF
+    command chmod +x "$test_dir/luggage-stub"
+
+    local rc=0
+    (
+        source "$PROJECT_ROOT/bin/lib/common.sh"
+        source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+        source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+
+        # shellcheck disable=SC2030,SC2034 # consumed by update_version() from the sourced module
+        PROJECT_ROOT="$test_dir"
+        # shellcheck disable=SC2030,SC2034 # ditto
+        DRY_RUN=false
+        # shellcheck disable=SC2030,SC2034 # ditto
+        LUGGAGE_BIN="$test_dir/luggage-stub"
+        # shellcheck disable=SC2030,SC2034 # read by mirror_upstream_catalog_entry
+        CONTAINERS_DB_SRC="$test_dir/upstream"
+
+        update_version "$label" "$current" "$latest" "Dockerfile" >/dev/null 2>&1
+    ) || rc=$?
+    return "$rc"
+}
+
+# _check_luggage_success <dir> <slug> <var> <feature> <latest> <rc>
+# Prints one line per failed expectation; prints nothing when all hold.
+_check_luggage_success() {
+    local test_dir="$1" slug="$2" var="$3" feature="$4" latest="$5" rc="$6"
+    local want
+
+    [ "$rc" -eq 0 ] || echo "    update_version: expected rc 0, got $rc"
+
+    want="$(printf '%s="${%s:-%s}"' "$var" "$var" "$latest")"
+    command grep -qxF "$want" "$test_dir/lib/features/$feature.sh" ||
+        echo "    $feature.sh: expected '$want', got: $(command grep "$var=" "$test_dir/lib/features/$feature.sh")"
+
+    want="ARG $var=$latest"
+    command grep -qxF "$want" "$test_dir/Dockerfile" ||
+        echo "    Dockerfile: expected '$want', got: $(command cat "$test_dir/Dockerfile")"
+
+    want="catalog add-version $slug@$latest --catalog $test_dir/crates/luggage/testdata/catalog"
+    local argv
+    argv="$(command cat "$test_dir/luggage-argv.log" 2>/dev/null || echo '<no call>')"
+    [ "$argv" = "$want" ] ||
+        echo "    luggage argv: expected exactly '$want', got: $argv"
+}
+
+test_node_luggage_catalog_success_updates_pins() {
+    local test_dir rc=0 failures
+    test_dir=$(mktemp -d)
+    _run_luggage_success "$test_dir" "Node.js" NODE_VERSION node 22 22.23.5 || rc=$?
+    failures="$(_check_luggage_success "$test_dir" node NODE_VERSION node 22.23.5 "$rc")"
+    command rm -rf "$test_dir"
+    assert_empty "$failures" "A successful Node.js bump rewrites both pins, calls add-version node@latest, returns 0"
+}
+
+test_go_luggage_catalog_success_updates_pins() {
+    local test_dir rc=0 failures
+    test_dir=$(mktemp -d)
+    _run_luggage_success "$test_dir" "Go" GO_VERSION golang 1.27.2 1.27.3 || rc=$?
+    failures="$(_check_luggage_success "$test_dir" go GO_VERSION golang 1.27.3 "$rc")"
+    command rm -rf "$test_dir"
+    assert_empty "$failures" "A successful Go bump rewrites both pins, calls add-version go@latest, returns 0"
+}
+
+test_rust_luggage_catalog_success_updates_pins() {
+    local test_dir rc=0 failures
+    test_dir=$(mktemp -d)
+    _run_luggage_success "$test_dir" "Rust" RUST_VERSION rust 1.90.0 1.91.0 || rc=$?
+    failures="$(_check_luggage_success "$test_dir" rust RUST_VERSION rust 1.91.0 "$rc")"
+    # The Rust arm also rewrites the devcontainer pin, after the catalog step.
+    command grep -qxF '        RUST_VERSION: "1.91.0"' "$test_dir/.devcontainer/docker-compose.yml" ||
+        failures+=$'\n'"    docker-compose.yml: expected RUST_VERSION: \"1.91.0\", got: $(command grep RUST_VERSION "$test_dir/.devcontainer/docker-compose.yml")"
+    failures="${failures#$'\n'}"
+    command rm -rf "$test_dir"
+    assert_empty "$failures" "A successful Rust bump rewrites all pins, calls add-version rust@latest, returns 0"
+}
+
 run_test test_luggage_catalog_failure_exits_three "Failed luggage catalog update returns RC_UPDATE_FAILED and exits 3"
 run_test test_go_luggage_catalog_failure_exits_three "Failed Go luggage catalog update returns RC_UPDATE_FAILED and exits 3"
 run_test test_node_luggage_catalog_failure_exits_three "Failed Node.js luggage catalog update returns RC_UPDATE_FAILED and exits 3"
+run_test test_node_luggage_catalog_success_updates_pins "Successful Node.js luggage bump rewrites pins and calls add-version"
+run_test test_go_luggage_catalog_success_updates_pins "Successful Go luggage bump rewrites pins and calls add-version"
+run_test test_rust_luggage_catalog_success_updates_pins "Successful Rust luggage bump rewrites pins and calls add-version"
 
 # Generate report
 generate_report
