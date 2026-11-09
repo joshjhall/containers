@@ -185,6 +185,7 @@ mod tests {
             skipped_dependencies: Vec::new(),
             warnings: Vec::new(),
             verification_tier: Some(3),
+            removed_build_dependencies: Vec::new(),
         }
     }
 

@@ -21,31 +21,45 @@ use containers_common::tooldb::InstalledDependency;
 use crate::error::{LuggageError, Result};
 use crate::resolver::ResolvedInstall;
 
+use super::build_deps::{PendingBuildDeps, removal_candidates};
 use super::download::DigestingFileSink;
 use super::methods::MethodContext;
 use super::rustup_target::rustup_target_for;
-use super::syspackages::{PackageManager, install_dependencies, resolve_installed_versions};
+use super::syspackages::{
+    PackageManager, install_dependencies, is_installed, resolve_installed_versions,
+};
 use super::template::Substitutions;
 use super::{Installer, logging, methods, post_install, validate, verify};
 
 impl Installer {
+    /// Install the resolved system packages, returning the build-only ones
+    /// this call newly added so the orchestrator can remove them once the
+    /// method is done (#1524; see [`super::build_deps`]).
+    ///
+    /// Presence is snapshotted *before* installing: a build dep the host
+    /// already had is not luggage's to remove. If the install itself fails
+    /// nothing is queued — the error is returned before any method ran.
     pub(super) fn stage_system_packages(
         &self,
         resolved: &ResolvedInstall,
         logger: Option<&logging::FeatureLogger>,
-    ) -> Result<()> {
+    ) -> Result<PendingBuildDeps> {
         if !self.options.install_system_packages {
-            return Ok(());
+            return Ok(PendingBuildDeps::default());
         }
-        let Ok(mgr) = PackageManager::for_platform(&resolved.platform) else { return Ok(()) };
+        let Ok(mgr) = PackageManager::for_platform(&resolved.platform) else {
+            return Ok(PendingBuildDeps::default());
+        };
         let deps = &resolved.system_deps;
         if deps.packages.is_empty() && deps.unmapped.is_empty() {
-            return Ok(());
+            return Ok(PendingBuildDeps::default());
         }
+        let pending = removal_candidates(deps, |p| is_installed(mgr, p));
         if let Some(l) = logger {
             l.step("install system packages");
         }
-        install_dependencies(deps, mgr, self.options.fail_on_unknown_deps)
+        install_dependencies(deps, mgr, self.options.fail_on_unknown_deps)?;
+        Ok(PendingBuildDeps::new(mgr, pending))
     }
 
     /// Query the host package manager for each dependency's resolved version,

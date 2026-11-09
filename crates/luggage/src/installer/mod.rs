@@ -11,6 +11,7 @@
 //! script-installer + tier 3 published-checksum verification). Other shapes
 //! return [`crate::LuggageError::NotImplemented`] and ship in follow-ups.
 
+mod build_deps;
 pub mod download;
 pub mod idempotency;
 #[cfg(unix)]
@@ -174,6 +175,12 @@ pub struct InstallReport {
     /// that was not verified.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification_tier: Option<u8>,
+    /// `purpose: build` system packages this run installed and then removed
+    /// once the method finished (#1524). Set on success and on a failed
+    /// method alike. `skip_serializing_if` keeps the wire shape byte-identical
+    /// to the pre-#1524 report when nothing was removed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removed_build_dependencies: Vec<String>,
 }
 
 /// What a successful stage run produced, on its way into the report.
@@ -187,6 +194,8 @@ struct StageOutcome {
     /// Warnings raised during verification (see
     /// [`verify::VerificationWarning`]).
     warnings: Vec<verify::VerificationWarning>,
+    /// Dependency versions, captured before build deps were removed.
+    dependencies: Option<Vec<InstalledDependency>>,
 }
 
 /// The install execution engine.
@@ -395,8 +404,9 @@ impl Installer {
         // Capture before `plan` is consumed by `run_stages`, so the success
         // report can carry any non-strict skips through to evidence-run.
         let skipped_dependencies = plan.skipped_dependencies.clone();
-        match self.run_stages(resolved, plan, logger.as_ref()) {
-            Ok(StageOutcome { version_output, warnings }) => {
+        let (removed_build_dependencies, result) = self.run_stages(resolved, plan, logger.as_ref());
+        match result {
+            Ok(StageOutcome { version_output, warnings, dependencies }) => {
                 if let Some(l) = &logger {
                     l.feature_end();
                 }
@@ -408,16 +418,18 @@ impl Installer {
                     duration_seconds: started.elapsed().as_secs_f64(),
                     version_output: Some(version_output),
                     error_class: None,
-                    dependencies: self.captured_dependency_versions(resolved),
+                    dependencies,
                     skipped_dependencies,
                     warnings,
                     verification_tier: Some(resolved.verification_tier),
+                    removed_build_dependencies,
                 };
                 (report, Ok(()))
             }
             Err(e) => {
-                let report =
+                let mut report =
                     Self::report_failure(resolved, &e, logger, started.elapsed().as_secs_f64());
+                report.removed_build_dependencies = removed_build_dependencies;
                 (report, Err(e))
             }
         }
@@ -447,6 +459,7 @@ impl Installer {
             skipped_dependencies: Vec::new(),
             warnings: Vec::new(),
             verification_tier: None,
+            removed_build_dependencies: Vec::new(),
         }
     }
 
@@ -471,6 +484,7 @@ impl Installer {
             skipped_dependencies: plan.skipped_dependencies,
             warnings: Vec::new(),
             verification_tier: None,
+            removed_build_dependencies: Vec::new(),
         }
     }
 
@@ -496,18 +510,47 @@ impl Installer {
             skipped_dependencies: Vec::new(),
             warnings: Vec::new(),
             verification_tier: None,
+            removed_build_dependencies: Vec::new(),
         }
     }
 
+    /// Run every stage, removing `purpose: build` packages after the method
+    /// (#1524). Returns the removed package names alongside the result so a
+    /// failure report records them too.
     fn run_stages(
         &self,
         resolved: &ResolvedInstall,
         plan: InstallPlan,
         logger: Option<&logging::FeatureLogger>,
-    ) -> Result<StageOutcome> {
+    ) -> (Vec<String>, Result<StageOutcome>) {
         // The verification guard already ran in `plan()`, which produced `plan`.
-        self.stage_system_packages(resolved, logger)?;
+        let pending = match self.stage_system_packages(resolved, logger) {
+            Ok(p) => p,
+            Err(e) => return (Vec::new(), Err(e)),
+        };
+        // Queried now, while the build deps are still installed, so the
+        // evidence row records every dependency the build used.
+        let dependencies = self.captured_dependency_versions(resolved);
+        let built = self.run_method_stages(resolved, plan, logger);
+        // Removed before validate, on success and failure alike: a passing
+        // validate then proves the tool runs without its build deps.
+        let (removed, cleanup) = build_deps::remove_build_deps(pending, logger);
+        let result =
+            build_deps::merge_cleanup(built, cleanup, logger).and_then(|(env_map, warnings)| {
+                let version_output = self.stage_validate(resolved, &env_map, logger)?;
+                Ok(StageOutcome { version_output, warnings, dependencies })
+            });
+        (removed, result)
+    }
 
+    /// Download, verify, install method and post-install. Returns the shared
+    /// env map validate needs and the verification warnings.
+    fn run_method_stages(
+        &self,
+        resolved: &ResolvedInstall,
+        plan: InstallPlan,
+        logger: Option<&logging::FeatureLogger>,
+    ) -> Result<(BTreeMap<String, String>, Vec<verify::VerificationWarning>)> {
         // Scratch dir is created BEFORE the download so the artifact can stream
         // straight into it — nothing buffers the whole artifact in memory, which
         // matters at 150MB (go) as much as it did not at 15MB (rustup-init).
@@ -552,8 +595,7 @@ impl Installer {
         let user = plan.user;
         self.stage_method(resolved, &artifact, &invoke_args, &env_map, &user, logger)?;
         self.stage_post_install(resolved, &user, &env_map, logger)?;
-        let version_output = self.stage_validate(resolved, &env_map, logger)?;
-        Ok(StageOutcome { version_output, warnings })
+        Ok((env_map, warnings))
     }
 }
 
@@ -643,6 +685,7 @@ mod tests {
                 packages: vec![crate::sysdeps::SystemPackageDep {
                     tool: "gcc".into(),
                     package: "gcc".into(),
+                    purpose: containers_common::tooldb::DependencyPurpose::Both,
                 }],
                 unmapped: Vec::new(),
             },
@@ -676,7 +719,7 @@ mod tests {
         .unwrap();
         let plan = installer.plan(&resolved).unwrap();
         assert!(plan.source_url.is_none(), "fixture must exercise the missing-URL path");
-        let err = installer.run_stages(&resolved, plan, None).unwrap_err();
+        let err = installer.run_stages(&resolved, plan, None).1.unwrap_err();
         match err {
             LuggageError::Catalog(msg) => {
                 assert!(msg.contains("source_url_template"), "got: {msg}");
@@ -731,6 +774,7 @@ mod tests {
             skipped_dependencies: Vec::new(),
             warnings: vec![warning.clone()],
             verification_tier: Some(4),
+            removed_build_dependencies: Vec::new(),
         };
         let json = serde_json::to_string(&report).unwrap();
         assert!(json.contains("\"warnings\""), "{json}");
@@ -755,9 +799,11 @@ mod tests {
             skipped_dependencies: Vec::new(),
             warnings: Vec::new(),
             verification_tier: None,
+            removed_build_dependencies: Vec::new(),
         };
         let json = serde_json::to_string(&report).unwrap();
         assert!(!json.contains("warnings"), "{json}");
+        assert!(!json.contains("removed_build_dependencies"), "{json}");
         // And a report written by an older build (no `warnings` key) still
         // deserializes.
         let back: InstallReport = serde_json::from_str(&json).unwrap();

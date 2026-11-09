@@ -92,7 +92,10 @@ toolchain bump instead of guessed at. Each element is an `InstalledDependency`:
 It is captured **best-effort** and only on the success path of a
 `luggage install --json-report` run: luggage queries the host package manager
 (`dpkg-query -W` / `apk info -v` / `rpm -q`) after installing the
-dependencies. A failed query leaves that entry's `version` unset rather than
+dependencies, and before any `purpose: build` packages are removed. Build
+deps therefore appear here even though the final image no longer has them.
+The luggage report lists those in `removed_build_dependencies` (#1524). That
+field is not copied into the evidence row. A failed query leaves that entry's `version` unset rather than
 failing the install; skip, dry-run, and failure rows omit `dependencies`
 entirely (`skip_serializing_if`).
 

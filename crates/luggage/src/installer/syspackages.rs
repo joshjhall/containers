@@ -150,6 +150,111 @@ pub fn install_dependencies(
     }
 }
 
+/// Build the argv that removes `packages` via `mgr` (#1524).
+///
+/// Only build-only packages luggage itself installed reach this. Every package
+/// luggage installs is explicit (apt marks it manual, apk adds it to `world`,
+/// dnf records it as user-installed), so a runtime dependency that is also a
+/// transitive dependency of a removed build package survives the removal.
+/// apt's `--auto-remove` drops the build package's own now-unneeded
+/// dependencies; dnf's default `clean_requirements_on_remove` and apk's world
+/// model do the same. Returns `None` when `packages` is empty.
+#[must_use]
+pub fn remove_argv(mgr: PackageManager, packages: &[&str]) -> Option<(&'static str, Vec<String>)> {
+    if packages.is_empty() {
+        return None;
+    }
+    let owned = packages.iter().map(|p| (*p).to_owned());
+    Some(match mgr {
+        PackageManager::Apt => {
+            let mut args = vec!["purge".to_owned(), "-y".to_owned(), "--auto-remove".to_owned()];
+            args.extend(owned);
+            ("apt-get", args)
+        }
+        PackageManager::Apk => {
+            let mut args = vec!["del".to_owned(), "--no-cache".to_owned()];
+            args.extend(owned);
+            ("apk", args)
+        }
+        PackageManager::Dnf => {
+            let mut args = vec!["remove".to_owned(), "-y".to_owned()];
+            args.extend(owned);
+            ("dnf", args)
+        }
+    })
+}
+
+/// Build the argv that asks whether `package` is installed.
+///
+/// - apt: `dpkg-query -W -f=${db:Status-Status} <pkg>` prints `installed` for
+///   an installed package — and exits 0 for a removed-but-not-purged one
+///   (`config-files`), so the exit code alone is not enough
+///   ([`parse_presence`]).
+/// - apk: `apk info -e <pkg>` exits 0 iff installed.
+/// - dnf: `rpm -q <pkg>` exits 0 iff installed.
+#[must_use]
+fn presence_argv(mgr: PackageManager, package: &str) -> (&'static str, Vec<String>) {
+    match mgr {
+        PackageManager::Apt => (
+            "dpkg-query",
+            vec!["-W".to_owned(), "-f=${db:Status-Status}".to_owned(), package.to_owned()],
+        ),
+        PackageManager::Apk => {
+            ("apk", vec!["info".to_owned(), "-e".to_owned(), package.to_owned()])
+        }
+        PackageManager::Dnf => ("rpm", vec!["-q".to_owned(), package.to_owned()]),
+    }
+}
+
+/// Interpret a presence query's result. apt must also print `installed`;
+/// apk and rpm are decided by the exit status alone.
+#[must_use]
+fn parse_presence(mgr: PackageManager, success: bool, stdout: &str) -> bool {
+    success && (!matches!(mgr, PackageManager::Apt) || stdout.trim() == "installed")
+}
+
+/// `true` when `package` is installed on the host.
+///
+/// A query that fails to launch reads as **present**: the caller uses this to
+/// decide what is safe to remove, and "unknown" must never turn into removing
+/// a package luggage did not install.
+#[must_use]
+pub fn is_installed(mgr: PackageManager, package: &str) -> bool {
+    let (program, args) = presence_argv(mgr, package);
+    match Command::new(program).args(&args).output() {
+        Ok(o) => parse_presence(mgr, o.status.success(), &String::from_utf8_lossy(&o.stdout)),
+        Err(e) => {
+            warn!(package, manager = ?mgr, error = %e, "presence query failed to launch; treating as present");
+            true
+        }
+    }
+}
+
+/// Remove `packages` from the host via `mgr` (#1524). A no-op when empty.
+///
+/// # Errors
+///
+/// [`LuggageError::PackageManagerFailed`] when the package manager exits
+/// non-zero or fails to launch.
+pub fn remove_packages(packages: &[&str], mgr: PackageManager) -> Result<()> {
+    let Some((program, args)) = remove_argv(mgr, packages) else { return Ok(()) };
+    let program = resolve_program(program, on_path);
+    let out = Command::new(program).args(&args).output().map_err(|e| {
+        LuggageError::PackageManagerFailed { message: format!("{program} failed to launch: {e}") }
+    })?;
+    if out.status.success() {
+        return Ok(());
+    }
+    Err(LuggageError::PackageManagerFailed {
+        message: format!(
+            "{program} {} exited {}: {}",
+            args.first().map_or("", String::as_str),
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim_end(),
+        ),
+    })
+}
+
 /// Pick the binary to run for `program` given what is on `PATH`.
 ///
 /// `install_argv` names the canonical program; this resolves the one case
@@ -395,10 +500,72 @@ mod tests {
                 .map(|(t, p)| crate::sysdeps::SystemPackageDep {
                     tool: (*t).into(),
                     package: (*p).into(),
+                    purpose: containers_common::tooldb::DependencyPurpose::Both,
                 })
                 .collect(),
             unmapped: unmapped.iter().map(|u| (*u).to_string()).collect(),
         }
+    }
+
+    #[test]
+    fn remove_argv_per_manager() {
+        assert_eq!(
+            remove_argv(PackageManager::Apt, &["g++", "make"]).unwrap(),
+            (
+                "apt-get",
+                vec!["purge", "-y", "--auto-remove", "g++", "make"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect()
+            )
+        );
+        assert_eq!(
+            remove_argv(PackageManager::Apk, &["g++"]).unwrap(),
+            ("apk", vec!["del".to_owned(), "--no-cache".to_owned(), "g++".to_owned()])
+        );
+        assert_eq!(
+            remove_argv(PackageManager::Dnf, &["gcc-c++"]).unwrap(),
+            ("dnf", vec!["remove".to_owned(), "-y".to_owned(), "gcc-c++".to_owned()])
+        );
+        assert!(remove_argv(PackageManager::Apk, &[]).is_none());
+    }
+
+    #[test]
+    fn presence_argv_per_manager() {
+        assert_eq!(
+            presence_argv(PackageManager::Apt, "make"),
+            (
+                "dpkg-query",
+                vec!["-W".to_owned(), "-f=${db:Status-Status}".to_owned(), "make".to_owned()]
+            )
+        );
+        assert_eq!(
+            presence_argv(PackageManager::Apk, "make"),
+            ("apk", vec!["info".to_owned(), "-e".to_owned(), "make".to_owned()])
+        );
+        assert_eq!(
+            presence_argv(PackageManager::Dnf, "make"),
+            ("rpm", vec!["-q".to_owned(), "make".to_owned()])
+        );
+    }
+
+    #[test]
+    fn apt_presence_needs_the_installed_status_not_just_exit_zero() {
+        // dpkg-query exits 0 for a removed-but-not-purged package; only an
+        // `installed` status means present.
+        assert!(parse_presence(PackageManager::Apt, true, "installed\n"));
+        assert!(!parse_presence(PackageManager::Apt, true, "config-files"));
+        assert!(!parse_presence(PackageManager::Apt, true, ""));
+        assert!(!parse_presence(PackageManager::Apt, false, "installed"));
+        // apk/rpm: exit status decides, stdout is ignored.
+        assert!(parse_presence(PackageManager::Apk, true, ""));
+        assert!(!parse_presence(PackageManager::Dnf, false, "package make is not installed"));
+    }
+
+    #[test]
+    fn remove_packages_is_a_noop_when_empty() {
+        // Must not shell out at all: no package manager exists on the test host.
+        remove_packages(&[], PackageManager::Apt).unwrap();
     }
 
     #[test]

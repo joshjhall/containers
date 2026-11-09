@@ -14,7 +14,7 @@
 //! The catalog is the single source of truth for package names; per-distro
 //! and per-release differences are data (containers-db), not luggage code.
 
-use containers_common::tooldb::Dependency;
+use containers_common::tooldb::{Dependency, DependencyPurpose};
 use serde::Serialize;
 
 use crate::Platform;
@@ -27,6 +27,18 @@ pub struct SystemPackageDep {
     pub tool: String,
     /// The host distro's package name (e.g. `glibc-devel` on rhel).
     pub package: String,
+    /// When the dependency is needed; an absent catalog `purpose` is
+    /// [`DependencyPurpose::Both`]. Only `Build` packages are candidates for
+    /// removal after the method runs (#1524). Omitted from JSON when `Both`
+    /// so the resolve/plan output is unchanged for every pre-#1524 entry.
+    #[serde(skip_serializing_if = "is_both")]
+    pub purpose: DependencyPurpose,
+}
+
+// serde's `skip_serializing_if` hands the predicate a reference.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_both(purpose: &DependencyPurpose) -> bool {
+    *purpose == DependencyPurpose::Both
 }
 
 /// Outcome of resolving a method's dependencies for one host.
@@ -77,7 +89,11 @@ pub fn resolve_system_deps(
             .map(|p| p.name.clone());
         match package {
             Some(package) => {
-                out.packages.push(SystemPackageDep { tool: dep.tool.clone(), package });
+                out.packages.push(SystemPackageDep {
+                    tool: dep.tool.clone(),
+                    package,
+                    purpose: dep.purpose.unwrap_or_default(),
+                });
             }
             None => out.unmapped.push(dep.tool.clone()),
         }
@@ -154,11 +170,19 @@ mod tests {
         let deps = [dep("libc_dev", None)];
         assert_eq!(
             resolve_system_deps(&deps, &platform("rhel", Some("10")), &cat).packages,
-            vec![SystemPackageDep { tool: "libc_dev".into(), package: "glibc-devel".into() }]
+            vec![SystemPackageDep {
+                tool: "libc_dev".into(),
+                package: "glibc-devel".into(),
+                purpose: DependencyPurpose::Both,
+            }]
         );
         assert_eq!(
             resolve_system_deps(&deps, &platform("debian", Some("13")), &cat).packages,
-            vec![SystemPackageDep { tool: "libc_dev".into(), package: "libc6-dev".into() }]
+            vec![SystemPackageDep {
+                tool: "libc_dev".into(),
+                package: "libc6-dev".into(),
+                purpose: DependencyPurpose::Both,
+            }]
         );
     }
 
@@ -201,5 +225,34 @@ mod tests {
         let r = resolve_system_deps(&deps, &platform("debian", Some("13")), &cat);
         assert!(r.packages.is_empty(), "expected no packages, got {:?}", r.packages);
         assert_eq!(r.unmapped, vec!["util_linux".to_string(), "frobnicator".to_string()]);
+    }
+
+    #[test]
+    fn purpose_is_carried_and_defaults_to_both() {
+        let (_t, cat) = catalog();
+        let with_purpose = |tool: &str, purpose: &str| -> Dependency {
+            serde_json::from_value(serde_json::json!({ "tool": tool, "purpose": purpose })).unwrap()
+        };
+        let deps = [with_purpose("libc_dev", "build"), dep("util_linux", None)];
+        let r = resolve_system_deps(&deps, &platform("rhel", Some("10")), &cat);
+        let purposes: Vec<_> = r.packages.iter().map(|p| p.purpose).collect();
+        assert_eq!(purposes, vec![DependencyPurpose::Build, DependencyPurpose::Both]);
+    }
+
+    #[test]
+    fn purpose_serializes_only_when_not_both() {
+        // The plan/resolve JSON stays byte-identical for entries with no
+        // `purpose`; a build dep says so.
+        let both = SystemPackageDep {
+            tool: "gcc".into(),
+            package: "gcc".into(),
+            purpose: DependencyPurpose::Both,
+        };
+        assert_eq!(
+            serde_json::to_value(&both).unwrap(),
+            serde_json::json!({ "tool": "gcc", "package": "gcc" })
+        );
+        let build = SystemPackageDep { purpose: DependencyPurpose::Build, ..both };
+        assert_eq!(serde_json::to_value(&build).unwrap()["purpose"], "build");
     }
 }
