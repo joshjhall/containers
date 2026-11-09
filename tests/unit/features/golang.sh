@@ -170,6 +170,16 @@ run_version_block() {
     local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
     local stub="$TEST_TEMP_DIR/luggage-stub" block="$TEST_TEMP_DIR/version-block.sh"
 
+    # A backtick in the body is a command substitution when the stub runs: `node`
+    # in an error string started the real node REPL and hung the suite (#1597).
+    # Refuse it here so a regression fails fast instead of hanging; enforced by
+    # tests/unit/stub-body-backtick-guard.sh.
+    case "$stub_body" in *'`'*)
+        echo "run_version_block: stub body contains a backtick (command substitution in the stub); see #1597" >&2
+        return 2
+        ;;
+    esac
+
     printf '#!/bin/bash\n%s\n' "$stub_body" >"$stub"
     command chmod +x "$stub"
     # The same extractor the luggage_golang fixture runs against real luggage
@@ -248,7 +258,7 @@ test_exact_version_skips_resolve() {
 # Test: a failing luggage resolve fails the build and surfaces luggage's reason
 test_resolve_failure_surfaces_luggage_error() {
     local out rc=0
-    out=$(run_version_block "1.30" 'echo "error: no version of `go` matches spec `partial:1.30`" >&2; exit 1') || rc=$?
+    out=$(run_version_block "1.30" 'echo "error: no version of go matches spec partial:1.30" >&2; exit 1') || rc=$?
     assert_not_equals "0" "$rc" "a failed resolve exits non-zero"
     assert_contains "$out" "Could not resolve Go 1.30" "names the request"
     assert_contains "$out" "partial:1.30" "carries luggage's own stderr, not a guessed cause"
@@ -300,7 +310,7 @@ test_bare_major_rejected_by_validation() {
 # and goes on to luggage, which owns whether that version exists.
 test_non_1x_major_reaches_resolve() {
     local out rc=0
-    out=$(run_version_block "2.0" 'echo "error: no version of `go` matches spec `partial:2.0`" >&2; exit 1') || rc=$?
+    out=$(run_version_block "2.0" 'echo "error: no version of go matches spec partial:2.0" >&2; exit 1') || rc=$?
     assert_not_contains "$out" "starts at 1.22.0" "2.0 is not caught by the 1.x floor"
     assert_contains "$out" "partial:2.0" "2.0 reached luggage resolve"
 }
