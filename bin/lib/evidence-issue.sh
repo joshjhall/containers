@@ -14,9 +14,11 @@
 #       Read+sanitize result/error_class from an evidence row and print
 #       `result=` / `error_class=` lines to stdout (the workflow redirects
 #       these into $GITHUB_OUTPUT). Exits 1 on an unexpected result enum.
-#   validate_issue_inputs <tool> <version> <tuple>
+#   validate_issue_inputs <tool> <version> <tuple> [action]
 #       Validate the three free-text coordinates against tight slugs; the
 #       primary injection defense for the gh --search title and issue body.
+#       [action] names the refused operation in the stderr message
+#       (default "file issue").
 #   open_or_update_tracking_issue <tool> <version> <tuple> <error_class> <run_url>
 #       Search-or-create the per-cell regression tracking issue.
 #   annotate_fail_verdict <result> <error_class> <tool> <version> <tuple>
@@ -93,6 +95,10 @@ read_evidence_verdict() {
 #   $1 - tool slug
 #   $2 - tool version
 #   $3 - tuple slug
+#   $4 - action named in the rejection message (optional, default
+#        "file issue"); annotate_fail_verdict passes "annotate" and
+#        open_run_tracking_issue "include fail row", so neither log misreports
+#        what was refused as issue filing (#1568)
 #
 # Returns:
 #   0 if all three pass their anchored regexes, 1 (with a message to stderr)
@@ -105,16 +111,17 @@ read_evidence_verdict() {
 # input but is split+rechecked anyway.
 validate_issue_inputs() {
     local INPUT_TOOL="$1" INPUT_TOOL_VERSION="$2" INPUT_TUPLE="$3"
+    local action="${4:-file issue}"
     if [[ ! "$INPUT_TOOL" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
-        echo "Refusing to file issue: unexpected tool slug '$INPUT_TOOL'" >&2
+        echo "Refusing to ${action}: unexpected tool slug '$INPUT_TOOL'" >&2
         return 1
     fi
     if [[ ! "$INPUT_TOOL_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9.+_-]*$ ]]; then
-        echo "Refusing to file issue: unexpected version '$INPUT_TOOL_VERSION'" >&2
+        echo "Refusing to ${action}: unexpected version '$INPUT_TOOL_VERSION'" >&2
         return 1
     fi
     if [[ ! "$INPUT_TUPLE" =~ ^[a-z0-9]+-[a-z0-9.]+-[a-z0-9]+$ ]]; then
-        echo "Refusing to file issue: unexpected tuple '$INPUT_TUPLE'" >&2
+        echo "Refusing to ${action}: unexpected tuple '$INPUT_TUPLE'" >&2
         return 1
     fi
     return 0
@@ -147,7 +154,7 @@ validate_issue_inputs() {
 annotate_fail_verdict() {
     local result="$1" error_class="$2" tool="$3" version="$4" tuple="$5"
     [ "$result" = "fail" ] || return 0
-    validate_issue_inputs "$tool" "$version" "$tuple" || return 1
+    validate_issue_inputs "$tool" "$version" "$tuple" annotate || return 1
     if [[ ! "$error_class" =~ ^[a-z_]+$ ]]; then
         echo "Refusing to annotate: unexpected error_class '$error_class'" >&2
         return 1
@@ -259,7 +266,9 @@ open_run_tracking_issue() {
         version="$(command jq -r '.version // empty' "$f")"
         tuple="$(command jq -r 'if (.os_version // "") != "" then "\(.os)-\(.os_version)-\(.arch)" else "" end' "$f")"
         ec="$(command jq -r '.error_class // "unknown"' "$f")"
-        validate_issue_inputs "$tool" "$version" "$tuple" || continue
+        # Name the real action: a bad row is dropped, but the issue for the
+        # remaining rows is still filed, so "file issue" would mislead (#1568).
+        validate_issue_inputs "$tool" "$version" "$tuple" "include fail row" || continue
         [[ "$ec" =~ ^[a-z_]+$ ]] || ec="unknown"
         table="${table}| \`${tool}@${version}\` | \`${tuple}\` | \`${ec}\` |"$'\n'
         count=$((count + 1))
