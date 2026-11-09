@@ -293,6 +293,63 @@ test_validate_default_action_is_file_issue() {
     done
 }
 
+test_validate_rejected_value_is_escaped_on_stderr() {
+    # The workflow leaves the validator's stderr on the step log, where the
+    # runner parses `::` workflow commands at the start of any line. A
+    # rejected value carrying CR/LF + `::` must stay on the single `Refusing`
+    # line, rendered as an escape, never as a forged command (#1589). The exact
+    # message is asserted too, so an empty stderr cannot pass the `^::` check.
+    local rc i bad lines forged err
+    local -a args labels=('tool slug' 'version' 'tuple')
+    # Payload 2 has no line break: it proves the escape branch keys on any
+    # control char (here ESC), not just CR/LF.
+    local -a payloads=($'x\n::stop-commands::t' $'x\r\n::add-mask::t' $'x\e[0m')
+    local -a escaped=("\$'x\\n::stop-commands::t'" "\$'x\\r\\n::add-mask::t'" "\$'x\\E[0m'")
+    local p
+    for i in 0 1 2; do
+        for p in 0 1 2; do
+            bad="${payloads[p]}"
+            args=(node 20.13.1 alpine-3.22-amd64)
+            args[i]="$bad"
+            rc=0
+            validate_issue_inputs "${args[@]}" 2>"$TEST_TEMP_DIR/err" || rc=$?
+            assert_equals "1" "$rc" "injected arg $((i + 1)) payload $p → rc 1"
+            lines="$(command wc -l <"$TEST_TEMP_DIR/err")"
+            assert_equals "1" "${lines// /}" "arg $((i + 1)) payload $p → exactly one stderr line"
+            forged="$(command grep -c '^::' "$TEST_TEMP_DIR/err" || true)"
+            assert_equals "0" "$forged" "arg $((i + 1)) payload $p → no stderr line starts with ::"
+            err="$(command cat "$TEST_TEMP_DIR/err")"
+            assert_equals "Refusing to file issue: unexpected ${labels[i]} ${escaped[p]}" "$err" \
+                "arg $((i + 1)) payload $p → value rendered as an escape"
+        done
+    done
+    # The annotate step is the live path: same property through
+    # annotate_fail_verdict, with the summary pinned to scratch.
+    rc=0
+    GITHUB_STEP_SUMMARY="$TEST_TEMP_DIR/summary.md" \
+        annotate_fail_verdict fail unknown "${payloads[0]}" 20.13.1 alpine-3.22-amd64 \
+        >/dev/null 2>"$TEST_TEMP_DIR/err" || rc=$?
+    assert_equals "1" "$rc" "annotate with injected tool → rc 1"
+    forged="$(command grep -c '^::' "$TEST_TEMP_DIR/err" || true)"
+    assert_equals "0" "$forged" "annotate stderr has no line starting with ::"
+    err="$(command cat "$TEST_TEMP_DIR/err")"
+    assert_equals "Refusing to annotate: unexpected tool slug ${escaped[0]}" "$err" \
+        "annotate reject message renders the value as an escape"
+    # error_class is validated separately from the coordinates, so its reject
+    # message needs the same escaping (a caller may skip read_evidence_verdict).
+    rc=0
+    GITHUB_STEP_SUMMARY="$TEST_TEMP_DIR/summary.md" \
+        annotate_fail_verdict fail "${payloads[0]}" node 20.13.1 alpine-3.22-amd64 \
+        >/dev/null 2>"$TEST_TEMP_DIR/err" || rc=$?
+    assert_equals "1" "$rc" "annotate with injected error_class → rc 1"
+    lines="$(command wc -l <"$TEST_TEMP_DIR/err")"
+    assert_equals "1" "${lines// /}" "injected error_class → exactly one stderr line"
+    err="$(command cat "$TEST_TEMP_DIR/err")"
+    assert_equals "Refusing to annotate: unexpected error_class ${escaped[0]}" "$err" \
+        "error_class reject message renders the value as an escape"
+    assert_file_not_exists "$TEST_TEMP_DIR/summary.md" "no summary line on a rejected annotation"
+}
+
 # --- Run -------------------------------------------------------------------
 
 run_test test_pass_row "valid pass row → result=pass, error_class=unknown"
@@ -309,5 +366,6 @@ run_test test_empty_error_class_reaches_annotation "empty error_class → unknow
 run_test test_annotate_underscore_error_classes "install_method/post_install → exact annotation"
 run_test test_annotate_reject_message_names_annotation "rejected annotation → 'Refusing to annotate'"
 run_test test_validate_default_action_is_file_issue "validator default message still names issue filing"
+run_test test_validate_rejected_value_is_escaped_on_stderr "CR/LF+:: rejected value → one escaped stderr line, no forged command"
 
 generate_report
