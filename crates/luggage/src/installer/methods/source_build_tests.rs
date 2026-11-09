@@ -789,6 +789,22 @@ fn launcher_leaves_a_missing_compiler_unset() {
     assert_eq!(env["CXX"], "ccache clang++");
 }
 
+/// The log note survives a compiler left unset (indexing `env["CXX"]` used
+/// to panic on a C-only image) and names exactly what each step receives.
+#[test]
+fn launcher_note_shows_an_unset_compiler() {
+    let mut env = BTreeMap::new();
+    apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&["gcc"]));
+    assert_eq!(
+        launcher_note("ccache", &env),
+        "compiler launcher: ccache (CC=`ccache gcc`, CXX=`unset`)"
+    );
+    assert_eq!(
+        launcher_note("ccache", &BTreeMap::new()),
+        "compiler launcher: ccache (CC=`unset`, CXX=`unset`)",
+    );
+}
+
 /// A compiler already routed through the launcher is kept verbatim, never
 /// `ccache ccache gcc` — whether it came from the catalog or the env, and
 /// whether the launcher was named bare or by path. A program that merely
@@ -828,7 +844,7 @@ fn launcher_env_names_the_program() {
         parse_compiler_launcher(Some("/usr/bin/sccache")).unwrap().as_deref(),
         Some("/usr/bin/sccache"),
     );
-    for ok in ["./ccache", "../bin/ccache", ".ccache"] {
+    for ok in [".ccache", "ccache-4.10", "/opt/evidence-ccache/ccache"] {
         assert_eq!(parse_compiler_launcher(Some(ok)).unwrap().as_deref(), Some(ok));
     }
 }
@@ -836,7 +852,8 @@ fn launcher_env_names_the_program() {
 /// Empty, multi-word, shell-metacharacter, and directory values are refused
 /// by name rather than silently treated as "off" (a silent two-hour cold
 /// build), word-split by `make`, run as shell code by `configure` as root, or
-/// handed to `make` as a "launcher" that is really a directory.
+/// handed to `make` as a "launcher" that is really a directory or a path that
+/// resolves differently in every sub-make.
 #[test]
 fn launcher_env_rejects_empty_and_whitespace() {
     for bad in [
@@ -858,6 +875,11 @@ fn launcher_env_rejects_empty_and_whitespace() {
         "/usr/..",
         "/usr/bin/.",
         "//",
+        // Relative paths: each step and sub-make resolves them from a
+        // different cwd.
+        "./ccache",
+        "../bin/ccache",
+        "bin/ccache",
     ] {
         match parse_compiler_launcher(Some(bad)).unwrap_err() {
             LuggageError::Catalog(msg) => {

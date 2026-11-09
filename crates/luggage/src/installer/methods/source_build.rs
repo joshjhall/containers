@@ -90,11 +90,16 @@ pub fn compiler_launcher_from_env() -> Result<Option<String>> {
 /// a stray flag, and shell metacharacters would run as code in the build.
 /// A value whose last `/`-segment is empty, `.` or `..` (`/`, `.`, `..`,
 /// `bin/`, `/usr/..`) names a directory, not a program, and is refused too.
+/// So is a relative path (`./ccache`, `bin/ccache`): every step runs in the
+/// scratch source tree and `make` recurses into subdirectories, so it would
+/// resolve against a different directory at each level. Use a bare name
+/// (looked up on `PATH`) or an absolute path.
 ///
 /// # Errors
 ///
 /// [`LuggageError::Catalog`] naming the variable for an empty value, one with
-/// a character outside `[A-Za-z0-9._/+-]`, or one that names a directory.
+/// a character outside `[A-Za-z0-9._/+-]`, a relative path, or one that names
+/// a directory.
 pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
     let Some(raw) = raw else { return Ok(None) };
     // A conservative charset: a bare program name or a path. `configure`
@@ -109,6 +114,7 @@ pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
         || raw.starts_with('-')
         || !raw.chars().all(launcher_char)
         || matches!(program, "" | "." | "..")
+        || (raw.contains('/') && !raw.starts_with('/'))
     {
         return Err(LuggageError::Catalog(format!(
             "{COMPILER_LAUNCHER_ENV} must name a single launcher program (e.g. `ccache`), \
@@ -131,8 +137,11 @@ pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
 ///    be silently replaced by `cc` once the launcher is on;
 /// 3. else the first of `gcc`, `cc` (for `CXX`: `g++`, `c++`) found on
 ///    `PATH` — the order autoconf's `AC_PROG_CC`/`AC_PROG_CXX` probe in, so
-///    an image whose `cc` is not its `gcc` still gets the compiler
-///    `configure` would have picked;
+///    an image whose `cc` is not its `gcc` still gets the compiler an
+///    autoconf `configure` would have picked. A non-autoconf configure can
+///    differ: node's `configure.py` defaults to `cc`/`c++`. On the images
+///    luggage targets those are `gcc`/`g++`, so the choice is the same;
+///    an image that points `cc` elsewhere should export `CC`/`CXX`;
 /// 4. else nothing: the variable is left as it was. A C-only image has no
 ///    C++ compiler, and a `CXX` naming one that does not exist would turn
 ///    an unwrapped build's "no C++" into a hard failure.
@@ -173,6 +182,13 @@ fn apply_compiler_launcher(
 fn already_launched(base: &str, launcher: &str) -> bool {
     let name = |s: &str| s.rsplit('/').next().unwrap_or(s).to_owned();
     base.split_whitespace().next().is_some_and(|first| name(first) == name(launcher))
+}
+
+/// The log line naming the launcher and the `CC`/`CXX` it produced. Either
+/// may be absent (a C-only image has no `CXX`), shown as `unset`.
+fn launcher_note(launcher: &str, env: &BTreeMap<String, String>) -> String {
+    let shown = |var: &str| env.get(var).map_or("unset", String::as_str);
+    format!("compiler launcher: {launcher} (CC=`{}`, CXX=`{}`)", shown("CC"), shown("CXX"))
 }
 
 /// Run the source-build flow.
@@ -263,9 +279,7 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
             |var| std::env::var(var).ok(),
             crate::installer::syspackages::on_path,
         );
-        let shown = |var: &str| env.get(var).map_or("unset", String::as_str);
-        let note =
-            format!("compiler launcher: {launcher} (CC=`{}`, CXX=`{}`)", shown("CC"), shown("CXX"));
+        let note = launcher_note(launcher, &env);
         if let Some(l) = ctx.log {
             l.message(&note);
         } else {
