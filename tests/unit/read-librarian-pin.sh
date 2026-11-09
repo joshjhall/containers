@@ -287,6 +287,12 @@ test_escape_directive_rejected() {
     assert_equals "0" "$RC" "default escape + late comment are accepted"
     assert_equals "v0.18.0" "$OUT" "pin printed under the default escape"
 
+    # A CRLF default escape (`\` + CR) is still the default.
+    df=$(command printf '# escape=\\\r\nARG LIBRARIAN_REF=v0.18.0\n' | write_dockerfile)
+    run_pin "$df"
+    assert_equals "0" "$RC" "CRLF default escape is accepted"
+    assert_equals "v0.18.0" "$OUT" "pin printed under a CRLF default escape"
+
     # Directives are only read before the first plain comment or blank line,
     # too: an escape-looking line after either is just a comment.
     local lead
@@ -309,6 +315,13 @@ test_continued_pin_rejected() {
     run_pin "$df"
     assert_rejected "pin with a continued tail"
     assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF" "continued single-key pin is rejected"
+
+    # A CRLF checkout leaves `\` + CR at the end of a continued line; it must
+    # still join, or the pin on the next line would escape the form rule.
+    df=$(command printf 'ARG FOO=1 \\\r\n    LIBRARIAN_REF=v0.19.0\r\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "CRLF-continued pin"
+    assert_contains "$ERR" "in $df at line 1 (" "CRLF continuation is joined"
 
     # Docker skips comment and blank lines inside a continuation.
     df=$(command printf 'ARG LIBRARIAN_REF=v0.18.0\nARG FOO=1 \\\n# note\n\n    LIBRARIAN_REF=v0.19.0\n' | write_dockerfile)
