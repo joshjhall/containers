@@ -19,7 +19,10 @@
 #      rc 2, the #1597 message, and no stub written — so a new language port
 #      cannot drop the refusal, comment it out, or move it after the write.
 #   2. Static: test_no_backtick_call_sites reports any non-comment line that
-#      calls run_version_block and carries a backtick, as file:line.
+#      calls run_version_block and carries a backtick, as file:line. It only
+#      sees a body written inline on the call line; a body passed through a
+#      variable or a multi-line string is left to layer 1, which every call
+#      goes through regardless of how its body was built.
 
 set -euo pipefail
 
