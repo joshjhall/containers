@@ -138,6 +138,28 @@ test_existing_numeric_guard_rejects_corrupt() {
     assert_not_contains "$calls" "issue edit" "no issue is edited when the number is corrupt"
 }
 
+test_existing_guard_escapes_injected_number() {
+    # gh output reaches stderr on the step log, where the runner parses `::`
+    # workflow commands at line start. A corrupt capture carrying LF + `::`
+    # must stay on one line as an escape (#1589); a plain one keeps its quotes.
+    local err lines forged
+    install_gh_stub
+    run_open $'1\n::stop-commands::t'
+    assert_equals "1" "$OPEN_RC" "an injected EXISTING number makes the helper return 1"
+    lines="$(command wc -l <"$TEST_TEMP_DIR/open-err")"
+    assert_equals "1" "${lines// /}" "injected EXISTING → exactly one stderr line"
+    forged="$(command grep -c '^::' "$TEST_TEMP_DIR/open-err" || true)"
+    assert_equals "0" "$forged" "injected EXISTING → no stderr line starts with ::"
+    err="$(command cat "$TEST_TEMP_DIR/open-err")"
+    assert_equals "Unexpected issue number from gh issue list: \$'1\\n::stop-commands::t'" "$err" \
+        "injected EXISTING is rendered as an escape"
+    install_gh_stub
+    run_open "12x"
+    err="$(command cat "$TEST_TEMP_DIR/open-err")"
+    assert_equals "Unexpected issue number from gh issue list: '12x'" "$err" \
+        "plain corrupt EXISTING keeps the quoted form"
+}
+
 test_update_path() {
     install_gh_stub
     run_open "42"
@@ -280,5 +302,6 @@ run_test test_run_issue_none_when_all_pass "no tracking issue when every row pas
 run_test test_run_issue_drops_rows_failing_validation "rows failing validation never reach the issue"
 run_test test_open_reject_message_names_issue_filing "per-cell caller logs the exact 'Refusing to file issue'"
 run_test test_run_issue_reject_message_names_dropped_row "run caller logs a dropped row, not a refused filing"
+run_test test_existing_guard_escapes_injected_number "corrupt gh issue number with LF+:: → one escaped stderr line"
 
 generate_report
