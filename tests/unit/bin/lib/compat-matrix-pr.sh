@@ -99,6 +99,8 @@ test_commit_failure_opens_no_pr() {
     assert_equals "0" "$(_count '^pr merge')" "auto-merge is never attempted"
     assert_equals "0" "$(_count '^api -X (POST|PATCH) .*refs/heads/chore/compat-matrix-v')" \
         "the matrix branch is never created"
+    assert_equals "1" "$(_count '^api -X DELETE repos/o/r/git/refs/heads/chore-staging/compat-matrix-v1\.2\.3$')" \
+        "the staging ref the commit was attempted on is deleted"
     assert_contains "$ERR" "could not commit matrix.json to o/r:chore/compat-matrix-v1.2.3" "names what failed"
 }
 
