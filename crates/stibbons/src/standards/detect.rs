@@ -1,9 +1,11 @@
 //! Detect which repo-baseline language slices apply to a repository.
 //!
 //! The file list comes from `git ls-files` (tracked + untracked-but-not-ignored)
-//! so vendored and build output the repo already ignores never votes; outside a
-//! git repo it falls back to a bounded directory walk that skips the usual
-//! heavy directories. Classification is pure and unit-tested separately.
+//! so vendored and build output the repo already ignores never votes. That
+//! path runs only when the root is itself the top of a git work tree; any
+//! other root (no repo at all, or a subdirectory nested inside an enclosing
+//! repo) falls back to a bounded directory walk that skips the usual heavy
+//! directories. Classification is pure and unit-tested separately.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -82,7 +84,27 @@ fn has_shell_shebang(path: &Path) -> bool {
 }
 
 /// `git ls-files --cached --others --exclude-standard` under `root`, or `None`
-/// when `root` is not a git work tree (or git is unavailable).
+/// when `root` is not the top of a git work tree (or git is unavailable).
+///
+/// Git discovers repositories by walking up parent directories, so a plain
+/// `git -C root` on a non-repo subdirectory of some enclosing repo answers
+/// with that outer repo's listing. `root` is the repository root being
+/// configured, so a nested root is treated as a standalone tree instead:
+/// `GIT_CEILING_DIRECTORIES` is set to root's (canonical) parent, git checks
+/// `root` itself for a `.git` but never ascends past it, and a root without
+/// its own `.git` (tracked by the outer repo or not) takes the walk fallback.
+/// The ceiling alone is not sufficient, so the git path is always gated on
+/// git itself resolving `root` as the top of its work tree
+/// (`rev-parse --show-cdup` prints nothing):
+///
+/// - no ceiling can be expressed (see [`ceiling_for`]), always the case off
+///   Unix;
+/// - git skips an empty or invalid `.git` directory and ascends, so a mere
+///   `.git` entry is not enough;
+/// - a repo-local `core.worktree` in `root`'s own `.git/config` points the
+///   work tree elsewhere, and the ceiling cannot see that.
+///
+/// The ceiling stays as defense in depth for the listing itself.
 ///
 /// `root` is often a freshly cloned, untrusted repo, and `ls-files` honors
 /// its `.git/config`: a `core.fsmonitor` command there runs on every call.
@@ -91,7 +113,18 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// hooks today). Inherited repo-selecting and config-injecting env
 /// ([`GIT_REPO_ENV`]) is dropped so `-C root` alone picks the repository.
 fn git_files(root: &Path) -> Option<Vec<String>> {
+    if !is_toplevel(git_command(root, &["rev-parse", "--show-cdup"])) {
+        return None;
+    }
     run_ls_files(ls_files_command(root))
+}
+
+/// Whether a `git rev-parse --show-cdup` command reports `root` as the top of
+/// its work tree: it succeeds and prints nothing (a nested dir prints `../`).
+/// Comparing no paths keeps this immune to canonicalization differences such
+/// as Windows verbatim `\\?\` prefixes.
+fn is_toplevel(mut cmd: Command) -> bool {
+    cmd.output().is_ok_and(|o| o.status.success() && o.stdout.trim_ascii().is_empty())
 }
 
 /// Run a `git ls-files -z` command and split its NUL-separated output, or
@@ -134,15 +167,50 @@ const GIT_REPO_ENV: &[&str] = &[
 
 /// The hardened `git ls-files` invocation [`git_files`] runs (see there).
 fn ls_files_command(root: &Path) -> Command {
+    git_command(root, &["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+}
+
+/// `git -C root <args>` with the hardening [`git_files`] describes: fsmonitor
+/// and hooks pinned off, [`GIT_REPO_ENV`] stripped, and the discovery ceiling
+/// set when one can be expressed.
+fn git_command(root: &Path, args: &[&str]) -> Command {
     let mut cmd = Command::new("git");
     cmd.args(["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"])
         .arg("-C")
         .arg(root)
-        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
+        .args(args);
     for var in GIT_REPO_ENV {
         cmd.env_remove(var);
     }
+    if let Some(ceiling) = ceiling_for(root) {
+        cmd.env("GIT_CEILING_DIRECTORIES", ceiling);
+    }
     cmd
+}
+
+/// The directory git discovery must not ascend into: `root`'s parent, after
+/// resolving symlinks so a linked root cannot slip past to a different
+/// ancestor.
+///
+/// `None` when the ceiling cannot be expressed. That covers an unresolvable
+/// root, a root of `/`, and a parent of `/` (git ignores a bare `/` entry).
+/// It also covers a parent containing `:`, because `GIT_CEILING_DIRECTORIES`
+/// is `:`-separated with no escape, so such a path splits into bogus entries
+/// that bound nothing.
+///
+/// Always `None` off Unix. There the list separator is `;`, `canonicalize`
+/// returns a verbatim `\\?\C:\...` path git may not parse, and the drive
+/// colon would trip the check above anyway. `git_files`'s toplevel check,
+/// which runs on every platform, gives the same answer without a ceiling.
+fn ceiling_for(root: &Path) -> Option<std::path::PathBuf> {
+    if !cfg!(unix) {
+        return None;
+    }
+    let parent = root.canonicalize().ok()?.parent()?.to_path_buf();
+    // A colon lives in an ASCII byte, so a lossy view finds it even in a
+    // non-UTF-8 path.
+    let colon = parent.as_os_str().to_string_lossy().contains(':');
+    (parent.parent().is_some() && !colon).then_some(parent)
 }
 
 /// Repo-relative paths of regular files under `root`, skipping [`SKIP_DIRS`]
@@ -261,7 +329,6 @@ mod tests {
     }
 
     /// Runs `git` in `dir` with any inherited repo-selecting env stripped.
-    #[cfg(unix)]
     fn git(dir: &Path, args: &[&str]) -> bool {
         let mut cmd = Command::new("git");
         cmd.arg("-C").arg(dir).args(args);
@@ -278,8 +345,8 @@ mod tests {
     /// reads its default `$XDG_CONFIG_HOME/git/ignore`, so the key is pinned
     /// to `/dev/null` too. This must run after `ls_files_command`, whose
     /// `GIT_CONFIG_COUNT` removal it overrides. Repo-local config (which the
-    /// fsmonitor test relies on) still applies.
-    #[cfg(unix)]
+    /// fsmonitor test relies on) still applies. Git for Windows maps
+    /// `/dev/null` to `NUL`, so this is portable.
     fn hermetic(cmd: &mut Command) -> &mut Command {
         cmd.env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -486,6 +553,24 @@ mod tests {
             assert!(removed.contains(var), "{var} is not stripped");
         }
         assert_eq!(removed.len(), GIT_REPO_ENV.len());
+
+        // `/r` does not exist, so no ceiling can be resolved for it.
+        assert!(!cmd.get_envs().any(|(k, _)| k == "GIT_CEILING_DIRECTORIES"));
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("root");
+        std::fs::create_dir(&root).unwrap();
+        let cmd = ls_files_command(&root);
+        let ceiling = cmd.get_envs().find(|(k, _)| *k == "GIT_CEILING_DIRECTORIES");
+        if cfg!(unix) {
+            let want = tmp.path().canonicalize().unwrap();
+            assert_eq!(
+                ceiling,
+                Some((std::ffi::OsStr::new("GIT_CEILING_DIRECTORIES"), Some(want.as_os_str())))
+            );
+        } else {
+            // Off Unix, `git_files`'s toplevel check stands in for it.
+            assert_eq!(ceiling, None);
+        }
     }
 
     #[test]
@@ -543,25 +628,178 @@ mod tests {
     #[test]
     fn git_files_is_none_outside_a_work_tree() {
         let tmp = tempfile::tempdir().unwrap();
-        // Controls: `None` must come from "not a work tree", not from git
-        // being absent, and not from a TMPDIR that sits inside some repo
-        // (git searches parent directories).
+        // Control: `None` must come from "not a work tree", not from git
+        // being absent. Where TMPDIR lives no longer matters: the discovery
+        // ceiling stops git from answering with an enclosing repo (see
+        // `git_files_ignores_enclosing_repo`).
         assert!(git(tmp.path(), &["--version"]), "git is not runnable");
-        // rev-parse exits 0 and prints `false` inside a `.git` dir, so read
-        // its answer rather than its exit code.
-        let mut probe = Command::new("git");
-        probe.arg("-C").arg(tmp.path()).args(["rev-parse", "--is-inside-work-tree"]);
-        for var in GIT_REPO_ENV {
-            probe.env_remove(var);
-        }
-        let inside =
-            probe.output().is_ok_and(|o| o.status.success() && o.stdout.trim_ascii() == b"true");
-        assert!(
-            !inside,
-            "control: TMPDIR is inside a git work tree (environment limit, not a bug)"
-        );
         // `-C` to a non-repo makes git fail, which selects the walk fallback.
         assert_eq!(git_files(tmp.path()), None);
+    }
+
+    /// A root nested inside an enclosing repo is a standalone tree: git must
+    /// not answer with the outer repo's listing, whether the outer repo
+    /// tracks the subdirectory or not. The outer `.gitignore` drops
+    /// `sub/vendor/x.py`, so the outer repo's listing would vote `{shell}`
+    /// while the walk votes `{python, shell}`, which tells the two paths
+    /// apart. `outer.py` sits outside `sub/` and never votes either way.
+    #[cfg(unix)]
+    #[test]
+    fn git_files_ignores_enclosing_repo() {
+        let outer = tempfile::tempdir().unwrap();
+        let sub = outer.path().join("sub");
+        assert!(git(outer.path(), &["init", "-q"]), "git init failed");
+        std::fs::create_dir_all(sub.join("vendor")).unwrap();
+        std::fs::write(outer.path().join(".gitignore"), "vendor/\n").unwrap();
+        std::fs::write(outer.path().join("outer.py"), "").unwrap();
+        std::fs::write(sub.join("a.sh"), "").unwrap();
+        std::fs::write(sub.join("vendor/x.py"), "").unwrap();
+
+        // Positive control: the production command minus only the ceiling
+        // does answer from the ancestor (vendor/ ignored, so no python).
+        let unceiled = || {
+            let mut cmd = ls_files_command(&sub);
+            hermetic(&mut cmd).env_remove("GIT_CEILING_DIRECTORIES");
+            run_ls_files(cmd)
+        };
+
+        // Untracked subdirectory.
+        assert_eq!(unceiled(), Some(files(&["a.sh"])), "control: no enclosing repo found");
+        assert_eq!(git_files(&sub), None);
+        let walked = set(&["python", "shell"]);
+        assert_eq!(detect_slices(&sub, &walked), walked);
+
+        // Tracked subdirectory: still the outer repo's tree, still the walk.
+        assert!(git(outer.path(), &["add", "."]));
+        assert_eq!(unceiled(), Some(files(&["a.sh"])), "control: no enclosing repo found");
+        assert_eq!(git_files(&sub), None);
+        assert_eq!(detect_slices(&sub, &walked), walked);
+
+        // The ceiling excludes only ancestors: the outer root itself is a
+        // work tree top and keeps the git path.
+        assert!(git_files(outer.path()).is_some());
+
+        // A symlink to the nested dir resolves to the same ancestor, so it
+        // cannot slip past the ceiling either.
+        let elsewhere = tempfile::tempdir().unwrap();
+        let link = elsewhere.path().join("link");
+        std::os::unix::fs::symlink(&sub, &link).unwrap();
+        assert_eq!(git_files(&link), None);
+
+        // A nested repo with its own `.git` (an inner clone or submodule)
+        // still answers from itself: the ceiling only stops the ascent.
+        assert!(git(&sub, &["init", "-q"]), "inner git init failed");
+        let mut inner = git_files(&sub).expect("nested repo lost the git path");
+        inner.sort();
+        assert_eq!(inner, files(&["a.sh", "vendor/x.py"]));
+    }
+
+    /// `GIT_CEILING_DIRECTORIES` is `:`-separated, so a parent containing `:`
+    /// cannot be a ceiling. A real git confirms this: such a ceiling is
+    /// ignored and git answers from the enclosing repo. Without the toplevel
+    /// check in `git_files`, the nested root here would take the outer listing.
+    #[cfg(unix)]
+    #[test]
+    fn git_files_ignores_enclosing_repo_when_ceiling_unexpressible() {
+        let outer = tempfile::tempdir().unwrap();
+        assert!(git(outer.path(), &["init", "-q"]), "git init failed");
+        let sub = outer.path().join("a:b/sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("a.sh"), "").unwrap();
+
+        assert_eq!(ceiling_for(&sub), None);
+        // Positive control: the production command alone (no ceiling could
+        // be set) does answer from the ancestor.
+        let mut cmd = ls_files_command(&sub);
+        hermetic(&mut cmd);
+        assert_eq!(run_ls_files(cmd), Some(files(&["a.sh"])), "control: no enclosing repo found");
+        assert_eq!(git_files(&sub), None);
+
+        // An empty `.git` dir is not a repository: git skips it and ascends,
+        // so its mere existence must not select the git path. Control: the
+        // unguarded command still answers from the ancestor.
+        std::fs::create_dir(sub.join(".git")).unwrap();
+        let mut cmd = ls_files_command(&sub);
+        hermetic(&mut cmd);
+        assert_eq!(run_ls_files(cmd), Some(files(&["a.sh"])), "control: empty .git did not ascend");
+        assert_eq!(git_files(&sub), None);
+        std::fs::remove_dir(sub.join(".git")).unwrap();
+
+        // With its own `.git`, the same root keeps the git path.
+        assert!(git(&sub, &["init", "-q"]), "inner git init failed");
+        assert_eq!(git_files(&sub), Some(files(&["a.sh"])));
+    }
+
+    /// The nested-root contract on every OS, including Windows where no
+    /// ceiling is ever set and only the toplevel check guards it. The outer
+    /// repo tracks `sub/a.sh`, so an ascent from `sub` would list `a.sh`;
+    /// the walk fallback is the only way `git_files` can return `None` here.
+    #[test]
+    fn git_files_nested_root_contract_holds_on_every_os() {
+        let outer = tempfile::tempdir().unwrap();
+        let sub = outer.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("a.sh"), "").unwrap();
+        assert!(git(outer.path(), &["init", "-q"]), "git init failed");
+        assert!(git(outer.path(), &["add", "."]));
+
+        // Positive control: plain git from `sub` does answer from the outer
+        // repo, so the `None` below is the guard's doing.
+        let mut plain = Command::new("git");
+        plain.arg("-C").arg(&sub).args(["ls-files", "-z", "--cached"]);
+        for var in GIT_REPO_ENV {
+            plain.env_remove(var);
+        }
+        hermetic(&mut plain);
+        assert_eq!(run_ls_files(plain), Some(files(&["a.sh"])), "control: no enclosing repo found");
+
+        assert_eq!(git_files(&sub), None);
+        assert!(git_files(outer.path()).is_some(), "outer root lost the git path");
+        assert!(git(&sub, &["init", "-q"]), "inner git init failed");
+        assert!(git_files(&sub).is_some(), "nested repo lost the git path");
+    }
+
+    /// An untrusted root's own `.git/config` can set `core.worktree` to a
+    /// sibling directory. The discovery ceiling cannot see that, so without
+    /// the toplevel check `ls-files` would classify the sibling's files.
+    /// Ungated: on Unix it covers the ceiling-set path, elsewhere the
+    /// no-ceiling one.
+    #[test]
+    fn git_files_rejects_repo_local_core_worktree_redirect() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("root");
+        let sibling = tmp.path().join("sibling");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&sibling).unwrap();
+        std::fs::write(root.join("a.sh"), "").unwrap();
+        std::fs::write(sibling.join("evil.py"), "").unwrap();
+        assert!(git(&root, &["init", "-q"]), "git init failed");
+        let sibling_abs = sibling.canonicalize().unwrap();
+        assert!(git(&root, &["config", "core.worktree", sibling_abs.to_str().unwrap()]));
+
+        // Positive control: the hardened listing alone, ceiling included,
+        // follows the redirect and lists the sibling's file.
+        let mut cmd = ls_files_command(&root);
+        hermetic(&mut cmd);
+        assert_eq!(run_ls_files(cmd), Some(files(&["evil.py"])), "control: redirect not followed");
+
+        assert_eq!(git_files(&root), None);
+        // The walk then sees only `root`'s own tree.
+        assert_eq!(detect_slices(&root, &set(&["shell", "python"])), set(&["shell"]));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ceiling_for_rejects_unexpressible_parents() {
+        assert_eq!(ceiling_for(Path::new("/")), None);
+        let tmp = tempfile::tempdir().unwrap();
+        let colon = tmp.path().join("x:y");
+        std::fs::create_dir_all(colon.join("root")).unwrap();
+        assert_eq!(ceiling_for(&colon.join("root")), None);
+        // A `:` in root's own name is fine; only the parent is a ceiling.
+        let named = tmp.path().join("r:oot");
+        std::fs::create_dir(&named).unwrap();
+        assert_eq!(ceiling_for(&named), Some(tmp.path().canonicalize().unwrap()));
     }
 
     #[cfg(unix)]
