@@ -152,7 +152,8 @@ pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
 /// `CC="ccache gcc"`) is kept as-is rather than wrapped a second time.
 ///
 /// `inherited` looks a variable up in the process environment and `on_path`
-/// reports whether a program is executable on `PATH`; both are parameters
+/// reports whether a program is executable on the steps' `PATH` (see
+/// [`step_on_path`]); both are parameters
 /// so tests can supply them without `std::env::set_var`.
 fn apply_compiler_launcher(
     env: &mut BTreeMap<String, String>,
@@ -182,6 +183,19 @@ fn apply_compiler_launcher(
 fn already_launched(base: &str, launcher: &str) -> bool {
     let name = |s: &str| s.rsplit('/').next().unwrap_or(s).to_owned();
     base.split_whitespace().next().is_some_and(|first| name(first) == name(launcher))
+}
+
+/// The `on_path` probe for [`apply_compiler_launcher`]: searches the `PATH`
+/// the build steps will run with — the catalog's own when it sets one, else
+/// luggage's — so the compiler chosen is one the steps can actually find.
+fn step_on_path(env: &BTreeMap<String, String>) -> impl Fn(&str) -> bool + use<> {
+    let step_path = env.get("PATH").cloned();
+    move |name: &str| {
+        step_path.as_ref().map_or_else(
+            || crate::installer::syspackages::on_path(name),
+            |paths| crate::installer::syspackages::on_search_path(paths.as_ref(), name),
+        )
+    }
 }
 
 /// The log line naming the launcher and the `CC`/`CXX` it produced. Either
@@ -273,12 +287,8 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
     // 3. Run the steps in order; the first failure aborts the rest.
     let mut env = build_env(ctx);
     if let Some(launcher) = ctx.compiler_launcher {
-        apply_compiler_launcher(
-            &mut env,
-            launcher,
-            |var| std::env::var(var).ok(),
-            crate::installer::syspackages::on_path,
-        );
+        let on_path = step_on_path(&env);
+        apply_compiler_launcher(&mut env, launcher, |var| std::env::var(var).ok(), on_path);
         let note = launcher_note(launcher, &env);
         if let Some(l) = ctx.log {
             l.message(&note);

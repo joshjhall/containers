@@ -168,9 +168,13 @@ pub fn resolve_program(program: &'static str, on_path: impl Fn(&str) -> bool) ->
 
 /// `true` when `name` is an executable file in some `PATH` directory.
 pub(crate) fn on_path(name: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|paths| {
-        std::env::split_paths(&paths).any(|dir| is_executable(&dir.join(name)))
-    })
+    std::env::var_os("PATH").is_some_and(|paths| on_search_path(&paths, name))
+}
+
+/// `true` when `name` is an executable file in some directory of `paths`, a
+/// `PATH`-style list — for callers probing a `PATH` other than luggage's own.
+pub(crate) fn on_search_path(paths: &std::ffi::OsStr, name: &str) -> bool {
+    std::env::split_paths(paths).any(|dir| is_executable(&dir.join(name)))
 }
 
 #[cfg(unix)]

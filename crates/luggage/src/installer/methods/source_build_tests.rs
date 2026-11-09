@@ -789,6 +789,30 @@ fn launcher_leaves_a_missing_compiler_unset() {
     assert_eq!(env["CXX"], "ccache clang++");
 }
 
+/// The compiler probe searches the `PATH` the steps run with: a catalog
+/// `PATH` replaces luggage's, so a compiler only there is found and one only
+/// on luggage's `PATH` is not.
+#[cfg(unix)]
+#[test]
+fn launcher_probes_the_step_path_when_the_catalog_sets_one() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempdir().unwrap();
+    let gcc = dir.path().join("gcc-luggage-probe");
+    fs::write(&gcc, "#!/bin/sh\n").unwrap();
+    fs::set_permissions(&gcc, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(dir.path().join("not-executable"), "").unwrap();
+
+    let env = BTreeMap::from([("PATH".to_owned(), dir.path().display().to_string())]);
+    let probe = step_on_path(&env);
+    assert!(probe("gcc-luggage-probe"), "a compiler on the catalog PATH is found");
+    assert!(!probe("not-executable"), "a non-executable file is not a compiler");
+    assert!(!probe("sh"), "luggage's own PATH is not searched when the catalog sets one");
+
+    // No catalog PATH: luggage's own is searched.
+    assert!(step_on_path(&BTreeMap::new())("sh"), "sh is on luggage's PATH");
+    assert!(!step_on_path(&BTreeMap::new())("gcc-luggage-probe"));
+}
+
 /// The log note survives a compiler left unset (indexing `env["CXX"]` used
 /// to panic on a C-only image) and names exactly what each step receives.
 #[test]
