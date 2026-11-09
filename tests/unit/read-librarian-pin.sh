@@ -240,6 +240,12 @@ test_multi_key_pin_rejected() {
     assert_rejected "multi-key duplicate pin"
     assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF" "multi-key duplicate is not silently skipped"
 
+    # A valueless first key (`ARG FOO LIBRARIAN_REF=...`) is multi-key too.
+    df=$(command printf 'ARG FOO LIBRARIAN_REF=v0.19.0\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "multi-key pin after a bare key"
+    assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF in $df at line 1" "bare-first-key multi-key hits the form rule"
+
     # Pin as the FIRST key: must hit the form rule, not merely the shape check.
     df=$(command printf 'FROM debian:13\nARG LIBRARIAN_REF=v0.19.0 FOO=1\n' | write_dockerfile)
     run_pin "$df"
@@ -267,6 +273,12 @@ test_escape_directive_rejected() {
         assert_contains "$ERR" "unsupported '# escape=' parser directive" "'$directives' is recognised as an escape directive"
         assert_not_contains "$ERR" "unsupported ARG form" "'$directives': the escape error takes precedence"
     done
+
+    # Every offending directive line is reported, not just the first.
+    df=$(command printf '# escape=`\n# escape=`\nARG LIBRARIAN_REF=v0.18.0\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "two escape directives"
+    assert_contains "$ERR" "parser directive in $df at line 1 2;" "both directive lines are listed"
 
     # The default escape, and an escape-looking comment AFTER the directive
     # block (no longer a directive), are both fine.
