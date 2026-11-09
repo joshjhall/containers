@@ -38,6 +38,7 @@ readonly LINUX_ONLY='["ubuntu-26.04"]'
 
 # Build a throwaway repo whose `origin/main` is the base commit, then put
 # one commit adding $1 on top as HEAD. Prints the repo path.
+# Several paths may be given as one comma-separated argument.
 _pr_repo() {
     local changed="$1" repo
     repo="$(/usr/bin/mktemp -d "$TEST_TEMP_DIR/repo.XXXXXX")"
@@ -52,9 +53,13 @@ _pr_repo() {
         git add README.md
         git commit -qm base
         git update-ref refs/remotes/origin/main HEAD
-        /usr/bin/mkdir -p "$(/usr/bin/dirname "$changed")"
-        /usr/bin/printf 'x\n' >"$changed"
-        git add "$changed"
+        local f
+        IFS=',' read -ra files <<<"$changed"
+        for f in "${files[@]}"; do
+            /usr/bin/mkdir -p "$(/usr/bin/dirname "$f")"
+            /usr/bin/printf 'x\n' >"$f"
+            git add "$f"
+        done
         git commit -qm change
     ) >/dev/null 2>&1 || return 1
     /usr/bin/printf '%s\n' "$repo"
@@ -79,6 +84,7 @@ test_matrix_by_changed_path() {
         "Cargo.toml|$FULL|a Cargo.toml PR runs all three OSes"
         "Cargo.lock|$FULL|a Cargo.lock PR runs all three OSes"
         "rust-toolchain.toml|$FULL|a rust-toolchain PR runs all three OSes"
+        "docs/a.md,bin/b.sh,crates/stibbons/src/lib.rs|$FULL|a Rust path is not masked by other changed files"
     )
     local row path want why repo got violations=0
     for row in "${cases[@]}"; do
