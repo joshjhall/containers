@@ -93,10 +93,18 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// `GIT_CEILING_DIRECTORIES` is set to root's (canonical) parent, git checks
 /// `root` itself for a `.git` but never ascends past it, and a root without
 /// its own `.git` (tracked by the outer repo or not) takes the walk fallback.
-/// When no ceiling can be expressed (see [`ceiling_for`]), the git path is
-/// taken only if git itself resolves `root` as the top of its work tree
-/// (`rev-parse --show-cdup` prints nothing). A mere `.git` entry is not
-/// enough: git skips an empty or invalid `.git` directory and ascends.
+/// The ceiling alone is not sufficient, so the git path is always gated on
+/// git itself resolving `root` as the top of its work tree
+/// (`rev-parse --show-cdup` prints nothing):
+///
+/// - no ceiling can be expressed (see [`ceiling_for`]), always the case off
+///   Unix;
+/// - git skips an empty or invalid `.git` directory and ascends, so a mere
+///   `.git` entry is not enough;
+/// - a repo-local `core.worktree` in `root`'s own `.git/config` points the
+///   work tree elsewhere, and the ceiling cannot see that.
+///
+/// The ceiling stays as defense in depth for the listing itself.
 ///
 /// `root` is often a freshly cloned, untrusted repo, and `ls-files` honors
 /// its `.git/config`: a `core.fsmonitor` command there runs on every call.
@@ -105,8 +113,7 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// hooks today). Inherited repo-selecting and config-injecting env
 /// ([`GIT_REPO_ENV`]) is dropped so `-C root` alone picks the repository.
 fn git_files(root: &Path) -> Option<Vec<String>> {
-    if ceiling_for(root).is_none() && !is_toplevel(git_command(root, &["rev-parse", "--show-cdup"]))
-    {
+    if !is_toplevel(git_command(root, &["rev-parse", "--show-cdup"])) {
         return None;
     }
     run_ls_files(ls_files_command(root))
@@ -193,8 +200,8 @@ fn git_command(root: &Path, args: &[&str]) -> Command {
 ///
 /// Always `None` off Unix. There the list separator is `;`, `canonicalize`
 /// returns a verbatim `\\?\C:\...` path git may not parse, and the drive
-/// colon would trip the check above anyway. `git_files`'s toplevel check
-/// gives the same answer without a ceiling.
+/// colon would trip the check above anyway. `git_files`'s toplevel check,
+/// which runs on every platform, gives the same answer without a ceiling.
 fn ceiling_for(root: &Path) -> Option<std::path::PathBuf> {
     if !cfg!(unix) {
         return None;
@@ -750,6 +757,35 @@ mod tests {
         assert!(git_files(outer.path()).is_some(), "outer root lost the git path");
         assert!(git(&sub, &["init", "-q"]), "inner git init failed");
         assert!(git_files(&sub).is_some(), "nested repo lost the git path");
+    }
+
+    /// An untrusted root's own `.git/config` can set `core.worktree` to a
+    /// sibling directory. The discovery ceiling cannot see that, so without
+    /// the toplevel check `ls-files` would classify the sibling's files.
+    /// Ungated: on Unix it covers the ceiling-set path, elsewhere the
+    /// no-ceiling one.
+    #[test]
+    fn git_files_rejects_repo_local_core_worktree_redirect() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("root");
+        let sibling = tmp.path().join("sibling");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&sibling).unwrap();
+        std::fs::write(root.join("a.sh"), "").unwrap();
+        std::fs::write(sibling.join("evil.py"), "").unwrap();
+        assert!(git(&root, &["init", "-q"]), "git init failed");
+        let sibling_abs = sibling.canonicalize().unwrap();
+        assert!(git(&root, &["config", "core.worktree", sibling_abs.to_str().unwrap()]));
+
+        // Positive control: the hardened listing alone, ceiling included,
+        // follows the redirect and lists the sibling's file.
+        let mut cmd = ls_files_command(&root);
+        hermetic(&mut cmd);
+        assert_eq!(run_ls_files(cmd), Some(files(&["evil.py"])), "control: redirect not followed");
+
+        assert_eq!(git_files(&root), None);
+        // The walk then sees only `root`'s own tree.
+        assert_eq!(detect_slices(&root, &set(&["shell", "python"])), set(&["shell"]));
     }
 
     #[cfg(unix)]
