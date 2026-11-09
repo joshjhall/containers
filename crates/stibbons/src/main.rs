@@ -99,7 +99,8 @@ fn main() {
             Ok(commands::setup::SetupOutcome::Drift) => std::process::exit(1),
             Ok(commands::setup::SetupOutcome::Done) => {}
             Err(e) => {
-                eprintln!("Error: {e}");
+                // Standards errors are chained (cause in `source()`, #1578).
+                eprintln!("Error: {}", standards::error_chain(&*e));
                 std::process::exit(1);
             }
         },

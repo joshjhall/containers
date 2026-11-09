@@ -13,7 +13,7 @@
 //!   silently clobber it.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// File name of the standards state, at the repo root.
 pub const STATE_FILE: &str = ".stibbons-standards.yml";
@@ -86,7 +86,8 @@ impl StandardsState {
     ///
     /// # Errors
     ///
-    /// Returns an error for a symlinked state path, or when serialization or
+    /// Returns an error for a symlinked state path or a failed serialization,
+    /// or a [`StateSaveError`] (with the [`std::io::Error`] as its source) when
     /// the write fails.
     pub fn save(&self, root: &Path) -> Result<(), Box<dyn std::error::Error>> {
         super::fsutil::ensure_no_symlink(root, STATE_FILE)?;
@@ -96,9 +97,29 @@ impl StandardsState {
             "# Managed by `stibbons setup standards`. Records which repo-baseline\n\
              # files were applied and their hashes, for drift detection.\n{body}"
         );
-        std::fs::write(&path, text)
-            .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
+        std::fs::write(&path, text).map_err(|source| StateSaveError { path, source })?;
         Ok(())
+    }
+}
+
+/// Writing [`STATE_FILE`] failed. Chained like the other standards errors:
+/// `Display` names the path, and the [`std::io::Error`] is the
+/// [`source`](std::error::Error::source).
+#[derive(Debug)]
+pub struct StateSaveError {
+    path: PathBuf,
+    source: std::io::Error,
+}
+
+impl std::fmt::Display for StateSaveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "failed to write {}", self.path.display())
+    }
+}
+
+impl std::error::Error for StateSaveError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
     }
 }
 
@@ -137,6 +158,21 @@ mod tests {
         let err = StandardsState::new().save(tmp.path()).unwrap_err().to_string();
         assert!(err.contains("is a symlink"), "{err}");
         assert_eq!(std::fs::read_to_string(&ext).unwrap(), "keep\n");
+    }
+
+    #[test]
+    fn failed_save_keeps_io_error_as_source() {
+        use std::error::Error as _;
+        let tmp = tempfile::tempdir().unwrap();
+        // A directory where the state file goes fails the write, for root too.
+        std::fs::create_dir(tmp.path().join(STATE_FILE)).unwrap();
+        let err = StandardsState::new().save(tmp.path()).unwrap_err();
+        let save = err.downcast_ref::<StateSaveError>().expect("typed save error");
+        assert_eq!(
+            save.to_string(),
+            format!("failed to write {}", tmp.path().join(STATE_FILE).display())
+        );
+        assert!(save.source().expect("source").is::<std::io::Error>(), "{save}");
     }
 
     #[test]
