@@ -117,6 +117,48 @@ fn failure_report_emits_fail_row_with_error_class() {
     assert!(row["ci_run"].is_null(), "ci_run is optional");
 }
 
+/// `removed_build_dependencies` must survive the real producer boundary —
+/// luggage's JSON report file, deserialized by this binary — not just the
+/// in-memory struct the lib tests set directly (#1620). A rename or
+/// `#[serde(skip)]` on the `InstallReport` side would pass those but fail here.
+#[test]
+fn removed_build_dependencies_cross_the_report_file_boundary() {
+    const PASS: &str = r#"{
+        "tool": "rust", "version": "1.95.0", "already_installed": false,
+        "duration_seconds": 12.5, "version_output": "rustc 1.95.0 (abcdef0)",
+        "removed_build_dependencies": ["g++", "make"]
+    }"#;
+    const FAIL: &str = r#"{
+        "tool": "rust", "version": "1.95.0", "already_installed": false,
+        "duration_seconds": 4.2, "error_class": "validate",
+        "removed_build_dependencies": ["g++", "make"]
+    }"#;
+
+    for (report_json, want_result, want_field) in
+        [(PASS, "pass", Some(serde_json::json!(["g++", "make"]))), (FAIL, "fail", None)]
+    {
+        let dir = tempdir().unwrap();
+        let report = write_report(dir.path(), report_json);
+        let out = run(&[
+            "--luggage-report",
+            report.to_str().unwrap(),
+            "--image-ref",
+            "ghcr.io/x/base-debian-12-amd64:v1.0.0",
+            "--image-digest",
+            "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "--os",
+            "debian",
+            "--arch",
+            "amd64",
+        ]);
+        assert_exit(&out, 0);
+
+        let row: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(row["result"], want_result);
+        assert_eq!(row.get("removed_build_dependencies").cloned(), want_field, "{want_result} row");
+    }
+}
+
 #[test]
 fn skip_report_emits_skip_row() {
     let dir = tempdir().unwrap();
