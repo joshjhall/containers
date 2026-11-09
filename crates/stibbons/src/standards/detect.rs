@@ -724,9 +724,9 @@ mod tests {
     }
 
     /// The nested-root contract on every OS, including Windows where no
-    /// ceiling is ever set and only the toplevel check guards it. `outer.py`
-    /// sits beside `sub/`, so an ascent would still list nothing of `sub`'s;
-    /// the tracked `sub/a.sh` is what an ascent would return.
+    /// ceiling is ever set and only the toplevel check guards it. The outer
+    /// repo tracks `sub/a.sh`, so an ascent from `sub` would list `a.sh`;
+    /// the walk fallback is the only way `git_files` can return `None` here.
     #[test]
     fn git_files_nested_root_contract_holds_on_every_os() {
         let outer = tempfile::tempdir().unwrap();
