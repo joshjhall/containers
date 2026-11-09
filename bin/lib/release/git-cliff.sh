@@ -56,7 +56,7 @@ ensure_git_cliff() {
 
     echo "Downloading git-cliff from $download_url..."
     if command curl -sfL "$download_url" | tar xz -C "$temp_dir"; then
-        sudo command mv "$temp_dir/git-cliff-${version}/git-cliff" /usr/local/bin/
+        sudo /bin/mv "$temp_dir/git-cliff-${version}/git-cliff" /usr/local/bin/
         sudo chmod +x /usr/local/bin/git-cliff
         command rm -rf "$temp_dir"
         echo -e "${GREEN}✓${NC} git-cliff installed successfully"
