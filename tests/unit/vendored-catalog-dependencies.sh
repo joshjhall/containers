@@ -141,12 +141,44 @@ test_dependency_guard_catches_missing_entry() {
         return 0
     fi
 
-    local scratch gaps rc problems=""
-    scratch="$(command mktemp -d)"
-    command cp -R "$VENDORED/tools" "$scratch/tools"
+    # Fixture preconditions on the LIVE catalog. The mutations below assume
+    # gxx maps only alpine (so dropping it is exactly one gap) and libatomic
+    # maps rhel (so dropping that distro is exactly one gap). If the catalog
+    # changes, say so — do not let it read as a guard regression.
+    if ! command jq -e '.system_package.platforms | keys == ["alpine"]' \
+        "$VENDORED/tools/gxx/index.json" >/dev/null 2>&1; then
+        fail_test "fixture changed: vendored tools/gxx is missing or no longer maps only alpine — update this test's fixture, not the guard"
+        return 0
+    fi
+    if ! command jq -e '.system_package.platforms | has("rhel")' \
+        "$VENDORED/tools/libatomic/index.json" >/dev/null 2>&1; then
+        fail_test "fixture changed: vendored tools/libatomic is missing or no longer maps rhel — update this test's fixture, not the guard"
+        return 0
+    fi
 
-    # Whole entry missing (gxx is alpine-only).
-    command rm -rf "$scratch/tools/gxx"
+    # run_test calls this in an `||` context, so set -e is off in here: every
+    # setup step must check itself or a failure would surface as a guard bug.
+    local scratch gaps rc problems=""
+    scratch="$(command mktemp -d)" || {
+        fail_test "setup: mktemp -d failed"
+        return 0
+    }
+    # Self-clearing: a RETURN trap is global and would otherwise re-fire on
+    # every later function return in this shell.
+    # shellcheck disable=SC2064  # expand $scratch now, not at return time
+    trap "command rm -rf '$scratch'; trap - RETURN" RETURN
+    command cp -R "$VENDORED/tools" "$scratch/tools" ||
+        {
+            fail_test "setup: copying the vendored catalog to $scratch failed"
+            return 0
+        }
+
+    # Whole entry missing (gxx is alpine-only, checked above).
+    command rm -rf "$scratch/tools/gxx" ||
+        {
+            fail_test "setup: removing tools/gxx from the scratch catalog failed"
+            return 0
+        }
     rc=0
     gaps="$(dependency_gaps "$scratch")" || rc=$?
     if [ "$rc" -ne 0 ]; then
@@ -154,12 +186,21 @@ test_dependency_guard_catches_missing_entry() {
     elif [ "$gaps" != "gxx/alpine" ]; then
         problems="$problems"$'\n'"  whole-entry removal: want exactly gxx/alpine, got: ${gaps:-<nothing>}"
     fi
-    command cp -R "$VENDORED/tools/gxx" "$scratch/tools/gxx"
+    command cp -R "$VENDORED/tools/gxx" "$scratch/tools/gxx" ||
+        {
+            fail_test "setup: restoring tools/gxx in the scratch catalog failed"
+            return 0
+        }
 
     # Partially mirrored entry: one distro dropped from a multi-distro
-    # mapping. libatomic's consumers target debian/ubuntu/rhel.
+    # mapping. libatomic's consumers target debian/ubuntu/rhel (rhel mapping
+    # checked above).
     local lib="$scratch/tools/libatomic/index.json"
-    command jq 'del(.system_package.platforms.rhel)' "$VENDORED/tools/libatomic/index.json" >"$lib"
+    command jq 'del(.system_package.platforms.rhel)' "$VENDORED/tools/libatomic/index.json" >"$lib" ||
+        {
+            fail_test "setup: dropping libatomic's rhel mapping in the scratch catalog failed"
+            return 0
+        }
     rc=0
     gaps="$(dependency_gaps "$scratch")" || rc=$?
     if [ "$rc" -ne 0 ]; then
@@ -167,7 +208,6 @@ test_dependency_guard_catches_missing_entry() {
     elif [ "$gaps" != "libatomic/rhel" ]; then
         problems="$problems"$'\n'"  partial-entry removal: want exactly libatomic/rhel, got: ${gaps:-<nothing>}"
     fi
-    command rm -rf "$scratch"
 
     # Exact match: the gap must be reported, and nothing else may be.
     if [ -n "$problems" ]; then
@@ -193,7 +233,13 @@ test_dependency_guard_selectors_and_errors() {
     fi
 
     local cat gaps rc problems=""
-    cat="$(command mktemp -d)"
+    cat="$(command mktemp -d)" || {
+        fail_test "setup: mktemp -d failed"
+        return 0
+    }
+    # Self-clearing RETURN trap, as in test_dependency_guard_catches_missing_entry.
+    # shellcheck disable=SC2064  # expand $cat now, not at return time
+    trap "command rm -rf '$cat'; trap - RETURN" RETURN
     _write_sys "$cat" debonly '{"debian":{"name":"d"}}'
     _write_sys "$cat" alponly '{"alpine":{"name":"a"}}'
     # Not kind=system_package but carries a block: sysdeps resolves it, so
@@ -284,7 +330,6 @@ test_dependency_guard_selectors_and_errors() {
     elif [[ "$err" != *"no tools/*/versions/*.json"* ]]; then
         problems="$problems"$'\n'"  empty catalog rejected for the wrong reason: $err"
     fi
-    command rm -rf "$cat"
 
     if [ -n "$problems" ]; then
         fail_test "dependency_gaps misbehaved:$problems"
