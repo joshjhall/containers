@@ -94,8 +94,9 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// `root` itself for a `.git` but never ascends past it, and a root without
 /// its own `.git` (tracked by the outer repo or not) takes the walk fallback.
 /// When no ceiling can be expressed (see [`ceiling_for`]), the git path is
-/// taken only if `root` has its own `.git` entry, which git finds before it
-/// would ascend.
+/// taken only if git itself resolves `root` as the top of its work tree
+/// (`rev-parse --show-cdup` prints nothing). A mere `.git` entry is not
+/// enough: git skips an empty or invalid `.git` directory and ascends.
 ///
 /// `root` is often a freshly cloned, untrusted repo, and `ls-files` honors
 /// its `.git/config`: a `core.fsmonitor` command there runs on every call.
@@ -104,10 +105,19 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// hooks today). Inherited repo-selecting and config-injecting env
 /// ([`GIT_REPO_ENV`]) is dropped so `-C root` alone picks the repository.
 fn git_files(root: &Path) -> Option<Vec<String>> {
-    if ceiling_for(root).is_none() && std::fs::symlink_metadata(root.join(".git")).is_err() {
+    if ceiling_for(root).is_none() && !is_toplevel(git_command(root, &["rev-parse", "--show-cdup"]))
+    {
         return None;
     }
     run_ls_files(ls_files_command(root))
+}
+
+/// Whether a `git rev-parse --show-cdup` command reports `root` as the top of
+/// its work tree: it succeeds and prints nothing (a nested dir prints `../`).
+/// Comparing no paths keeps this immune to canonicalization differences such
+/// as Windows verbatim `\\?\` prefixes.
+fn is_toplevel(mut cmd: Command) -> bool {
+    cmd.output().is_ok_and(|o| o.status.success() && o.stdout.trim_ascii().is_empty())
 }
 
 /// Run a `git ls-files -z` command and split its NUL-separated output, or
@@ -150,11 +160,18 @@ const GIT_REPO_ENV: &[&str] = &[
 
 /// The hardened `git ls-files` invocation [`git_files`] runs (see there).
 fn ls_files_command(root: &Path) -> Command {
+    git_command(root, &["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+}
+
+/// `git -C root <args>` with the hardening [`git_files`] describes: fsmonitor
+/// and hooks pinned off, [`GIT_REPO_ENV`] stripped, and the discovery ceiling
+/// set when one can be expressed.
+fn git_command(root: &Path, args: &[&str]) -> Command {
     let mut cmd = Command::new("git");
     cmd.args(["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"])
         .arg("-C")
         .arg(root)
-        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
+        .args(args);
     for var in GIT_REPO_ENV {
         cmd.env_remove(var);
     }
@@ -176,7 +193,7 @@ fn ls_files_command(root: &Path) -> Command {
 ///
 /// Always `None` off Unix. There the list separator is `;`, `canonicalize`
 /// returns a verbatim `\\?\C:\...` path git may not parse, and the drive
-/// colon would trip the check above anyway. `git_files`'s own-`.git` guard
+/// colon would trip the check above anyway. `git_files`'s toplevel check
 /// gives the same answer without a ceiling.
 fn ceiling_for(root: &Path) -> Option<std::path::PathBuf> {
     if !cfg!(unix) {
@@ -305,7 +322,6 @@ mod tests {
     }
 
     /// Runs `git` in `dir` with any inherited repo-selecting env stripped.
-    #[cfg(unix)]
     fn git(dir: &Path, args: &[&str]) -> bool {
         let mut cmd = Command::new("git");
         cmd.arg("-C").arg(dir).args(args);
@@ -322,8 +338,8 @@ mod tests {
     /// reads its default `$XDG_CONFIG_HOME/git/ignore`, so the key is pinned
     /// to `/dev/null` too. This must run after `ls_files_command`, whose
     /// `GIT_CONFIG_COUNT` removal it overrides. Repo-local config (which the
-    /// fsmonitor test relies on) still applies.
-    #[cfg(unix)]
+    /// fsmonitor test relies on) still applies. Git for Windows maps
+    /// `/dev/null` to `NUL`, so this is portable.
     fn hermetic(cmd: &mut Command) -> &mut Command {
         cmd.env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -545,7 +561,7 @@ mod tests {
                 Some((std::ffi::OsStr::new("GIT_CEILING_DIRECTORIES"), Some(want.as_os_str())))
             );
         } else {
-            // Off Unix, `git_files`'s own-`.git` guard stands in for it.
+            // Off Unix, `git_files`'s toplevel check stands in for it.
             assert_eq!(ceiling, None);
         }
     }
@@ -673,8 +689,8 @@ mod tests {
 
     /// `GIT_CEILING_DIRECTORIES` is `:`-separated, so a parent containing `:`
     /// cannot be a ceiling. A real git confirms this: such a ceiling is
-    /// ignored and git answers from the enclosing repo. Without the `.git`
-    /// guard in `git_files`, the nested root here would take the outer listing.
+    /// ignored and git answers from the enclosing repo. Without the toplevel
+    /// check in `git_files`, the nested root here would take the outer listing.
     #[cfg(unix)]
     #[test]
     fn git_files_ignores_enclosing_repo_when_ceiling_unexpressible() {
@@ -692,9 +708,48 @@ mod tests {
         assert_eq!(run_ls_files(cmd), Some(files(&["a.sh"])), "control: no enclosing repo found");
         assert_eq!(git_files(&sub), None);
 
+        // An empty `.git` dir is not a repository: git skips it and ascends,
+        // so its mere existence must not select the git path. Control: the
+        // unguarded command still answers from the ancestor.
+        std::fs::create_dir(sub.join(".git")).unwrap();
+        let mut cmd = ls_files_command(&sub);
+        hermetic(&mut cmd);
+        assert_eq!(run_ls_files(cmd), Some(files(&["a.sh"])), "control: empty .git did not ascend");
+        assert_eq!(git_files(&sub), None);
+        std::fs::remove_dir(sub.join(".git")).unwrap();
+
         // With its own `.git`, the same root keeps the git path.
         assert!(git(&sub, &["init", "-q"]), "inner git init failed");
         assert_eq!(git_files(&sub), Some(files(&["a.sh"])));
+    }
+
+    /// The nested-root contract on every OS, including Windows where no
+    /// ceiling is ever set and only the toplevel check guards it. `outer.py`
+    /// sits beside `sub/`, so an ascent would still list nothing of `sub`'s;
+    /// the tracked `sub/a.sh` is what an ascent would return.
+    #[test]
+    fn git_files_nested_root_contract_holds_on_every_os() {
+        let outer = tempfile::tempdir().unwrap();
+        let sub = outer.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("a.sh"), "").unwrap();
+        assert!(git(outer.path(), &["init", "-q"]), "git init failed");
+        assert!(git(outer.path(), &["add", "."]));
+
+        // Positive control: plain git from `sub` does answer from the outer
+        // repo, so the `None` below is the guard's doing.
+        let mut plain = Command::new("git");
+        plain.arg("-C").arg(&sub).args(["ls-files", "-z", "--cached"]);
+        for var in GIT_REPO_ENV {
+            plain.env_remove(var);
+        }
+        hermetic(&mut plain);
+        assert_eq!(run_ls_files(plain), Some(files(&["a.sh"])), "control: no enclosing repo found");
+
+        assert_eq!(git_files(&sub), None);
+        assert!(git_files(outer.path()).is_some(), "outer root lost the git path");
+        assert!(git(&sub, &["init", "-q"]), "inner git init failed");
+        assert!(git_files(&sub).is_some(), "nested repo lost the git path");
     }
 
     #[cfg(unix)]
