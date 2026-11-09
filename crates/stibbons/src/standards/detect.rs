@@ -173,7 +173,15 @@ fn ls_files_command(root: &Path) -> Command {
 /// It also covers a parent containing `:`, because `GIT_CEILING_DIRECTORIES`
 /// is `:`-separated with no escape, so such a path splits into bogus entries
 /// that bound nothing.
+///
+/// Always `None` off Unix. There the list separator is `;`, `canonicalize`
+/// returns a verbatim `\\?\C:\...` path git may not parse, and the drive
+/// colon would trip the check above anyway. `git_files`'s own-`.git` guard
+/// gives the same answer without a ceiling.
 fn ceiling_for(root: &Path) -> Option<std::path::PathBuf> {
+    if !cfg!(unix) {
+        return None;
+    }
     let parent = root.canonicalize().ok()?.parent()?.to_path_buf();
     // A colon lives in an ASCII byte, so a lossy view finds it even in a
     // non-UTF-8 path.
@@ -530,11 +538,16 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         let cmd = ls_files_command(&root);
         let ceiling = cmd.get_envs().find(|(k, _)| *k == "GIT_CEILING_DIRECTORIES");
-        let want = tmp.path().canonicalize().unwrap();
-        assert_eq!(
-            ceiling,
-            Some((std::ffi::OsStr::new("GIT_CEILING_DIRECTORIES"), Some(want.as_os_str())))
-        );
+        if cfg!(unix) {
+            let want = tmp.path().canonicalize().unwrap();
+            assert_eq!(
+                ceiling,
+                Some((std::ffi::OsStr::new("GIT_CEILING_DIRECTORIES"), Some(want.as_os_str())))
+            );
+        } else {
+            // Off Unix, `git_files`'s own-`.git` guard stands in for it.
+            assert_eq!(ceiling, None);
+        }
     }
 
     #[test]
