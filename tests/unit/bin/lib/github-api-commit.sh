@@ -671,6 +671,50 @@ test_create_pr_uses_the_url_gh_reports_when_lookup_fails() {
     assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" "without re-sending the create"
 }
 
+test_create_pr_ignores_a_reported_url_for_another_repo() {
+    gh_stub_install
+    GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 GH_STUB_PR_CREATE_URL=https://github.com/evil/r/pull/12 _pr
+    assert_equals "1" "$RC" "a URL naming another repo is not adopted"
+    assert_equals "" "$OUT" "and nothing is printed for auto-merge"
+    gh_stub_install
+    GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 GH_STUB_PR_CREATE_URL=https://evil.example/o/r/pull/12 _pr
+    assert_equals "1" "$RC" "nor one on another host"
+    local out rc=0
+    gh_stub_install
+    out="$(GH_API_RETRY_DELAY=0 GITHUB_REPOSITORY=o/r GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 \
+        GH_STUB_PR_CREATE_URL=https://github.com/o/r/pull/5 PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr --base main --head m/x 2>/dev/null)" || rc=$?
+    assert_equals "0" "$rc" "without --repo, GITHUB_REPOSITORY names the target"
+    assert_equals "https://github.com/o/r/pull/5" "$out" "and its PR is adopted"
+    rc=0
+    gh_stub_install
+    out="$(GH_API_RETRY_DELAY=0 GITHUB_REPOSITORY='' GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 \
+        GH_STUB_PR_CREATE_URL=https://github.com/o/r/pull/5 PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr --base main --head m/x 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "with no repository known, no URL is adopted"
+}
+
+test_create_pr_short_repo_and_base_flags() {
+    gh_stub_install
+    local out
+    out="$(GH_STUB_PR_EXISTING=https://github.com/o/r/pull/4 GH_STUB_PR_BASE=dev PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr -R o/r -H x -B dev --title t 2>/dev/null)"
+    assert_equals "https://github.com/o/r/pull/4" "$out" "-R/-H/-B find the open PR"
+    assert_equals "1" "$(command grep -c '^pr list --repo o/r --head x ' "$GH_LOG")" "the lookup carries -R as --repo"
+    out="$(GH_STUB_PR_EXISTING=https://github.com/o/r/pull/4 GH_STUB_PR_BASE=main PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr -R o/r -H x -B dev --title t 2>/dev/null)" || true
+    assert_not_contains "$out" "pull/4" "and -B filters out a PR into another base"
+}
+
+test_graphql_insufficient_scopes_is_not_retried() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS='INSUFFICIENT_SCOPES:Your token has not been granted the required scopes' _commit
+    assert_equals "1" "$RC" "a scope error fails the commit"
+    assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "after ONE attempt"
+}
+
 test_create_pr_parses_equals_forms_and_filters_on_base() {
     gh_stub_install
     local out
@@ -737,6 +781,9 @@ run_test test_permanent_error_does_not_preempt_adopting_a_landed_commit "a perma
 run_test test_create_pr_with_failing_lookup_still_creates_or_fails "create_pr with a failing lookup still creates or fails"
 run_test test_ref_replication_lag_422_is_retried_until_it_clears "a ref replication-lag 422 is retried"
 run_test test_create_pr_uses_the_url_gh_reports_when_lookup_fails "create_pr uses the URL gh reports when the lookup fails"
+run_test test_create_pr_ignores_a_reported_url_for_another_repo "create_pr ignores a reported URL for another repo"
+run_test test_create_pr_short_repo_and_base_flags "create_pr accepts -R and -B"
+run_test test_graphql_insufficient_scopes_is_not_retried "an INSUFFICIENT_SCOPES error is not retried"
 run_test test_create_pr_parses_equals_forms_and_filters_on_base "create_pr parses --x= forms and filters on base"
 
 generate_report

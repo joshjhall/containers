@@ -85,7 +85,8 @@ gh_api_retry() {
 # --head branch into --base (in --repo, when given) and prints its URL
 # instead of creating a second one; a failed create is looked up once more
 # before it counts as a failure (GitHub answers "already exists" to a
-# re-send, naming the PR, which is used if the lookup itself is failing).
+# re-send, naming the PR, which is used if the lookup itself is failing and
+# the URL is a github.com PR of --repo, else of $GITHUB_REPOSITORY).
 gh_api_create_pr() {
     local repo="" head="" base="" prev=""
     local a
@@ -126,8 +127,9 @@ _gh_api_find_pr() {
 }
 
 _gh_api_pr_create_or_find() {
-    local repo="$1" head="$2" base="$3" out rc=0 err url
+    local repo="$1" head="$2" base="$3" out rc=0 err url want_repo
     shift 3
+    want_repo="${repo:-${GITHUB_REPOSITORY:-}}"
     _gh_api_find_pr "$repo" "$head" "$base" && return 0
     err="$(command mktemp)" || return 1
     out="$(gh pr create "$@" 2>"$err")" || rc=$?
@@ -139,8 +141,15 @@ _gh_api_pr_create_or_find() {
         return 0
     fi
     url=""
-    if command grep -q 'already exists' "$err"; then
+    # Only a PR of the target repository is adopted: the URL is later
+    # auto-merged with this token, so one naming another host or repo (or
+    # any URL when the repository is unknown) is ignored.
+    if [ -n "$want_repo" ] && command grep -q 'already exists' "$err"; then
         url="$(command grep -oE 'https://[^[:space:]]+/pull/[0-9]+' "$err" | command head -n 1)"
+        case "$url" in
+            "https://github.com/$want_repo/pull/"*) ;;
+            *) url="" ;;
+        esac
     fi
     command rm -f "$err"
     if _gh_api_find_pr "$repo" "$head" "$base"; then
@@ -357,7 +366,7 @@ _gh_api_create_commit() {
     local i=1 delay="${GH_API_RETRY_DELAY:-2}" resp oid head commit parent headline want
     local err errors rc permanent
     want="$(command jq -r '.variables.input.message.headline' "$payload")"
-    err="${payload%/*}/graphql.err"
+    err="$(command dirname "$payload")/graphql.err"
     while [ "$i" -le 3 ]; do
         rc=0
         # gh prints the response body on stdout even when it exits non-zero.
