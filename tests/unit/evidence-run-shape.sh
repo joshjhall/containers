@@ -519,6 +519,50 @@ test_ccache_guards_discriminate() {
     /usr/bin/rm -f "$tmp"
 }
 
+# _save_is_main_only [file] — true when Save ccache's if: carries both gates.
+_save_is_main_only() {
+    local cond
+    cond="$(_step "Save ccache" "${1:-$WF}" | /usr/bin/grep -E '^ +if: ')"
+    [[ "$cond" == *"github.event_name != 'pull_request'"* &&
+        "$cond" == *"github.ref == 'refs/heads/main'"* ]]
+}
+
+test_ccache_save_only_on_main() {
+    # PR dry runs must not save: their entries spend the shared 10 GB repo
+    # cache budget and evict main's (#1612). They still restore.
+    if _save_is_main_only; then
+        assert_true true "Save ccache is gated to main, non-PR runs"
+    else
+        assert_true false "Save ccache must gate on event_name != pull_request and ref == refs/heads/main"
+    fi
+    local restore_if
+    restore_if="$(_step "Restore ccache" | /usr/bin/grep -E '^ +if: ')"
+    assert_not_contains "$restore_if" "github.event_name" "Restore ccache still runs on PRs"
+    assert_not_contains "$restore_if" "github.ref" "Restore ccache is not limited to main"
+}
+
+test_ccache_save_main_gate_discriminates() {
+    # Mutation check on a scratch copy: dropping either main-only clause from
+    # Save ccache must make the main-only assertion fail.
+    local tmp clause
+    tmp="$(/usr/bin/mktemp)"
+    for clause in " && github.event_name != 'pull_request'" " && github.ref == 'refs/heads/main'"; do
+        CLAUSE="$clause" /usr/bin/awk '
+            /- name: Save ccache/ { on = 1 }
+            on && /^        if:/ { i = index($0, ENVIRON["CLAUSE"]); if (i) $0 = substr($0, 1, i - 1) substr($0, i + length(ENVIRON["CLAUSE"])); on = 0 }
+            { print }
+        ' "$WF" >"$tmp"
+        if /usr/bin/cmp -s "$WF" "$tmp"; then
+            assert_true false "mutation did not apply for clause:$clause"
+        elif _save_is_main_only "$tmp"; then
+            assert_true false "dropping$clause still passed (guard is vacuous)"
+        else
+            assert_true true "dropping$clause is detected"
+        fi
+    done
+    /usr/bin/rm -f "$tmp"
+}
+
 run_test test_cells_install_as_the_container_user "cells install as the container user (--user runner)"
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
@@ -543,5 +587,7 @@ run_test test_ccache_post_steps_never_fail_the_cell "ccache stats/save failures 
 run_test test_ccache_binary_is_fetched_static_and_verified "ccache is a verified static binary, never installed in the image (#1594)"
 run_test test_ccache_actions_are_sha_pinned "ccache cache actions are SHA-pinned (#1594)"
 run_test test_ccache_guards_discriminate "ccache gate assertion catches a dropped gate"
+run_test test_ccache_save_only_on_main "ccache saves only on main runs, PRs restore-only (#1612)"
+run_test test_ccache_save_main_gate_discriminates "main-only save assertion catches a dropped clause (#1612)"
 
 generate_report

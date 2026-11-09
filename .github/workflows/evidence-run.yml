@@ -500,8 +500,9 @@ jobs:
       # objects), then any version of the tool on this tuple. Cache entries
       # are immutable, so every save gets a run-unique suffix: a fixed key
       # would freeze a timed-out cold build's partial cache forever, and the
-      # next run could never extend it. Prefix restore returns the newest. Non-source cells
-      # skip every ccache step and keep the plain docker run below.
+      # next run could never extend it. Prefix restore returns the newest. Only
+      # main runs save; PR dry runs restore but never save (#1612). Non-source
+      # cells skip every ccache step and keep the plain docker run below.
       - name: Prepare ccache (source-build cells)
         id: ccache
         if: ${{ matrix.source_build }}
@@ -691,7 +692,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save ccache
-        if: ${{ always() && matrix.source_build && steps.ccache.outputs.dir != '' }}
+        if: ${{ always() && matrix.source_build && steps.ccache.outputs.dir != '' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        # Main only (#1612): a PR dry run's save is scoped to its merge ref
+        # (main never restores it) yet still spends the 10 GB repo budget and
+        # evicts main's entries; main-only saves also keep every entry built
+        # from merged code. always() stays so a timed-out cold main build
+        # still keeps its objects; it cannot leak a save from a cancelled PR
+        # run (#1595), because the event gate skips the step there, and main
+        # is never cancelled.
         # Cache plumbing never decides a verdict: a failure here must not skip
         # the evidence row and artifact upload below.
         continue-on-error: true

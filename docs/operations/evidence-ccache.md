@@ -56,8 +56,20 @@ How it is wired:
   10 GB and evicts least-recently-used entries past it. Since every run saves a
   new entry, superseded entries for the same cell age out first; ccache's own
   cap keeps any single entry at or under 2 GB.
-- **Save.** The save step runs under `always()`, so a cold build that fails or
-  times out still keeps the objects it compiled.
+- **Save.** Only main runs save: a `push` to main, or a `workflow_dispatch` on
+  main (#1612). Pull-request dry runs restore and report stats, but never save.
+  GitHub scopes a PR run's entries to its `refs/pull/N/merge` ref, so main
+  never restores them, but they still count against the shared 10 GB budget
+  and push main's entries out through LRU eviction. Saving only from main
+  also keeps every entry built from merged code. On main the step runs under
+  `always()`, so a cold build that fails or times out still keeps the objects
+  it compiled.
+- **Cancellation (#1595).** PR runs share a per-PR concurrency group with
+  `cancel-in-progress`, so a new push or the PR closing cancels the old run.
+  An `always()` step still runs after a cancel, but on a PR run the event gate
+  skips the save, so a cancelled PR run never writes an entry. Main runs are
+  never cancelled by concurrency (serialized, not cancelled), so main never
+  saves from a cancelled run either.
 
 **Reading the result.** Each source-build cell adds a `ccache:` section to the
 job summary. It shows which key was restored (`none (cold)` on a miss) and the
