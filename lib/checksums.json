@@ -252,6 +252,11 @@
           "sha256": "43aaeb9bc30d9331ed57952a872b80dab3dafe8e927f0f7a90a3c8e67d08eaac",
           "url": "https://github.com/jbangdev/jbang/releases/download/v0.142.0/jbang-0.142.0.tar",
           "added": "2026-09-29"
+        },
+        "0.143.0": {
+          "sha256": "1388fcc2258e2bdcd277c68a5aad5a9d7c1dc8b57ef06165a45da02c2ed9775b",
+          "url": "https://github.com/jbangdev/jbang/releases/download/v0.143.0/jbang-0.143.0.tar",
+          "added": "2026-11-09"
         }
       }
     },
@@ -684,6 +689,19 @@
             }
           },
           "added": "2026-10-25"
+        },
+        "2.6.6": {
+          "checksums": {
+            "amd64": {
+              "sha256": "69ca8e9ff548091b2bfbd178d6f73142b483a5257b07854de702c68fb7f8c06b",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.6.6/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "bd0c5860a6220b68ceb82d7a00b7a4ed97fbaf3904eb41bcb897f9ec74af4148",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.6.6/biome-linux-arm64"
+            }
+          },
+          "added": "2026-11-09"
         }
       }
     },
@@ -1089,6 +1107,19 @@
             }
           },
           "added": "2026-10-12"
+        },
+        "2.7.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "983d22fbad9724514e3fcc6acc83b5fa64c5ffa6b0d9f510028f22c1b223ff81",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_arm64"
+            }
+          },
+          "added": "2026-11-09"
         }
       }
     },
@@ -1145,6 +1176,19 @@
             }
           },
           "added": "2026-09-29"
+        },
+        "4.54.3": {
+          "checksums": {
+            "amd64": {
+              "sha256": "129534601871538efe0ba4c5e62a34fb1d5f469bcb975c4fddeb467d82974973",
+              "url": "https://github.com/mikefarah/yq/releases/download/v4.54.3/yq_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "89f69310b61b68d1245065a1241d1fc843f7a36cd6103ffd77ad987613bd1b67",
+              "url": "https://github.com/mikefarah/yq/releases/download/v4.54.3/yq_linux_arm64"
+            }
+          },
+          "added": "2026-11-09"
         }
       }
     },
@@ -1365,12 +1409,25 @@
             }
           },
           "added": "2026-10-25"
+        },
+        "1.26.2": {
+          "checksums": {
+            "amd64": {
+              "sha256": "9e0e064f189a9abb9f8df5fb93c3c810ef5cc19e7212d998c7a64c9e4d3527d5",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.26.2/cargo-binstall-x86_64-unknown-linux-musl.tgz"
+            },
+            "arm64": {
+              "sha256": "a235250cd684af9bf1e3a1e4c216b1d36e6c553553d5d789744f27689d81c2d6",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.26.2/cargo-binstall-aarch64-unknown-linux-musl.tgz"
+            }
+          },
+          "added": "2026-11-09"
         }
       }
     }
   },
   "metadata": {
-    "generated": "2026-10-25T14:24:24Z",
+    "generated": "2026-11-09T05:03:42Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
