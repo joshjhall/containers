@@ -67,9 +67,10 @@ How it is wired:
 - **Cancellation (#1595).** PR runs share a per-PR concurrency group with
   `cancel-in-progress`, so a new push or the PR closing cancels the old run.
   An `always()` step still runs after a cancel, but on a PR run the event gate
-  skips the save, so a cancelled PR run never writes an entry. Main runs are
-  never cancelled by concurrency (serialized, not cancelled), so main never
-  saves from a cancelled run either.
+  skips the save, so a cancelled PR run never writes an entry. Concurrency
+  never cancels a main run (main runs are serialized). A main run cancelled by
+  hand still saves its partial objects under `always()`. That is intended: the
+  key is run-unique, so the next run restores and extends that entry.
 
 **Reading the result.** Each source-build cell adds a `ccache:` section to the
 job summary. It shows which key was restored (`none (cold)` on a miss) and the

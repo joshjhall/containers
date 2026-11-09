@@ -698,8 +698,9 @@ jobs:
         # evicts main's entries; main-only saves also keep every entry built
         # from merged code. always() stays so a timed-out cold main build
         # still keeps its objects; it cannot leak a save from a cancelled PR
-        # run (#1595), because the event gate skips the step there, and main
-        # is never cancelled.
+        # run (#1595), because the event gate skips the step there. Concurrency
+        # never cancels main; a hand-cancelled main run saves its partial
+        # objects, which the next run extends (run-unique key).
         # Cache plumbing never decides a verdict: a failure here must not skip
         # the evidence row and artifact upload below.
         continue-on-error: true

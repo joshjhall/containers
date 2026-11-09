@@ -536,14 +536,11 @@ test_ccache_save_only_on_main() {
     else
         assert_true false "Save ccache if: must be exactly: ${SAVE_CCACHE_IF# *}"
     fi
-    # Pin the Restore gate exactly, so an empty capture (missing step or if:)
-    # cannot let the not-contains checks below pass vacuously.
-    local restore_if
-    restore_if="$(_step "Restore ccache" | /usr/bin/grep -E '^ +if: ')"
-    assert_equals '        if: ${{ matrix.source_build }}' "$restore_if" \
-        "Restore ccache gates only on source_build"
-    assert_not_contains "$restore_if" "github.event_name" "Restore ccache still runs on PRs"
-    assert_not_contains "$restore_if" "github.ref" "Restore ccache is not limited to main"
+    # PRs keep restoring: pin the Restore gate exactly, so neither an event/ref
+    # gate nor a missing step or if: (empty capture) can slip through.
+    assert_equals '        if: ${{ matrix.source_build }}' \
+        "$(_step "Restore ccache" | /usr/bin/grep -E '^ +if: ')" \
+        "Restore ccache gates only on source_build (PRs still restore)"
 }
 
 test_ccache_save_main_gate_discriminates() {
