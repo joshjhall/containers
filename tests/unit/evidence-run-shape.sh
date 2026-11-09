@@ -519,12 +519,13 @@ test_ccache_guards_discriminate() {
     /usr/bin/rm -f "$tmp"
 }
 
-# _save_is_main_only [file] — true when Save ccache's if: carries both gates.
+# The whole Save ccache gate, pinned exactly: a substring check would accept
+# an `||`-weakened or negated gate that lets PR runs save again (#1612).
+SAVE_CCACHE_IF="        if: \${{ always() && matrix.source_build && steps.ccache.outputs.dir != '' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}"
+
+# _save_is_main_only [file] — true when Save ccache's if: is exactly the gate.
 _save_is_main_only() {
-    local cond
-    cond="$(_step "Save ccache" "${1:-$WF}" | /usr/bin/grep -E '^ +if: ')"
-    [[ "$cond" == *"github.event_name != 'pull_request'"* &&
-        "$cond" == *"github.ref == 'refs/heads/main'"* ]]
+    [[ "$(_step "Save ccache" "${1:-$WF}" | /usr/bin/grep -E '^ +if: ')" == "$SAVE_CCACHE_IF" ]]
 }
 
 test_ccache_save_only_on_main() {
@@ -533,7 +534,7 @@ test_ccache_save_only_on_main() {
     if _save_is_main_only; then
         assert_true true "Save ccache is gated to main, non-PR runs"
     else
-        assert_true false "Save ccache must gate on event_name != pull_request and ref == refs/heads/main"
+        assert_true false "Save ccache if: must be exactly: ${SAVE_CCACHE_IF# *}"
     fi
     # Pin the Restore gate exactly, so an empty capture (missing step or if:)
     # cannot let the not-contains checks below pass vacuously.
@@ -546,24 +547,28 @@ test_ccache_save_only_on_main() {
 }
 
 test_ccache_save_main_gate_discriminates() {
-    # Mutation check on a scratch copy: dropping either main-only clause from
-    # Save ccache must make the main-only assertion fail.
-    local tmp clause
+    # Mutation check on a scratch copy: dropping either main-only clause, or
+    # OR-ing the main gate away, must make the main-only assertion fail.
+    local tmp from to
     tmp="$(/usr/bin/mktemp)"
-    for clause in " && github.event_name != 'pull_request'" " && github.ref == 'refs/heads/main'"; do
-        CLAUSE="$clause" /usr/bin/awk '
+    while IFS='|' read -r from to; do
+        FROM="$from" TO="$to" /usr/bin/awk '
             /- name: Save ccache/ { on = 1 }
-            on && /^        if:/ { i = index($0, ENVIRON["CLAUSE"]); if (i) $0 = substr($0, 1, i - 1) substr($0, i + length(ENVIRON["CLAUSE"])); on = 0 }
+            on && /^        if:/ { i = index($0, ENVIRON["FROM"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["TO"] substr($0, i + length(ENVIRON["FROM"])); on = 0 }
             { print }
         ' "$WF" >"$tmp"
         if /usr/bin/cmp -s "$WF" "$tmp"; then
-            assert_true false "mutation did not apply for clause:$clause"
+            assert_true false "mutation did not apply: '$from' -> '$to'"
         elif _save_is_main_only "$tmp"; then
-            assert_true false "dropping$clause still passed (guard is vacuous)"
+            assert_true false "'$from' -> '$to' still passed (guard is vacuous)"
         else
-            assert_true true "dropping$clause is detected"
+            assert_true true "'$from' -> '$to' is detected"
         fi
-    done
+    done <<'MUTATIONS'
+ && github.event_name != 'pull_request'|
+ && github.ref == 'refs/heads/main'|
+ && github.event_name != 'pull_request'| || github.event_name != 'pull_request'
+MUTATIONS
     /usr/bin/rm -f "$tmp"
 }
 
