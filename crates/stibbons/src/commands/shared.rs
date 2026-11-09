@@ -324,6 +324,26 @@ mod tests {
         }
     }
 
+    /// The other side of the filter: only the exact state-file path is dropped.
+    /// Near-names must still render, so a loosened `ends_with`/`contains`/
+    /// `starts_with` match fails here.
+    #[test]
+    fn write_render_plan_keeps_state_file_near_names() {
+        let plan = plan_of(&[
+            ("sub/.igor.yml", FileAction::Created),
+            (".igor.yml.bak", FileAction::Created),
+            ("igor.yml", FileAction::Created),
+        ]);
+
+        assert_eq!(
+            render_to_string(&plan),
+            "\nPlanned changes:\n  \
+             create    sub/.igor.yml\n  \
+             create    .igor.yml.bak\n  \
+             create    igor.yml\n"
+        );
+    }
+
     /// Accepts `budget` bytes, then fails every write.
     struct FailAfter {
         budget: usize,
