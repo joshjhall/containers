@@ -323,10 +323,14 @@ same split #1560 made for `ci.yml`):
   group, and starting it cancels the in-flight dry run. The close-event run
   itself does no work: `setup` and `reconcile` check
   `if: github.event.action != 'closed'` directly, and `evidence` is skipped
-  because it needs `setup`. `collect` runs under `always()`, which would
+  because it needs `setup`. `collect` runs under `!cancelled()`, which would
   override the skipped `setup`, so it repeats the guard explicitly. Any new job
-  needs the same: a direct guard, or `needs: setup` with no status function
-  (`always()`, `!cancelled()`, `failure()`) in its `if:`.
+  needs the same: a direct guard AND-ed into its `if:`, or `needs: setup` with
+  no status function (`always()`, `!cancelled()`, `failure()`) in its `if:`.
+- **`collect` uses `!cancelled()`, not `always()`.** It still runs when some
+  cells failed or timed out, because a fail row is evidence too. It does not
+  start on a run that a newer push or a close cancelled. `always()` would
+  start it there, taking a runner to ingest a partial dry run.
 
   This needs no `actions: write` token and no matching on branch names, and it
   works for PRs from forks. It also cannot reach a `main` run, because `main`

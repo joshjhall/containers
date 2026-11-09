@@ -622,11 +622,13 @@ jobs:
   # into containers-db with the shared dedup policy, opens ONE PR, and
   # auto-merges it. Per-cell PRs (up to 200 per push, conflicting on shared
   # version files) and per-cell tracking issues are gone. Runs even when some
-  # cells failed: a fail row is evidence too.
+  # cells failed or timed out: a fail row is evidence too. `!cancelled()`, not
+  # `always()`: a PR dry run superseded by a newer push (or a close) is
+  # cancelled, and `always()` would still start this job on it (#1591).
   collect:
     name: Ingest evidence (one PR)
     needs: [setup, evidence]
-    if: ${{ always() && github.event.action != 'closed' && needs.setup.outputs.has_cells == 'true' }}
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.setup.outputs.has_cells == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

@@ -56,7 +56,14 @@ test_collect_job_batches_into_one_pr() {
     collect="$(_job_block collect)"
     assert_contains "$collect" "ingest-evidence-batch.sh" "collect ingests the whole run in one batch"
     assert_contains "$collect" "open_run_tracking_issue" "collect files one issue per run"
-    assert_contains "$collect" "always()" "collect runs even when some cells failed"
+    # !cancelled(), not always(): still runs when cells failed or timed out,
+    # but not on a run a newer PR push or a close cancelled (#1591).
+    assert_contains "$collect" '!cancelled()' "collect runs even when some cells failed"
+    if /usr/bin/grep -q '^    if:.*always()' <<<"$collect"; then
+        assert_true false "collect must not use always(): it would run on a cancelled (superseded) run"
+    else
+        assert_true true "collect does not use always()"
+    fi
 }
 
 test_cell_timeout_comes_from_the_matrix() {
@@ -300,7 +307,10 @@ test_closed_pr_runs_do_nothing() {
         block="$(_job_block "$job")"
         # A job reached only through `needs: setup` is skipped with setup —
         # unless its `if:` calls a status function, which runs it anyway.
-        if /usr/bin/grep -q "^    if:.*github.event.action != 'closed'" <<<"$block" ||
+        # The direct guard must be AND-ed in: an `||` anywhere in the `if:`
+        # could OR it away (`always() || ...`), so it does not count.
+        if { /usr/bin/grep -q "^    if:.*github.event.action != 'closed'" <<<"$block" &&
+            ! /usr/bin/grep -q '^    if:.*||' <<<"$block"; } ||
             { /usr/bin/grep -qE '^    needs: (setup|\[setup[],])' <<<"$block" &&
                 ! /usr/bin/grep -qE '^    if:.*(always|cancelled|failure|success)\(\)' <<<"$block"; }; then
             assert_true true "job $job is skipped on a closed PR"
@@ -310,9 +320,12 @@ test_closed_pr_runs_do_nothing() {
     done
     # Guard against a vacuous pass if the job listing ever matches nothing.
     assert_equals 4 "$seen" "every job (setup, reconcile, evidence, collect) was checked"
-    # collect runs under always(), which overrides a skipped setup.
-    assert_contains "$(_job_block collect | /usr/bin/grep '^    if:')" \
-        "github.event.action != 'closed'" "collect (always()) guards closed explicitly"
+    # collect runs under !cancelled(), which overrides a skipped setup, so it
+    # must AND the guard in explicitly.
+    local collect_if
+    collect_if="$(_job_block collect | /usr/bin/grep '^    if:')"
+    assert_contains "$collect_if" "&& github.event.action != 'closed' &&" \
+        "collect (!cancelled()) ANDs the closed guard explicitly"
 }
 
 run_test test_cells_install_as_the_container_user "cells install as the container user (--user runner)"
