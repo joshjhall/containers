@@ -6,6 +6,7 @@
 //! by exactly one command lives with that command instead.
 
 use std::collections::HashSet;
+use std::io::Write;
 use std::path::Path;
 
 use containers_common::config::IgorConfig;
@@ -37,27 +38,40 @@ pub fn join_or_none(items: &[String]) -> String {
     if items.is_empty() { "(none)".to_string() } else { items.join(", ") }
 }
 
-/// Prints the per-file action table for a render plan.
+/// Prints the per-file action table for a render plan to stdout.
+///
+/// See [`write_render_plan`] for the format.
+///
+/// # Panics
+///
+/// Panics if writing to stdout fails, matching `println!`.
+pub fn print_render_plan(plan: &render::RenderPlan) {
+    write_render_plan(&mut std::io::stdout().lock(), plan)
+        .expect("failed to write render plan to stdout");
+}
+
+/// Writes the per-file action table for a render plan to `out`.
 ///
 /// The state file (`.igor.yml`) is omitted: it is always rewritten via
 /// `IgorConfig::save`, so classifying it against the templated hash would show
 /// a misleading `skip`/`update` line.
-pub fn print_render_plan(plan: &render::RenderPlan) {
-    println!("\nPlanned changes:");
+fn write_render_plan(out: &mut impl Write, plan: &render::RenderPlan) -> std::io::Result<()> {
+    writeln!(out, "\nPlanned changes:")?;
     for (path, action) in &plan.actions {
         if path == render::STATE_FILE {
             continue;
         }
         match action {
-            FileAction::Created => println!("  create    {path}"),
-            FileAction::Updated => println!("  update    {path}"),
-            FileAction::Unchanged => println!("  unchanged {path}"),
-            FileAction::Forced => println!("  overwrite {path} (forced)"),
+            FileAction::Created => writeln!(out, "  create    {path}")?,
+            FileAction::Updated => writeln!(out, "  update    {path}")?,
+            FileAction::Unchanged => writeln!(out, "  unchanged {path}")?,
+            FileAction::Forced => writeln!(out, "  overwrite {path} (forced)")?,
             FileAction::Skipped => {
-                println!("  skip      {path} (modified locally; use --force to overwrite)");
+                writeln!(out, "  skip      {path} (modified locally; use --force to overwrite)")?;
             }
         }
     }
+    Ok(())
 }
 
 /// Detects the containers submodule directory.
@@ -240,5 +254,67 @@ mod tests {
         let found = with_cwd(tmp.path(), detect_containers_dir);
 
         assert_eq!(found, "containers", "a directory should not satisfy the probe");
+    }
+
+    fn plan_of(actions: &[(&str, FileAction)]) -> render::RenderPlan {
+        render::RenderPlan {
+            actions: actions.iter().map(|(p, a)| ((*p).to_string(), *a)).collect(),
+            entries_to_write: Vec::new(),
+            new_hashes: std::collections::BTreeMap::new(),
+        }
+    }
+
+    fn render_to_string(plan: &render::RenderPlan) -> String {
+        let mut buf = Vec::new();
+        write_render_plan(&mut buf, plan).unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn write_render_plan_empty_plan_prints_only_header() {
+        assert_eq!(render_to_string(&plan_of(&[])), "\nPlanned changes:\n");
+    }
+
+    /// Each variant maps to its own exact line. Whole-output equality (not
+    /// `contains`) so a swapped prefix between two variants fails.
+    #[test]
+    fn write_render_plan_renders_each_file_action() {
+        let plan = plan_of(&[
+            ("a", FileAction::Created),
+            ("b", FileAction::Updated),
+            ("c", FileAction::Unchanged),
+            ("d", FileAction::Forced),
+            ("e", FileAction::Skipped),
+        ]);
+
+        assert_eq!(
+            render_to_string(&plan),
+            "\nPlanned changes:\n\
+             \x20 create    a\n\
+             \x20 update    b\n\
+             \x20 unchanged c\n\
+             \x20 overwrite d (forced)\n\
+             \x20 skip      e (modified locally; use --force to overwrite)\n"
+        );
+    }
+
+    /// `.igor.yml` is always rewritten via `IgorConfig::save`, so it must never
+    /// appear in the plan — whatever its classification — while its neighbours
+    /// still print in order.
+    #[test]
+    fn write_render_plan_omits_state_file() {
+        for action in [FileAction::Skipped, FileAction::Updated, FileAction::Created] {
+            let plan = plan_of(&[
+                ("before", FileAction::Created),
+                (render::STATE_FILE, action),
+                ("after", FileAction::Unchanged),
+            ]);
+
+            assert_eq!(
+                render_to_string(&plan),
+                "\nPlanned changes:\n  create    before\n  unchanged after\n",
+                "state file classified {action:?} leaked into the plan"
+            );
+        }
     }
 }
