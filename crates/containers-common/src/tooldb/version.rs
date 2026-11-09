@@ -128,6 +128,19 @@ pub struct TestEntry {
     /// base-image toolchain bump. Omitted when nothing was captured.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<Vec<InstalledDependency>>,
+    /// Per-distro package names luggage installed only for the build and
+    /// purged after the install method finished, before validation ran
+    /// (`g++`, `make`, `linux-headers`, …). Sourced from
+    /// `InstallReport.removed_build_dependencies` (#1524).
+    ///
+    /// A pass row carrying this shows the tool works without its build
+    /// toolchain present. Distinct from [`Self::dependencies`], which is
+    /// captured *before* the removal and so still lists these packages.
+    /// Populated on pass rows only, like `dependencies`. Empty on rows
+    /// predating the field (#1620), which `skip_serializing_if` keeps
+    /// byte-identical.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removed_build_dependencies: Vec<String>,
     /// Verifications that succeeded on weaker grounds than the tier name alone
     /// suggests — currently only tier-4 TOFU acceptances.
     ///
@@ -405,6 +418,36 @@ mod tests {
         let serialized = serde_json::to_string(&entry).unwrap();
         let reparsed: TestEntry = serde_json::from_str(&serialized).unwrap();
         assert_eq!(reparsed.verification_warnings, entry.verification_warnings);
+    }
+
+    /// `removed_build_dependencies` (#1620) parses when present, round-trips,
+    /// and is omitted from the serialized row when empty so pre-#1620 rows
+    /// stay byte-identical.
+    #[test]
+    fn test_entry_round_trips_removed_build_dependencies() {
+        let base =
+            r#""os":"debian","arch":"amd64","tested_at":"2026-05-16T12:00:00Z","result":"pass""#;
+
+        let with = format!(r#"{{{base},"removed_build_dependencies":["g++","make"]}}"#);
+        let entry: TestEntry = serde_json::from_str(&with).expect("parse row with field");
+        assert_eq!(entry.removed_build_dependencies, vec!["g++".to_string(), "make".to_string()]);
+        let serialized = serde_json::to_string(&entry).unwrap();
+        let reparsed: TestEntry = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(reparsed.removed_build_dependencies, entry.removed_build_dependencies);
+
+        let without = format!("{{{base}}}");
+        let entry: TestEntry = serde_json::from_str(&without).expect("parse row without field");
+        assert_eq!(entry.removed_build_dependencies, Vec::<String>::new());
+        assert_eq!(serde_json::to_string(&entry).unwrap(), without, "empty field must be omitted");
+    }
+
+    /// Mirroring the new field must not loosen `deny_unknown_fields` on
+    /// `TestEntry` for any other key.
+    #[test]
+    fn test_entry_still_rejects_unknown_fields() {
+        let json = r#"{"os":"debian","arch":"amd64","tested_at":"2026-05-16T12:00:00Z","result":"pass","removed_build_dependencies":["make"],"removed_build_deps":["make"]}"#;
+        let err = serde_json::from_str::<TestEntry>(json).expect_err("unknown key must not parse");
+        assert!(err.to_string().contains("removed_build_deps"), "wrong error: {err}");
     }
 
     /// `deny_unknown_fields` is the strictness guard that mirrors the
