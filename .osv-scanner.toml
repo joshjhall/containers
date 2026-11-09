@@ -27,7 +27,8 @@
 # octarine -> phonenumber 0.3 -> postcard 1.1.3 (build+normal) -> heapless 0.7,
 # and postcard's newest release still requires heapless ^0.7.
 #
-# Mirrored in deny.toml's [advisories] ignore list — keep the two in sync.
+# Mirrored in deny.toml's [advisories] ignore list and .cargo/audit.toml —
+# keep the three in sync (tests/unit/advisory-ignore-sync.sh).
 # Revisit when phonenumber drops postcard, or postcard moves to heapless 0.9.
 
 [[IgnoredVulns]]
@@ -72,7 +73,8 @@ reason = "block-buffer 0.10 cursor corruption needs a caught panic inside a comp
 # No upgrade path from our side: rsa has no constant-time release, and pgp
 # 0.21 pins elliptic-curve 0.13, which requires crypto-bigint 0.5.
 #
-# Mirrored in deny.toml's [advisories] ignore list — keep the two in sync.
+# Mirrored in deny.toml's [advisories] ignore list and .cargo/audit.toml —
+# keep the three in sync (tests/unit/advisory-ignore-sync.sh).
 # Revisit when pgp moves to rsa 0.10 / elliptic-curve 0.14.
 
 [[IgnoredVulns]]

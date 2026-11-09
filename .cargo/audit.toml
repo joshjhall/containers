@@ -1,0 +1,14 @@
+# cargo-audit configuration — runs under `just security-scan` and the
+# scheduled security-scan workflow. It is the third of three advisory gates,
+# alongside deny.toml and .osv-scanner.toml.
+#
+# Every RUSTSEC id ignored in deny.toml must be ignored here too, or the gates
+# disagree and the scan fails on an advisory that's already accepted (#1592).
+# tests/unit/advisory-ignore-sync.sh enforces this. The full rationale for each
+# entry lives in deny.toml; the comments here are its one-line form.
+[advisories]
+ignore = [
+  "RUSTSEC-2023-0089", # atomic-polyfill unmaintained; embedded-target-only via heapless 0.7, never compiled on any target we build
+  "RUSTSEC-2023-0071", # rsa Marvin timing attack needs a secret-key operation; luggage only verifies with public keys (pgp 0.21, tier 1, #1508)
+  "RUSTSEC-2026-0387", # crypto-bigint 0.5 non-constant-time ops leak secret operands; luggage only verifies with public keys (pgp 0.21, tier 1, #1508)
+]

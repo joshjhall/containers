@@ -16,9 +16,10 @@ version = 2
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
-# Advisory suppressions. Same contract as .osv-scanner.toml: every entry needs
-# a reason, and the same advisory must be suppressed in both files or the two
-# gates disagree.
+# Advisory suppressions. Same contract as .osv-scanner.toml and
+# .cargo/audit.toml: every entry needs a reason, and the same advisory must be
+# suppressed in all three files or the gates disagree
+# (tests/unit/advisory-ignore-sync.sh).
 ignore = [
   # atomic-polyfill (unmaintained, archived upstream, no successor version).
   # Reached only via octarine -> phonenumber -> postcard -> heapless 0.7, and
