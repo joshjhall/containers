@@ -327,14 +327,14 @@ same split #1560 made for `ci.yml`):
   override the skipped `setup`, so it repeats the guard explicitly. Any new job
   needs the same: a direct guard AND-ed into its `if:`, or `needs: setup` with
   no status function (`always()`, `!cancelled()`, `failure()`) in its `if:`.
-- **`collect` uses `!cancelled()`, not `always()`.** It still runs when some
-  cells failed or timed out, because a fail row is evidence too. It does not
-  start on a run that a newer push or a close cancelled. `always()` would
-  start it there, taking a runner to ingest a partial dry run.
 
   This needs no `actions: write` token and no matching on branch names, and it
   works for PRs from forks. It also cannot reach a `main` run, because `main`
   runs use a different group.
+- **`collect` uses `!cancelled()`, not `always()`.** It still runs when some
+  cells failed or timed out, because a fail row is evidence too. It does not
+  start on a run that a newer push or a close cancelled. `always()` would
+  start it there, taking a runner to ingest a partial dry run.
 
 `tests/unit/evidence-run-shape.sh` pins these rules.
 
