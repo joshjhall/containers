@@ -419,6 +419,15 @@ test_graphql_permission_error_is_not_retried_and_logged() {
     assert_contains "$ERR" "permanent error on o/r:b, not retrying" "and why it stopped"
 }
 
+test_graphql_forbidden_rate_limit_is_retried() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS='FORBIDDEN:You have exceeded a secondary rate limit' _commit
+    assert_equals "3" "$(command grep -c '^api graphql' "$GH_LOG")" "a FORBIDDEN rate limit is retried every attempt"
+    assert_not_contains "$ERR" "permanent error" "and is not called permanent"
+}
+
 test_exit0_errors_body_is_logged_and_classified() {
     _repo
     gh_stub_install
@@ -513,6 +522,8 @@ transient|gh: Bad Gateway (HTTP 502)\ngh: Reference already exists (HTTP 422)
 permanent|gh: Forbidden (HTTP 403)\ngh: Reference already exists (HTTP 422)
 transient|GraphQL: Could not resolve to a PullRequest with the number of 7.
 transient|GraphQL: Could not resolve to a Ref with the name b
+transient|gh: Reference already exists (HTTP 422)
+permanent|GraphQL: Could not resolve to a Repository\ngh: Reference already exists (HTTP 422)
 TABLE
 }
 
@@ -687,6 +698,7 @@ run_test test_truncated_tree_warns_and_tree_read_failure_errors "truncated tree 
 run_test test_permanent_4xx_is_not_retried_and_logged "a permanent 4xx is not retried and is logged"
 run_test test_429_and_5xx_are_retried "429 and 5xx are retried"
 run_test test_graphql_permission_error_is_not_retried_and_logged "a GraphQL permission error is not retried and is logged"
+run_test test_graphql_forbidden_rate_limit_is_retried "a GraphQL FORBIDDEN rate limit is retried"
 run_test test_exit0_errors_body_is_logged_and_classified "an exit-0 errors body is logged and classified"
 run_test test_create_pr_reuses_an_open_pr "create_pr reuses an open PR"
 run_test test_create_pr_whose_attempt_landed_resolves_to_it "create_pr whose attempt landed resolves to it"

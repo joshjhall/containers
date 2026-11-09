@@ -376,8 +376,10 @@ _gh_api_create_commit() {
         [ -s "$err" ] && command sed 's/^/  gh: /' "$err" >&2
         # NOT_FOUND / "Could not resolve" stay retryable here: GraphQL can
         # briefly fail to resolve a branch gh_api_ensure_branch just created.
+        # A rate or abuse limit stays retryable whatever its error type.
         permanent=0
-        if command grep -qE '^(FORBIDDEN|UNPROCESSABLE|INSUFFICIENT_SCOPES):|Repository rule violations' <<<"$errors" ||
+        if command grep -viE 'rate limit|abuse' <<<"$errors" |
+            command grep -qE '^(FORBIDDEN|UNPROCESSABLE|INSUFFICIENT_SCOPES):|Repository rule violations' ||
             { _gh_api_is_permanent "$err" && ! command grep -q 'Could not resolve' "$err"; }; then
             permanent=1
         fi
