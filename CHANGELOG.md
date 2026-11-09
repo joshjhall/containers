@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.22.1] - 2026-11-09
+
+### Added
+
+- Add setup standards init/check/accept (#1539)
+- Commit evidence and auto-patch changes via the GitHub API (#1582)
+- Re-vendor stibbons repo-baseline on LIBRARIAN_REF bump (#1585)
+
+### CI/CD
+
+- Cancel superseded PR pipeline runs with a concurrency group (#1570)
+- Require exactly one ARG LIBRARIAN_REF match in librarian pin reads (#1581)
+
+### Changed
+
+- Split installer/verify/tier1.rs into a module directory (#1544)
+- Move standards accept path into accept.rs (#1572)
+
+### Documentation
+
+- Fix 9 pre-existing rustdoc link warnings (#1587)
+
+### Fixed
+
+- Stop counting crate names and WARN lines as build errors (#1538)
+- Disable repo-local git config in standards detection (#1545)
+- Mirror missing system_package entries into vendored catalog (#1547)
+- Classify UnknownDependency as unknown and annotate fail cells (#1567)
+- Recover from partial standards init and guard accept (#1562)
+- Vendor node 24.22.2 and 26.13.0 from containers-db (#1579)
+- Report only what a failed standards init wrote (#1577)
+- Per-cell evidence timeout and a clear all-cancelled ingest (#1571)
+- Survive bash 5.3's null-directory cd on ubuntu-26.04 (#1598)
+- Drop sudo-wrapped command builtin flagged by shellcheck 0.11 (#1599)
+
+### Miscellaneous
+
+- Record staged harness blocking worktree teardown
+
+### Testing
+
+- Make tier-1's pre-epoch clock guard testable (#1551)
+- Serde back-compat tests for TestEntry.verification_tier (#1557)
+- Cover standards git-path detection and make parity loud (#1552)
+- Cover dependency_gaps' unreadable-index.json fail-loud branch (#1559)
+- Reject non-array deps in dependency guard and split it out (#1561)
+- Cover standards init/accept error branches (#1586)
+- Prove git_files ignores a hostile inherited git env (#1590)
+- Cover underscore error classes in annotate_fail_verdict and fix its reject message (#1588)
+
 ## [4.22.0] - 2026-10-28
 
 ### Added
@@ -1210,6 +1260,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add Cargo workspace with stibbons and containers-common crates
+- Port feature registry and dependency resolution from Go to Rust
+- Port .igor.yml config parsing from Go to Rust
+- Port template rendering and golden file tests from Go to Rust
+- Port TUI wizard from charmbracelet/huh to Rust with inquire
+- Wire up stibbons init file generation and remove Go codebase
 - Update octarine to v0.3.0-beta.1 and require Windows CI
 - Add lefthook + gitleaks, migrate git hooks from pre-commit (#366)
 - Add cspell spell checker
@@ -1217,6 +1273,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI/CD
 
+- Add Rust CI job, pre-commit hooks, and editor integration
+- Add v5 branch to CI triggers
 - Remove Go test job and fix Rust CI for octarine dependency
 - Fix octarine fetch in test job and allow Windows failure
 - Install mado and dprint so lefthook lint step passes in CI
@@ -1226,13 +1284,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrate markdown hooks to mado + dprint (#377)
 - Replace pre-commit-hooks uvx shims with native equivalents (#382)
 
+### Documentation
+
+- Rewrite README and CLAUDE.md for v5 architecture
+- Add claude memory files for v5 architecture decisions
+
 ### Fixed
 
+- Use HTTPS URL for octarine git dependency
 - Widen curl retry window for tool downloads
 - Gunzip install path produced gzipped binaries; add nmap (#378)
 
 ### Miscellaneous
 
+- Add Rust tooling config and update ignore files
+- Fix cspell dictionary ordering and add ratatui
 - Skip Go tests when cmd/igor/ no longer exists
 - Update Trivy image ref and add memory entries
 - Refresh Cargo lockfile and bump inquire 0.7 → 0.9
@@ -1345,29 +1411,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.15.11] - 2026-03-25
 
-### Added
-
-- Add Cargo workspace with stibbons and containers-common crates
-- Port feature registry and dependency resolution from Go to Rust
-- Port .igor.yml config parsing from Go to Rust
-- Port template rendering and golden file tests from Go to Rust
-- Port TUI wizard from charmbracelet/huh to Rust with inquire
-- Wire up stibbons init file generation and remove Go codebase
-
-### CI/CD
-
-- Add Rust CI job, pre-commit hooks, and editor integration
-- Add v5 branch to CI triggers
-
-### Documentation
-
-- Rewrite README and CLAUDE.md for v5 architecture
-- Add claude memory files for v5 architecture decisions
-
 ### Fixed
 
 - Add MEMORY_FILE_PATH env var and fix comment indentation
-- Use HTTPS URL for octarine git dependency
 - Skip issues with status/on-hold label
 - Measure production code only for file-length thresholds
 - Exclude git submodules from codebase-audit scans
@@ -1375,11 +1421,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 
 - Parallelize op read calls and background claude-setup
-
-### Miscellaneous
-
-- Add Rust tooling config and update ignore files
-- Fix cspell dictionary ordering and add ratatui
 
 ## [4.15.10] - 2026-03-23
 
@@ -2096,6 +2137,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.12.8] - 2025-12-28
 
+### Fixed
+
+- Ignore devcontainer.json and remove invalid linter key
+
 ### Miscellaneous
 
 - Sync extension recommendations across configs
@@ -2107,7 +2152,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Filter out Go pre-release versions
-- Ignore devcontainer.json and remove invalid linter key
 
 ### Miscellaneous
 
@@ -2826,6 +2870,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.22.1]: https://github.com/joshjhall/containers/compare/v4.22.0...v4.22.1
 [4.22.0]: https://github.com/joshjhall/containers/compare/v4.21.3...v4.22.0
 [4.21.3]: https://github.com/joshjhall/containers/compare/v4.21.2...v4.21.3
 [4.21.2]: https://github.com/joshjhall/containers/compare/v4.21.1...v4.21.2
