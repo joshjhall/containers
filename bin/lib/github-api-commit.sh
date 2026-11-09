@@ -131,7 +131,8 @@ _gh_api_pr_create_or_find() {
     _gh_api_find_pr "$repo" "$head" "$base" && return 0
     err="$(command mktemp)" || return 1
     out="$(gh pr create "$@" 2>"$err")" || rc=$?
-    command cat "$err" >&2
+    # Indented, as in gh_api_retry, so no line of gh's text starts with "::".
+    command sed 's/^/  /' "$err" >&2
     if [ "$rc" -eq 0 ]; then
         command rm -f "$err"
         command echo "$out"
@@ -374,13 +375,14 @@ _gh_api_create_commit() {
         command echo "gh_api_commit_worktree: createCommitOnBranch attempt $i failed (exit $rc):" >&2
         command sed 's/^/  /' <<<"${errors:-no errors in response}" >&2
         [ -s "$err" ] && command sed 's/^/  gh: /' "$err" >&2
-        # NOT_FOUND / "Could not resolve" stay retryable here: GraphQL can
-        # briefly fail to resolve a branch gh_api_ensure_branch just created.
+        # NOT_FOUND / "Could not resolve to a Ref" stay retryable here: GraphQL
+        # can briefly fail to resolve a branch gh_api_ensure_branch just
+        # created. An unresolvable Repository is still permanent.
         # A rate or abuse limit stays retryable whatever its error type.
         permanent=0
         if command grep -viE 'rate limit|abuse' <<<"$errors" |
             command grep -qE '^(FORBIDDEN|UNPROCESSABLE|INSUFFICIENT_SCOPES):|Repository rule violations' ||
-            { _gh_api_is_permanent "$err" && ! command grep -q 'Could not resolve' "$err"; }; then
+            { _gh_api_is_permanent "$err" && ! command grep -qE 'Could not resolve to a (Ref|PullRequest)' "$err"; }; then
             permanent=1
         fi
         head="$(gh api "repos/$repo/git/ref/heads/$branch" 2>/dev/null |

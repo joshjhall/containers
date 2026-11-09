@@ -419,6 +419,23 @@ test_graphql_permission_error_is_not_retried_and_logged() {
     assert_contains "$ERR" "permanent error on o/r:b, not retrying" "and why it stopped"
 }
 
+test_graphql_unresolvable_repository_is_not_retried() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS='NOT_FOUND:Could not resolve to a Repository with the name o/r.' _commit
+    assert_equals "1" "$RC" "a missing repository fails the commit"
+    assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "after ONE attempt"
+    assert_contains "$ERR" "permanent error on o/r:b, not retrying" "and says why it stopped"
+}
+
+test_create_pr_stderr_cannot_issue_workflow_commands() {
+    gh_stub_install
+    GH_STUB_PR_CREATE_FAIL=1 GH_STUB_PR_CREATE_URL='::add-mask::x' _pr
+    assert_contains "$ERR" "  ::add-mask::x" "gh pr create's stderr is replayed indented"
+    assert_equals "0" "$(command grep -c '^::' <<<"$ERR")" "so no line starts with '::'"
+}
+
 test_graphql_forbidden_rate_limit_is_retried() {
     _repo
     gh_stub_install
@@ -698,6 +715,8 @@ run_test test_truncated_tree_warns_and_tree_read_failure_errors "truncated tree 
 run_test test_permanent_4xx_is_not_retried_and_logged "a permanent 4xx is not retried and is logged"
 run_test test_429_and_5xx_are_retried "429 and 5xx are retried"
 run_test test_graphql_permission_error_is_not_retried_and_logged "a GraphQL permission error is not retried and is logged"
+run_test test_graphql_unresolvable_repository_is_not_retried "an unresolvable GraphQL Repository is not retried"
+run_test test_create_pr_stderr_cannot_issue_workflow_commands "gh pr create stderr cannot issue workflow commands"
 run_test test_graphql_forbidden_rate_limit_is_retried "a GraphQL FORBIDDEN rate limit is retried"
 run_test test_exit0_errors_body_is_logged_and_classified "an exit-0 errors body is logged and classified"
 run_test test_create_pr_reuses_an_open_pr "create_pr reuses an open PR"
