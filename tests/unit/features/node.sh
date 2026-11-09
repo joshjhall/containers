@@ -773,6 +773,16 @@ run_version_block() {
     local node_script="$PROJECT_ROOT/lib/features/node.sh"
     local stub="$TEST_TEMP_DIR/luggage-stub" block="$TEST_TEMP_DIR/version-block.sh"
 
+    # A backtick in the body is a command substitution when the stub runs: `node`
+    # in an error string started the real node REPL and hung the suite (#1597).
+    # Refuse it here so a regression fails fast instead of hanging; enforced by
+    # tests/unit/stub-body-backtick-guard.sh.
+    case "$stub_body" in *'`'*)
+        echo "run_version_block: stub body contains a backtick (command substitution in the stub); see #1597" >&2
+        return 2
+        ;;
+    esac
+
     printf '#!/bin/bash\n%s\n' "$stub_body" >"$stub"
     command chmod +x "$stub"
     # The same extractor the luggage_node fixture runs against real luggage
@@ -852,7 +862,7 @@ test_exact_version_skips_resolve() {
 # Test: a failing luggage resolve fails the build and surfaces luggage's reason
 test_resolve_failure_surfaces_luggage_error() {
     local out rc=0
-    out=$(run_version_block "27" 'echo "error: no version of `node` matches spec `partial:27`" >&2; exit 1') || rc=$?
+    out=$(run_version_block "27" 'echo "error: no version of node matches spec partial:27" >&2; exit 1') || rc=$?
     assert_not_equals "0" "$rc" "a failed resolve exits non-zero"
     assert_contains "$out" "Could not resolve Node.js 27" "names the request"
     assert_contains "$out" "partial:27" "carries luggage's own stderr, not a guessed cause"
