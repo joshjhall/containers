@@ -8,9 +8,11 @@
 # the same group even with cancel-in-progress false, so a per-ref group would
 # still drop main runs.
 #
-# Also pins evidence-run.yml's deliberate cancel-in-progress: false (an
-# interrupted ingest can leave a half-pushed branch). test-pr.yml's own group
-# is covered by tests/unit/required-checks-pr-tier.sh.
+# Also pins evidence-run.yml's cancel-in-progress: it cancels only dry-run
+# pull_request runs (#1591) — push/dispatch runs ingest, and an interrupted
+# ingest can leave a half-pushed branch. The full evidence group shape is
+# covered by tests/unit/evidence-run-shape.sh; test-pr.yml's own group by
+# tests/unit/required-checks-pr-tier.sh.
 #
 # Run via: ./tests/run_unit_tests.sh
 
@@ -67,17 +69,20 @@ test_ci_has_no_job_level_concurrency() {
     assert_equals "0" "$out" "no ci.yml job overrides the workflow concurrency group"
 }
 
-test_evidence_run_never_cancels() {
+# Only dry-run pull_request runs may cancel. A literal `true` would cancel an
+# in-flight main ingest; a literal `false` re-opens #1591's wasted PR runs.
+test_evidence_run_cancels_only_pr() {
     require_yq || return 0
     local out
 
     out=$(run_yq '.concurrency["cancel-in-progress"]' "$EVIDENCE_WORKFLOW") || out="FAILED"
-    assert_equals "false" "$out" "evidence-run.yml never cancels an in-flight ingest"
+    assert_equals "\${{ github.event_name == 'pull_request' }}" "$out" \
+        "evidence-run.yml cancels only pull_request runs, never an ingest"
 }
 
 run_test test_ci_concurrency_group_shape "ci.yml concurrency group keys PRs by number, others by run_id (#1560)"
 run_test test_ci_cancel_only_on_pull_request "ci.yml cancels only superseded pull_request runs (#1560)"
 run_test test_ci_has_no_job_level_concurrency "ci.yml jobs inherit the workflow concurrency group"
-run_test test_evidence_run_never_cancels "evidence-run.yml keeps cancel-in-progress: false"
+run_test test_evidence_run_cancels_only_pr "evidence-run.yml cancels only dry-run pull_request runs (#1591)"
 
 generate_report

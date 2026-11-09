@@ -79,6 +79,10 @@ on:
         type: boolean
   pull_request:
     branches: [main]
+    # `closed` is here only so a merged/closed PR's run joins the per-PR
+    # concurrency group below and cancels that PR's in-flight dry run. No job
+    # runs on `closed` (directly guarded, or skipped via `setup`) (#1591).
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "crates/luggage/**"
       - "crates/record-evidence/**"
@@ -105,12 +109,16 @@ on:
 permissions:
   contents: read
 
-# Serialize runs on the same ref so two pushes to main don't race to open
-# duplicate containers-db PRs. Don't cancel an in-flight run — an
-# interrupted ingest could leave a half-pushed branch behind.
+# push / workflow_dispatch: serialize runs on the same ref so two pushes to
+# main don't race to open duplicate containers-db PRs, and never cancel an
+# in-flight run — an interrupted ingest could leave a half-pushed branch.
+# pull_request: always a dry run (never ingests), so it is safe to cancel.
+# One group per PR: a new push, or the PR closing/merging, cancels the old
+# head's dry run instead of letting it hold a runner for hours (#1591; the
+# same split #1560 made for ci.yml).
 concurrency:
-  group: evidence-${{ github.ref }}
-  cancel-in-progress: false
+  group: evidence-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io
@@ -125,6 +133,9 @@ jobs:
   #     with a real ingest; pull_request runs the same cells in dry-run.
   setup:
     name: Resolve matrix
+    # A closed/merged PR's run exists only to cancel its dry run (see
+    # `concurrency`); it does no work. `evidence` and `collect` follow setup.
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -314,6 +325,7 @@ jobs:
   # § Coverage reconciliation.
   reconcile:
     name: Reconcile coverage (report)
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -610,11 +622,13 @@ jobs:
   # into containers-db with the shared dedup policy, opens ONE PR, and
   # auto-merges it. Per-cell PRs (up to 200 per push, conflicting on shared
   # version files) and per-cell tracking issues are gone. Runs even when some
-  # cells failed: a fail row is evidence too.
+  # cells failed or timed out: a fail row is evidence too. `!cancelled()`, not
+  # `always()`: a PR dry run superseded by a newer push (or a close) is
+  # cancelled, and `always()` would still start this job on it (#1591).
   collect:
     name: Ingest evidence (one PR)
     needs: [setup, evidence]
-    if: ${{ always() && needs.setup.outputs.has_cells == 'true' }}
+    if: ${{ !cancelled() && github.event.action != 'closed' && needs.setup.outputs.has_cells == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
