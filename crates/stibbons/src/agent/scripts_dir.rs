@@ -137,15 +137,15 @@ pub fn state_root() -> Result<PathBuf, ScriptsDirError> {
 /// Off Unix there is no uid or mode to inspect; the directory is accepted as-is
 /// (see the module note on why that is safe there).
 fn ensure_private_dir(path: &Path) -> Result<(), ScriptsDirError> {
-    ensure_owned_dir(path)?;
+    // One `lstat` for all three checks: re-reading the path for the mode would
+    // open a window in which a concurrent invocation renames it away (#927).
+    let meta = ensure_owned_dir(path)?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
 
-        let mode =
-            std::fs::symlink_metadata(path).map_err(|e| io_err(path, e))?.permissions().mode()
-                & 0o777;
+        let mode = meta.permissions().mode() & 0o777;
         if mode != DIR_MODE {
             return Err(unsafe_path(
                 path,
@@ -156,8 +156,30 @@ fn ensure_private_dir(path: &Path) -> Result<(), ScriptsDirError> {
             ));
         }
     }
+    #[cfg(not(unix))]
+    let _ = meta;
 
     Ok(())
+}
+
+/// [`ensure_private_dir`], with "nothing is there" as a value rather than an
+/// error: `Ok(true)` — a private dir of ours; `Ok(false)` — absent.
+///
+/// This is the race-tolerant existence check (#927). Checking existence and
+/// then validating are two reads of a path that a concurrent invocation may
+/// rename away in between, turning a benign "it just moved" into a hard
+/// `NotFound`. Validating once and reading `NotFound` from that single `lstat`
+/// closes the gap instead of narrowing it.
+fn private_dir_state(path: &Path) -> Result<bool, ScriptsDirError> {
+    match ensure_private_dir(path) {
+        Ok(()) => Ok(true),
+        Err(ScriptsDirError::Io { source, .. })
+            if source.kind() == std::io::ErrorKind::NotFound =>
+        {
+            Ok(false)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// The ownership half of [`ensure_private_dir`]: a real directory, not a
@@ -171,7 +193,10 @@ fn ensure_private_dir(path: &Path) -> Result<(), ScriptsDirError> {
 /// to stop — and a symlink planted at an ancestor would otherwise be followed,
 /// letting an attacker relocate the whole tree even though the leaf check
 /// passes.
-fn ensure_owned_dir(path: &Path) -> Result<(), ScriptsDirError> {
+///
+/// Returns the metadata it checked, so a caller needing more of it does not
+/// re-read a path that may have changed since.
+fn ensure_owned_dir(path: &Path) -> Result<std::fs::Metadata, ScriptsDirError> {
     let meta = std::fs::symlink_metadata(path).map_err(|e| io_err(path, e))?;
 
     if meta.file_type().is_symlink() {
@@ -194,23 +219,7 @@ fn ensure_owned_dir(path: &Path) -> Result<(), ScriptsDirError> {
         }
     }
 
-    Ok(())
-}
-
-/// Creates `path` as a `0700` directory, failing if anything already occupies
-/// it.
-///
-/// `create_dir`, never `create_dir_all`: adopting a pre-existing path is the
-/// bug (#924). The caller has already removed any directory of its own, so an
-/// occupant here means something raced in between that removal and this call.
-///
-/// The mode is set in a second step rather than through the create call. That
-/// leaves a brief window where the directory carries the process umask's mode —
-/// harmless, because the parent `agent-scripts` directory is itself `0700`, so
-/// nobody else can traverse into this one to observe or use the window.
-fn create_private_dir(path: &Path) -> Result<(), ScriptsDirError> {
-    std::fs::create_dir(path).map_err(|e| io_err(path, e))?;
-    set_mode(path, DIR_MODE)
+    Ok(meta)
 }
 
 /// Sets `mode` on `path` on Unix. A no-op elsewhere.
@@ -249,8 +258,9 @@ fn set_mode(path: &Path, mode: u32) -> Result<(), ScriptsDirError> {
 ///
 /// A pre-existing path is **rejected** unless it is a directory this user owns
 /// with mode `0700`; in that case it is our own directory from an earlier
-/// start, so it is removed and recreated (rather than written over) so no stale
-/// file from a previous version survives into the mount.
+/// start. If it already holds exactly `scripts` it is returned untouched;
+/// otherwise it is replaced wholesale (never written over), so no stale file
+/// from a previous version survives into the mount.
 ///
 /// The directory is intentionally not cleaned up on exit: it is mounted into a
 /// container that outlives this process.
@@ -272,27 +282,43 @@ pub fn prepare_scripts_dir(
     container_name: &str,
     scripts: &[(&str, &str)],
 ) -> Result<PathBuf, ScriptsDirError> {
+    prepare_with_hook(state_root, container_name, scripts, &mut |_| {})
+}
+
+/// [`prepare_scripts_dir`] with a `hook` called at each [`Stage`], so a test
+/// can pause one invocation mid-flight while another runs (#927).
+///
+/// Concurrency: two invocations for the same container (parallel golem
+/// dispatch, or a re-run after a hung `docker run`) share the path. The scripts
+/// are therefore built in a private sibling and renamed into place, so the
+/// target is only ever absent or complete; an existing directory that already
+/// holds these exact scripts is returned untouched, so a tree another
+/// invocation has already bind-mounted is not pulled out from under it.
+fn prepare_with_hook(
+    state_root: Option<&Path>,
+    container_name: &str,
+    scripts: &[(&str, &str)],
+    hook: &mut dyn FnMut(Stage),
+) -> Result<PathBuf, ScriptsDirError> {
     let state_root = state_root.ok_or(ScriptsDirError::NoStateRoot)?;
     // Defend at the sink, not only upstream (#924). `AgentContext::load`
     // allow-lists the project name this is derived from, but this function does
     // the `Path::join` — where `/` and `..` are real components — and cannot see
     // whether its caller validated. A future caller, or a reordering of that
     // validation, would silently turn this back into a path escape.
-    // `Normal` is the only component kind that names a new directory: it
-    // excludes `.` and `..` (which are `CurDir`/`ParentDir`, each a single
-    // component, so a bare count would let `..` through) as well as any root or
-    // prefix. Requiring exactly one Normal component also rejects separators.
-    let sole_component = {
-        let mut components = Path::new(container_name).components();
-        match (components.next(), components.next()) {
-            (Some(std::path::Component::Normal(c)), None) => Some(c),
-            _ => None,
-        }
-    };
-    if sole_component.is_none_or(|c| c != std::ffi::OsStr::new(container_name)) {
+    if !is_single_component(container_name) {
         return Err(unsafe_path(
             &state_root.join(container_name),
             format!("container name {container_name:?} is not a single path component"),
+        ));
+    }
+    // The script names are joined the same way, onto the staging dir, and then
+    // chmod'd 0755 — so the same rule applies to them. Checked before anything
+    // is created, so a bad name leaves no staging dir to clean up.
+    if let Some((name, _)) = scripts.iter().find(|(n, _)| !is_single_component(n)) {
+        return Err(unsafe_path(
+            &state_root.join(name),
+            format!("script name {name:?} is not a single path component"),
         ));
     }
     // Create the ancestors one level at a time, checking ownership at each.
@@ -311,32 +337,311 @@ pub fn prepare_scripts_dir(
     let mut parent = state_root.to_path_buf();
     for segment in ["stibbons", "agent-scripts"] {
         parent.push(segment);
-        if std::fs::symlink_metadata(&parent).is_ok() {
-            ensure_owned_dir(&parent)?;
-        } else {
-            std::fs::create_dir(&parent).map_err(|e| io_err(&parent, e))?;
+        if std::fs::symlink_metadata(&parent).is_err() {
+            hook(Stage::AncestorAbsent);
+            match std::fs::create_dir(&parent) {
+                Ok(()) => continue,
+                // A concurrent first start created it between our check and
+                // here (#927). These two are shared by every container, so
+                // that is routine under parallel dispatch, not an error. Fall
+                // through to the ownership check: whoever created it must
+                // still be us, and a symlink planted in the gap is refused.
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(io_err(&parent, e)),
+            }
         }
+        ensure_owned_dir(&parent)?;
     }
     // Lock down the shared parent: it is what makes the umask window in
-    // `create_private_dir` unobservable, and it hides which agents exist.
+    // `build_staged` unobservable, and it hides which agents exist.
     set_mode(&parent, DIR_MODE)?;
 
     let dir = parent.join(container_name);
-    if std::fs::symlink_metadata(&dir).is_ok() {
-        // Ours from a previous start? Then start clean. Anything else is
-        // rejected by `ensure_private_dir` rather than adopted.
-        ensure_private_dir(&dir)?;
-        std::fs::remove_dir_all(&dir).map_err(|e| io_err(&dir, e))?;
-    }
-    create_private_dir(&dir)?;
-
-    for (name, body) in scripts {
-        let path = dir.join(name);
-        std::fs::write(&path, body).map_err(|e| io_err(&path, e))?;
-        set_mode(&path, SCRIPT_MODE)?;
+    hook(Stage::BeforeTargetCheck);
+    // Ours from a previous start? Anything else is rejected rather than
+    // adopted. If it already holds exactly these scripts, leave it alone: a
+    // concurrent start of the same agent may have bind-mounted it already. If
+    // it is absent — including moved aside by a concurrent start a moment ago
+    // — build (#927).
+    if private_dir_state(&dir)? && matches(&dir, scripts) {
+        return Ok(dir);
     }
 
+    let staged = build_staged(&parent, container_name, scripts)?;
+    hook(Stage::Built);
+    install(&parent, &dir, container_name, staged, scripts, hook)?;
     Ok(dir)
+}
+
+/// Whether `name` is exactly one `Normal` path component, so joining it onto a
+/// directory names a direct child and nothing else.
+///
+/// `Normal` is the only component kind that names a new directory entry: it
+/// excludes `.` and `..` (`CurDir`/`ParentDir` — each a single component, so a
+/// bare count would let `..` through) and any root or prefix. Requiring
+/// exactly one also rejects separators, and comparing back to `name` rejects
+/// the normalizations `components()` performs (a trailing `/`, `./` prefix).
+fn is_single_component(name: &str) -> bool {
+    let mut components = Path::new(name).components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(std::path::Component::Normal(c)), None) if c == OsStr::new(name)
+    )
+}
+
+/// Points in [`prepare_with_hook`] a test can pause at to drive a concurrent
+/// interleaving deterministically, instead of relying on timing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Stage {
+    /// An owned ancestor (`stibbons` or `agent-scripts`) was just found
+    /// absent; it has not been created yet.
+    AncestorAbsent,
+    /// The ancestors are in place; the target has not been inspected yet.
+    BeforeTargetCheck,
+    /// The full script set is written to the staging directory, not yet
+    /// installed.
+    Built,
+    /// The install rename just failed because the target was occupied; the
+    /// target has not been re-inspected yet.
+    RenameFailed,
+    /// An occupant of the target path was just moved aside; the install
+    /// rename has not been retried yet.
+    MovedAside,
+}
+
+/// How many times [`install`] retries after losing a race to a concurrent
+/// invocation. Each retry needs another process to finish an install in the
+/// gap, so a handful is ample; the bound only stops a pathological livelock.
+const MAX_INSTALL_ATTEMPTS: usize = 8;
+
+/// Distinguishes sibling names created within one process (threads, or
+/// repeated retries), on top of the PID that distinguishes processes and the
+/// timestamp that distinguishes a reused PID from a crashed predecessor whose
+/// hidden entry was never cleaned up.
+static SIBLING_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A fresh sibling path `.{container}.{kind}-{pid}-{nanos}-{seq}` in `parent`.
+///
+/// Same parent as the target, so it is on the same filesystem (`rename` is
+/// atomic only within one) and already behind the `0700` `agent-scripts`
+/// directory. The leading `.` keeps it from ever equalling a container name —
+/// Docker names cannot start with one.
+///
+/// Known limit: a process killed outright (SIGKILL, OOM) between creating one
+/// of these and removing it leaves it behind, since no drop guard runs. It is
+/// harmless — hidden, inside the `0700` parent, never mounted, never reused —
+/// and is deliberately not swept: another invocation may be mid-prepare with a
+/// live sibling, and telling a live one from a dead one needs a lock this
+/// design exists to avoid.
+fn sibling(parent: &Path, container_name: &str, kind: &str) -> PathBuf {
+    let seq = SIBLING_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    parent.join(format!(".{container_name}.{kind}-{}-{nanos}-{seq}", std::process::id()))
+}
+
+/// A directory removed on drop unless [`disarm`](Self::disarm)ed, so a staging
+/// directory never outlives an error path (#927).
+struct RemoveOnDrop(Option<PathBuf>);
+
+impl RemoveOnDrop {
+    fn path(&self) -> &Path {
+        self.0.as_deref().expect("path is only taken by disarm, which consumes self")
+    }
+
+    /// Keeps the directory: it has been renamed into place.
+    fn disarm(mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for RemoveOnDrop {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            // Best effort: a drop cannot report, and the path is hidden inside
+            // the private parent, so a failure here leaks nothing to others.
+            let _ = std::fs::remove_dir_all(path);
+        }
+    }
+}
+
+/// Writes the full script set into a fresh private staging directory beside
+/// the target. Nothing reads the staging path, so no reader can observe it
+/// half-written; it only becomes visible through the atomic rename in
+/// [`install`].
+///
+/// `create_dir`, never `create_dir_all`: adopting a pre-existing path is the
+/// bug (#924). The mode is set in a second step rather than through the create
+/// call, leaving a brief window at the process umask's mode — harmless, because
+/// the parent `agent-scripts` directory is itself `0700`, so nobody else can
+/// traverse in to observe or use it. The drop guard is armed before that
+/// second step, so even a failing chmod leaves nothing behind.
+fn build_staged(
+    parent: &Path,
+    container_name: &str,
+    scripts: &[(&str, &str)],
+) -> Result<RemoveOnDrop, ScriptsDirError> {
+    let path = sibling(parent, container_name, "tmp");
+    std::fs::create_dir(&path).map_err(|e| io_err(&path, e))?;
+    let staged = RemoveOnDrop(Some(path));
+    set_mode(staged.path(), DIR_MODE)?;
+    for (name, body) in scripts {
+        let file = staged.path().join(name);
+        std::fs::write(&file, body).map_err(|e| io_err(&file, e))?;
+        set_mode(&file, SCRIPT_MODE)?;
+    }
+    Ok(staged)
+}
+
+/// Whether `dir` holds exactly `scripts` — the same names, bytes, and (on
+/// Unix) [`SCRIPT_MODE`] — and nothing else.
+///
+/// Any read failure counts as "no": the caller then replaces the directory,
+/// which is the safe direction.
+fn matches(dir: &Path, scripts: &[(&str, &str)]) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    let mut seen = 0usize;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        let name = entry.file_name();
+        let Some((_, body)) = scripts.iter().find(|(n, _)| OsStr::new(n) == name) else {
+            return false;
+        };
+        let path = entry.path();
+        let Ok(meta) = std::fs::symlink_metadata(&path) else {
+            return false;
+        };
+        if !meta.is_file() {
+            return false;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if meta.permissions().mode() & 0o777 != SCRIPT_MODE {
+                return false;
+            }
+        }
+        if std::fs::read(&path).ok().as_deref() != Some(body.as_bytes()) {
+            return false;
+        }
+        seen += 1;
+    }
+    seen == scripts.len()
+}
+
+/// Renames `staged` onto `dir`, so the target is only ever absent or complete —
+/// never partially written (#927).
+///
+/// `rename` cannot replace a non-empty directory, so an occupant is first moved
+/// aside, then the rename is retried. A concurrent invocation can slip its own
+/// install into that gap; the loop then sees the new occupant and goes round
+/// again — unless it already holds these exact scripts, in which case the
+/// other process did our work and the staging copy is discarded.
+///
+/// Only an "occupied" rename failure is retried (see [`target_occupied`]).
+/// Any other failure — `EACCES`, `ENOSPC`, `EIO` — is returned as-is: retrying
+/// it would only move a working installed tree aside (and then delete it) and
+/// finally report a misleading "lost the race".
+fn install(
+    parent: &Path,
+    dir: &Path,
+    container_name: &str,
+    staged: RemoveOnDrop,
+    scripts: &[(&str, &str)],
+    hook: &mut dyn FnMut(Stage),
+) -> Result<(), ScriptsDirError> {
+    let mut aside = Vec::new();
+    let result = install_loop(parent, dir, container_name, staged, scripts, hook, &mut aside);
+
+    // Moved-aside trees are ours (they passed `ensure_private_dir`) and nothing
+    // can reach them under the hidden name, so they are always removed, on the
+    // error path too. A removal failure is reported rather than leaked.
+    let mut cleanup = Ok(());
+    for old in aside {
+        if let Err(e) = std::fs::remove_dir_all(&old)
+            && cleanup.is_ok()
+        {
+            cleanup = Err(io_err(&old, e));
+        }
+    }
+    result.and(cleanup)
+}
+
+/// The retry loop of [`install`], split out so every exit — success or
+/// error — funnels through `install`'s moved-aside cleanup.
+fn install_loop(
+    parent: &Path,
+    dir: &Path,
+    container_name: &str,
+    staged: RemoveOnDrop,
+    scripts: &[(&str, &str)],
+    hook: &mut dyn FnMut(Stage),
+    aside: &mut Vec<PathBuf>,
+) -> Result<(), ScriptsDirError> {
+    let mut last_err = None;
+    for _ in 0..MAX_INSTALL_ATTEMPTS {
+        let err = match std::fs::rename(staged.path(), dir) {
+            Ok(()) => {
+                staged.disarm();
+                return Ok(());
+            }
+            Err(e) => e,
+        };
+        hook(Stage::RenameFailed);
+        if !target_occupied(&err, dir) {
+            return Err(io_err(dir, err));
+        }
+        last_err = Some(err);
+
+        // The target is (still, or again) occupied — or it vanished between
+        // the rename and here because another invocation moved it aside, in
+        // which case just retry.
+        if !private_dir_state(dir)? {
+            continue;
+        }
+        if matches(dir, scripts) {
+            return Ok(());
+        }
+
+        let old = sibling(parent, container_name, "old");
+        match std::fs::rename(dir, &old) {
+            Ok(()) => {
+                aside.push(old);
+                hook(Stage::MovedAside);
+            }
+            // Someone else moved it aside first; retry the install.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(io_err(dir, e)),
+        }
+    }
+
+    let last = last_err.map_or_else(|| "none".to_owned(), |e| e.to_string());
+    Err(io_err(
+        dir,
+        std::io::Error::other(format!(
+            "could not install after {MAX_INSTALL_ATTEMPTS} attempts \
+             (concurrent agent starts kept replacing it; last error: {last})"
+        )),
+    ))
+}
+
+/// Whether a failed `rename(staged, dir)` means "the target is occupied" — the
+/// only failure [`install_loop`] retries.
+///
+/// On Unix that is `ENOTEMPTY`/`EEXIST`, by kind. Windows reports an occupied
+/// directory target as access-denied, indistinguishable by kind from a real
+/// permission error, so there it also requires the target to exist.
+fn target_occupied(err: &std::io::Error, dir: &Path) -> bool {
+    use std::io::ErrorKind;
+    matches!(err.kind(), ErrorKind::AlreadyExists | ErrorKind::DirectoryNotEmpty)
+        || (cfg!(windows)
+            && err.kind() == ErrorKind::PermissionDenied
+            && std::fs::symlink_metadata(dir).is_ok())
 }
 
 #[cfg(test)]
@@ -615,5 +920,465 @@ mod tests {
 
         assert_ne!(one, two);
         assert!(one.join("agent-start.sh").exists(), "agent-1 scripts survive agent-2's start");
+    }
+
+    /// Hidden staging/aside entries left in the `agent-scripts` parent. Every
+    /// prepare — success or failure — must leave none (#927).
+    fn leftovers(state_root: &Path) -> Vec<String> {
+        let parent = state_root.join("stibbons").join("agent-scripts");
+        std::fs::read_dir(parent)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.starts_with('.'))
+            .collect()
+    }
+
+    /// Asserts `dir` holds exactly `expected`, byte for byte.
+    fn assert_complete(dir: &Path, expected: &[(&str, &str)]) {
+        let mut names: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        let mut want: Vec<_> = expected.iter().map(|(n, _)| (*n).to_owned()).collect();
+        want.sort();
+        assert_eq!(names, want, "{}", dir.display());
+        for (name, body) in expected {
+            assert_eq!(std::fs::read_to_string(dir.join(name)).unwrap(), *body, "{name}");
+        }
+    }
+
+    /// Runs invocation A up to `pause_at`, runs B to completion in that gap,
+    /// then lets A finish. Barriers, not sleeps, so the interleaving is the
+    /// same every run (#927).
+    fn interleave(
+        root: &Path,
+        a_scripts: &[(&'static str, &'static str)],
+        b_scripts: &[(&'static str, &'static str)],
+        pause_at: Stage,
+    ) -> (PathBuf, PathBuf) {
+        use std::sync::{Arc, Barrier};
+
+        let paused = Arc::new(Barrier::new(2));
+        let resume = Arc::new(Barrier::new(2));
+        let a = {
+            let (root, scripts) = (root.to_path_buf(), a_scripts.to_vec());
+            let (paused, resume) = (Arc::clone(&paused), Arc::clone(&resume));
+            std::thread::spawn(move || {
+                let mut hit = false;
+                let dir = prepare_with_hook(Some(&root), "myproject-agent-1", &scripts, &mut |s| {
+                    if s == pause_at && !hit {
+                        hit = true;
+                        paused.wait();
+                        resume.wait();
+                    }
+                });
+                // A that returns before its pause point must still release the
+                // main thread, or a regression hangs the suite instead of
+                // failing it.
+                if !hit {
+                    paused.wait();
+                    resume.wait();
+                }
+                assert!(hit, "A never reached {pause_at:?}: {dir:?}");
+                dir
+            })
+        };
+        paused.wait();
+        let b = prepare_scripts_dir(Some(root), "myproject-agent-1", b_scripts).unwrap();
+        resume.wait();
+        (a.join().unwrap().unwrap(), b)
+    }
+
+    /// The scripts with one body changed — a different stibbons version.
+    fn other_scripts() -> Vec<(&'static str, &'static str)> {
+        let mut s = scripts();
+        s[1].1 = "#!/bin/bash\ninit v2\n";
+        s
+    }
+
+    /// #927 acceptance: A has built its scripts but not installed them when B
+    /// runs a whole prepare for the same container. Both must come back with
+    /// the full script set — under the old remove-then-write sequence, B's
+    /// `remove_dir_all` deleted A's half-written tree.
+    #[test]
+    fn concurrent_prepare_same_scripts_both_complete() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let (a, b) = interleave(tmp.path(), &scripts(), &scripts(), Stage::Built);
+
+        assert_eq!(a, b);
+        assert_complete(&a, &scripts());
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// The same race with differing content: A must replace B's tree whole,
+    /// never merge with it, and clear its staging and moved-aside copies.
+    #[test]
+    fn concurrent_prepare_different_scripts_last_install_wins_whole() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let (a, _) = interleave(tmp.path(), &other_scripts(), &scripts(), Stage::Built);
+
+        assert_complete(&a, &other_scripts());
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// The narrower window: A has moved the old tree aside and the target is
+    /// momentarily absent when B installs. A's rename then hits B's tree and
+    /// must retry rather than fail or merge.
+    #[test]
+    fn concurrent_install_into_moved_aside_gap_retries() {
+        let tmp = tempfile::tempdir().unwrap();
+        prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+
+        let (a, b) = interleave(tmp.path(), &other_scripts(), &scripts(), Stage::MovedAside);
+
+        assert_eq!(a, b);
+        assert_complete(&a, &other_scripts());
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// Finding (1), post-PR cycle 1: two FIRST-EVER starts race to create the
+    /// shared ancestors. A sees `stibbons` absent and pauses; B then runs a
+    /// whole prepare, creating it. A's `create_dir` now gets `AlreadyExists` —
+    /// which must read as "exists", not abort the start. Different containers,
+    /// because the ancestors are shared by all of them.
+    #[test]
+    fn concurrent_first_start_ancestor_race_is_tolerated() {
+        use std::sync::{Arc, Barrier};
+        let tmp = tempfile::tempdir().unwrap();
+        let (paused, resume) = (Arc::new(Barrier::new(2)), Arc::new(Barrier::new(2)));
+
+        let a = {
+            let root = tmp.path().to_path_buf();
+            let (paused, resume) = (Arc::clone(&paused), Arc::clone(&resume));
+            std::thread::spawn(move || {
+                let mut hit = false;
+                let dir =
+                    prepare_with_hook(Some(&root), "myproject-agent-1", &scripts(), &mut |s| {
+                        if s == Stage::AncestorAbsent && !hit {
+                            hit = true;
+                            paused.wait();
+                            resume.wait();
+                        }
+                    });
+                if !hit {
+                    paused.wait();
+                    resume.wait();
+                }
+                assert!(hit, "A never saw an absent ancestor: {dir:?}");
+                dir
+            })
+        };
+        paused.wait();
+        let b = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-2", &scripts()).unwrap();
+        resume.wait();
+        let a = a.join().unwrap().expect("AlreadyExists on a shared ancestor must be tolerated");
+
+        assert_complete(&a, &scripts());
+        assert_complete(&b, &scripts());
+    }
+
+    /// The tolerated `AlreadyExists` still goes through the ownership check: a
+    /// symlink planted at the ancestor in that same gap is refused, not
+    /// followed — the #924 boundary must not open up for the race fix.
+    #[cfg(unix)]
+    #[test]
+    fn ancestor_symlink_planted_in_race_gap_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let ancestor = tmp.path().join("stibbons");
+
+        let err = prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &scripts(), &mut |s| {
+            if s == Stage::AncestorAbsent && !ancestor.exists() {
+                std::os::unix::fs::symlink(elsewhere.path(), &ancestor).unwrap();
+            }
+        })
+        .expect_err("a symlink at the ancestor must be refused");
+
+        assert!(err.to_string().contains("is a symlink"), "{err}");
+        assert_eq!(
+            std::fs::read_dir(elsewhere.path()).unwrap().count(),
+            0,
+            "nothing written through the link"
+        );
+    }
+
+    /// Finding (2), post-PR cycle 1, first site: the target exists when the
+    /// ancestors are done, then a concurrent start moves it aside before it is
+    /// inspected. That is "absent — build", not a hard `NotFound`.
+    #[test]
+    fn target_vanishing_before_inspection_builds() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+        let elsewhere = tmp.path().join("moved-by-someone-else");
+
+        let mut vanished = false;
+        let got =
+            prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &other_scripts(), &mut |s| {
+                if s == Stage::BeforeTargetCheck && !vanished {
+                    vanished = true;
+                    std::fs::rename(&dir, &elsewhere).unwrap();
+                }
+            })
+            .expect("a target that vanished before inspection must be rebuilt");
+
+        assert!(vanished);
+        assert_complete(&got, &other_scripts());
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// The target vanishes between A's failed rename and its re-inspection —
+    /// another invocation moved it aside. A must treat that as "retry", not as
+    /// an error, and still install a complete tree.
+    #[test]
+    fn target_vanishing_after_failed_rename_is_retried() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+        let elsewhere = tmp.path().join("moved-by-someone-else");
+
+        let mut vanished = false;
+        let got =
+            prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &other_scripts(), &mut |s| {
+                if s == Stage::RenameFailed && !vanished {
+                    vanished = true;
+                    std::fs::rename(&dir, &elsewhere).unwrap();
+                }
+            })
+            .unwrap();
+
+        assert!(vanished, "rename never failed, so the branch was not reached");
+        assert_complete(&got, &other_scripts());
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// A non-race rename failure is returned with its real cause — not retried
+    /// into a misleading "lost the race". Here the staged source vanishes
+    /// between build and install, so `rename` fails `ENOENT` with the target
+    /// absent: the retry-everything loop this replaced would spin through every
+    /// attempt and report a race. Driven by the hook rather than mode bits, so
+    /// it also holds when the suite runs as root.
+    #[test]
+    fn non_race_rename_failure_is_reported_not_retried() {
+        let tmp = tempfile::tempdir().unwrap();
+        let parent = tmp.path().join("stibbons").join("agent-scripts");
+
+        let err = prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &scripts(), &mut |s| {
+            if s == Stage::Built {
+                for entry in std::fs::read_dir(&parent).unwrap() {
+                    std::fs::remove_dir_all(entry.unwrap().path()).unwrap();
+                }
+            }
+        })
+        .expect_err("a vanished source must not be retried");
+
+        match err {
+            ScriptsDirError::Io { source, .. } => {
+                assert_eq!(source.kind(), std::io::ErrorKind::NotFound, "{source}");
+            }
+            other => panic!("expected Io(NotFound), got {other}"),
+        }
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// The retry bound holds: if every attempt loses to a fresh differing
+    /// occupant, prepare gives up with the attempt count in the error rather
+    /// than looping forever, and every tree it moved aside is removed.
+    #[cfg(unix)]
+    #[test]
+    fn retry_exhaustion_errors_and_cleans_up() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+        let mut planted = 0;
+
+        let err =
+            prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &other_scripts(), &mut |s| {
+                if s == Stage::MovedAside {
+                    planted += 1;
+                    std::fs::create_dir(&dir).unwrap();
+                    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+                    std::fs::write(dir.join("rival.sh"), "x").unwrap();
+                }
+            })
+            .expect_err("a rival that always wins must exhaust the retries");
+
+        assert_eq!(planted, MAX_INSTALL_ATTEMPTS, "one move-aside per attempt");
+        let msg = err.to_string();
+        assert!(msg.contains(&format!("after {MAX_INSTALL_ATTEMPTS} attempts")), "{msg}");
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// Script names get the same single-component rule as the container name:
+    /// one is joined onto the staging dir and chmod'd 0755, so `..` or a
+    /// separator would write outside it. Refused before anything is created.
+    #[test]
+    fn traversing_script_name_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        for name in ["../escape.sh", "sub/x.sh", "..", "", "x.sh/"] {
+            let mut bad = scripts();
+            bad.push((name, "x"));
+            let err = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &bad)
+                .expect_err("must be rejected");
+            assert!(err.to_string().contains("script name"), "{name:?}: {err}");
+        }
+        assert!(!tmp.path().join("stibbons").exists(), "nothing created for a refused name");
+    }
+
+    /// A foreign occupant that appears at the target mid-install (here our own
+    /// tree opened to 0755 — what an attacker-planted dir looks like) is
+    /// rejected rather than moved aside and replaced, and the staging dir does
+    /// not leak on that error path.
+    #[cfg(unix)]
+    #[test]
+    fn foreign_occupant_appearing_mid_install_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+
+        let err =
+            prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &other_scripts(), &mut |s| {
+                if s == Stage::RenameFailed {
+                    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+                }
+            })
+            .expect_err("an open-mode occupant must be refused");
+
+        assert!(matches!(err, ScriptsDirError::UnsafePath { .. }), "{err}");
+        assert_complete(&dir, &scripts());
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// The "already matches, leave it" short-circuit must not accept a tree
+    /// that differs in anything but script bytes: a tampered mode, an extra
+    /// file, or a script swapped for a symlink each force a full replacement.
+    /// These are the cases where returning the tree untouched would carry
+    /// someone else's change into the mount.
+    #[cfg(unix)]
+    #[test]
+    fn near_match_trees_are_replaced() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        type Tamper = fn(&Path);
+        let tampers: [(&str, Tamper); 3] = [
+            ("mode", |d| {
+                std::fs::set_permissions(
+                    d.join("agent-init.sh"),
+                    std::fs::Permissions::from_mode(0o777),
+                )
+                .unwrap();
+            }),
+            ("extra file", |d| std::fs::write(d.join("extra.sh"), "x").unwrap()),
+            ("symlink", |d| {
+                let target = d.parent().unwrap().parent().unwrap().join("init-copy");
+                std::fs::write(&target, "#!/bin/bash\ninit\n").unwrap();
+                std::fs::remove_file(d.join("agent-init.sh")).unwrap();
+                std::os::unix::fs::symlink(&target, d.join("agent-init.sh")).unwrap();
+            }),
+        ];
+        for (what, tamper) in tampers {
+            let tmp = tempfile::tempdir().unwrap();
+            let dir =
+                prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+            tamper(&dir);
+            let ino = std::fs::metadata(&dir).unwrap().ino();
+
+            prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+
+            assert_ne!(std::fs::metadata(&dir).unwrap().ino(), ino, "{what}: not replaced");
+            assert_complete(&dir, &scripts());
+            assert_eq!(mode_of(&dir.join("agent-init.sh")), 0o755, "{what}");
+            assert!(
+                !std::fs::symlink_metadata(dir.join("agent-init.sh")).unwrap().is_symlink(),
+                "{what}"
+            );
+        }
+    }
+
+    /// Only an occupied-target kind is retried; every other kind is reported.
+    /// The Windows `PermissionDenied` arm is `cfg!`-gated, so on Unix that kind
+    /// must stay a hard error even when the target exists.
+    #[test]
+    fn target_occupied_classifies_by_kind() {
+        use std::io::{Error, ErrorKind};
+        let tmp = tempfile::tempdir().unwrap();
+        let (present, absent) = (tmp.path(), tmp.path().join("absent"));
+
+        assert!(target_occupied(&Error::from(ErrorKind::AlreadyExists), present));
+        assert!(target_occupied(&Error::from(ErrorKind::DirectoryNotEmpty), present));
+        assert!(!target_occupied(&Error::from(ErrorKind::PermissionDenied), &absent));
+        assert!(!target_occupied(&Error::from(ErrorKind::StorageFull), present));
+        assert!(!target_occupied(&Error::from(ErrorKind::Other), present));
+        assert_eq!(
+            target_occupied(&Error::from(ErrorKind::PermissionDenied), present),
+            cfg!(windows),
+        );
+    }
+
+    /// Sibling names never repeat within a process and stay hidden, so they
+    /// can neither collide with each other nor with a container name.
+    #[test]
+    fn sibling_names_are_hidden_and_unique() {
+        let parent = Path::new("/p");
+        let a = sibling(parent, "c", "tmp");
+        let b = sibling(parent, "c", "tmp");
+
+        assert_ne!(a, b);
+        for p in [&a, &b] {
+            let name = p.file_name().unwrap().to_string_lossy();
+            assert!(name.starts_with(".c.tmp-"), "{name}");
+            // pid, nanos, seq
+            assert_eq!(name.trim_start_matches(".c.tmp-").split('-').count(), 3, "{name}");
+        }
+    }
+
+    /// A tree that already holds these exact scripts is left in place — same
+    /// inode — so a concurrent start that has bind-mounted it keeps its files.
+    #[cfg(unix)]
+    #[test]
+    fn unchanged_scripts_leave_dir_in_place() {
+        use std::os::unix::fs::MetadataExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+        let ino = std::fs::metadata(&dir).unwrap().ino();
+
+        prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+
+        assert_eq!(std::fs::metadata(&dir).unwrap().ino(), ino);
+    }
+
+    /// Changed content replaces the tree rather than editing it in place.
+    #[cfg(unix)]
+    #[test]
+    fn changed_scripts_replace_the_dir() {
+        use std::os::unix::fs::MetadataExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+        let ino = std::fs::metadata(&dir).unwrap().ino();
+
+        prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &other_scripts()).unwrap();
+
+        assert_ne!(std::fs::metadata(&dir).unwrap().ino(), ino);
+        assert_complete(&dir, &other_scripts());
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// A script that fails to write aborts the prepare without leaking the
+    /// staging directory, and leaves an existing installed tree intact.
+    #[test]
+    fn failed_build_leaks_no_staging_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+
+        // A NUL byte passes the single-component check but fails the write
+        // itself, so the failure lands mid-build, after staging exists.
+        let mut bad = scripts();
+        bad.push(("bad\0name.sh", "x"));
+        prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &bad)
+            .expect_err("a write that fails mid-build must fail the prepare");
+
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+        assert_complete(&dir, &scripts());
     }
 }
