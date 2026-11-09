@@ -315,6 +315,47 @@ test_pr_sample_is_scoped_and_full_runs_are_real() {
     assert_equals 'v*' "$(yq -r '.on.push.tags[0]' "$WF")" "a v* tag runs the full matrix"
 }
 
+test_pr_scope_step_executes() {
+    # #1593: run the shipped scope step, not just its text. gh is stubbed: a
+    # listing yields the scope, a failing listing fails CHEAP to empty.
+    command -v yq >/dev/null 2>&1 || {
+        assert_true false "yq is required to extract the scope step"
+        return 0
+    }
+    local script bin out rc
+    script="$TEST_TEMP_DIR/scope-step.sh"
+    bin="$TEST_TEMP_DIR/scope-bin"
+    /usr/bin/mkdir -p "$bin"
+    yq -r '.jobs.setup.steps[] | select(.name == "Source-build scope (PR changed files)") | .run' "$WF" >"$script"
+    if ! [ -s "$script" ] || /usr/bin/grep -qx null "$script"; then
+        assert_true false "could not extract the Source-build scope step"
+        return 0
+    fi
+    _scope_run() {
+        local gh_body="$1"
+        /usr/bin/printf '#!/usr/bin/env bash\n%s\n' "$gh_body" >"$bin/gh"
+        /usr/bin/chmod +x "$bin/gh"
+        : >"$TEST_TEMP_DIR/scope-out"
+        # env -u BASH_ENV: the container's BASH_ENV rebuilds PATH for a
+        # non-interactive bash, which would bypass the stub and call real gh.
+        (cd "$PROJECT_ROOT" && /usr/bin/env -u BASH_ENV PATH="$bin:$PATH" \
+            GITHUB_OUTPUT="$TEST_TEMP_DIR/scope-out" GITHUB_REPOSITORY=o/r PR_NUMBER=7 \
+            bash "$script") >/dev/null 2>&1
+    }
+    rc=0
+    _scope_run "/usr/bin/printf '%s\\n' crates/luggage/testdata/catalog/tools/node/index.json bin/lib/evidence-matrix.sh" || rc=$?
+    out="$(/usr/bin/cat "$TEST_TEMP_DIR/scope-out")"
+    assert_equals "0:scope=node" "$rc:$out" "a node catalog change scopes node's source build"
+    rc=0
+    _scope_run "/usr/bin/printf '%s\\n' crates/luggage/src/installer/methods/source_build.rs" || rc=$?
+    out="$(/usr/bin/cat "$TEST_TEMP_DIR/scope-out")"
+    assert_equals "0:scope=*" "$rc:$out" "a source_build.rs change scopes every tool"
+    rc=0
+    _scope_run "exit 1" || rc=$?
+    out="$(/usr/bin/cat "$TEST_TEMP_DIR/scope-out")"
+    assert_equals "0:scope=" "$rc:$out" "an unreadable PR file list fails cheap: empty scope, step still passes"
+}
+
 test_closed_pr_runs_do_nothing() {
     # A closed/merged PR's run joins the per-PR group only to cancel the
     # in-flight dry run; no job of its own may run.
@@ -608,6 +649,7 @@ run_test test_pr_runs_cancel_per_pr "PR runs cancel per PR (#1591)"
 run_test test_main_runs_never_cancel "main/dispatch runs never cancel (#1591)"
 run_test test_closed_pr_runs_do_nothing "a closed PR run cancels and does nothing (#1591)"
 run_test test_pr_sample_is_scoped_and_full_runs_are_real "PR evidence is sampled by scope; nightly and tags run in full (#1593)"
+run_test test_pr_scope_step_executes "the PR source-build scope step runs and fails cheap (#1593)"
 run_test test_ccache_steps_gate_on_source_build "ccache steps run only for source-build cells (#1594)"
 run_test test_ccache_save_runs_on_failure "ccache stats + save run even when the build fails (#1594)"
 run_test test_ccache_key_is_per_tool_and_tuple "ccache key is tool-tuple-major-version (#1594)"

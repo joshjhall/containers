@@ -184,6 +184,11 @@ test_rollup_job_shape() {
     out=$(run_yq '.jobs["rust-changes"].steps[] | select(.id == "matrix") | .run' "$CI_WORKFLOW") || out="FAILED"
     assert_contains "$out" 'bin/rust-test-matrix.sh "$EVENT_NAME" "$BASE_REF"' \
         "the detector job runs the tested script"
+    # Without full history origin/<base> is absent, the diff fails, and the
+    # detector falls back to FULL on every PR — safe, but silently loses the
+    # whole saving.
+    out=$(run_yq '.jobs["rust-changes"].steps[] | select(.uses == "actions/checkout@v4") | .with["fetch-depth"]' "$CI_WORKFLOW") || out="FAILED"
+    assert_equals "0" "$out" "the detector's checkout fetches full history so origin/<base> exists"
     out=$(run_yq '.on.schedule[0].cron' "$CI_WORKFLOW") || out="FAILED"
     assert_not_equals "null" "$out" "ci.yml has a nightly schedule for the full matrix"
 }
