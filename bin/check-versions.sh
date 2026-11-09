@@ -411,6 +411,12 @@ extract_all_versions() {
     ver=$(command grep "^ARG LIBRARIAN_REF=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | command cut -d= -f2 | command tr -d '"' | command sed 's/^v//') || true
     [ -n "$ver" ] && add_tool "librarian" "$ver" "Dockerfile" || true
 
+    # Static ccache the evidence workflow fetches for source-build cells
+    # (#1611). Only the version is compared; the updater recomputes both
+    # per-arch digests from the release tarballs on writeback.
+    ver=$(command grep -E '^ +CCACHE_VERSION: ' "$PROJECT_ROOT/.github/workflows/evidence-run.yml" 2>/dev/null | command head -1 | command sed -E 's/.*CCACHE_VERSION: *//; s/[[:space:]]+$//') || true
+    [ -n "$ver" ] && add_tool "ccache" "$ver" "evidence-run.yml" || true
+
     # GitHub Actions from workflows
     if [ -f "$PROJECT_ROOT/.github/workflows/ci.yml" ]; then
         # trivy-action is SHA-pinned (docs/security/action-pinning.md), so the
@@ -557,6 +563,7 @@ main() {
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;
+            ccache) check_github_release "ccache" "ccache/ccache" ;;
             librarian) check_github_release "librarian" "joshjhall/librarian" ;;
             agnix) check_npm "agnix" ;;
             corepack) check_npm "corepack" ;;
