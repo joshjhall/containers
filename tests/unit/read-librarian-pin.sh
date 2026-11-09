@@ -201,7 +201,7 @@ test_default_dockerfile_argument() {
 # A CRLF checkout or trailing blank leaves junk after the tag; it must fail
 # closed on the shape check rather than reach a checkout `ref:`.
 test_trailing_junk_rejected() {
-    local df
+    local suffix df
     for suffix in $'\r' ' '; do
         df=$(command printf 'ARG LIBRARIAN_REF=v1.2.3%s\n' "$suffix" | write_dockerfile)
         run_pin "$df"
@@ -225,14 +225,96 @@ test_repo_dockerfile_passes() {
     fi
 }
 
-# Both ci.yml steps must go through the script, and the old inline read must
-# not creep back into either (it would silently drop the count guard).
+# A pin Docker would honour but the single-key matcher cannot see must fail
+# closed, or a second pin hides from the count (#1580).
+test_multi_key_pin_rejected() {
+    local df
+    df=$(command printf 'FROM debian:13\nARG FOO=1 LIBRARIAN_REF=v0.19.0\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "lone multi-key pin"
+    assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF" "multi-key pin names the form rule"
+    assert_contains "$ERR" "at line 2" "multi-key error names the line"
+
+    df=$(command printf 'ARG LIBRARIAN_REF=v0.18.0\narg FOO=1 LIBRARIAN_REF=v0.19.0\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "multi-key duplicate pin"
+    assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF" "multi-key duplicate is not silently skipped"
+}
+
+test_continued_pin_rejected() {
+    local df
+    df=$(command printf 'FROM debian:13\nARG \\\n    LIBRARIAN_REF=v0.19.0\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "pin on a continuation line"
+    assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF in $df at line 2" "continued pin names its instruction's line"
+
+    df=$(command printf 'ARG LIBRARIAN_REF=v0.18.0 \\\n    FOO=1\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "pin with a continued tail"
+    assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF" "continued single-key pin is rejected"
+
+    # Docker skips comment and blank lines inside a continuation.
+    df=$(command printf 'ARG LIBRARIAN_REF=v0.18.0\nARG FOO=1 \\\n# note\n\n    LIBRARIAN_REF=v0.19.0\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "continued pin across comment + blank lines"
+    assert_contains "$ERR" "at line 2" "continuation through a comment is still joined"
+}
+
+# The new rejection must not fire on LIBRARIAN_REF outside an ARG key: the
+# repo Dockerfile's ENV block carries `LIBRARIAN_REF=${LIBRARIAN_REF} \`.
+test_other_instruction_mention_ignored() {
+    local df
+    df=$(
+        write_dockerfile <<'EOF'
+ARG LIBRARIAN_REF=v0.18.0
+ARG OTHER_LIBRARIAN_REF=x
+ENV FOO=1 \
+    LIBRARIAN_REF=${LIBRARIAN_REF} \
+    BAR=2
+RUN echo LIBRARIAN_REF=v9.9.9
+EOF
+    )
+    run_pin "$df"
+    assert_equals "0" "$RC" "non-ARG and non-key mentions are ignored"
+    assert_equals "v0.18.0" "$OUT" "the single pin is printed"
+    assert_equals "" "$ERR" "no error output"
+}
+
+# Count LIBRARIAN_REF mentions in a workflow file outside comments. ci.yml
+# must have none: every read goes through bin/read-librarian-pin.sh, whose
+# call line does not name the variable. Any inline read — sed, grep, awk, cut
+# — has to name LIBRARIAN_REF, so this catches every spelling (#1580).
+count_inline_pin_reads() {
+    command sed -E 's/(^|[[:space:]])#.*$//' "$1" | command grep -ci 'LIBRARIAN_REF' || true
+}
+
+# Both ci.yml steps must go through the script, and no inline read may creep
+# back in (it would silently drop the count guard).
 test_ci_steps_use_shared_script() {
     local calls inline
     calls=$(command grep -c 'ref=$(bin/read-librarian-pin.sh Dockerfile)' "$CI_WORKFLOW" || true)
     assert_equals "2" "$calls" "both Read librarian pin steps call bin/read-librarian-pin.sh"
-    inline=$(command grep -c "s/^ARG LIBRARIAN_REF=" "$CI_WORKFLOW" || true)
-    assert_equals "0" "$inline" "no inline sed read of ARG LIBRARIAN_REF remains in ci.yml"
+    inline=$(count_inline_pin_reads "$CI_WORKFLOW")
+    assert_equals "0" "$inline" "no inline read of LIBRARIAN_REF remains in ci.yml"
+}
+
+# The guard above must catch inline reads in any spelling, and must not count
+# the explanatory comments ci.yml carries.
+test_inline_read_guard_discriminates() {
+    local yml n step
+    yml="$TEST_TEMP_DIR/ci.yml"
+    for step in \
+        "ref=\$(command sed -nE 's/^ARG LIBRARIAN_REF=//p' Dockerfile)" \
+        "ref=\$(command grep -oP 'LIBRARIAN_REF=\\K.*' Dockerfile)" \
+        "ref=\$(command awk -F= '/^arg librarian_ref=/ {print \$2}' Dockerfile)" \
+        "ref=\$(command grep LIBRARIAN_REF Dockerfile | command cut -d= -f2)"; do
+        command printf '      - run: |\n          %s\n' "$step" >"$yml"
+        n=$(count_inline_pin_reads "$yml")
+        assert_equals "1" "$n" "inline read counted: $step"
+    done
+    command printf '      # read from `ARG LIBRARIAN_REF`\n      - run: echo hi # LIBRARIAN_REF note\n      env:\n        REQUIRE_LIBRARIAN_PARITY: 1\n' >"$yml"
+    n=$(count_inline_pin_reads "$yml")
+    assert_equals "0" "$n" "comments and REQUIRE_LIBRARIAN_PARITY are not counted"
 }
 
 run_test test_single_valid_line_prints_ref "single valid ARG line prints the ref"
@@ -250,6 +332,10 @@ run_test test_default_dockerfile_argument "no argument defaults to ./Dockerfile"
 run_test test_trailing_junk_rejected "CRLF / trailing whitespace after the tag is rejected"
 run_test test_missing_file_rejected "unreadable Dockerfile is rejected"
 run_test test_repo_dockerfile_passes "repo Dockerfile carries exactly one valid pin"
+run_test test_multi_key_pin_rejected "multi-key ARG pin is rejected, not skipped (#1580)"
+run_test test_continued_pin_rejected "backslash-continued ARG pin is rejected (#1580)"
+run_test test_other_instruction_mention_ignored "LIBRARIAN_REF outside an ARG key is not a pin"
 run_test test_ci_steps_use_shared_script "ci.yml pin steps share bin/read-librarian-pin.sh"
+run_test test_inline_read_guard_discriminates "ci.yml inline-read guard catches any spelling (#1580)"
 
 generate_report

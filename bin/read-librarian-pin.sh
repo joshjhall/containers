@@ -15,8 +15,9 @@
 #
 # Supported form: one `ARG LIBRARIAN_REF=<tag>` per instruction, on one line
 # (any case, any indent). A multi-key `ARG A=1 LIBRARIAN_REF=...` or a
-# backslash-continued `ARG \` is NOT recognised as a pin; keep the pin in the
-# single-key form so this count stays authoritative.
+# backslash-continued ARG that sets LIBRARIAN_REF is REJECTED (#1580): it is
+# still a pin to Docker, so skipping it would let a second pin hide from the
+# count. Fail closed and ask for the single-key form instead.
 #
 # Prints the ref on stdout and exits 0; prints a `::error::` line and exits 1
 # otherwise.
@@ -29,17 +30,68 @@ if [ ! -r "$dockerfile" ]; then
     exit 1
 fi
 
-# One element per matching line. Docker instructions are case-insensitive and
-# may be indented, so `  arg LIBRARIAN_REF=...` is a pin too and must be
-# counted; a bare `ARG LIBRARIAN_REF` (re-declaration, no `=`) sets no value
-# and is not. A read loop rather than `mapfile` keeps this working on bash 3.2
-# (macOS). `|| [ -n "$line" ]` keeps a final line with no trailing newline,
-# which `read` returns non-zero on: without it an unterminated last pin is
-# silently dropped from the count. `|| true`: zero matches is handled below.
+# Classify every ARG instruction that sets LIBRARIAN_REF. awk joins
+# backslash continuations into logical instructions (as Docker does, dropping
+# comment lines), so an `ENV ... LIBRARIAN_REF=${LIBRARIAN_REF} \` continuation
+# line is seen as part of its ENV, not mistaken for an ARG. For each ARG:
+#   PIN<TAB><value>  single-key, single-line `ARG LIBRARIAN_REF=<value>`
+#                    (any case, any indent; the value is kept verbatim so
+#                    trailing junk still fails the shape check below)
+#   BAD<TAB><line>   LIBRARIAN_REF= set any other way (multi-key / continued)
+# A bare `ARG LIBRARIAN_REF` (re-declaration, no `=`) sets no value and emits
+# nothing. awk's END flush keeps an unterminated last line.
+classify_args() {
+    command awk '
+        function flush(   t, w) {
+            if (!open) return
+            open = 0
+            t = inst
+            sub(/^[[:space:]]+/, "", t)
+            split(t, w, /[[:space:]]+/)
+            if (toupper(w[1]) != "ARG") return
+            if (nlines == 1 && match(first, /^[[:space:]]*[Aa][Rr][Gg][[:space:]]+LIBRARIAN_REF=/)) {
+                print "PIN\t" substr(first, RLENGTH + 1)
+            } else if (inst ~ /(^|[[:space:]])LIBRARIAN_REF=/) {
+                print "BAD\t" start
+            }
+        }
+        # Docker skips comment and empty lines, even inside a continuation.
+        /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+        {
+            line = $0
+            if (!open) {
+                open = 1; start = NR; first = line; nlines = 0; inst = ""
+            }
+            nlines++
+            if (line ~ /\\[[:space:]]*$/) {
+                sub(/\\[[:space:]]*$/, "", line)
+                inst = inst line " "
+                next
+            }
+            inst = inst line
+            flush()
+        }
+        END { flush() }
+    ' "$1"
+}
+
+# A read loop rather than `mapfile` keeps this working on bash 3.2 (macOS).
+# `|| [ -n "$line" ]` keeps a final line with no trailing newline.
 refs=()
+bad=()
+tab=$'\t'
 while IFS= read -r line || [ -n "$line" ]; do
-    refs+=("$line")
-done < <(command sed -nE 's/^[[:space:]]*[Aa][Rr][Gg][[:space:]]+LIBRARIAN_REF=//p' "$dockerfile" | command tr -d '"' || true)
+    case "$line" in
+        "PIN$tab"*) refs+=("$(command printf '%s' "${line#PIN"$tab"}" | command tr -d '"')") ;;
+        "BAD$tab"*) bad+=("${line#BAD"$tab"}") ;;
+    esac
+done < <(classify_args "$dockerfile")
+
+if [ "${#bad[@]}" -gt 0 ]; then
+    printf "::error::unsupported ARG form for LIBRARIAN_REF in %s at line %s (multi-key or backslash-continued); use a single-key 'ARG LIBRARIAN_REF=vX.Y.Z' line\n" \
+        "$dockerfile" "${bad[*]}" >&2
+    exit 1
+fi
 
 count=${#refs[@]}
 if [ "$count" -ne 1 ]; then
