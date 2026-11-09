@@ -14,8 +14,10 @@
 #   1. Runtime: every run_version_block refuses a body with a backtick before
 #      writing the stub (rc 2 + a message naming #1597). That covers multi-line
 #      bodies a line scan cannot parse, and turns a regression into a fast
-#      failure instead of a hang. test_helpers_refuse_backticks keeps every
-#      definition carrying that refusal, so a new language port cannot drop it.
+#      failure instead of a hang. test_helpers_refuse_backticks CALLS every
+#      definition found under tests/unit with a backtick body and requires
+#      rc 2, the #1597 message, and no stub written — so a new language port
+#      cannot drop the refusal, comment it out, or move it after the write.
 #   2. Static: test_no_backtick_call_sites reports any non-comment line that
 #      calls run_version_block and carries a backtick, as file:line.
 
@@ -43,16 +45,46 @@ backtick_call_sites() {
     ' {} + | LC_ALL=C command sort)
 }
 
-# helpers_missing_refusal ROOT — prints "relpath" for every file under ROOT
-# that defines run_version_block() without the backtick refusal case arm.
-helpers_missing_refusal() {
-    local root="$1" f
-    while IFS= read -r f; do
-        [ -n "$f" ] || continue
-        if ! command grep -qF "*'${BT}'*)" "$root/$f"; then
-            printf '%s\n' "$f"
-        fi
-    done < <(cd "$root" && command grep -rlE --include='*.sh' '^[[:space:]]*run_version_block\(\)' . | command sed 's|^\./||' | LC_ALL=C command sort)
+# helper_defs ROOT — prints "relpath" for every file under ROOT defining
+# run_version_block().
+helper_defs() {
+    local root="$1"
+    (cd "$root" && command grep -rlE --include='*.sh' '^[[:space:]]*run_version_block\(\)' . || true) |
+        command sed 's|^\./||' | LC_ALL=C command sort
+}
+
+# helper_refusal_failure FILE — extract FILE's run_version_block, call it in a
+# scratch subshell with a backtick-bearing body, and print why it did NOT
+# refuse (empty output = refused correctly). Behavioral, not textual: a
+# refusal that is commented out, does not return, or sits after the stub
+# write all fail here. PROJECT_ROOT points into the scratch dir, so a helper
+# that does not refuse fails fast on a missing extractor instead of reaching
+# lib/features. The backtick body runs `true`, never a real tool.
+helper_refusal_failure() {
+    local file="$1" scratch rc=0 err
+    scratch=$(command mktemp -d)
+    /usr/bin/awk '/^[[:space:]]*run_version_block\(\)/ { on = 1 } on { print } on && /^}/ { exit }' \
+        "$file" >"$scratch/helper.sh"
+    err=$(
+        PROJECT_ROOT="$scratch/no-project" TEST_TEMP_DIR="$scratch"
+        export PROJECT_ROOT TEST_TEMP_DIR
+        # shellcheck disable=SC1091  # generated above
+        source "$scratch/helper.sh"
+        # stdin from /dev/null: a helper that does not refuse goes on to run
+        # its stub and bash children; none may read the caller's stdin (the
+        # #1597 hang was a stray process blocked on stdin).
+        run_version_block "1" "echo \"x ${BT}true${BT}\"" 2>&1 >/dev/null </dev/null
+    ) || rc=$?
+    if [ ! -s "$scratch/helper.sh" ]; then
+        printf 'no run_version_block definition extracted\n'
+    elif [ "$rc" != "2" ]; then
+        printf 'returned %s, not 2\n' "$rc"
+    elif [[ "$err" != *"#1597"* ]]; then
+        printf 'refusal message does not name #1597: %s\n' "$err"
+    elif [ -e "$scratch/luggage-stub" ]; then
+        printf 'wrote the stub before refusing\n'
+    fi
+    command rm -rf "$scratch"
 }
 
 # ---------------------------------------------------------------------------
@@ -75,14 +107,20 @@ test_scanner_detects_backtick_body() {
 }
 
 test_helper_check_detects_missing_refusal() {
-    local dir out
+    local dir refusal
     dir=$(command mktemp -d)
-    printf '%s\n' 'run_version_block() {' '    local stub_body="$2"' '}' >"$dir/bare.sh"
-    printf '%s\n' 'run_version_block() {' \
-        "    case \"\$stub_body\" in *'${BT}'*) return 2 ;; esac" '}' >"$dir/guarded.sh"
-    out=$(helpers_missing_refusal "$dir")
+    refusal="    case \"\$stub_body\" in *'${BT}'*) echo 'see #1597' >&2; return 2 ;; esac"
+    local write='    printf "%s\n" "$stub_body" >"$TEST_TEMP_DIR/luggage-stub"; return 1'
+    printf '%s\n' 'run_version_block() {' '    local stub_body="$2"' "$refusal" "$write" '}' >"$dir/good.sh"
+    printf '%s\n' 'run_version_block() {' '    local stub_body="$2"' "$write" '}' >"$dir/bare.sh"
+    printf '%s\n' 'run_version_block() {' '    local stub_body="$2"' "#$refusal" "$write" '}' >"$dir/commented.sh"
+    printf '%s\n' 'run_version_block() {' '    local stub_body="$2"' \
+        '    printf "%s\n" "$stub_body" >"$TEST_TEMP_DIR/luggage-stub"' "$refusal" '    return 1' '}' >"$dir/late.sh"
+    assert_equals "" "$(helper_refusal_failure "$dir/good.sh")" "a helper that refuses first passes"
+    assert_contains "$(helper_refusal_failure "$dir/bare.sh")" "not 2" "a helper with no refusal is flagged"
+    assert_contains "$(helper_refusal_failure "$dir/commented.sh")" "not 2" "a commented-out refusal is flagged"
+    assert_contains "$(helper_refusal_failure "$dir/late.sh")" "wrote the stub" "a refusal after the stub write is flagged"
     command rm -rf "$dir"
-    assert_equals "bare.sh" "$out" "only the helper without the refusal is flagged"
 }
 
 # ---------------------------------------------------------------------------
@@ -102,25 +140,30 @@ test_no_backtick_call_sites() {
 }
 
 test_helpers_refuse_backticks() {
-    local defs missing
+    local defs f why
+    local -a bad=()
+    defs=$(helper_defs "$UNIT_DIR")
     # Non-vacuous: the known definitions must be found, or a broken scan
-    # would report "nothing missing" over nothing.
-    defs=$(cd "$UNIT_DIR" && command grep -rlE --include='*.sh' '^[[:space:]]*run_version_block\(\)' . || true)
+    # would report "nothing wrong" over nothing.
     assert_contains "$defs" "features/node.sh" "scan finds node.sh's run_version_block"
     assert_contains "$defs" "features/golang.sh" "scan finds golang.sh's run_version_block"
-    missing=$(helpers_missing_refusal "$UNIT_DIR")
-    if [ -n "$missing" ]; then
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        why=$(helper_refusal_failure "$UNIT_DIR/$f")
+        [ -z "$why" ] || bad+=("  $f: $why")
+    done <<<"$defs"
+    if [ "${#bad[@]}" -gt 0 ]; then
         tf_fail_assertion \
-            "run_version_block defined without the backtick refusal (#1597):" \
-            "$missing"
+            "run_version_block does not refuse a backtick-bearing body before writing the stub (#1597):" \
+            "${bad[@]}"
         return 1
     fi
     return 0
 }
 
 run_test "test_scanner_detects_backtick_body" "Scanner flags only a backtick-bearing run_version_block call"
-run_test "test_helper_check_detects_missing_refusal" "Helper check flags only a definition without the refusal"
+run_test "test_helper_check_detects_missing_refusal" "Behavioral helper check flags missing, commented-out, and late refusals"
 run_test "test_no_backtick_call_sites" "No run_version_block call under tests/unit carries a backtick"
-run_test "test_helpers_refuse_backticks" "Every run_version_block refuses a backtick-bearing body"
+run_test "test_helpers_refuse_backticks" "Every run_version_block refuses a backtick body before writing the stub"
 
 generate_report
