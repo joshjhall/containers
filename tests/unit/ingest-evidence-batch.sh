@@ -58,10 +58,12 @@ _merged() {
 # _run <rows> <db> [run-id] — run id defaults to 4242; a later run in the
 # same test needs its own, as a real evidence run would have.
 _run() {
-    local rows="$1" db="$2" run_id="${3:-4242}" rc=0
+    local rows="$1" db="$2" run_id="${3:-4242}" rc=0 err_file
+    err_file="$(command mktemp "$TEST_TEMP_DIR/err.XXXXXX")"
     OUT=$(PATH="$STUB_DIR:$PATH" GH_TOKEN=dummy BASH_ENV='' \
-        "$BATCH" --rows-dir "$rows" --db-path "$db" --run-id "$run_id" --no-validate 2>/dev/null) || rc=$?
+        "$BATCH" --rows-dir "$rows" --db-path "$db" --run-id "$run_id" --no-validate 2>"$err_file") || rc=$?
     RC="$rc"
+    ERR="$(command cat "$err_file")"
 }
 
 test_many_rows_one_pr_with_automerge() {
@@ -212,6 +214,39 @@ test_api_commit_failure_fails_the_ingest_and_opens_no_pr() {
         "the staging ref is deleted on the failure path"
 }
 
+test_automerge_failure_fails_the_ingest() {
+    local d db rows
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    db="$d/db"
+    rows="$d/rows"
+    _fake_db "$db"
+    gh_stub_install
+    _row "$rows" r1 1.82.0 debian 13 amd64 pass
+    GH_API_RETRY_DELAY=0 GH_STUB_PR_MERGE_FAIL_FIRST=99 _run "$rows" "$db"
+    assert_equals "1" "$RC" "auto-merge that never enables fails the ingest (#1574)"
+    assert_equals "" "$OUT" "no branch is printed for a PR that will not merge"
+    assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" "the PR was opened before the failure"
+    assert_equals "3" "$(command grep -c '^pr merge ' "$GH_LOG")" "every retry attempt was spent first"
+    assert_equals "1" "$(command grep -c '^::error::could not enable auto-merge on https://github.com/joshjhall/containers-db/pull/9;' <<<"$ERR")" \
+        "one ::error:: line names the stuck PR"
+    assert_equals "0" "$(command grep -c '^::warning::' <<<"$ERR" || true)" "it is not downgraded to a warning"
+}
+
+test_transient_automerge_failure_is_retried() {
+    local d db rows
+    d="$(command mktemp -d "$TEST_TEMP_DIR/b.XXXXXX")"
+    db="$d/db"
+    rows="$d/rows"
+    _fake_db "$db"
+    gh_stub_install
+    _row "$rows" r1 1.82.0 debian 13 amd64 pass
+    GH_API_RETRY_DELAY=0 GH_STUB_PR_MERGE_FAIL_FIRST=1 _run "$rows" "$db"
+    assert_equals "0" "$RC" "a transient auto-merge failure is retried, not fatal"
+    assert_equals "evidence/batch/4242" "$OUT" "prints the batch branch"
+    assert_equals "2" "$(command grep -c '^pr merge ' "$GH_LOG")" "the second attempt enabled auto-merge"
+    assert_equals "0" "$(command grep -c '::error::' <<<"$ERR" || true)" "no error is reported"
+}
+
 test_unsafe_run_id_is_refused() {
     local rc=0
     "$BATCH" --rows-dir "$TEST_TEMP_DIR" --db-path "$TEST_TEMP_DIR/x" --run-id 'a;b' >/dev/null 2>&1 || rc=$?
@@ -356,6 +391,8 @@ run_test test_repeated_fail_refreshes_and_identical_is_noop "a newer repeated fa
 run_test test_rows_for_unknown_versions_are_skipped "rows for versions not in the db are skipped"
 run_test test_dry_run_commits_locally_and_never_calls_github "dry-run commits locally and never calls GitHub"
 run_test test_api_commit_failure_fails_the_ingest_and_opens_no_pr "a failed API commit fails the ingest with no PR"
+run_test test_automerge_failure_fails_the_ingest "auto-merge that cannot be enabled fails the ingest, naming the PR"
+run_test test_transient_automerge_failure_is_retried "a transient auto-merge failure is retried and succeeds"
 run_test test_unsafe_run_id_is_refused "unsafe run id is refused"
 run_test test_all_cancelled_run_is_a_neutral_skip "an all-cancelled run (no rows) is a clear neutral skip"
 run_test test_all_cancelled_skip_edge_cases "all-cancelled skip: non-JSON-only dir, --dry-run, zero cells"
