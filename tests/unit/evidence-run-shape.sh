@@ -275,11 +275,12 @@ test_main_runs_never_cancel() {
         "s/^evidence-\\$\\{\\{ github\\.event_name == 'pull_request' && [^|]+ \\|\\| (.+) \\}\\}$/evidence-<\\1>/" <<<"$group")"
     assert_equals "evidence-<github.ref>" "$non_pr_group" \
         "push/dispatch runs group per ref, so two main pushes serialize"
-    if [[ $cancel == "\${{ github.event_name == 'pull_request' }}" ]]; then
-        non_pr_cancel=false
-    else
-        non_pr_cancel="$cancel"
-    fi
+    # Substitute the PR test with `false` and unwrap `${{ }}`: anything that
+    # does not reduce to a bare `false` (a literal true, `!= 'pull_request'`,
+    # `... || true`) can cancel a main ingest.
+    non_pr_cancel="$(/usr/bin/sed -E \
+        -e "s/github\\.event_name == 'pull_request'/false/g" \
+        -e 's/^\$\{\{ (.*) \}\}$/\1/' <<<"$cancel")"
     assert_equals false "$non_pr_cancel" \
         "cancel-in-progress evaluates to false for push/dispatch (got: $cancel)"
 }
