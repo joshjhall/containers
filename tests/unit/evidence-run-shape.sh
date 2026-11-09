@@ -519,6 +519,56 @@ test_ccache_guards_discriminate() {
     /usr/bin/rm -f "$tmp"
 }
 
+# The whole Save ccache gate, pinned exactly: a substring check would accept
+# an `||`-weakened or negated gate that lets PR runs save again (#1612).
+SAVE_CCACHE_IF="        if: \${{ always() && matrix.source_build && steps.ccache.outputs.dir != '' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}"
+
+# _save_is_main_only [file] — true when Save ccache's if: is exactly the gate.
+_save_is_main_only() {
+    [[ "$(_step "Save ccache" "${1:-$WF}" | /usr/bin/grep -E '^ +if: ')" == "$SAVE_CCACHE_IF" ]]
+}
+
+test_ccache_save_only_on_main() {
+    # PR dry runs must not save: their entries spend the shared 10 GB repo
+    # cache budget and evict main's (#1612). They still restore.
+    if _save_is_main_only; then
+        assert_true true "Save ccache is gated to main, non-PR runs"
+    else
+        assert_true false "Save ccache if: must be exactly: ${SAVE_CCACHE_IF# *}"
+    fi
+    # PRs keep restoring: pin the Restore gate exactly, so neither an event/ref
+    # gate nor a missing step or if: (empty capture) can slip through.
+    assert_equals '        if: ${{ matrix.source_build }}' \
+        "$(_step "Restore ccache" | /usr/bin/grep -E '^ +if: ')" \
+        "Restore ccache gates only on source_build (PRs still restore)"
+}
+
+test_ccache_save_main_gate_discriminates() {
+    # Mutation check on a scratch copy: dropping either main-only clause, or
+    # OR-ing the main gate away, must make the main-only assertion fail.
+    local tmp from to
+    tmp="$(/usr/bin/mktemp)"
+    while IFS='|' read -r from to; do
+        FROM="$from" TO="$to" /usr/bin/awk '
+            /- name: Save ccache/ { on = 1 }
+            on && /^        if:/ { i = index($0, ENVIRON["FROM"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["TO"] substr($0, i + length(ENVIRON["FROM"])); on = 0 }
+            { print }
+        ' "$WF" >"$tmp"
+        if /usr/bin/cmp -s "$WF" "$tmp"; then
+            assert_true false "mutation did not apply: '$from' -> '$to'"
+        elif _save_is_main_only "$tmp"; then
+            assert_true false "'$from' -> '$to' still passed (guard is vacuous)"
+        else
+            assert_true true "'$from' -> '$to' is detected"
+        fi
+    done <<'MUTATIONS'
+ && github.event_name != 'pull_request'|
+ && github.ref == 'refs/heads/main'|
+ && github.event_name != 'pull_request'| || github.event_name != 'pull_request'
+MUTATIONS
+    /usr/bin/rm -f "$tmp"
+}
+
 run_test test_cells_install_as_the_container_user "cells install as the container user (--user runner)"
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
@@ -543,5 +593,7 @@ run_test test_ccache_post_steps_never_fail_the_cell "ccache stats/save failures 
 run_test test_ccache_binary_is_fetched_static_and_verified "ccache is a verified static binary, never installed in the image (#1594)"
 run_test test_ccache_actions_are_sha_pinned "ccache cache actions are SHA-pinned (#1594)"
 run_test test_ccache_guards_discriminate "ccache gate assertion catches a dropped gate"
+run_test test_ccache_save_only_on_main "ccache saves only on main runs, PRs restore-only (#1612)"
+run_test test_ccache_save_main_gate_discriminates "main-only save assertion catches a dropped clause (#1612)"
 
 generate_report
