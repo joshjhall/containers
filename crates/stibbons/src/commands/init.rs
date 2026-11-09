@@ -302,11 +302,11 @@ services:
             panic!("malformed YAML must be an error");
         };
 
-        // The file exists and is readable, so the failure must come from
-        // parsing, not from the read.
+        // The file exists and is readable, so the failure must come from the
+        // YAML parser — not the read, and not post-parse validation.
         assert!(
-            err.downcast_ref::<std::io::Error>().is_none(),
-            "expected a parse error, got an io::Error: {err}"
+            err.downcast_ref::<serde_saphyr::Error>().is_some(),
+            "expected a YAML parse error, got: {err}"
         );
     }
 
