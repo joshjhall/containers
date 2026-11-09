@@ -422,6 +422,12 @@ test_ccache_run_wires_the_cache_into_the_container() {
         '"${CCACHE_FLAGS[@]}"' '"${CCACHE_WRAP[@]}"' 'if [ -n "$CCACHE_HOST_DIR" ]; then'; do
         assert_contains "$run" "$want" "source-build docker run carries $want"
     done
+    # --init lives in CCACHE_FLAGS (source cells only): a bare `sh` as PID 1
+    # ignores SIGTERM, so a cancelled build would keep writing the cache
+    # while the always() save step archives it.
+    local flags
+    flags="$(/usr/bin/awk '/CCACHE_FLAGS=\($/ { on = 1; next } on && /^ *\)$/ { exit } on' <<<"$run")"
+    assert_contains "$flags" '--init' "source-build cells run under an init that forwards signals"
     # The launcher opt-in belongs to the entry script, set only once ccache is
     # actually installed; the workflow exporting it would break the
     # uncached fallback (luggage would spawn a missing `ccache`).
@@ -430,6 +436,19 @@ test_ccache_run_wires_the_cache_into_the_container() {
     else
         assert_true true "only the entry script opts luggage into the launcher"
     fi
+}
+
+test_ccache_actions_are_sha_pinned() {
+    # Repo convention: third-party actions are pinned by commit SHA with a
+    # version comment, never a movable tag.
+    local name
+    for name in "Restore ccache" "Save ccache"; do
+        if /usr/bin/grep -qE 'uses: actions/cache/(restore|save)@[0-9a-f]{40} # v[0-9]' <<<"$(_step "$name")"; then
+            assert_true true "$name is SHA-pinned"
+        else
+            assert_true false "$name must pin actions/cache by 40-hex SHA with a # vX comment"
+        fi
+    done
 }
 
 test_ccache_guards_discriminate() {
@@ -470,6 +489,7 @@ run_test test_ccache_save_runs_on_failure "ccache stats + save run even when the
 run_test test_ccache_key_is_per_tool_and_tuple "ccache key is tool-tuple-major-version (#1594)"
 run_test test_ccache_major_never_fails_the_cell "a version with no numeric major never fails the cell (#1594)"
 run_test test_ccache_run_wires_the_cache_into_the_container "docker run mounts the cache and wraps luggage (#1594)"
+run_test test_ccache_actions_are_sha_pinned "ccache cache actions are SHA-pinned (#1594)"
 run_test test_ccache_guards_discriminate "ccache gate assertion catches a dropped gate"
 
 generate_report

@@ -112,15 +112,33 @@ pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
 
 /// Prefix `launcher` onto the build's `CC` and `CXX`.
 ///
-/// The compiler each wraps is the catalog's own `CC`/`CXX` when it exports
-/// one, else the POSIX defaults `cc`/`c++` — the names autoconf and node's
-/// gyp fall back to when neither is set, so the wrapped build compiles with
-/// the same toolchain the unwrapped one would.
-fn apply_compiler_launcher(env: &mut BTreeMap<String, String>, launcher: &str) {
+/// The compiler each wraps is the one the unwrapped build would have used,
+/// so caching never changes the toolchain:
+///
+/// 1. the catalog's own `CC`/`CXX` when it exports one (it wins in the step
+///    env, so it wins here too);
+/// 2. else a non-empty `CC`/`CXX` inherited from luggage's environment — the
+///    streaming runner passes the process env through to every step, so an
+///    image-level `CC=clang` would otherwise reach `configure` unwrapped but
+///    be silently replaced by `cc` once the launcher is on;
+/// 3. else the POSIX defaults `cc`/`c++`, the names autoconf and node's gyp
+///    fall back to when neither is set (an empty value counts as unset, as
+///    autoconf's `test -z "$CC"` treats it).
+///
+/// `inherited` looks a variable up in the process environment; it is a
+/// parameter so tests can supply one without `std::env::set_var`.
+fn apply_compiler_launcher(
+    env: &mut BTreeMap<String, String>,
+    launcher: &str,
+    inherited: impl Fn(&str) -> Option<String>,
+) {
     for (var, default) in [("CC", "cc"), ("CXX", "c++")] {
-        let base = env.get(var).map_or(default, String::as_str);
-        let wrapped = format!("{launcher} {base}");
-        env.insert(var.to_owned(), wrapped);
+        let base = env
+            .get(var)
+            .cloned()
+            .or_else(|| inherited(var).filter(|v| !v.trim().is_empty()))
+            .unwrap_or_else(|| default.to_owned());
+        env.insert(var.to_owned(), format!("{launcher} {base}"));
     }
 }
 
@@ -206,7 +224,7 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
     // 3. Run the steps in order; the first failure aborts the rest.
     let mut env = build_env(ctx);
     if let Some(launcher) = ctx.compiler_launcher {
-        apply_compiler_launcher(&mut env, launcher);
+        apply_compiler_launcher(&mut env, launcher, |var| std::env::var(var).ok());
         let note =
             format!("compiler launcher: {launcher} (CC=`{}`, CXX=`{}`)", env["CC"], env["CXX"]);
         if let Some(l) = ctx.log {

@@ -11,8 +11,9 @@ How it is wired:
 
 - **luggage opt-in.** `LUGGAGE_COMPILER_LAUNCHER=<program>` makes the
   `source-build` method prefix that program onto `CC`/`CXX` for every build step.
-  It wraps the catalog's own `CC`/`CXX` if the method exports one, or `cc`/`c++`
-  otherwise. When the variable is unset (the default, and every production
+  It wraps the catalog's own `CC`/`CXX` if the method exports one, else a
+  non-empty `CC`/`CXX` inherited from luggage's environment, else `cc`/`c++`, so
+  caching never changes which compiler the build uses. When the variable is unset (the default, and every production
   install), the build env is exactly what the catalog wrote. An empty or
   multi-word value is a hard error, never a silent "off". Other install methods
   ignore it.

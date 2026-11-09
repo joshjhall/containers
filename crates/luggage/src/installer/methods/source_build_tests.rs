@@ -608,6 +608,14 @@ fn steps_stream_banner_and_output_into_the_feature_log() {
 
 // ---- compiler launcher (#1594) -----------------------------------------
 
+/// What `run()` wraps when the catalog names no compiler: `run()` reads the
+/// real process env (see [`apply_compiler_launcher`]), so a `CC`/`CXX`
+/// exported where the tests run must not turn these assertions red.
+fn launched(var: &str, default: &str) -> String {
+    let base = std::env::var(var).ok().filter(|v| !v.trim().is_empty());
+    format!("ccache {}", base.as_deref().unwrap_or(default))
+}
+
 /// Off by default: with no launcher every step's env is exactly what
 /// `build_env` produces — no `CC`/`CXX` appears. This is the production
 /// path, so it must stay byte-identical to the pre-#1594 behaviour.
@@ -635,8 +643,8 @@ fn launcher_wraps_the_default_compilers_for_every_step() {
     let calls = f.runner.streaming_calls();
     assert_eq!(calls.len(), 3);
     for call in calls {
-        assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache cc"), "{}", call.program);
-        assert_eq!(call.env.get("CXX").map(String::as_str), Some("ccache c++"), "{}", call.program);
+        assert_eq!(call.env.get("CC"), Some(&launched("CC", "cc")), "{}", call.program);
+        assert_eq!(call.env.get("CXX"), Some(&launched("CXX", "c++")), "{}", call.program);
     }
 }
 
@@ -651,7 +659,7 @@ fn launcher_wraps_a_catalog_compiler_rather_than_replacing_it() {
 
     let call = &f.runner.streaming_calls()[0];
     assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc-13"));
-    assert_eq!(call.env.get("CXX").map(String::as_str), Some("ccache c++"));
+    assert_eq!(call.env.get("CXX"), Some(&launched("CXX", "c++")));
 }
 
 /// The same holds for `CXX`, and for both at once: neither variable falls
@@ -659,8 +667,12 @@ fn launcher_wraps_a_catalog_compiler_rather_than_replacing_it() {
 #[test]
 fn launcher_wraps_a_catalog_cxx_and_both_together() {
     for (env, want_cc, want_cxx) in [
-        (vec![("CXX", "g++-13")], "ccache cc", "ccache g++-13"),
-        (vec![("CC", "clang"), ("CXX", "clang++")], "ccache clang", "ccache clang++"),
+        (vec![("CXX", "g++-13")], launched("CC", "cc"), "ccache g++-13".to_owned()),
+        (
+            vec![("CC", "clang"), ("CXX", "clang++")],
+            "ccache clang".to_owned(),
+            "ccache clang++".to_owned(),
+        ),
     ] {
         let mut f = Fixture::python();
         f.launcher = Some("ccache");
@@ -669,9 +681,39 @@ fn launcher_wraps_a_catalog_cxx_and_both_together() {
         f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
 
         let call = &f.runner.streaming_calls()[0];
-        assert_eq!(call.env.get("CC").map(String::as_str), Some(want_cc), "{env:?}");
-        assert_eq!(call.env.get("CXX").map(String::as_str), Some(want_cxx), "{env:?}");
+        assert_eq!(call.env.get("CC"), Some(&want_cc), "{env:?}");
+        assert_eq!(call.env.get("CXX"), Some(&want_cxx), "{env:?}");
     }
+}
+
+/// A compiler inherited from luggage's own environment (an image-level
+/// `CC=clang`) reaches an unwrapped build through the streaming runner, so
+/// the launcher must wrap it rather than replace it with `cc` — otherwise
+/// the cached build would use a different toolchain than the uncached one.
+/// The catalog still wins over the inherited value, and an inherited empty
+/// value falls back to the default like an unset one.
+#[test]
+fn launcher_wraps_an_inherited_compiler_and_the_catalog_still_wins() {
+    let inherited = |var: &str| match var {
+        "CC" => Some("clang".to_owned()),
+        "CXX" => Some("clang++".to_owned()),
+        _ => None,
+    };
+
+    let mut env = BTreeMap::new();
+    apply_compiler_launcher(&mut env, "ccache", inherited);
+    assert_eq!(env["CC"], "ccache clang");
+    assert_eq!(env["CXX"], "ccache clang++");
+
+    let mut env = BTreeMap::from([("CC".to_owned(), "gcc-13".to_owned())]);
+    apply_compiler_launcher(&mut env, "ccache", inherited);
+    assert_eq!(env["CC"], "ccache gcc-13", "catalog CC must beat the inherited one");
+    assert_eq!(env["CXX"], "ccache clang++");
+
+    let mut env = BTreeMap::new();
+    apply_compiler_launcher(&mut env, "ccache", |var: &str| (var == "CC").then(|| "  ".to_owned()));
+    assert_eq!(env["CC"], "ccache cc", "a blank inherited CC is unset");
+    assert_eq!(env["CXX"], "ccache c++");
 }
 
 #[test]

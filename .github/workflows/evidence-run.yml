@@ -525,7 +525,7 @@ jobs:
       - name: Restore ccache
         id: ccache-restore
         if: ${{ matrix.source_build }}
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ steps.ccache.outputs.dir }}
           key: ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-${{ matrix.version }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -552,10 +552,15 @@ jobs:
           # COMPILERCHECK=content because the compiler is reinstalled into a
           # fresh container each run, so its mtime proves nothing. 2G per
           # tool+tuple entry keeps a few entries inside the repo's 10 GB cache.
+          # --init: the entry script is a plain `sh`, and as PID 1 it would
+          # ignore the SIGTERM docker forwards on cancel/timeout, so the build
+          # would keep writing into the bind-mounted cache while the always()
+          # stats/save steps archive it. tini forwards the signal instead.
           CCACHE_FLAGS=()
           CCACHE_WRAP=()
           if [ -n "$CCACHE_HOST_DIR" ]; then
             CCACHE_FLAGS=(
+              --init
               -v "$CCACHE_HOST_DIR:/ccache"
               -v "$PWD/bin/lib/evidence-ccache-entry.sh:/usr/local/bin/evidence-ccache-entry:ro"
               -e CCACHE_DIR=/ccache
@@ -643,7 +648,7 @@ jobs:
 
       - name: Save ccache
         if: ${{ always() && matrix.source_build && steps.ccache.outputs.dir != '' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ steps.ccache.outputs.dir }}
           key: ccache-${{ matrix.tool }}-${{ matrix.tuple }}-${{ steps.ccache.outputs.major }}-${{ matrix.version }}-${{ github.run_id }}-${{ github.run_attempt }}
