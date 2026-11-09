@@ -311,10 +311,36 @@ pub fn remove_packages(packages: &[&str], mgr: PackageManager) -> Result<()> {
 /// Remove each package in its own transaction, returning a description of
 /// every one that was still refused.
 fn remove_individually(mgr: PackageManager, packages: &[&str]) -> Vec<String> {
-    packages
-        .iter()
-        .filter_map(|p| run_removal(mgr, &[p]).err().map(|e| format!("{p}: {e}")))
-        .collect()
+    remove_until_fixed_point(packages, |p| run_removal(mgr, &[p]))
+}
+
+/// Pass over `packages` removing each one via `remove`, then pass again over
+/// the ones refused, until a pass removes nothing. Returns `"{pkg}: {err}"`
+/// for each package still refused at that point.
+///
+/// One pass is not enough: dpkg and rpm refuse a package while an installed
+/// package still depends on it, so when a build dep is listed before the
+/// build dep that needs it, the first is refused, the second goes, and only a
+/// second pass can take the first. Each extra pass must remove at least one
+/// package, so this runs at most `packages.len()` passes.
+fn remove_until_fixed_point<'a>(
+    packages: &[&'a str],
+    mut remove: impl FnMut(&'a str) -> std::result::Result<(), String>,
+) -> Vec<String> {
+    let mut pending: Vec<&'a str> = packages.to_vec();
+    loop {
+        let before = pending.len();
+        let mut refused = Vec::new();
+        for p in pending {
+            if let Err(e) = remove(p) {
+                refused.push((p, e));
+            }
+        }
+        if refused.is_empty() || refused.len() == before {
+            return refused.into_iter().map(|(p, e)| format!("{p}: {e}")).collect();
+        }
+        pending = refused.into_iter().map(|(p, _)| p).collect();
+    }
 }
 
 /// Run one removal transaction. `Ok` when `packages` is empty.
@@ -671,6 +697,88 @@ mod tests {
         assert!(!present(Apk, out(1, "", "")));
         assert!(present(Dnf, out(0, "make-4.3-1.el9", "")));
         assert!(!present(Dnf, out(1, "package make is not installed\n", "")));
+    }
+
+    /// A fake dpkg/rpm: refuses to remove a package while any package that
+    /// depends on it (per `deps`, `(dependent, dependency)`) is still
+    /// installed, and records every removal attempt in `calls`.
+    fn fake_manager<'a>(
+        installed: &'a std::cell::RefCell<Vec<&'static str>>,
+        deps: &'a [(&'static str, &'static str)],
+        calls: &'a std::cell::RefCell<Vec<&'static str>>,
+    ) -> impl FnMut(&'static str) -> std::result::Result<(), String> + 'a {
+        move |p| {
+            calls.borrow_mut().push(p);
+            let mut inst = installed.borrow_mut();
+            if let Some((dependent, _)) = deps.iter().find(|(d, dep)| *dep == p && inst.contains(d))
+            {
+                return Err(format!("dependency problems - {dependent} depends on {p}"));
+            }
+            inst.retain(|i| *i != p);
+            Ok(())
+        }
+    }
+
+    /// Cycle-8 defect: B depends on A, and A is listed first. A single pass
+    /// refuses A (B still installed), removes B, and stops — reporting A as
+    /// refused though it is removable. The fixed-point retry must take both.
+    #[test]
+    fn retry_removes_a_dependency_listed_before_its_dependent() {
+        let installed = std::cell::RefCell::new(vec!["libfoo-dev", "foo-build"]);
+        let deps = [("foo-build", "libfoo-dev")];
+        let calls = std::cell::RefCell::new(Vec::new());
+
+        let refused = remove_until_fixed_point(
+            &["libfoo-dev", "foo-build"],
+            fake_manager(&installed, &deps, &calls),
+        );
+
+        assert!(refused.is_empty(), "nothing should be reported refused: {refused:?}");
+        assert!(installed.borrow().is_empty(), "both removed: {:?}", installed.borrow());
+        // Proves the fix, not luck: the first attempt on libfoo-dev was
+        // refused, and a second pass retried it after foo-build went.
+        assert_eq!(*calls.borrow(), ["libfoo-dev", "foo-build", "libfoo-dev"]);
+    }
+
+    /// A dependent listed first needs only one pass; no spurious retries.
+    #[test]
+    fn retry_single_pass_when_dependent_listed_first() {
+        let installed = std::cell::RefCell::new(vec!["foo-build", "libfoo-dev"]);
+        let deps = [("foo-build", "libfoo-dev")];
+        let calls = std::cell::RefCell::new(Vec::new());
+
+        let refused = remove_until_fixed_point(
+            &["foo-build", "libfoo-dev"],
+            fake_manager(&installed, &deps, &calls),
+        );
+
+        assert!(refused.is_empty(), "{refused:?}");
+        assert!(installed.borrow().is_empty());
+        assert_eq!(*calls.borrow(), ["foo-build", "libfoo-dev"]);
+    }
+
+    /// A package held by something outside the removal set is genuinely
+    /// refused: the loop stops once a pass makes no progress and reports
+    /// exactly that package, after removing everything it could.
+    #[test]
+    fn retry_stops_and_reports_a_package_still_refused() {
+        // `runtime-tool` is installed and needs libfoo-dev; it is not ours to remove.
+        let installed = std::cell::RefCell::new(vec!["libfoo-dev", "foo-build", "runtime-tool"]);
+        let deps = [("foo-build", "libfoo-dev"), ("runtime-tool", "libfoo-dev")];
+        let calls = std::cell::RefCell::new(Vec::new());
+
+        let refused = remove_until_fixed_point(
+            &["libfoo-dev", "foo-build"],
+            fake_manager(&installed, &deps, &calls),
+        );
+
+        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert!(refused[0].starts_with("libfoo-dev: "), "{refused:?}");
+        assert!(refused[0].contains("runtime-tool depends on libfoo-dev"), "{refused:?}");
+        assert_eq!(*installed.borrow(), ["libfoo-dev", "runtime-tool"]);
+        // Pass 1: libfoo-dev refused, foo-build removed. Pass 2: libfoo-dev
+        // still refused, no progress -> stop (no third attempt).
+        assert_eq!(*calls.borrow(), ["libfoo-dev", "foo-build", "libfoo-dev"]);
     }
 
     /// Every probe failure that is not a clear "not installed" — a launch
