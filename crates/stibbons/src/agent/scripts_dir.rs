@@ -1008,7 +1008,10 @@ mod tests {
     fn non_race_rename_failure_is_reported_not_retried() {
         use std::os::unix::fs::PermissionsExt;
         if rustix::process::getuid().is_root() {
-            return; // root ignores the mode bits this test relies on
+            // Root ignores the mode bits this test relies on. Say so, so a
+            // root-run suite does not read this as a real pass.
+            eprintln!("SKIP non_race_rename_failure_is_reported_not_retried: running as root");
+            return;
         }
         let tmp = tempfile::tempdir().unwrap();
         let parent = tmp.path().join("stibbons").join("agent-scripts");
@@ -1103,6 +1106,43 @@ mod tests {
                 !std::fs::symlink_metadata(dir.join("agent-init.sh")).unwrap().is_symlink(),
                 "{what}"
             );
+        }
+    }
+
+    /// Only an occupied-target kind is retried; every other kind is reported.
+    /// The Windows `PermissionDenied` arm is `cfg!`-gated, so on Unix that kind
+    /// must stay a hard error even when the target exists.
+    #[test]
+    fn target_occupied_classifies_by_kind() {
+        use std::io::{Error, ErrorKind};
+        let tmp = tempfile::tempdir().unwrap();
+        let (present, absent) = (tmp.path(), tmp.path().join("absent"));
+
+        assert!(target_occupied(&Error::from(ErrorKind::AlreadyExists), present));
+        assert!(target_occupied(&Error::from(ErrorKind::DirectoryNotEmpty), present));
+        assert!(!target_occupied(&Error::from(ErrorKind::PermissionDenied), &absent));
+        assert!(!target_occupied(&Error::from(ErrorKind::StorageFull), present));
+        assert!(!target_occupied(&Error::from(ErrorKind::Other), present));
+        assert_eq!(
+            target_occupied(&Error::from(ErrorKind::PermissionDenied), present),
+            cfg!(windows),
+        );
+    }
+
+    /// Sibling names never repeat within a process and stay hidden, so they
+    /// can neither collide with each other nor with a container name.
+    #[test]
+    fn sibling_names_are_hidden_and_unique() {
+        let parent = Path::new("/p");
+        let a = sibling(parent, "c", "tmp");
+        let b = sibling(parent, "c", "tmp");
+
+        assert_ne!(a, b);
+        for p in [&a, &b] {
+            let name = p.file_name().unwrap().to_string_lossy();
+            assert!(name.starts_with(".c.tmp-"), "{name}");
+            // pid, nanos, seq
+            assert_eq!(name.trim_start_matches(".c.tmp-").split('-').count(), 3, "{name}");
         }
     }
 
