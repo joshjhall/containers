@@ -68,3 +68,17 @@ _NOW=1792540800
 _tool_cells() {
     command jq -r '.include[] | "\(.tool) \(.version) \(.tuple)"' <<<"$1"
 }
+
+# _methods <version-file> <methods-json> — give a fixture version install_methods.
+_methods() {
+    local f="$1" tmp
+    tmp="$(command mktemp "$TEST_TEMP_DIR/m.XXXXXX")"
+    command jq --argjson m "$2" '. + {install_methods: $m}' "$f" >"$tmp"
+    command mv "$tmp" "$f"
+}
+
+# Shaped like the vendored node entry: a binary tarball for glibc distros,
+# then a source build for alpine (#1569).
+_NODE_LIKE_METHODS='[
+  {"name":"tarball","method_kind":"binary-tarball","platform":{"os":["debian","ubuntu","rhel"],"arch":["amd64","arm64"]}},
+  {"name":"source","method_kind":"source-build","platform":{"os":"alpine","arch":["amd64","arm64"]}}]'

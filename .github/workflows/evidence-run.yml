@@ -12,8 +12,13 @@ name: Evidence Run
 #   - push → main         : run the matrix and open a real PR against
 #     containers-db (requires the `CONTAINERS_DB_PAT` secret).
 #   - workflow_dispatch   : ad-hoc single run; the `dry_run` input chooses.
-# No cron: per #473, while the catalog is small "just enumerate" beats
-# sampling, so the matrix is exhaustive and event-driven.
+#   - schedule (nightly)  : the push-to-main run without a push — the full
+#     pending matrix with a real ingest (#1593).
+#   - push → tags v*      : the same full run for a release candidate (#1593).
+# Tiering (#1593): exhaustive enumeration (#473) stays on main, nightly and
+# tags. A PR dry run only proves row shape and the luggage path, so it runs a
+# small sample (evidence_pr_legs) with source builds — up to 3h each — only
+# when the PR touches source-build code or that tool's catalog entry.
 #
 # A `setup` job resolves the matrix (a single input-derived leg for
 # dispatch, the enumerated pilot legs for PR/push) and the effective
@@ -95,6 +100,9 @@ on:
       - ".github/workflows/evidence-run.yml"
   push:
     branches: [main]
+    # A tag push ignores `paths:` (GitHub filters paths on branch pushes only),
+    # so every v* tag runs the full matrix (#1593).
+    tags: ["v*"]
     paths:
       - "crates/luggage/**"
       - "crates/record-evidence/**"
@@ -105,6 +113,8 @@ on:
       - "bin/lib/evidence-*.sh"
       - "bin/lib/github-api-commit.sh"
       - ".github/workflows/evidence-run.yml"
+  schedule:
+    - cron: "30 5 * * *"
 
 permissions:
   contents: read
@@ -115,9 +125,11 @@ permissions:
 # pull_request: always a dry run (never ingests), so it is safe to cancel.
 # One group per PR: a new push, or the PR closing/merging, cancels the old
 # head's dry run instead of letting it hold a runner for hours (#1591; the
-# same split #1560 made for ci.yml).
+# same split #1560 made for ci.yml). A schedule run's ref is main; a v* tag
+# run joins main's group too (#1593), since both ingest the same pending cells
+# and two at once would open duplicate containers-db PRs.
 concurrency:
-  group: evidence-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  group: evidence-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || startsWith(github.ref, 'refs/tags/') && 'refs/heads/main' || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -199,10 +211,35 @@ jobs:
           SOURCES=$(evidence_db_sources "$PWD/_db" "$PWD" "$(date -u +%s)")
           echo "sources=$SOURCES" >> "$GITHUB_OUTPUT"
 
+      # Which tools may keep a source-build cell in this PR's sample (#1593):
+      # `*` for source-build code, the tools whose catalog entry changed, else
+      # none. Fails CHEAP: if the file list cannot be read the scope is empty,
+      # so the PR runs its sample without the 3h source builds — main, nightly
+      # and tags still run every pending one.
+      - name: Source-build scope (PR changed files)
+        id: changed
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # shellcheck source=bin/lib/evidence-matrix.sh
+          source bin/lib/evidence-matrix.sh
+          if FILES=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --jq '.[].filename'); then
+            SCOPE=$(evidence_pr_source_build_scope <<<"$FILES")
+          else
+            echo "::warning::could not list PR files; sampling without source-build cells"
+            SCOPE=""
+          fi
+          echo "PR source-build scope: ${SCOPE:-<none>}"
+          echo "scope=$SCOPE" >> "$GITHUB_OUTPUT"
+
       - name: Generate matrix and dry-run flag
         id: gen
         env:
           EVENT: ${{ github.event_name }}
+          SOURCE_BUILD_SCOPE: ${{ steps.changed.outputs.scope }}
           INPUT_TOOL: ${{ inputs.tool }}
           INPUT_TOOL_VERSION: ${{ inputs.tool_version }}
           INPUT_TUPLE: ${{ inputs.tuple }}
@@ -296,10 +333,11 @@ jobs:
             if [ "$EVENT" = "pull_request" ]; then
               DRY="true"
               # A PR only needs to prove the pipeline still works, not
-              # re-evidence the backlog: the first pending cell of EACH tool
-              # keeps a PR to one runner per tool instead of up to 200 (see
-              # evidence_pr_legs for why per tool, #1341).
-              MATRIX=$(evidence_pr_legs <<<"$MATRIX")
+              # re-evidence the backlog: the first pending cell of each
+              # (tool, method_kind, libc) keeps a PR to a handful of runners
+              # instead of up to 200, and source builds run only inside the
+              # scope above (evidence_pr_legs; #1341, #1593).
+              MATRIX=$(evidence_pr_legs "$SOURCE_BUILD_SCOPE" <<<"$MATRIX")
             else
               DRY="false"
             fi

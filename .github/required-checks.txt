@@ -29,3 +29,6 @@
 
 Run Tests
 PR Tier
+
+# Rust test OS-matrix rollup (#1593): the per-OS legs have templated names.
+Rust Tests

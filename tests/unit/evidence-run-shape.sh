@@ -259,9 +259,9 @@ test_pr_runs_cancel_per_pr() {
     # #1591: a PR's dry runs share one group per PR and cancel each other, so
     # a new push drops the old head's run instead of holding a runner.
     assert_equals \
-        "evidence-\${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}" \
+        "evidence-\${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || startsWith(github.ref, 'refs/tags/') && 'refs/heads/main' || github.ref }}" \
         "$(_concurrency_value group)" \
-        "PR runs group per PR number; everything else groups per ref"
+        "PR runs group per PR number; tags join main's group; everything else groups per ref"
     assert_equals "\${{ github.event_name == 'pull_request' }}" \
         "$(_concurrency_value cancel-in-progress)" \
         "cancel-in-progress is true for pull_request events only"
@@ -280,8 +280,10 @@ test_main_runs_never_cancel() {
     local non_pr_group non_pr_cancel
     non_pr_group="$(/usr/bin/sed -E \
         "s/^evidence-\\$\\{\\{ github\\.event_name == 'pull_request' && [^|]+ \\|\\| (.+) \\}\\}$/evidence-<\\1>/" <<<"$group")"
-    assert_equals "evidence-<github.ref>" "$non_pr_group" \
-        "push/dispatch runs group per ref, so two main pushes serialize"
+    # A v* tag run ingests the same pending cells as main (#1593), so it
+    # serializes with main rather than racing it in a group of its own.
+    assert_equals "evidence-<startsWith(github.ref, 'refs/tags/') && 'refs/heads/main' || github.ref>" "$non_pr_group" \
+        "push/dispatch runs group per ref (tags with main), so two ingests serialize"
     # Substitute the PR test with `false` and unwrap `${{ }}`: anything that
     # does not reduce to a bare `false` (a literal true, `!= 'pull_request'`,
     # `... || true`) can cancel a main ingest.
@@ -290,6 +292,27 @@ test_main_runs_never_cancel() {
         -e 's/^\$\{\{ (.*) \}\}$/\1/' <<<"$cancel")"
     assert_equals false "$non_pr_cancel" \
         "cancel-in-progress evaluates to false for push/dispatch (got: $cancel)"
+}
+
+test_pr_sample_is_scoped_and_full_runs_are_real() {
+    # #1593: a PR dry run passes its source-build scope into evidence_pr_legs;
+    # schedule and tag runs take the push path — the full matrix, not dry.
+    local scope gen
+    scope="$(_step "Source-build scope (PR changed files)")"
+    gen="$(_step "Generate matrix and dry-run flag")"
+    assert_contains "$scope" "if: github.event_name == 'pull_request'" \
+        "the changed-files step runs on PRs only"
+    assert_contains "$scope" 'evidence_pr_source_build_scope <<<"$FILES"' \
+        "the PR's changed files go through the tested scope function"
+    assert_contains "$scope" 'SCOPE=""' "an unreadable file list fails cheap (no source builds)"
+    assert_contains "$gen" 'SOURCE_BUILD_SCOPE: ${{ steps.changed.outputs.scope }}' \
+        "the scope reaches the matrix step"
+    assert_contains "$gen" 'MATRIX=$(evidence_pr_legs "$SOURCE_BUILD_SCOPE" <<<"$MATRIX")' \
+        "the PR sample is cut with the scope"
+    assert_contains "$gen" 'if [ "$EVENT" = "pull_request" ]; then
+              DRY="true"' "only pull_request forces a dry run"
+    assert_equals '30 5 * * *' "$(yq -r '.on.schedule[0].cron' "$WF")" "evidence runs nightly"
+    assert_equals 'v*' "$(yq -r '.on.push.tags[0]' "$WF")" "a v* tag runs the full matrix"
 }
 
 test_closed_pr_runs_do_nothing() {
@@ -584,6 +607,7 @@ run_test test_cells_install_from_the_vendored_catalog "cells install from the ve
 run_test test_pr_runs_cancel_per_pr "PR runs cancel per PR (#1591)"
 run_test test_main_runs_never_cancel "main/dispatch runs never cancel (#1591)"
 run_test test_closed_pr_runs_do_nothing "a closed PR run cancels and does nothing (#1591)"
+run_test test_pr_sample_is_scoped_and_full_runs_are_real "PR evidence is sampled by scope; nightly and tags run in full (#1593)"
 run_test test_ccache_steps_gate_on_source_build "ccache steps run only for source-build cells (#1594)"
 run_test test_ccache_save_runs_on_failure "ccache stats + save run even when the build fails (#1594)"
 run_test test_ccache_key_is_per_tool_and_tuple "ccache key is tool-tuple-major-version (#1594)"

@@ -161,7 +161,7 @@ Settings to apply:
 
 | Setting | Value |
 | --- | --- |
-| Required contexts | `Run Tests` (`ci.yml`), `PR Tier` (`test-pr.yml`) |
+| Required contexts | `Run Tests` (`ci.yml`), `PR Tier` (`test-pr.yml`), `Rust Tests` (`ci.yml`, #1593) |
 | `strict` (branch must be up to date) | `false` |
 | `enforce_admins` | `false` |
 | Required reviews | none |
@@ -173,7 +173,7 @@ invisibly in repo settings. Apply it, then read the live values back:
 ```bash
 gh api -X PUT repos/OWNER/REPO/branches/main/protection --input - <<'JSON'
 {
-  "required_status_checks": {"strict": false, "contexts": ["Run Tests", "PR Tier"]},
+  "required_status_checks": {"strict": false, "contexts": ["Run Tests", "PR Tier", "Rust Tests"]},
   "enforce_admins": false,
   "required_pull_request_reviews": null,
   "restrictions": null

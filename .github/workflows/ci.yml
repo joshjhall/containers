@@ -10,6 +10,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # Nightly tier (#1593): the full rust-test OS matrix that PRs no longer pay
+  # for unless they touch Rust inputs. Merge-tier jobs gate on push/dispatch,
+  # so they do not run here.
+  schedule:
+    - cron: "0 5 * * *"
 
 # Supersede stale PR runs (#1560). PR events share one group per PR and cancel
 # the in-flight run for the old head, freeing the runner slot. Every other
@@ -509,14 +514,42 @@ jobs:
   # =====================================
   # Rust Tests (stibbons)
   # =====================================
+  # PR tier (#1593): a PR that touches no Rust input runs rust-test on ubuntu
+  # only; one touching crates/, Cargo.{toml,lock} or rust-toolchain* runs all
+  # three OSes, as do push, tags, schedule and dispatch (`build` needs the
+  # full matrix). bin/rust-test-matrix.sh decides and fails safe to FULL.
+  rust-changes:
+    name: Rust Test Matrix
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.matrix.outputs.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Choose OS matrix
+        id: matrix
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          os=$(bin/rust-test-matrix.sh "$EVENT_NAME" "$BASE_REF")
+          echo "rust-test OS matrix: $os"
+          echo "os=$os" >>"$GITHUB_OUTPUT"
+
   rust-test:
     name: Rust Tests (stibbons) — ${{ matrix.os }}
+    needs: rust-changes
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04, macos-26, windows-2025]
+        os: ${{ fromJSON(needs.rust-changes.outputs.matrix) }}
     steps:
       - name: Disable CRLF conversion
         if: runner.os == 'Windows'
@@ -583,6 +616,36 @@ jobs:
 
       - name: Verify build
         run: cargo build --workspace
+
+  # Required-check rollup for rust-test (#1593, #904). The matrix legs carry a
+  # templated, shape-dependent name, so branch protection points at this one
+  # literal context instead. Fail closed: every leg must have run and passed,
+  # and the matrix detector must have succeeded — a skipped or cancelled
+  # rust-test is never a pass (the ubuntu leg is in every matrix).
+  rust-test-result:
+    name: Rust Tests
+    needs: [rust-changes, rust-test]
+    if: always()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Summarize
+        env:
+          DETECT_RESULT: ${{ needs.rust-changes.result }}
+          TEST_RESULT: ${{ needs.rust-test.result }}
+          MATRIX: ${{ needs.rust-changes.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          echo "rust-changes=${DETECT_RESULT} rust-test=${TEST_RESULT} matrix=${MATRIX:-<none>}"
+          if [ "$DETECT_RESULT" != "success" ]; then
+            echo "::error::Rust test matrix detector did not succeed (${DETECT_RESULT})"
+            exit 1
+          fi
+          if [ "$TEST_RESULT" != "success" ]; then
+            echo "::error::rust-test did not pass (${TEST_RESULT})"
+            exit 1
+          fi
+          echo "Rust Tests passed on ${MATRIX}"
 
   # Early warning for the next Rust release. The build chain is frozen at the
   # MSRV (rust-test above; #1111), so a new stable's lints never break CI on

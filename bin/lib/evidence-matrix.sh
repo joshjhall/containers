@@ -112,17 +112,20 @@ def em_evidence($now):
 # The matrix carries this boolean, NOT a minute count: evidence-run.yml turns
 # it into `timeout-minutes: ${{ matrix.source_build && 180 || 30 }}`, a form
 # tests/unit/workflow-timeouts.sh can prove bounded without seeing the matrix
-# (it can only ever be 180 or 30). Node on alpine runs `make` for far longer
+# (it can only ever be 180 or 30). Cells also carry the raw `method_kind`
+# (em_method_kind; "" when no method matches) so the PR sample can keep one
+# cell per method kind (evidence_pr_legs, #1593). Node on alpine runs `make` for far longer
 # than the 30 minutes every other method needs (116 minutes observed for
 # node@22.22.3 on a hosted runner); a fast tool never gets a 3h ceiling.
 _EM_SOURCE_BUILD_JQ='
 def em_in($want): . == null or (if type == "array" then index([$want]) != null else . == $want end);
-def em_source_build($os; $osv; $arch):
+def em_method_kind($os; $osv; $arch):
     [ .install_methods[]?
       | select((.platform // {}) as $p
           | ($p.os | em_in($os)) and ($p.arch | em_in($arch))
             and ($p.os_version == null or ($osv != null and ($p.os_version | em_in($osv))))) ]
-    | (.[0].method_kind // "") == "source-build";
+    | (.[0].method_kind // "");
+def em_source_build($os; $osv; $arch): em_method_kind($os; $osv; $arch) == "source-build";
 '
 
 # evidence_cell_source_build <catalog_dir> <tool> <version> <tuple> — prints
@@ -505,6 +508,7 @@ _em_tool_cells() {
             | {tool: $tool, version: $v.version, tuple: $tuple, image_tag: $tag,
                arch: .arch, runner: $plumbing[.arch][0], runtime: $plumbing[.arch][1],
                rust_target: $plumbing[.arch][2],
+               method_kind: ($v | em_method_kind($row.os; $row.os_version; $row.arch)),
                source_build: ($v | em_source_build($row.os; $row.os_version; $row.arch)),
                retry: ($failed_at != null)} ]
         | unique_by([.version, .tuple])
@@ -554,12 +558,53 @@ evidence_matrix() {
     _em_cap "$tool" "$max_cells" <<<"$cells"
 }
 
-# evidence_pr_legs — reads a matrix on stdin and prints the PR dry-run subset:
-# the first (highest-priority) cell of EACH tool. Not the first cell overall:
-# the merged order breaks ties by tool name, so that would always be go and a
-# rust-only install change would get no PR coverage (#1341).
+# evidence_pr_legs [source_build_tools] — reads a matrix on stdin and prints
+# the PR dry-run sample. A PR dry run validates row shape and the luggage
+# install path, not every version (#1593), so it keeps the first
+# (highest-priority) cell of each (tool, method_kind, libc) group. Grouping
+# per tool, not taking the first cell overall: the merged order breaks ties by
+# tool name, so that would always be go and a rust-only install change would
+# get no PR coverage (#1341). libc comes from the tuple's OS — alpine is the
+# only musl base image.
+#
+# Source-build cells run for up to 3 hours (node on alpine: ~115 min), so they
+# are DROPPED unless their tool is in the space-separated allow-list
+# $1, or the list is `*` — see evidence_pr_source_build_scope for how a PR
+# earns one. Empty (the default) keeps no source-build cell.
 evidence_pr_legs() {
-    command jq -c '{include: (.include | group_by(.tool) | map(.[0]))}'
+    command jq -c --arg sb "${1:-}" '
+        ($sb | split(" ") | map(select(. != ""))) as $allow
+        | {include: (.include
+            | map(select(.tool as $t | (.method_kind // "") != "source-build"
+                         or $sb == "*" or ($allow | index([$t]) != null)))
+            | group_by([.tool, (.method_kind // ""),
+                        (if (.tuple | startswith("alpine-")) then "musl" else "glibc" end)])
+            | map(.[0]))}'
+}
+
+# evidence_pr_source_build_scope [catalog_prefix] — reads a PR's changed paths
+# on stdin (one per line) and prints which tools may keep source-build cells
+# in its PR sample (#1593):
+#   `*`              the PR touches luggage's source-build method code, so
+#                    every tool's source-build path is under test;
+#   `<tool> ...`     the PR touches those tools' vendored catalog entries
+#                    (<catalog_prefix>/<tool>/...), sorted and de-duplicated;
+#   (empty)          anything else — no source-build cell on this PR.
+evidence_pr_source_build_scope() {
+    local prefix="${1:-crates/luggage/testdata/catalog/tools}"
+    command awk -v prefix="$prefix/" '
+        /^crates\/luggage\/src\/installer\/methods\/source_build[^\/]*\.rs$/ { all = 1 }
+        index($0, prefix) == 1 {
+            rest = substr($0, length(prefix) + 1)
+            n = index(rest, "/")
+            if (n > 1) tools[substr(rest, 1, n - 1)] = 1
+        }
+        END {
+            if (all) { print "*"; exit }
+            out = ""
+            for (t in tools) out = out (out == "" ? "" : "\n") t
+            if (out != "") print out
+        }' | command sort -u | command paste -sd' ' -
 }
 
 # evidence_matrix_all <catalog_dir> <project_root> [image_tag] [max_cells]
