@@ -363,10 +363,12 @@ enum Stage {
 const MAX_INSTALL_ATTEMPTS: usize = 8;
 
 /// Distinguishes sibling names created within one process (threads, or
-/// repeated retries), on top of the PID that distinguishes processes.
+/// repeated retries), on top of the PID that distinguishes processes and the
+/// timestamp that distinguishes a reused PID from a crashed predecessor whose
+/// hidden entry was never cleaned up.
 static SIBLING_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// A fresh sibling path `.{container}.{kind}-{pid}-{seq}` in `parent`.
+/// A fresh sibling path `.{container}.{kind}-{pid}-{nanos}-{seq}` in `parent`.
 ///
 /// Same parent as the target, so it is on the same filesystem (`rename` is
 /// atomic only within one) and already behind the `0700` `agent-scripts`
@@ -374,7 +376,10 @@ static SIBLING_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64:
 /// Docker names cannot start with one.
 fn sibling(parent: &Path, container_name: &str, kind: &str) -> PathBuf {
     let seq = SIBLING_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    parent.join(format!(".{container_name}.{kind}-{}-{seq}", std::process::id()))
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    parent.join(format!(".{container_name}.{kind}-{}-{nanos}-{seq}", std::process::id()))
 }
 
 /// A directory removed on drop unless [`disarm`](Self::disarm)ed, so a staging
@@ -479,9 +484,10 @@ fn matches(dir: &Path, scripts: &[(&str, &str)]) -> bool {
 /// again — unless it already holds these exact scripts, in which case the
 /// other process did our work and the staging copy is discarded.
 ///
-/// Error detection is by re-inspecting the target rather than by `errno`: the
-/// "target occupied" error is `ENOTEMPTY` or `EEXIST` on Linux and different
-/// again on Windows, while "is the target there?" is portable.
+/// Only an "occupied" rename failure is retried (see [`target_occupied`]).
+/// Any other failure — `EACCES`, `ENOSPC`, `EIO` — is returned as-is: retrying
+/// it would only move a working installed tree aside (and then delete it) and
+/// finally report a misleading "lost the race".
 fn install(
     parent: &Path,
     dir: &Path,
@@ -518,12 +524,20 @@ fn install_loop(
     hook: &mut dyn FnMut(Stage),
     aside: &mut Vec<PathBuf>,
 ) -> Result<(), ScriptsDirError> {
+    let mut last_err = None;
     for _ in 0..MAX_INSTALL_ATTEMPTS {
-        if std::fs::rename(staged.path(), dir).is_ok() {
-            staged.disarm();
-            return Ok(());
-        }
+        let err = match std::fs::rename(staged.path(), dir) {
+            Ok(()) => {
+                staged.disarm();
+                return Ok(());
+            }
+            Err(e) => e,
+        };
         hook(Stage::RenameFailed);
+        if !target_occupied(&err, dir) {
+            return Err(io_err(dir, err));
+        }
+        last_err = Some(err);
 
         // The target is (still, or again) occupied — or it vanished between
         // the rename and here because another invocation moved it aside, in
@@ -548,13 +562,28 @@ fn install_loop(
         }
     }
 
+    let last = last_err.map_or_else(|| "none".to_owned(), |e| e.to_string());
     Err(io_err(
         dir,
         std::io::Error::other(format!(
             "could not install after {MAX_INSTALL_ATTEMPTS} attempts \
-             (concurrent agent starts kept replacing it)"
+             (concurrent agent starts kept replacing it; last error: {last})"
         )),
     ))
+}
+
+/// Whether a failed `rename(staged, dir)` means "the target is occupied" — the
+/// only failure [`install_loop`] retries.
+///
+/// On Unix that is `ENOTEMPTY`/`EEXIST`, by kind. Windows reports an occupied
+/// directory target as access-denied, indistinguishable by kind from a real
+/// permission error, so there it also requires the target to exist.
+fn target_occupied(err: &std::io::Error, dir: &Path) -> bool {
+    use std::io::ErrorKind;
+    matches!(err.kind(), ErrorKind::AlreadyExists | ErrorKind::DirectoryNotEmpty)
+        || (cfg!(windows)
+            && err.kind() == ErrorKind::PermissionDenied
+            && std::fs::symlink_metadata(dir).is_ok())
 }
 
 #[cfg(test)]
@@ -967,6 +996,114 @@ mod tests {
         assert!(vanished, "rename never failed, so the branch was not reached");
         assert_complete(&got, &other_scripts());
         assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// A non-race rename failure (here `EACCES`, from a parent made read-only
+    /// between build and install) is returned with its real cause — not retried
+    /// into a misleading "lost the race", and not used as a reason to move the
+    /// installed tree aside. The hook restores the mode at `RenameFailed`, so a
+    /// retry WOULD now succeed: only an immediate error passes this test.
+    #[cfg(unix)]
+    #[test]
+    fn non_race_rename_failure_is_reported_not_retried() {
+        use std::os::unix::fs::PermissionsExt;
+        if rustix::process::getuid().is_root() {
+            return; // root ignores the mode bits this test relies on
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let parent = tmp.path().join("stibbons").join("agent-scripts");
+        let set =
+            |m| std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(m)).unwrap();
+
+        let err =
+            prepare_with_hook(
+                Some(tmp.path()),
+                "myproject-agent-1",
+                &scripts(),
+                &mut |s| match s {
+                    Stage::Built => set(0o500),
+                    Stage::RenameFailed => set(0o700),
+                    Stage::MovedAside => {}
+                },
+            )
+            .expect_err("EACCES must not be retried");
+
+        match err {
+            ScriptsDirError::Io { source, .. } => {
+                assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied, "{source}");
+            }
+            other => panic!("expected Io(PermissionDenied), got {other}"),
+        }
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// A foreign occupant that appears at the target mid-install (here our own
+    /// tree opened to 0755 — what an attacker-planted dir looks like) is
+    /// rejected rather than moved aside and replaced, and the staging dir does
+    /// not leak on that error path.
+    #[cfg(unix)]
+    #[test]
+    fn foreign_occupant_appearing_mid_install_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+
+        let err =
+            prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &other_scripts(), &mut |s| {
+                if s == Stage::RenameFailed {
+                    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+                }
+            })
+            .expect_err("an open-mode occupant must be refused");
+
+        assert!(matches!(err, ScriptsDirError::UnsafePath { .. }), "{err}");
+        assert_complete(&dir, &scripts());
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// The "already matches, leave it" short-circuit must not accept a tree
+    /// that differs in anything but script bytes: a tampered mode, an extra
+    /// file, or a script swapped for a symlink each force a full replacement.
+    /// These are the cases where returning the tree untouched would carry
+    /// someone else's change into the mount.
+    #[cfg(unix)]
+    #[test]
+    fn near_match_trees_are_replaced() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        type Tamper = fn(&Path);
+        let tampers: [(&str, Tamper); 3] = [
+            ("mode", |d| {
+                std::fs::set_permissions(
+                    d.join("agent-init.sh"),
+                    std::fs::Permissions::from_mode(0o777),
+                )
+                .unwrap();
+            }),
+            ("extra file", |d| std::fs::write(d.join("extra.sh"), "x").unwrap()),
+            ("symlink", |d| {
+                let target = d.parent().unwrap().parent().unwrap().join("init-copy");
+                std::fs::write(&target, "#!/bin/bash\ninit\n").unwrap();
+                std::fs::remove_file(d.join("agent-init.sh")).unwrap();
+                std::os::unix::fs::symlink(&target, d.join("agent-init.sh")).unwrap();
+            }),
+        ];
+        for (what, tamper) in tampers {
+            let tmp = tempfile::tempdir().unwrap();
+            let dir =
+                prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+            tamper(&dir);
+            let ino = std::fs::metadata(&dir).unwrap().ino();
+
+            prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+
+            assert_ne!(std::fs::metadata(&dir).unwrap().ino(), ino, "{what}: not replaced");
+            assert_complete(&dir, &scripts());
+            assert_eq!(mode_of(&dir.join("agent-init.sh")), 0o755, "{what}");
+            assert!(
+                !std::fs::symlink_metadata(dir.join("agent-init.sh")).unwrap().is_symlink(),
+                "{what}"
+            );
+        }
     }
 
     /// A tree that already holds these exact scripts is left in place — same
