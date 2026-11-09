@@ -397,7 +397,10 @@ jobs:
 
           Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          # Send CRITICAL priority notification
+          # Send CRITICAL priority notification. Every Pushover call in this
+          # workflow retries (#1607): a retried POST can duplicate an alert
+          # whose response was lost, which is accepted — a duplicate alert is
+          # harmless, a missed one is not.
           curl -s --retry 3 \
             --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
             --form-string "user=${{ secrets.PUSHOVER_USER }}" \
