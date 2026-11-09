@@ -89,6 +89,25 @@ read_evidence_verdict() {
     printf '%s\n' "result=$RESULT" "error_class=$ERROR_CLASS"
 }
 
+# _quote_rejected_value - Render a rejected input for a one-line log message.
+#
+# Arguments:
+#   $1 - the raw rejected value
+#
+# Output (stdout):
+#   `'value'` when the value has no control characters (keeps the #1568
+#   messages byte-identical); otherwise bash's `printf %q` form (e.g.
+#   `$'x\n::stop-commands::t'`), which renders CR/LF/ESC as escapes so the
+#   message can never break onto a new line that begins with `::`.
+_quote_rejected_value() {
+    local v="$1"
+    if [[ "$v" == *[[:cntrl:]]* ]]; then
+        command printf '%q' "$v"
+    else
+        command printf "'%s'" "$v"
+    fi
+}
+
 # validate_issue_inputs - Validate the three free-text coordinates.
 #
 # Arguments:
@@ -104,6 +123,11 @@ read_evidence_verdict() {
 #   0 if all three pass their anchored regexes, 1 (with a message to stderr)
 #   on the first failure.
 #
+# The rejected value is echoed via _quote_rejected_value, never raw: the
+# workflow steps that call this leave stderr on the step log, where the runner
+# parses `::` workflow commands at the start of any line. A value carrying a
+# newline then `::stop-commands::` would otherwise forge one (#1589).
+#
 # INPUT_TOOL/INPUT_TOOL_VERSION are free-text workflow_dispatch inputs. They
 # flow into TITLE (a gh --search query) and the issue body, so validate them
 # against tight slugs first — this blocks a dispatcher from smuggling gh-search
@@ -113,15 +137,18 @@ validate_issue_inputs() {
     local INPUT_TOOL="$1" INPUT_TOOL_VERSION="$2" INPUT_TUPLE="$3"
     local action="${4:-file issue}"
     if [[ ! "$INPUT_TOOL" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
-        echo "Refusing to ${action}: unexpected tool slug '$INPUT_TOOL'" >&2
+        command printf 'Refusing to %s: unexpected tool slug %s\n' \
+            "$action" "$(_quote_rejected_value "$INPUT_TOOL")" >&2
         return 1
     fi
     if [[ ! "$INPUT_TOOL_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9.+_-]*$ ]]; then
-        echo "Refusing to ${action}: unexpected version '$INPUT_TOOL_VERSION'" >&2
+        command printf 'Refusing to %s: unexpected version %s\n' \
+            "$action" "$(_quote_rejected_value "$INPUT_TOOL_VERSION")" >&2
         return 1
     fi
     if [[ ! "$INPUT_TUPLE" =~ ^[a-z0-9]+-[a-z0-9.]+-[a-z0-9]+$ ]]; then
-        echo "Refusing to ${action}: unexpected tuple '$INPUT_TUPLE'" >&2
+        command printf 'Refusing to %s: unexpected tuple %s\n' \
+            "$action" "$(_quote_rejected_value "$INPUT_TUPLE")" >&2
         return 1
     fi
     return 0
