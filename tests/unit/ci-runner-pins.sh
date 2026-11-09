@@ -190,10 +190,34 @@ test_every_curl_retries() {
 # wget's defaults retry nothing useful for an HTTP 5xx, and the curl row above
 # cannot see it — so workflow downloads use curl (whose retries this suite
 # checks) and wget is not used at all.
+# _wget_lines — "<file>:<line>:<text>" for every non-comment wget call in the
+# workflow files (both extensions). Reads WGET_SCAN_FILES when set, so the
+# positive control below can aim the same matcher at a fixture.
+_wget_lines() {
+    local -a files
+    if [ -n "${WGET_SCAN_FILES:-}" ]; then
+        files=("$WGET_SCAN_FILES")
+    else
+        mapfile -t files < <(_workflow_files)
+    fi
+    [ "${#files[@]}" -gt 0 ] || return 0
+    command grep -nHE '(^|[[:space:];|&(])wget([[:space:]]|$)' "${files[@]}" |
+        command grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true
+}
+
 test_no_wget_downloads() {
+    # Positive control: the matcher must flag a real wget line and a bare
+    # `wget` at end of line, and ignore a commented one — otherwise a regex
+    # typo would make the row below pass vacuously.
+    local fixture="$TEST_TEMP_DIR/wget-fixture.yml" found
+    printf '%s\n' '          wget -qO- https://example.invalid/key' \
+        '          sudo wget' \
+        '          # wget https://example.invalid/commented' >"$fixture"
+    found=$(WGET_SCAN_FILES="$fixture" _wget_lines | command wc -l)
+    assert_equals "2" "${found//[[:space:]]/}" "the wget matcher flags real calls and skips comments"
+
     local hits
-    hits=$(command grep -nE '(^|[[:space:];|&(])wget[[:space:]]' "$WORKFLOWS_DIR"/*.yml |
-        command grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)
+    hits=$(_wget_lines)
     if [ -n "$hits" ]; then
         /usr/bin/echo "$hits" | command sed "s|^$WORKFLOWS_DIR/|  |"
     fi
