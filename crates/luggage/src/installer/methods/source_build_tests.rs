@@ -615,7 +615,7 @@ fn steps_stream_banner_and_output_into_the_feature_log() {
 fn launched(var: &str) -> Option<String> {
     let probe = if var == "CC" { ["gcc", "cc"] } else { ["g++", "c++"] };
     let base = std::env::var(var).ok().filter(|v| !v.trim().is_empty()).or_else(|| {
-        probe.into_iter().find(|p| crate::installer::syspackages::on_path(p)).map(str::to_owned)
+        probe.into_iter().find(|p| step_on_path(&BTreeMap::new())(p)).map(str::to_owned)
     })?;
     Some(if already_launched(&base, "ccache") { base } else { format!("ccache {base}") })
 }
@@ -807,6 +807,24 @@ fn launcher_probes_the_step_path_when_the_catalog_sets_one() {
     assert!(probe("gcc-luggage-probe"), "a compiler on the catalog PATH is found");
     assert!(!probe("not-executable"), "a non-executable file is not a compiler");
     assert!(!probe("sh"), "luggage's own PATH is not searched when the catalog sets one");
+
+    // Empty and relative entries resolve against the steps' cwd (the scratch
+    // tree), not luggage's, so they are never probed. `rel` reaches the probe
+    // directory from luggage's own cwd (`../` up to `/`, then down), so a
+    // probe that honoured relative entries would wrongly find the compiler.
+    let cwd = std::env::current_dir().unwrap();
+    let up = "../".repeat(cwd.components().count() - 1);
+    let rel = format!("{up}{}", dir.path().strip_prefix("/").unwrap().display());
+    assert!(
+        std::path::Path::new(&rel).join("gcc-luggage-probe").is_file(),
+        "{rel} must reach the probe dir from the cwd, or this test proves nothing",
+    );
+    for path in [String::new(), ":".to_owned(), rel.clone(), format!(":{rel}:")] {
+        let env = BTreeMap::from([("PATH".to_owned(), path.clone())]);
+        assert!(!step_on_path(&env)("gcc-luggage-probe"), "PATH={path:?}");
+    }
+    let env = BTreeMap::from([("PATH".to_owned(), format!("{rel}:{}", dir.path().display()))]);
+    assert!(step_on_path(&env)("gcc-luggage-probe"), "the absolute entry still counts");
 
     // No catalog PATH: luggage's own is searched.
     assert!(step_on_path(&BTreeMap::new())("sh"), "sh is on luggage's PATH");

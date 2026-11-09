@@ -167,14 +167,21 @@ pub fn resolve_program(program: &'static str, on_path: impl Fn(&str) -> bool) ->
 }
 
 /// `true` when `name` is an executable file in some `PATH` directory.
-pub(crate) fn on_path(name: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|paths| on_search_path(&paths, name))
+fn on_path(name: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|paths| {
+        std::env::split_paths(&paths).any(|dir| is_executable(&dir.join(name)))
+    })
 }
 
-/// `true` when `name` is an executable file in some directory of `paths`, a
-/// `PATH`-style list — for callers probing a `PATH` other than luggage's own.
-pub(crate) fn on_search_path(paths: &std::ffi::OsStr, name: &str) -> bool {
-    std::env::split_paths(paths).any(|dir| is_executable(&dir.join(name)))
+/// `true` when `name` is an executable file in some **absolute** directory of
+/// `paths`, a `PATH`-style list — for probing what a process running in a
+/// *different* cwd would find. Empty and relative entries are skipped: they
+/// resolve against that process's cwd, not luggage's, so luggage cannot
+/// answer for them.
+pub(crate) fn on_absolute_search_path(paths: &std::ffi::OsStr, name: &str) -> bool {
+    std::env::split_paths(paths)
+        .filter(|dir| dir.is_absolute())
+        .any(|dir| is_executable(&dir.join(name)))
 }
 
 #[cfg(unix)]

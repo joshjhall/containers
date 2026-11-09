@@ -188,13 +188,15 @@ fn already_launched(base: &str, launcher: &str) -> bool {
 /// The `on_path` probe for [`apply_compiler_launcher`]: searches the `PATH`
 /// the build steps will run with — the catalog's own when it sets one, else
 /// luggage's — so the compiler chosen is one the steps can actually find.
+/// Only absolute entries count: the steps run in the scratch source tree, so
+/// an empty or relative entry would resolve somewhere luggage cannot see.
 fn step_on_path(env: &BTreeMap<String, String>) -> impl Fn(&str) -> bool + use<> {
-    let step_path = env.get("PATH").cloned();
+    let step_path =
+        env.get("PATH").map(std::ffi::OsString::from).or_else(|| std::env::var_os("PATH"));
     move |name: &str| {
-        step_path.as_ref().map_or_else(
-            || crate::installer::syspackages::on_path(name),
-            |paths| crate::installer::syspackages::on_search_path(paths.as_ref(), name),
-        )
+        step_path.as_deref().is_some_and(|paths| {
+            crate::installer::syspackages::on_absolute_search_path(paths, name)
+        })
     }
 }
 
