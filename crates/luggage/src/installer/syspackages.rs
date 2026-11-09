@@ -214,8 +214,10 @@ fn presence_argv(mgr: PackageManager, package: &str) -> (&'static str, Vec<Strin
 /// install.
 ///
 /// - apt: exit 0 is decided by the status words, one line per architecture
-///   instance on a multiarch host. The package is present if any line is
-///   `installed` (`config-files` means removed). A non-zero
+///   instance on a multiarch host. Absent only when every line is
+///   `not-installed` or `config-files`. Any other state (`installed`,
+///   `half-installed`, `unpacked`, `triggers-pending`, ...) or empty output
+///   reads as present. A non-zero
 ///   exit is absence only when dpkg-query says it found no such package.
 /// - apk: `info -e` exits 0 when installed and 1 with nothing on stderr when
 ///   not.
@@ -230,9 +232,19 @@ fn presence_from_output(
     let stdout = String::from_utf8_lossy(&o.stdout);
     let stderr = String::from_utf8_lossy(&o.stderr);
     let absent = match (mgr, o.status.code()) {
-        // One line per matching architecture instance on a multiarch host;
-        // any installed instance means present.
-        (PackageManager::Apt, Some(0)) => return stdout.lines().any(|l| l.trim() == "installed"),
+        // One line per matching architecture instance on a multiarch host.
+        // Absent only when every instance is cleanly gone. A partial state
+        // (half-installed, unpacked, triggers-pending) or empty output is
+        // inconclusive and reads as present.
+        (PackageManager::Apt, Some(0)) => {
+            let states: Vec<&str> =
+                stdout.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+            if states.contains(&"installed") {
+                return true;
+            }
+            !states.is_empty()
+                && states.iter().all(|l| matches!(*l, "not-installed" | "config-files"))
+        }
         (PackageManager::Apt, Some(1)) => stderr.contains("no packages found matching"),
         (PackageManager::Apk | PackageManager::Dnf, Some(0)) => return true,
         (PackageManager::Apk, Some(1)) => stderr.trim().is_empty(),
@@ -647,6 +659,12 @@ mod tests {
         assert!(present(Apt, out(0, "installed\ninstalled\n", "")));
         assert!(present(Apt, out(0, "config-files\ninstalled\n", "")));
         assert!(!present(Apt, out(0, "config-files\nnot-installed\n", "")));
+        // Partial states and empty output are inconclusive: present.
+        for partial in ["half-installed", "unpacked", "half-configured", "triggers-pending"] {
+            assert!(present(Apt, out(0, &format!("{partial}\n"), "")), "{partial}");
+        }
+        assert!(present(Apt, out(0, "not-installed\nunpacked\n", "")));
+        assert!(present(Apt, out(0, "", "")));
         assert!(!present(Apt, out(1, "", "dpkg-query: no packages found matching make")));
         // apk / rpm: their documented "not installed" answers.
         assert!(present(Apk, out(0, "", "")));
