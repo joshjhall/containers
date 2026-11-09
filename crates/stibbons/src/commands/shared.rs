@@ -303,7 +303,13 @@ mod tests {
     /// still print in order.
     #[test]
     fn write_render_plan_omits_state_file() {
-        for action in [FileAction::Skipped, FileAction::Updated, FileAction::Created] {
+        for action in [
+            FileAction::Created,
+            FileAction::Updated,
+            FileAction::Unchanged,
+            FileAction::Forced,
+            FileAction::Skipped,
+        ] {
             let plan = plan_of(&[
                 ("before", FileAction::Created),
                 (render::STATE_FILE, action),
@@ -315,6 +321,41 @@ mod tests {
                 "\nPlanned changes:\n  create    before\n  unchanged after\n",
                 "state file classified {action:?} leaked into the plan"
             );
+        }
+    }
+
+    /// Accepts `budget` bytes, then fails every write.
+    struct FailAfter {
+        budget: usize,
+    }
+
+    impl Write for FailAfter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            if self.budget == 0 {
+                return Err(std::io::Error::other("sink closed"));
+            }
+            let n = buf.len().min(self.budget);
+            self.budget -= n;
+            Ok(n)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// A write failure must propagate, not be swallowed. Fail both on the
+    /// header and on a per-file row (budget exactly covers the header), so the
+    /// `?` on either `writeln!` is pinned.
+    #[test]
+    fn write_render_plan_propagates_write_errors() {
+        let plan = plan_of(&[("a", FileAction::Created)]);
+        let header_len = "\nPlanned changes:\n".len();
+
+        for budget in [0, header_len] {
+            let err = write_render_plan(&mut FailAfter { budget }, &plan)
+                .expect_err(&format!("budget {budget}: write error was swallowed"));
+            assert_eq!(err.to_string(), "sink closed", "budget {budget}");
         }
     }
 }
