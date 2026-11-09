@@ -46,6 +46,8 @@
 #
 # Prints the branch name on success, nothing when there was nothing to ingest.
 # Exit: 0 ok (incl. nothing to ingest), 1 runtime error, 2 usage/input error.
+# A PR that opened but could not have auto-merge enabled is a runtime error
+# (exit 1, an ::error:: naming the PR, no branch printed): it would never merge.
 #
 # Why the cancelled/failed case is a NEUTRAL skip: those cells already fail the
 # run with the real cause on each cell (job timeout, a failed build step).
@@ -125,7 +127,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -h | --help)
-            command sed -n '2,56p' "$0"
+            command sed -n '2,58p' "$0"
             exit 0
             ;;
         *) die "unknown argument: $1" 2 ;;
@@ -256,8 +258,11 @@ EOF
 
 pr_url="$(gh_api_create_pr --repo "$DB_REPO" --base main --head "$BRANCH" --title "$SUBJECT" --body "$BODY")"
 command echo "$SCRIPT_NAME: opened $pr_url" >&2
-# Squash + delete branch once the required check passes. Best-effort: if
-# auto-merge is unavailable the PR is still open and correct.
-gh_api_retry gh pr merge "$pr_url" --repo "$DB_REPO" --auto --squash --delete-branch >&2 ||
-    command echo "::warning::could not enable auto-merge on $pr_url; merge it manually" >&2
+# Squash + delete branch once the required check passes. Not best-effort
+# (#1574): the PR is correct but would sit unmerged, and a warning on a green
+# job is never read, so evidence PRs piled up unnoticed. Fail the job instead.
+if ! gh_api_retry gh pr merge "$pr_url" --repo "$DB_REPO" --auto --squash --delete-branch >&2; then
+    command echo "::error::could not enable auto-merge on $pr_url; the PR is open but will not merge on its own: enable auto-merge on it or merge it manually" >&2
+    exit 1
+fi
 command echo "$BRANCH"

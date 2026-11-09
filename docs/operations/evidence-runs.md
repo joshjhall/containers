@@ -268,7 +268,9 @@ Cells only install, record, and upload their row (an envelope adding
 1. merges each into its version file in one containers-db checkout with the
    shared dedup policy ([`bin/lib/evidence-merge.sh`](../../bin/lib/evidence-merge.sh)),
 1. validates once, and opens **one** PR on `evidence/batch/<run_id>` with
-   **auto-merge** enabled ([`bin/ingest-evidence-batch.sh`](../../bin/ingest-evidence-batch.sh)),
+   **auto-merge** enabled ([`bin/ingest-evidence-batch.sh`](../../bin/ingest-evidence-batch.sh));
+   if auto-merge cannot be enabled after retries, the job fails with an
+   `::error::` naming the PR rather than leaving it open behind a green job,
 1. files **one** tracking issue listing the run's `fail` rows, if any.
 
 It runs even when cells failed, since a fail row is evidence too. Rows already
