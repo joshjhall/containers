@@ -120,7 +120,8 @@ Add these secrets to your repository settings:
      files: `repo` + `workflow` scopes on a classic PAT, or Contents: write +
      Workflows: write on a fine-grained token. Some updaters rewrite
      `.github/workflows/*.yml` (the trivy-action SHA pin, the Rust toolchain
-     pins from #1039), and GitHub rejects those pushes without the workflow
+     pins from #1039, the static ccache version + per-arch digests in
+     `evidence-run.yml` from #1611), and GitHub rejects those pushes without the workflow
      permission — the run then fails at `git push`
    - gitleaks bumps do **not** touch workflow files: CI reads the version from
      `lib/features/dev-tools.sh` and verifies it against `lib/checksums.json`

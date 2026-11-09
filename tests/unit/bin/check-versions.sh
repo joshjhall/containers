@@ -573,6 +573,25 @@ test_offline_sweep_survives_failed_fetches() {
     fi
 }
 
+# The static ccache pin (#1611) lives in a workflow env block, not a feature
+# script: it must be registered from evidence-run.yml with the committed
+# version, so the updater dispatch (keyed on the file) can find it.
+test_ccache_registered_from_evidence_workflow() {
+    local dir rc row pinned
+    dir=$(command mktemp -d)
+    rc=$(run_offline_sweep "$dir")
+    row=$(jq -c '[.tools[] | select(.tool == "ccache")] | .[0] // empty' "$dir/out.json" 2>/dev/null)
+    command rm -rf "$dir"
+    pinned=$(command grep -E '^ +CCACHE_VERSION: ' "$PROJECT_ROOT/.github/workflows/evidence-run.yml" | command sed -E 's/.*: *//')
+    if [ -n "$pinned" ] &&
+        [ "$(jq -r '.current' <<<"$row")" = "$pinned" ] &&
+        [ "$(jq -r '.file' <<<"$row")" = "evidence-run.yml" ]; then
+        assert_true true "ccache $pinned registered from evidence-run.yml"
+    else
+        assert_true false "ccache row wrong or missing: rc=$rc pinned=$pinned row=$row"
+    fi
+}
+
 test_every_registered_tool_has_a_checker() {
     local dir rc unchecked
     dir=$(command mktemp -d)
@@ -758,6 +777,7 @@ test_extract_action_version_branch_passthrough() {
 run_test test_extract_action_version_sha_pinned "extract_action_version reads version from SHA-pin comment"
 run_test test_extract_action_version_sha_pinned_no_v "extract_action_version handles un-prefixed comment version"
 run_test test_extract_action_version_plain_tags "extract_action_version normalizes plain tags"
+run_test test_ccache_registered_from_evidence_workflow "ccache is registered from evidence-run.yml with its pinned version"
 run_test test_extract_action_version_branch_passthrough "extract_action_version passes branch refs through"
 
 # Generate test report

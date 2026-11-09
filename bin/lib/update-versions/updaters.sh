@@ -132,6 +132,9 @@ pin_action() {
 # file-size ceiling (tests/unit/file-size-ceiling.sh).
 # shellcheck source=bin/lib/update-versions/gitleaks-pins.sh
 source "$(dirname "${BASH_SOURCE[0]}")/gitleaks-pins.sh"
+# bump_ccache_pin (evidence-run.yml static ccache, #1611) lives in ccache-pin.sh.
+# shellcheck source=bin/lib/update-versions/ccache-pin.sh
+source "$(dirname "${BASH_SOURCE[0]}")/ccache-pin.sh"
 # update_luggage_catalog (vendored luggage catalog) lives in catalog.sh.
 # shellcheck source=bin/lib/update-versions/catalog.sh
 source "$(dirname "${BASH_SOURCE[0]}")/catalog.sh"
@@ -637,6 +640,19 @@ update_version() {
                     ;;
                 *)
                     echo -e "${RED}    ERROR: Unknown ci.yml tool: $tool — add a case in updaters.sh${NC}" >&2
+                    return "$RC_NO_UPDATER_CASE"
+                    ;;
+            esac
+            ;;
+        evidence-run.yml)
+            # The static ccache the evidence workflow mounts into source-build
+            # cells (#1594). Version and both per-arch digests move together.
+            case "$tool" in
+                ccache)
+                    bump_ccache_pin "$PROJECT_ROOT/.github/workflows/$file" "$latest" || return
+                    ;;
+                *)
+                    echo -e "${RED}    ERROR: Unknown evidence-run.yml tool: $tool — add a case in updaters.sh${NC}" >&2
                     return "$RC_NO_UPDATER_CASE"
                     ;;
             esac
