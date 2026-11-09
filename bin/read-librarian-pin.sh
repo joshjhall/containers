@@ -37,12 +37,16 @@ fi
 #   PIN<TAB><value>  single-key, single-line `ARG LIBRARIAN_REF=<value>`
 #                    (any case, any indent; the value is kept verbatim so
 #                    trailing junk still fails the shape check below)
-#   BAD<TAB><line>   LIBRARIAN_REF= set any other way (multi-key / continued)
+#   BAD<TAB><line>   LIBRARIAN_REF= set any other way (multi-key in either
+#                    key order, or continued)
+#   ESC<TAB><line>   an `# escape=` parser directive naming a character other
+#                    than `\`: it changes the continuation character, so the
+#                    joins above would no longer match Docker's. Fail closed.
 # A bare `ARG LIBRARIAN_REF` (re-declaration, no `=`) sets no value and emits
 # nothing. awk's END flush keeps an unterminated last line.
 classify_args() {
-    command awk '
-        function flush(   t, w) {
+    command awk -v directives=1 '
+        function flush(   t, w, v) {
             if (!open) return
             open = 0
             t = inst
@@ -50,11 +54,26 @@ classify_args() {
             split(t, w, /[[:space:]]+/)
             if (toupper(w[1]) != "ARG") return
             if (nlines == 1 && match(first, /^[[:space:]]*[Aa][Rr][Gg][[:space:]]+LIBRARIAN_REF=/)) {
-                print "PIN\t" substr(first, RLENGTH + 1)
+                v = substr(first, RLENGTH + 1)
+                # `ARG LIBRARIAN_REF=v1.2.3 FOO=1`: a second key after the
+                # pin. Bare trailing whitespace stays a PIN so it fails the
+                # shape check with the value quoted.
+                if (v ~ /[[:space:]]+[^[:space:]]/) print "BAD\t" start
+                else print "PIN\t" v
             } else if (inst ~ /(^|[[:space:]])LIBRARIAN_REF=/) {
                 print "BAD\t" start
             }
         }
+        # Parser directives (`# key=value`) are only read before the first
+        # comment, blank line or instruction.
+        directives && /^#[[:space:]]*[A-Za-z]+[[:space:]]*=/ {
+            d = $0
+            sub(/^#[[:space:]]*/, "", d)
+            split(d, kv, /[[:space:]]*=[[:space:]]*/)
+            if (tolower(kv[1]) == "escape" && kv[2] !~ /^\\[[:space:]]*$/) print "ESC\t" NR
+            next
+        }
+        { directives = 0 }
         # Docker skips comment and empty lines, even inside a continuation.
         /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
         {
@@ -79,13 +98,21 @@ classify_args() {
 # `|| [ -n "$line" ]` keeps a final line with no trailing newline.
 refs=()
 bad=()
+esc=()
 tab=$'\t'
 while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
         "PIN$tab"*) refs+=("$(command printf '%s' "${line#PIN"$tab"}" | command tr -d '"')") ;;
         "BAD$tab"*) bad+=("${line#BAD"$tab"}") ;;
+        "ESC$tab"*) esc+=("${line#ESC"$tab"}") ;;
     esac
 done < <(classify_args "$dockerfile")
+
+if [ "${#esc[@]}" -gt 0 ]; then
+    printf "::error::unsupported '# escape=' parser directive in %s at line %s; only the default backslash escape is supported\n" \
+        "$dockerfile" "${esc[*]}" >&2
+    exit 1
+fi
 
 if [ "${#bad[@]}" -gt 0 ]; then
     printf "::error::unsupported ARG form for LIBRARIAN_REF in %s at line %s (multi-key or backslash-continued); use a single-key 'ARG LIBRARIAN_REF=vX.Y.Z' line\n" \

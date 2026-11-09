@@ -239,6 +239,29 @@ test_multi_key_pin_rejected() {
     run_pin "$df"
     assert_rejected "multi-key duplicate pin"
     assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF" "multi-key duplicate is not silently skipped"
+
+    # Pin as the FIRST key: must hit the form rule, not merely the shape check.
+    df=$(command printf 'FROM debian:13\nARG LIBRARIAN_REF=v0.19.0 FOO=1\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "multi-key pin, pin first"
+    assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF in $df at line 2" "pin-first multi-key hits the form rule"
+}
+
+# `# escape=`` makes backtick the continuation character, so a continued pin
+# would slip past the backslash join. Any non-default escape is rejected.
+test_escape_directive_rejected() {
+    local df
+    df=$(command printf '# escape=`\nFROM debian:13\nARG LIBRARIAN_REF=v0.18.0\nARG FOO=1 `\n    LIBRARIAN_REF=v0.19.0\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "backtick escape directive"
+    assert_contains "$ERR" "unsupported '# escape=' parser directive in $df at line 1" "escape directive is named"
+
+    # The default escape, and an escape-looking comment AFTER the directive
+    # block (no longer a directive), are both fine.
+    df=$(command printf '# syntax=docker/dockerfile:1\n# escape=\\\nFROM debian:13\n# escape=`\nARG LIBRARIAN_REF=v0.18.0\n' | write_dockerfile)
+    run_pin "$df"
+    assert_equals "0" "$RC" "default escape + late comment are accepted"
+    assert_equals "v0.18.0" "$OUT" "pin printed under the default escape"
 }
 
 test_continued_pin_rejected() {
@@ -280,12 +303,15 @@ EOF
     assert_equals "" "$ERR" "no error output"
 }
 
-# Count LIBRARIAN_REF mentions in a workflow file outside comments. ci.yml
+# Count LIBRARIAN_REF mentions in a workflow file outside whole-line comments.
+# Only lines whose first non-blank character is `#` are dropped: stripping a
+# trailing ` #...` would also cut a `#` inside a quoted shell string and hide a
+# read after it. ci.yml
 # must have none: every read goes through bin/read-librarian-pin.sh, whose
 # call line does not name the variable. Any inline read — sed, grep, awk, cut
 # — has to name LIBRARIAN_REF, so this catches every spelling (#1580).
 count_inline_pin_reads() {
-    command sed -E 's/(^|[[:space:]])#.*$//' "$1" | command grep -ci 'LIBRARIAN_REF' || true
+    command grep -v '^[[:space:]]*#' "$1" | command grep -ci 'LIBRARIAN_REF' || true
 }
 
 # Both ci.yml steps must go through the script, and no inline read may creep
@@ -307,14 +333,16 @@ test_inline_read_guard_discriminates() {
         "ref=\$(command sed -nE 's/^ARG LIBRARIAN_REF=//p' Dockerfile)" \
         "ref=\$(command grep -oP 'LIBRARIAN_REF=\\K.*' Dockerfile)" \
         "ref=\$(command awk -F= '/^arg librarian_ref=/ {print \$2}' Dockerfile)" \
-        "ref=\$(command grep LIBRARIAN_REF Dockerfile | command cut -d= -f2)"; do
+        "ref=\$(command grep LIBRARIAN_REF Dockerfile | command cut -d= -f2)" \
+        "x=\"a #b\"; ref=\$(command grep LIBRARIAN_REF Dockerfile)" \
+        "echo hi # LIBRARIAN_REF trailing note"; do
         command printf '      - run: |\n          %s\n' "$step" >"$yml"
         n=$(count_inline_pin_reads "$yml")
         assert_equals "1" "$n" "inline read counted: $step"
     done
-    command printf '      # read from `ARG LIBRARIAN_REF`\n      - run: echo hi # LIBRARIAN_REF note\n      env:\n        REQUIRE_LIBRARIAN_PARITY: 1\n' >"$yml"
+    command printf '      # read from `ARG LIBRARIAN_REF`\n  # LIBRARIAN_REF again\n      - run: echo hi\n      env:\n        REQUIRE_LIBRARIAN_PARITY: 1\n' >"$yml"
     n=$(count_inline_pin_reads "$yml")
-    assert_equals "0" "$n" "comments and REQUIRE_LIBRARIAN_PARITY are not counted"
+    assert_equals "0" "$n" "whole-line comments and REQUIRE_LIBRARIAN_PARITY are not counted"
 }
 
 run_test test_single_valid_line_prints_ref "single valid ARG line prints the ref"
@@ -333,6 +361,7 @@ run_test test_trailing_junk_rejected "CRLF / trailing whitespace after the tag i
 run_test test_missing_file_rejected "unreadable Dockerfile is rejected"
 run_test test_repo_dockerfile_passes "repo Dockerfile carries exactly one valid pin"
 run_test test_multi_key_pin_rejected "multi-key ARG pin is rejected, not skipped (#1580)"
+run_test test_escape_directive_rejected "non-default # escape= directive is rejected (#1580)"
 run_test test_continued_pin_rejected "backslash-continued ARG pin is rejected (#1580)"
 run_test test_other_instruction_mention_ignored "LIBRARIAN_REF outside an ARG key is not a pin"
 run_test test_ci_steps_use_shared_script "ci.yml pin steps share bin/read-librarian-pin.sh"
