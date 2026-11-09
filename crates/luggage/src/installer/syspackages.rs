@@ -186,7 +186,8 @@ pub fn remove_argv(mgr: PackageManager, packages: &[&str]) -> Option<(&'static s
 
 /// Build the argv that asks whether `package` is installed.
 ///
-/// - apt: `dpkg-query -W -f=${db:Status-Status} <pkg>`.
+/// - apt: `dpkg-query -W -f='${db:Status-Status}\n' <pkg>`; dpkg-query expands
+///   the `\n` itself, giving one line per architecture instance.
 /// - apk: `apk info -e <pkg>`.
 /// - dnf: `rpm -q <pkg>`.
 ///
@@ -196,7 +197,7 @@ fn presence_argv(mgr: PackageManager, package: &str) -> (&'static str, Vec<Strin
     match mgr {
         PackageManager::Apt => (
             "dpkg-query",
-            vec!["-W".to_owned(), "-f=${db:Status-Status}".to_owned(), package.to_owned()],
+            vec!["-W".to_owned(), "-f=${db:Status-Status}\\n".to_owned(), package.to_owned()],
         ),
         PackageManager::Apk => {
             ("apk", vec!["info".to_owned(), "-e".to_owned(), package.to_owned()])
@@ -212,8 +213,9 @@ fn presence_argv(mgr: PackageManager, package: &str) -> (&'static str, Vec<Strin
 /// and an unknown must never turn into removing a package luggage did not
 /// install.
 ///
-/// - apt: exit 0 is decided by the status word, which is `installed` only for
-///   a fully installed package (`config-files` means removed). A non-zero
+/// - apt: exit 0 is decided by the status words, one line per architecture
+///   instance on a multiarch host. The package is present if any line is
+///   `installed` (`config-files` means removed). A non-zero
 ///   exit is absence only when dpkg-query says it found no such package.
 /// - apk: `info -e` exits 0 when installed and 1 with nothing on stderr when
 ///   not.
@@ -228,7 +230,9 @@ fn presence_from_output(
     let stdout = String::from_utf8_lossy(&o.stdout);
     let stderr = String::from_utf8_lossy(&o.stderr);
     let absent = match (mgr, o.status.code()) {
-        (PackageManager::Apt, Some(0)) => return stdout.trim() == "installed",
+        // One line per matching architecture instance on a multiarch host;
+        // any installed instance means present.
+        (PackageManager::Apt, Some(0)) => return stdout.lines().any(|l| l.trim() == "installed"),
         (PackageManager::Apt, Some(1)) => stderr.contains("no packages found matching"),
         (PackageManager::Apk | PackageManager::Dnf, Some(0)) => return true,
         (PackageManager::Apk, Some(1)) => stderr.trim().is_empty(),
@@ -263,12 +267,21 @@ pub fn is_installed(mgr: PackageManager, package: &str) -> bool {
 ///
 /// # Errors
 ///
-/// [`LuggageError::PackageManagerFailed`] naming each package that could not
-/// be removed, with the manager's stderr. A package refused because an
+/// [`LuggageError::PackageManagerFailed`] when a name is empty or starts with
+/// `-` (nothing is run), or naming each package that could not be removed, with the manager's stderr. A package refused because an
 /// installed package depends on it means the catalog declared a runtime need
 /// as `purpose: build`. That fails loudly rather than shipping a silently
 /// broken image.
 pub fn remove_packages(packages: &[&str], mgr: PackageManager) -> Result<()> {
+    // Names come from the catalog and land in argv after the manager's own
+    // flags. One starting with `-` would be parsed as an option, e.g.
+    // `--nodeps` or `--force-depends`, defeating the refuse-don't-cascade
+    // removal. Refuse the whole removal before anything runs.
+    if let Some(bad) = packages.iter().find(|p| p.is_empty() || p.starts_with('-')) {
+        return Err(LuggageError::PackageManagerFailed {
+            message: format!("refusing to remove package with option-like name {bad:?}"),
+        });
+    }
     let refused: Vec<String> = match run_removal(mgr, packages) {
         Ok(()) => return Ok(()),
         // A lone package has nothing to retry.
@@ -599,7 +612,7 @@ mod tests {
             presence_argv(PackageManager::Apt, "make"),
             (
                 "dpkg-query",
-                vec!["-W".to_owned(), "-f=${db:Status-Status}".to_owned(), "make".to_owned()]
+                vec!["-W".to_owned(), "-f=${db:Status-Status}\\n".to_owned(), "make".to_owned()]
             )
         );
         assert_eq!(
@@ -629,7 +642,11 @@ mod tests {
         let present = |m, o| presence_from_output(m, "make", &Ok(o));
         // apt: exit 0 is read from the status word.
         assert!(present(Apt, out(0, "installed\n", "")));
-        assert!(!present(Apt, out(0, "config-files", "")));
+        assert!(!present(Apt, out(0, "config-files\n", "")));
+        // Multiarch: one status line per architecture instance.
+        assert!(present(Apt, out(0, "installed\ninstalled\n", "")));
+        assert!(present(Apt, out(0, "config-files\ninstalled\n", "")));
+        assert!(!present(Apt, out(0, "config-files\nnot-installed\n", "")));
         assert!(!present(Apt, out(1, "", "dpkg-query: no packages found matching make")));
         // apk / rpm: their documented "not installed" answers.
         assert!(present(Apk, out(0, "", "")));
@@ -654,6 +671,19 @@ mod tests {
         // rpm's exit 1 for a *different* package is not this one's absence.
         let other = Ok(out(1, "package gmake is not installed", ""));
         assert!(presence_from_output(PackageManager::Dnf, "make", &other));
+    }
+
+    /// An option-looking name is refused before any package manager runs
+    /// (none exists on the test host, so reaching one would surface as a
+    /// launch error naming the program, not this message).
+    #[test]
+    fn remove_packages_refuses_option_like_names() {
+        for mgr in [PackageManager::Apt, PackageManager::Apk, PackageManager::Dnf] {
+            for bad in ["--nodeps", "-r", ""] {
+                let err = remove_packages(&["make", bad], mgr).unwrap_err();
+                assert!(err.to_string().contains("option-like name"), "{mgr:?} {bad:?}: {err}");
+            }
+        }
     }
 
     #[test]
