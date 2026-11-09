@@ -17,6 +17,7 @@
 #   GH_STUB_PARENT        parents[0].sha of any `git/commits/<sha>` lookup
 #   GH_STUB_MESSAGE       message of that commit (default "chore: headline")
 #   GH_STUB_GRAPHQL_FAIL_FIRST=N  the first N graphql calls exit 1
+#   GH_STUB_PR_MERGE_FAIL_FIRST=N  the first N `pr merge` calls exit 1
 #   GH_STUB_GRAPHQL_LANDED=1  graphql records the payload, then exits 1 (the
 #                         commit landed but the response was lost)
 #   GH_STUB_VERIFIED      the commit's verification.verified (default true)
@@ -55,6 +56,13 @@ gh_stub_install() {
 printf '%s\n' "$*" >>"$GH_LOG"
 last() { command ls "$GH_PAYLOADS" | command sort -n | command tail -1; }
 case "$1 $2" in
+    "pr merge")
+        if [ -n "${GH_STUB_PR_MERGE_FAIL_FIRST:-}" ]; then
+            merges=$(( $(command cat "$GH_PAYLOADS/.merges" 2>/dev/null || echo 0) + 1 ))
+            echo "$merges" >"$GH_PAYLOADS/.merges"
+            [ "$merges" -le "$GH_STUB_PR_MERGE_FAIL_FIRST" ] && exit 1
+        fi
+        ;;
     "pr create")
         : >"$GH_PAYLOADS/.pr-created"
         if [ "${GH_STUB_PR_CREATE_FAIL:-}" = 1 ]; then
