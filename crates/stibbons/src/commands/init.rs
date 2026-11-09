@@ -284,9 +284,12 @@ services:
         let reg = Registry::new();
         let tmp = tempfile::tempdir().unwrap();
 
-        let result = load_from_config(&reg, &tmp.path().join("absent.igor.yml"));
+        let Err(err) = load_from_config(&reg, &tmp.path().join("absent.igor.yml")) else {
+            panic!("a missing config must be an error, not a default");
+        };
 
-        assert!(result.is_err(), "a missing config must be an error, not a default");
+        let io = err.downcast_ref::<std::io::Error>().expect("expected the read's io::Error");
+        assert_eq!(io.kind(), std::io::ErrorKind::NotFound, "got: {err}");
     }
 
     #[test]
@@ -294,9 +297,17 @@ services:
         let reg = Registry::new();
         let tmp = tempfile::tempdir().unwrap();
 
-        let result = load_from_config(&reg, &write_cfg(tmp.path(), "features: [unclosed\n"));
+        let Err(err) = load_from_config(&reg, &write_cfg(tmp.path(), "features: [unclosed\n"))
+        else {
+            panic!("malformed YAML must be an error");
+        };
 
-        assert!(result.is_err(), "malformed YAML must be an error");
+        // The file exists and is readable, so the failure must come from
+        // parsing, not from the read.
+        assert!(
+            err.downcast_ref::<std::io::Error>().is_none(),
+            "expected a parse error, got an io::Error: {err}"
+        );
     }
 
     /// The guard must fire before anything else: no wizard, no render, no
