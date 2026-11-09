@@ -26,7 +26,7 @@ use containers_common::tooldb::DependencyPurpose;
 use tracing::warn;
 
 use super::logging;
-use super::syspackages::{PackageManager, remove_packages};
+use super::syspackages::{PackageManager, is_installed, remove_packages};
 
 /// Build-only packages the system-package stage newly installed, awaiting
 /// removal. Empty when there is nothing to remove.
@@ -83,9 +83,12 @@ pub(super) fn removal_candidates(
 
 /// Remove the pending build-only packages.
 ///
-/// Returns the removed package names (empty when nothing was pending or
-/// the removal failed) alongside the removal's own result, so the caller
-/// decides how a removal failure ranks against an earlier stage error.
+/// Returns the package names that are actually gone afterwards, re-checked on
+/// the host rather than assumed, alongside the removal's own result, so the
+/// caller decides how a removal failure ranks against an earlier stage error.
+/// The re-check matters both ways. `apk del` keeps a package something else
+/// still needs and exits 0, and a removal that fails partway has still changed
+/// the host. A package whose presence cannot be established counts as kept.
 pub(super) fn remove_build_deps(
     pending: PendingBuildDeps,
     logger: Option<&logging::FeatureLogger>,
@@ -98,10 +101,9 @@ pub(super) fn remove_build_deps(
         l.step(&format!("remove build dependencies: {}", pending.packages.join(" ")));
     }
     let names: Vec<&str> = pending.packages.iter().map(String::as_str).collect();
-    match remove_packages(&names, mgr) {
-        Ok(()) => (pending.packages, Ok(())),
-        Err(e) => (Vec::new(), Err(e)),
-    }
+    let result = remove_packages(&names, mgr);
+    let gone = pending.packages.into_iter().filter(|p| !is_installed(mgr, p)).collect();
+    (gone, result)
 }
 
 /// Fold the build-dep removal result into the install result.
