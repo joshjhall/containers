@@ -589,4 +589,39 @@ mod tests {
         assert_eq!(walk_files_capped(tmp.path(), 3).len(), 3);
         assert_eq!(walk_files_capped(tmp.path(), 10).len(), 5);
     }
+
+    /// The cap must hold across directories, not just within one: a cap
+    /// counted per directory passes [`walk_stops_at_limit`]'s flat tree but
+    /// returns all 6 files here for a limit of 4. `target/` (a [`SKIP_DIRS`]
+    /// entry) and the symlink must never count toward the cap.
+    ///
+    /// Swapping the inner `return out` for `break` is an equivalent mutant
+    /// (each later directory stops on its first entry, so the output is
+    /// identical); no output-based test can tell them apart.
+    #[cfg(unix)]
+    #[test]
+    fn walk_cap_holds_across_nested_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        for (dir, range) in [("a", 0..3), ("b", 3..6)] {
+            std::fs::create_dir(root.join(dir)).unwrap();
+            for i in range {
+                std::fs::write(root.join(dir).join(format!("f{i}.txt")), "").unwrap();
+            }
+        }
+        std::fs::create_dir(root.join("target")).unwrap();
+        std::fs::write(root.join("target/t.txt"), "").unwrap();
+        std::os::unix::fs::symlink(root.join("a/f0.txt"), root.join("link.txt")).unwrap();
+
+        let real = set(&["a/f0.txt", "a/f1.txt", "a/f2.txt", "b/f3.txt", "b/f4.txt", "b/f5.txt"]);
+        // Control: uncapped, the walk sees exactly the six regular files.
+        let all: BTreeSet<String> = walk_files_capped(root, 100).into_iter().collect();
+        assert_eq!(all, real);
+
+        let capped = walk_files_capped(root, 4);
+        assert_eq!(capped.len(), 4, "cap overshot: {capped:?}");
+        let unique: BTreeSet<String> = capped.iter().cloned().collect();
+        assert_eq!(unique.len(), 4, "duplicate paths: {capped:?}");
+        assert!(unique.is_subset(&real), "non-regular or skipped path: {capped:?}");
+    }
 }
