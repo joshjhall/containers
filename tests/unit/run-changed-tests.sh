@@ -320,6 +320,11 @@ $TESTS_DIR/unit/bin/enforce-command-prefix.sh" "$out" \
     assert_equals "$TESTS_DIR/unit/bin/lib/keyring-swap-signals.sh
 $TESTS_DIR/unit/bin/lib/keyring-swap.sh" "$out" \
         "the swap suite and its INT/TERM-trap sibling must both be mapped (#1493)"
+
+    out=$(map_to_test "bin/update-versions.sh" | command sort)
+    assert_equals "$TESTS_DIR/unit/bin/update-versions-luggage-catalog.sh
+$TESTS_DIR/unit/bin/update-versions.sh" "$out" \
+        "the updater suite and its luggage catalog-failure sibling must both be mapped (#1512)"
 }
 
 # The runner's own collection loop, not just map_to_test. #832's sibling fanout
