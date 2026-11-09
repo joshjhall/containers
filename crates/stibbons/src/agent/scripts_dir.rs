@@ -281,21 +281,19 @@ fn prepare_with_hook(
     // the `Path::join` — where `/` and `..` are real components — and cannot see
     // whether its caller validated. A future caller, or a reordering of that
     // validation, would silently turn this back into a path escape.
-    // `Normal` is the only component kind that names a new directory: it
-    // excludes `.` and `..` (which are `CurDir`/`ParentDir`, each a single
-    // component, so a bare count would let `..` through) as well as any root or
-    // prefix. Requiring exactly one Normal component also rejects separators.
-    let sole_component = {
-        let mut components = Path::new(container_name).components();
-        match (components.next(), components.next()) {
-            (Some(std::path::Component::Normal(c)), None) => Some(c),
-            _ => None,
-        }
-    };
-    if sole_component.is_none_or(|c| c != std::ffi::OsStr::new(container_name)) {
+    if !is_single_component(container_name) {
         return Err(unsafe_path(
             &state_root.join(container_name),
             format!("container name {container_name:?} is not a single path component"),
+        ));
+    }
+    // The script names are joined the same way, onto the staging dir, and then
+    // chmod'd 0755 — so the same rule applies to them. Checked before anything
+    // is created, so a bad name leaves no staging dir to clean up.
+    if let Some((name, _)) = scripts.iter().find(|(n, _)| !is_single_component(n)) {
+        return Err(unsafe_path(
+            &state_root.join(name),
+            format!("script name {name:?} is not a single path component"),
         ));
     }
     // Create the ancestors one level at a time, checking ownership at each.
@@ -342,6 +340,22 @@ fn prepare_with_hook(
     Ok(dir)
 }
 
+/// Whether `name` is exactly one `Normal` path component, so joining it onto a
+/// directory names a direct child and nothing else.
+///
+/// `Normal` is the only component kind that names a new directory entry: it
+/// excludes `.` and `..` (`CurDir`/`ParentDir` — each a single component, so a
+/// bare count would let `..` through) and any root or prefix. Requiring
+/// exactly one also rejects separators, and comparing back to `name` rejects
+/// the normalizations `components()` performs (a trailing `/`, `./` prefix).
+fn is_single_component(name: &str) -> bool {
+    let mut components = Path::new(name).components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(std::path::Component::Normal(c)), None) if c == OsStr::new(name)
+    )
+}
+
 /// Points in [`prepare_with_hook`] a test can pause at to drive a concurrent
 /// interleaving deterministically, instead of relying on timing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -374,6 +388,13 @@ static SIBLING_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64:
 /// atomic only within one) and already behind the `0700` `agent-scripts`
 /// directory. The leading `.` keeps it from ever equalling a container name —
 /// Docker names cannot start with one.
+///
+/// Known limit: a process killed outright (SIGKILL, OOM) between creating one
+/// of these and removing it leaves it behind, since no drop guard runs. It is
+/// harmless — hidden, inside the `0700` parent, never mounted, never reused —
+/// and is deliberately not swept: another invocation may be mid-prepare with a
+/// live sibling, and telling a live one from a dead one needs a lock this
+/// design exists to avoid.
 fn sibling(parent: &Path, container_name: &str, kind: &str) -> PathBuf {
     let seq = SIBLING_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let nanos = std::time::SystemTime::now()
@@ -998,46 +1019,78 @@ mod tests {
         assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
     }
 
-    /// A non-race rename failure (here `EACCES`, from a parent made read-only
-    /// between build and install) is returned with its real cause — not retried
-    /// into a misleading "lost the race", and not used as a reason to move the
-    /// installed tree aside. The hook restores the mode at `RenameFailed`, so a
-    /// retry WOULD now succeed: only an immediate error passes this test.
-    #[cfg(unix)]
+    /// A non-race rename failure is returned with its real cause — not retried
+    /// into a misleading "lost the race". Here the staged source vanishes
+    /// between build and install, so `rename` fails `ENOENT` with the target
+    /// absent: the retry-everything loop this replaced would spin through every
+    /// attempt and report a race. Driven by the hook rather than mode bits, so
+    /// it also holds when the suite runs as root.
     #[test]
     fn non_race_rename_failure_is_reported_not_retried() {
-        use std::os::unix::fs::PermissionsExt;
-        if rustix::process::getuid().is_root() {
-            // Root ignores the mode bits this test relies on. Say so, so a
-            // root-run suite does not read this as a real pass.
-            eprintln!("SKIP non_race_rename_failure_is_reported_not_retried: running as root");
-            return;
-        }
         let tmp = tempfile::tempdir().unwrap();
         let parent = tmp.path().join("stibbons").join("agent-scripts");
-        let set =
-            |m| std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(m)).unwrap();
 
-        let err =
-            prepare_with_hook(
-                Some(tmp.path()),
-                "myproject-agent-1",
-                &scripts(),
-                &mut |s| match s {
-                    Stage::Built => set(0o500),
-                    Stage::RenameFailed => set(0o700),
-                    Stage::MovedAside => {}
-                },
-            )
-            .expect_err("EACCES must not be retried");
+        let err = prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &scripts(), &mut |s| {
+            if s == Stage::Built {
+                for entry in std::fs::read_dir(&parent).unwrap() {
+                    std::fs::remove_dir_all(entry.unwrap().path()).unwrap();
+                }
+            }
+        })
+        .expect_err("a vanished source must not be retried");
 
         match err {
             ScriptsDirError::Io { source, .. } => {
-                assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied, "{source}");
+                assert_eq!(source.kind(), std::io::ErrorKind::NotFound, "{source}");
             }
-            other => panic!("expected Io(PermissionDenied), got {other}"),
+            other => panic!("expected Io(NotFound), got {other}"),
         }
         assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// The retry bound holds: if every attempt loses to a fresh differing
+    /// occupant, prepare gives up with the attempt count in the error rather
+    /// than looping forever, and every tree it moved aside is removed.
+    #[cfg(unix)]
+    #[test]
+    fn retry_exhaustion_errors_and_cleans_up() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+        let mut planted = 0;
+
+        let err =
+            prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &other_scripts(), &mut |s| {
+                if s == Stage::MovedAside {
+                    planted += 1;
+                    std::fs::create_dir(&dir).unwrap();
+                    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+                    std::fs::write(dir.join("rival.sh"), "x").unwrap();
+                }
+            })
+            .expect_err("a rival that always wins must exhaust the retries");
+
+        assert_eq!(planted, MAX_INSTALL_ATTEMPTS, "one move-aside per attempt");
+        let msg = err.to_string();
+        assert!(msg.contains(&format!("after {MAX_INSTALL_ATTEMPTS} attempts")), "{msg}");
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// Script names get the same single-component rule as the container name:
+    /// one is joined onto the staging dir and chmod'd 0755, so `..` or a
+    /// separator would write outside it. Refused before anything is created.
+    #[test]
+    fn traversing_script_name_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        for name in ["../escape.sh", "sub/x.sh", "..", "", "x.sh/"] {
+            let mut bad = scripts();
+            bad.push((name, "x"));
+            let err = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &bad)
+                .expect_err("must be rejected");
+            assert!(err.to_string().contains("script name"), "{name:?}: {err}");
+        }
+        assert!(!tmp.path().join("stibbons").exists(), "nothing created for a refused name");
     }
 
     /// A foreign occupant that appears at the target mid-install (here our own
@@ -1184,10 +1237,12 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
 
+        // A NUL byte passes the single-component check but fails the write
+        // itself, so the failure lands mid-build, after staging exists.
         let mut bad = scripts();
-        bad.push(("missing/sub.sh", "x"));
+        bad.push(("bad\0name.sh", "x"));
         prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &bad)
-            .expect_err("write into a missing subdir must fail");
+            .expect_err("a write that fails mid-build must fail the prepare");
 
         assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
         assert_complete(&dir, &scripts());
