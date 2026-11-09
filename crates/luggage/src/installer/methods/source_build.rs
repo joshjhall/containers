@@ -88,11 +88,13 @@ pub fn compiler_launcher_from_env() -> Result<Option<String>> {
 /// two-hour cold compile. Anything outside `[A-Za-z0-9._/+-]` is refused:
 /// `make` word-splits `$(CC)`, so `ccache --foo` would become a launcher plus
 /// a stray flag, and shell metacharacters would run as code in the build.
+/// A value whose last `/`-segment is empty, `.` or `..` (`/`, `.`, `..`,
+/// `bin/`, `/usr/..`) names a directory, not a program, and is refused too.
 ///
 /// # Errors
 ///
-/// [`LuggageError::Catalog`] naming the variable for an empty value or one
-/// with a character outside `[A-Za-z0-9._/+-]`.
+/// [`LuggageError::Catalog`] naming the variable for an empty value, one with
+/// a character outside `[A-Za-z0-9._/+-]`, or one that names a directory.
 pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
     let Some(raw) = raw else { return Ok(None) };
     // A conservative charset: a bare program name or a path. `configure`
@@ -100,8 +102,14 @@ pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
     // `eval`), and these steps run as root, so a `;`, `$(...)` or backtick
     // here would execute as shell code rather than name a launcher.
     let launcher_char = |c: char| c.is_ascii_alphanumeric() || "._/+-".contains(c);
+    // The program's own name: what is left after the last `/`.
+    let program = raw.rsplit('/').next().unwrap_or(raw);
     // A leading `-` would read as a flag, not a program (`--foo cc`).
-    if raw.is_empty() || raw.starts_with('-') || !raw.chars().all(launcher_char) {
+    if raw.is_empty()
+        || raw.starts_with('-')
+        || !raw.chars().all(launcher_char)
+        || matches!(program, "" | "." | "..")
+    {
         return Err(LuggageError::Catalog(format!(
             "{COMPILER_LAUNCHER_ENV} must name a single launcher program (e.g. `ccache`), \
              got `{raw}`; unset it to build without one",
@@ -121,29 +129,50 @@ pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
 ///    streaming runner passes the process env through to every step, so an
 ///    image-level `CC=clang` would otherwise reach `configure` unwrapped but
 ///    be silently replaced by `cc` once the launcher is on;
-/// 3. else the POSIX defaults `cc`/`c++`, the names autoconf and node's gyp
-///    fall back to when neither is set.
+/// 3. else the first of `gcc`, `cc` (for `CXX`: `g++`, `c++`) found on
+///    `PATH` — the order autoconf's `AC_PROG_CC`/`AC_PROG_CXX` probe in, so
+///    an image whose `cc` is not its `gcc` still gets the compiler
+///    `configure` would have picked;
+/// 4. else nothing: the variable is left as it was. A C-only image has no
+///    C++ compiler, and a `CXX` naming one that does not exist would turn
+///    an unwrapped build's "no C++" into a hard failure.
 ///
 /// A blank value at either level counts as unset, as autoconf's
 /// `test -z "$CC"` treats it — wrapping it would hand ccache no compiler.
+/// A base that already starts with the launcher (an inherited
+/// `CC="ccache gcc"`) is kept as-is rather than wrapped a second time.
 ///
-/// `inherited` looks a variable up in the process environment; it is a
-/// parameter so tests can supply one without `std::env::set_var`.
+/// `inherited` looks a variable up in the process environment and `on_path`
+/// reports whether a program is executable on `PATH`; both are parameters
+/// so tests can supply them without `std::env::set_var`.
 fn apply_compiler_launcher(
     env: &mut BTreeMap<String, String>,
     launcher: &str,
     inherited: impl Fn(&str) -> Option<String>,
+    on_path: impl Fn(&str) -> bool,
 ) {
-    for (var, default) in [("CC", "cc"), ("CXX", "c++")] {
+    for (var, probe) in [("CC", ["gcc", "cc"]), ("CXX", ["g++", "c++"])] {
         let set = |v: &String| !v.trim().is_empty();
-        let base = env
+        let Some(base) = env
             .get(var)
             .filter(|v| set(v))
             .cloned()
             .or_else(|| inherited(var).filter(set))
-            .unwrap_or_else(|| default.to_owned());
-        env.insert(var.to_owned(), format!("{launcher} {base}"));
+            .or_else(|| probe.into_iter().find(|p| on_path(p)).map(str::to_owned))
+        else {
+            continue;
+        };
+        let wrapped =
+            if already_launched(&base, launcher) { base } else { format!("{launcher} {base}") };
+        env.insert(var.to_owned(), wrapped);
     }
+}
+
+/// `true` when `base`'s first word is `launcher` — compared by file name, so
+/// `ccache gcc` counts as launched for both `ccache` and `/opt/x/ccache`.
+fn already_launched(base: &str, launcher: &str) -> bool {
+    let name = |s: &str| s.rsplit('/').next().unwrap_or(s).to_owned();
+    base.split_whitespace().next().is_some_and(|first| name(first) == name(launcher))
 }
 
 /// Run the source-build flow.
@@ -228,9 +257,15 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
     // 3. Run the steps in order; the first failure aborts the rest.
     let mut env = build_env(ctx);
     if let Some(launcher) = ctx.compiler_launcher {
-        apply_compiler_launcher(&mut env, launcher, |var| std::env::var(var).ok());
+        apply_compiler_launcher(
+            &mut env,
+            launcher,
+            |var| std::env::var(var).ok(),
+            crate::installer::syspackages::on_path,
+        );
+        let shown = |var: &str| env.get(var).map_or("unset", String::as_str);
         let note =
-            format!("compiler launcher: {launcher} (CC=`{}`, CXX=`{}`)", env["CC"], env["CXX"]);
+            format!("compiler launcher: {launcher} (CC=`{}`, CXX=`{}`)", shown("CC"), shown("CXX"));
         if let Some(l) = ctx.log {
             l.message(&note);
         } else {

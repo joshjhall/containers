@@ -12,11 +12,17 @@ How it is wired:
 - **luggage opt-in.** `LUGGAGE_COMPILER_LAUNCHER=<program>` makes the
   `source-build` method prefix that program onto `CC`/`CXX` for every build step.
   It wraps the catalog's own `CC`/`CXX` if the method exports one, else a
-  non-empty `CC`/`CXX` inherited from luggage's environment, else `cc`/`c++`, so
-  caching never changes which compiler the build uses. When the variable is unset (the default, and every production
-  install), the build env is exactly what the catalog wrote. An empty or
-  multi-word value is a hard error, never a silent "off". Other install methods
-  ignore it.
+  non-empty `CC`/`CXX` inherited from luggage's environment, else the first of
+  `gcc`, `cc` (`g++`, `c++` for `CXX`) on `PATH`. That is the order autoconf's
+  `AC_PROG_CC`/`AC_PROG_CXX` probe in, so caching never changes which compiler
+  the build uses (#1613). If none of those exists, the variable is left unset,
+  so a C-only image never gets a `CXX` that names a missing compiler. A
+  compiler that already starts with the launcher (`CC="ccache gcc"`) is kept
+  as-is, not wrapped twice. When the variable is unset (the default, and every
+  production install), the build env is exactly what the catalog wrote. An
+  empty or multi-word value, or one naming a directory (`/`, `.`, `..`,
+  `bin/`), is a hard error, never a silent "off". Other install methods ignore
+  it.
 - **Nothing installed in the image under test.** A ccache *package* would
   pull in its own runtime libraries (`libstdc++`, `zstd`, `xxhash` on alpine).
   Those could mask a runtime dependency the catalog forgot, so a cell would
