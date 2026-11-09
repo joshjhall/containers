@@ -67,8 +67,13 @@ test_build_deps_removed_runtime_kept() {
             "present-$pkg"
     done
     # The compiler binaries themselves are gone, not just the package records.
-    assert_command_in_container "$LUGGAGE_IMAGE" \
-        "command -v g++ make python3 | command wc -l" "0"
+    # Checked one at a time: `command -v a b c` succeeds if any one resolves,
+    # and a bare count would match "0" as a substring of "10".
+    for pkg in g++ make python3; do
+        assert_command_in_container "$LUGGAGE_IMAGE" \
+            "command -v $pkg >/dev/null && echo bin-present-$pkg || echo bin-absent-$pkg" \
+            "bin-absent-$pkg"
+    done
 }
 
 test_report_records_removed_build_deps() {
