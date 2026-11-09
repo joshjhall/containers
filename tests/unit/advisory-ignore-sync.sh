@@ -56,8 +56,11 @@ _osv_ids() {
 _block_literal_count() {
     command awk '
         /^[[:space:]]*ignore[[:space:]]*=[[:space:]]*\[/ { inside = 1 }
-        inside { line = $0; sub(/#.*/, "", line); print line }
-        inside && /\][[:space:]]*(#.*)?$/ { inside = 0 }
+        inside {
+            line = $0; sub(/#.*/, "", line); print line
+            # Close on the code part only: a `]` inside a comment is not the end.
+            if (line ~ /\][[:space:]]*$/) inside = 0
+        }
     ' "$1" |
         command grep -oE 'RUSTSEC-[0-9]{4}-[0-9]{4}' |
         command sort -u |
@@ -118,10 +121,13 @@ test_deny_ids_in_osv() {
         "every deny.toml RUSTSEC ignore must also be in .osv-scanner.toml"
 }
 
+# _bare_entries <file> — audit.toml entry lines with no (or an empty) reason.
+_bare_entries() {
+    command grep -E '^[[:space:]]*"RUSTSEC-[0-9]{4}-[0-9]{4}",?[[:space:]]*(#[[:space:]]*)?$' "$1" || true
+}
+
 test_audit_entries_have_reasons() {
-    local bare
-    bare="$(command grep -E '^[[:space:]]*"RUSTSEC-[0-9]{4}-[0-9]{4}",?[[:space:]]*(#[[:space:]]*)?$' "$AUDIT" || true)"
-    assert_equals "" "$bare" ".cargo/audit.toml entries need a '# reason' comment"
+    assert_equals "" "$(_bare_entries "$AUDIT")" ".cargo/audit.toml entries need a '# reason' comment"
 }
 
 # The guard must actually discriminate: dropping an id from a scratch copy of
@@ -129,6 +135,7 @@ test_audit_entries_have_reasons() {
 test_mutation_dropped_id_detected() {
     local scratch="$TEST_SCRATCH_BASE/advisory-sync-mutation" dropped missing
     dropped="$(printf '%s\n' "$AUDIT_IDS" | command head -n 1)"
+    assert_not_empty "$dropped" "need an audit.toml id to drop, or this mutation passes vacuously"
     /bin/mkdir -p "$scratch"
     command grep -v "\"$dropped\"" "$AUDIT" >"$scratch/audit.toml"
     missing="$(_missing "$DENY_IDS" "$(_audit_ids "$scratch/audit.toml")")"
@@ -142,6 +149,7 @@ test_mutation_dropped_id_detected() {
 test_mutation_dropped_deny_id_detected() {
     local scratch="$TEST_SCRATCH_BASE/advisory-sync-mutation-deny" dropped extra
     dropped="$(printf '%s\n' "$DENY_IDS" | command tail -n 1)"
+    assert_not_empty "$dropped" "need a deny.toml id to drop, or this mutation passes vacuously"
     /bin/mkdir -p "$scratch"
     command grep -v "id = \"$dropped\"" "$DENY" >"$scratch/deny.toml"
     extra="$(_missing "$AUDIT_IDS" "$(_deny_ids "$scratch/deny.toml")")"
@@ -160,8 +168,46 @@ test_mutation_unparsed_shape_detected() {
     parsed="$(_count "$(_audit_ids "$scratch/audit.toml")")"
     literal="$(_block_literal_count "$scratch/audit.toml")"
     /bin/rm -rf "$scratch"
-    assert_not_equals "$literal" "$parsed" \
-        "a second id on one line must make the literal count exceed the parsed count"
+    assert_equals "$((parsed + 1))" "$literal" \
+        "a second id on one line must make the literal count exceed the parsed count by exactly one"
+}
+
+# A `]` inside a comment within the block must not end the literal count early.
+test_mutation_bracket_in_comment_ignored() {
+    local scratch="$TEST_SCRATCH_BASE/advisory-sync-mutation-bracket" literal
+    /bin/mkdir -p "$scratch"
+    command sed -E '0,/^[[:space:]]*"RUSTSEC-/s/^([[:space:]]*"RUSTSEC-[^"]*",).*/\1 # see [notes]/' "$AUDIT" \
+        >"$scratch/audit.toml"
+    literal="$(_block_literal_count "$scratch/audit.toml")"
+    /bin/rm -rf "$scratch"
+    assert_equals "$(_count "$AUDIT_IDS")" "$literal" \
+        "a ']' in an entry comment must not cut the ignore block short"
+}
+
+# The osv rule must be able to fail: an id dropped from .osv-scanner.toml is
+# reported as exactly that id missing.
+test_mutation_dropped_osv_id_detected() {
+    local scratch="$TEST_SCRATCH_BASE/advisory-sync-mutation-osv" dropped missing
+    dropped="$(printf '%s\n' "$DENY_IDS" | command head -n 1)"
+    assert_not_empty "$dropped" "need a deny.toml id to drop, or this mutation passes vacuously"
+    /bin/mkdir -p "$scratch"
+    command grep -v "^id = \"$dropped\"" "$OSV" >"$scratch/osv.toml"
+    missing="$(_missing "$DENY_IDS" "$(_osv_ids "$scratch/osv.toml")")"
+    /bin/rm -rf "$scratch"
+    assert_equals "$dropped" "$missing" \
+        "removing $dropped from .osv-scanner.toml must be reported as exactly that id missing"
+}
+
+# The reason rule must be able to fail: stripping one entry's comment makes
+# _bare_entries return exactly that one line.
+test_mutation_missing_reason_detected() {
+    local scratch="$TEST_SCRATCH_BASE/advisory-sync-mutation-reason" bare
+    /bin/mkdir -p "$scratch"
+    command sed -E '0,/^[[:space:]]*"RUSTSEC-.*#/s/,[[:space:]]*#.*$/,/' "$AUDIT" >"$scratch/audit.toml"
+    bare="$(_bare_entries "$scratch/audit.toml")"
+    /bin/rm -rf "$scratch"
+    assert_equals "1" "$(_count "$bare")" \
+        "an entry with its reason stripped must be reported (exactly one bare line)"
 }
 
 run_test test_each_file_yields_ids "each config parses to a non-empty RUSTSEC list"
@@ -174,5 +220,8 @@ run_test test_audit_entries_have_reasons ".cargo/audit.toml entries carry reason
 run_test test_mutation_dropped_id_detected "a dropped audit.toml id is detected"
 run_test test_mutation_dropped_deny_id_detected "a dropped deny.toml id is detected"
 run_test test_mutation_unparsed_shape_detected "an id in an unparsed shape trips the count guard"
+run_test test_mutation_bracket_in_comment_ignored "a ']' in a comment does not end the block"
+run_test test_mutation_dropped_osv_id_detected "a dropped .osv-scanner.toml id is detected"
+run_test test_mutation_missing_reason_detected "an audit.toml entry without a reason is detected"
 
 generate_report
