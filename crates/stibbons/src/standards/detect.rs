@@ -319,9 +319,144 @@ mod tests {
         assert!(!marker.exists(), "repo-local core.fsmonitor was executed");
     }
 
+    /// Env var that turns [`hostile_env_probe`] from a no-op into a probe.
+    #[cfg(unix)]
+    const PROBE_ROOT_VAR: &str = "STIBBONS_DETECT_PROBE_ROOT";
+
+    /// Prefix of the one line [`hostile_env_probe`] prints.
+    #[cfg(unix)]
+    const PROBE_TAG: &str = "PROBE_RESULT:";
+
+    /// Child half of the hostile-env tests: [`run_probe`] re-runs this test
+    /// binary filtered to this test, with the hostile env set on the child
+    /// only, so this process's own environment is never mutated. Without
+    /// [`PROBE_ROOT_VAR`] (e.g. a plain `cargo test -- --ignored`) it is a
+    /// no-op.
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "child process for run_probe; does nothing when run directly"]
+    fn hostile_env_probe() {
+        if let Some(root) = std::env::var_os(PROBE_ROOT_VAR) {
+            // libtest's `test <name> ... ` precedes this on the same line.
+            println!("\n{PROBE_TAG}{:?}", git_files(Path::new(&root)));
+        }
+    }
+
+    /// Hermetic git config for a child: no global/system config and no
+    /// default `$XDG_CONFIG_HOME/git/ignore`. Unlike [`hermetic`] this uses
+    /// no `GIT_CONFIG_COUNT`, which the hostile env below needs for itself.
+    #[cfg(unix)]
+    fn hermetic_child<'a>(cmd: &'a mut Command, xdg: &Path) -> &'a mut Command {
+        for var in GIT_REPO_ENV {
+            cmd.env_remove(var);
+        }
+        cmd.env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("XDG_CONFIG_HOME", xdg)
+    }
+
+    /// Run `git_files(root)` in a re-executed copy of this test binary whose
+    /// environment carries `hostile`, and return the `{:?}` of its result.
+    /// Panics unless the child succeeded and printed exactly one probe line,
+    /// so a test filter that matches nothing can never pass vacuously.
+    #[cfg(unix)]
+    fn run_probe(root: &Path, hostile: &[(&str, &str)]) -> String {
+        // libtest names tests by module path without the crate name.
+        let module = module_path!().split_once("::").unwrap().1;
+        let xdg = tempfile::tempdir().unwrap();
+        let mut cmd = Command::new(std::env::current_exe().unwrap());
+        cmd.arg(format!("{module}::hostile_env_probe")).args([
+            "--exact",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ]);
+        hermetic_child(&mut cmd, xdg.path()).env(PROBE_ROOT_VAR, root);
+        cmd.envs(hostile.iter().copied());
+        let out = cmd.output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "probe child failed: {stdout}");
+        let lines: Vec<&str> = stdout.lines().filter_map(|l| l.strip_prefix(PROBE_TAG)).collect();
+        assert_eq!(lines.len(), 1, "probe did not run exactly once: {stdout}");
+        lines[0].to_string()
+    }
+
+    /// Control: the same `ls-files` with `hostile` but none of the hardening
+    /// (no `-c` pins, no env stripping), showing what git does unguarded.
+    #[cfg(unix)]
+    fn plain_ls_files(root: &Path, hostile: &[(&str, &str)]) -> Option<Vec<String>> {
+        let xdg = tempfile::tempdir().unwrap();
+        let mut cmd = Command::new("git");
+        cmd.arg("-C").arg(root).args(["ls-files", "-z", "--cached", "--others"]);
+        hermetic_child(&mut cmd, xdg.path()).envs(hostile.iter().copied());
+        run_ls_files(cmd)
+    }
+
+    /// A tempdir repo holding one committed-to-index file `name`.
+    #[cfg(unix)]
+    fn repo_with(name: &str) -> tempfile::TempDir {
+        let repo = tempfile::tempdir().unwrap();
+        assert!(git(repo.path(), &["init", "-q"]), "git init failed");
+        std::fs::write(repo.path().join(name), "").unwrap();
+        assert!(git(repo.path(), &["add", name]));
+        repo
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn git_files_ignores_inherited_git_dir() {
+        let root = repo_with("a.sh");
+        let decoy = repo_with("decoy.py");
+        let git_dir = decoy.path().join(".git");
+        let hostile = [("GIT_DIR", git_dir.to_str().unwrap())];
+
+        // Positive control: unguarded git reads the decoy's index, listing a
+        // file that exists only in the decoy.
+        let plain = plain_ls_files(root.path(), &hostile).expect("control ls-files failed");
+        assert!(
+            plain.iter().any(|f| f == "decoy.py"),
+            "control: inherited GIT_DIR was not honored: {plain:?}"
+        );
+
+        assert_eq!(run_probe(root.path(), &hostile), format!("{:?}", Some(files(&["a.sh"]))));
+    }
+
+    /// Either guard alone (the `GIT_CONFIG_COUNT` strip or the
+    /// `-c core.fsmonitor=false` pin) defeats this; it proves the outcome,
+    /// while `ls_files_command_pins_config_and_strips_repo_env` pins both.
+    #[cfg(unix)]
+    #[test]
+    fn git_files_ignores_env_injected_fsmonitor() {
+        let root = repo_with("a.sh");
+        // The marker lives outside the repo so it can never alter the list.
+        let elsewhere = tempfile::tempdir().unwrap();
+        let marker = elsewhere.path().join("MARKER");
+        let hook = format!("touch '{}'; false #", marker.display());
+        let hostile = [
+            ("GIT_CONFIG_COUNT", "1"),
+            ("GIT_CONFIG_KEY_0", "core.fsmonitor"),
+            ("GIT_CONFIG_VALUE_0", hook.as_str()),
+        ];
+
+        // Positive control: unguarded git runs the env-injected hook.
+        assert!(plain_ls_files(root.path(), &hostile).is_some());
+        assert!(
+            marker.exists(),
+            "control: this git never ran an env-injected core.fsmonitor for \
+             ls-files, so this test cannot observe the guard (environment limit)"
+        );
+        std::fs::remove_file(&marker).unwrap();
+
+        assert_eq!(run_probe(root.path(), &hostile), format!("{:?}", Some(files(&["a.sh"]))));
+        assert!(!marker.exists(), "env-injected core.fsmonitor was executed");
+    }
+
     /// Pins the guards the fsmonitor test cannot observe: the hooksPath
     /// override (ls-files runs no hooks) and the repo-selecting env removal.
-    /// Asserting on the builder avoids mutating this process's environment.
+    /// Asserting on the builder avoids mutating this process's environment;
+    /// the runtime effect of the removal is proven by
+    /// `git_files_ignores_inherited_git_dir` and
+    /// `git_files_ignores_env_injected_fsmonitor`.
     #[test]
     fn ls_files_command_pins_config_and_strips_repo_env() {
         let cmd = ls_files_command(Path::new("/r"));
