@@ -17,19 +17,27 @@ How it is wired:
   install), the build env is exactly what the catalog wrote. An empty or
   multi-word value is a hard error, never a silent "off". Other install methods
   ignore it.
+- **Nothing installed in the image under test.** A ccache *package* would
+  pull in its own runtime libraries (`libstdc++`, `zstd`, `xxhash` on alpine).
+  Those could mask a runtime dependency the catalog forgot, so a cell would
+  pass that a clean install fails. Instead, the runner downloads a pinned
+  upstream musl-static ccache release (`CCACHE_VERSION` in the workflow),
+  verifies its sha256 per architecture, and bind-mounts the binary read-only
+  at `/opt/evidence-ccache/ccache`. To bump it, update the version and both
+  checksums from the release's asset digests.
 - **In the container.** The cell mounts
   [`bin/lib/evidence-ccache-entry.sh`](../../bin/lib/evidence-ccache-entry.sh)
   and runs luggage through it. The script:
-  1. installs `ccache` with the image's package manager (`apk`, `apt-get`,
-     `dnf` or `microdnf`);
-  2. zeroes the stats;
+  1. checks that the mounted binary runs (`ccache --version`);
+  2. zeroes the stats and puts the binary's directory on `PATH`;
   3. only then exports `LUGGAGE_COMPILER_LAUNCHER=ccache`;
   4. runs the install, writes `ccache -s` to `out/ccache-stats.txt`, and exits
      with luggage's status.
 
-  If ccache cannot be installed, the build runs uncached with a `::warning::`.
-  Cache plumbing never decides a verdict, and nothing ccache-related ever
-  reaches a production image.
+  If the binary cannot be fetched, fails its checksum, or will not run, the
+  build runs uncached with a `::warning::`. Cache plumbing never decides a
+  verdict (the stats and save steps are also `continue-on-error`), and nothing
+  ccache-related ever reaches a production image.
 - **Hashing.** luggage extracts each build into a random
   `/tmp/.../luggage-build-*` directory. `CCACHE_BASEDIR=/tmp` plus
   `CCACHE_NOHASHDIR=1` keep that path out of the hash. Without them every run

@@ -449,6 +449,29 @@ test_ccache_post_steps_never_fail_the_cell() {
     done
 }
 
+test_ccache_binary_is_fetched_static_and_verified() {
+    # ccache must never be installed into the image under test (its package
+    # libs could mask a missing catalog dep). The runner fetches a pinned
+    # musl-static release, checks its sha256, and mounts it read-only.
+    local fetch run
+    fetch="$(_step "Fetch static ccache")"
+    assert_contains "$fetch" 'if: ${{ matrix.source_build }}' "fetch runs only for source-build cells"
+    assert_contains "$fetch" 'musl-static' "the binary is the static musl build"
+    assert_contains "$fetch" 'sha256sum -c -' "the download is checksum-verified"
+    if /usr/bin/grep -qE 'CCACHE_SHA256_(X86_64|AARCH64): [0-9a-f]{64}$' <<<"$fetch"; then
+        assert_true true "per-arch sha256 pins are full digests"
+    else
+        assert_true false "per-arch sha256 pins must be 64-hex digests"
+    fi
+    run="$(_step "Run luggage install inside the base image")"
+    assert_contains "$run" '"$CCACHE_BIN:/opt/evidence-ccache/ccache:ro"' "the static binary is mounted read-only"
+    if /usr/bin/grep -qE 'apk add|apt-get install|dnf install' <<<"$run$(/usr/bin/cat "$PROJECT_ROOT/bin/lib/evidence-ccache-entry.sh")"; then
+        assert_true false "nothing may install ccache into the image under test"
+    else
+        assert_true true "no package install of ccache in the cell"
+    fi
+}
+
 test_ccache_actions_are_sha_pinned() {
     # Repo convention: third-party actions are pinned by commit SHA with a
     # version comment, never a movable tag.
@@ -501,6 +524,7 @@ run_test test_ccache_key_is_per_tool_and_tuple "ccache key is tool-tuple-major-v
 run_test test_ccache_major_never_fails_the_cell "a version with no numeric major never fails the cell (#1594)"
 run_test test_ccache_run_wires_the_cache_into_the_container "docker run mounts the cache and wraps luggage (#1594)"
 run_test test_ccache_post_steps_never_fail_the_cell "ccache stats/save failures never skip the evidence row (#1594)"
+run_test test_ccache_binary_is_fetched_static_and_verified "ccache is a verified static binary, never installed in the image (#1594)"
 run_test test_ccache_actions_are_sha_pinned "ccache cache actions are SHA-pinned (#1594)"
 run_test test_ccache_guards_discriminate "ccache gate assertion catches a dropped gate"
 

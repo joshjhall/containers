@@ -522,6 +522,40 @@ jobs:
             echo "dir=$RUNNER_TEMP/ccache"
           } >> "$GITHUB_OUTPUT"
 
+      # ccache is NOT installed into the image under test: its package would
+      # pull runtime libs (libstdc++, zstd, xxhash on alpine) that could mask a
+      # dep the catalog forgot, turning a failing cell into a pass. Instead a
+      # pinned, checksum-verified musl-static release binary is fetched on the
+      # runner and bind-mounted read-only, so the container's package set is
+      # exactly what luggage installs. Any failure here only means an uncached
+      # build: `bin` stays empty and the entry script never opts in.
+      - name: Fetch static ccache (source-build cells)
+        id: ccache-bin
+        if: ${{ matrix.source_build }}
+        env:
+          CCACHE_VERSION: 4.14.3
+          CCACHE_SHA256_X86_64: d553fac006ed93a37342cee9228cf4e13dd66690fa1a8075c54c7bace9b72ae6
+          CCACHE_SHA256_AARCH64: f13e56bdb02f62b6f08f54ac527a0a7674dff22ea607167f33621fe2f2ded37b
+        run: |
+          set -uo pipefail
+          case "$ARCH" in
+            amd64) CARCH=x86_64 SUM="$CCACHE_SHA256_X86_64" ;;
+            arm64) CARCH=aarch64 SUM="$CCACHE_SHA256_AARCH64" ;;
+            *) echo "::warning::no static ccache for arch $ARCH; building uncached"; exit 0 ;;
+          esac
+          NAME="ccache-${CCACHE_VERSION}-linux-${CARCH}-musl-static"
+          DEST="$RUNNER_TEMP/ccache-bin"
+          mkdir -p "$DEST"
+          if curl -fsSL --retry 3 -o "$DEST/$NAME.tar.xz" \
+              "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${NAME}.tar.xz" \
+            && echo "$SUM  $DEST/$NAME.tar.xz" | sha256sum -c - \
+            && tar -xJf "$DEST/$NAME.tar.xz" -C "$DEST" --strip-components=1 "$NAME/ccache" \
+            && [ -x "$DEST/ccache" ]; then
+            echo "bin=$DEST/ccache" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::could not fetch or verify static ccache $CCACHE_VERSION ($CARCH); building uncached"
+          fi
+
       - name: Restore ccache
         id: ccache-restore
         if: ${{ matrix.source_build }}
@@ -539,13 +573,17 @@ jobs:
           IMAGE: ${{ steps.digest.outputs.image_ref }}@${{ steps.digest.outputs.digest }}
           # Empty on a non-source cell, which leaves both arrays below empty.
           CCACHE_HOST_DIR: ${{ steps.ccache.outputs.dir }}
+          # Empty when the static binary could not be fetched: no mount, and
+          # the entry script builds uncached.
+          CCACHE_BIN: ${{ steps.ccache-bin.outputs.bin }}
         run: |
           mkdir -p out
-          # Source-build cells mount the host ccache dir and run luggage
-          # through bin/lib/evidence-ccache-entry.sh, which installs ccache in
-          # the throwaway container and only then sets
-          # LUGGAGE_COMPILER_LAUNCHER=ccache (an opt-in luggage never takes on
-          # its own, so production installs are unchanged). BASEDIR +
+          # Source-build cells mount the host ccache dir and the runner-fetched
+          # static ccache binary, and run luggage through
+          # bin/lib/evidence-ccache-entry.sh, which sets
+          # LUGGAGE_COMPILER_LAUNCHER only once that binary actually runs (an
+          # opt-in luggage never takes on its own, so production installs are
+          # unchanged). Nothing is installed into the image under test. BASEDIR +
           # NOHASHDIR are what make hits possible at all: luggage extracts each
           # build into a random /tmp/.../luggage-build-* dir, so without them
           # every absolute path, and so every hash, differs run to run.
@@ -570,6 +608,9 @@ jobs:
               -e CCACHE_COMPILERCHECK=content
               -e CCACHE_STATS_OUT=/out/ccache-stats.txt
             )
+            if [ -n "$CCACHE_BIN" ]; then
+              CCACHE_FLAGS+=(-v "$CCACHE_BIN:/opt/evidence-ccache/ccache:ro")
+            fi
             CCACHE_WRAP=(/usr/local/bin/evidence-ccache-entry)
           fi
           # Emulated legs pin the container platform so QEMU runs the foreign

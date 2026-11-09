@@ -2,7 +2,8 @@
 # Unit tests: bin/lib/evidence-ccache-entry.sh (#1594).
 #
 # The entry script wraps a source-build evidence cell's `luggage install`. It
-# must opt luggage into ccache ONLY once ccache is actually installed, pass the
+# must opt luggage into ccache ONLY once the mounted static binary runs, never
+# install anything into the image under test, pass the
 # wrapped command's exit status through unchanged, and never let cache
 # plumbing decide the evidence verdict. Every external command is a PATH stub
 # in a mktemp dir; nothing is installed.
@@ -34,42 +35,65 @@ _sandbox() {
     /usr/bin/cat >"$d/bin/luggage" <<'STUB'
 #!/bin/sh
 printf '%s\n' "${LUGGAGE_COMPILER_LAUNCHER-<unset>}" >"$SANDBOX/launcher-seen"
+command -v ccache >"$SANDBOX/ccache-on-path" || :
 exit "${LUGGAGE_STUB_RC:-0}"
 STUB
     /usr/bin/chmod +x "$d/bin/luggage"
     printf '%s\n' "$d"
 }
 
-# _stub_ccache <dir> — a working ccache that logs its calls.
+# _stub_ccache <dir> — a working static ccache, mounted (as the workflow
+# does) OUTSIDE PATH at <dir>/mnt/ccache; it logs its calls.
 _stub_ccache() {
-    /usr/bin/cat >"$1/bin/ccache" <<'STUB'
+    /usr/bin/mkdir -p "$1/mnt"
+    /usr/bin/cat >"$1/mnt/ccache" <<'STUB'
 #!/bin/sh
 printf '%s\n' "$*" >>"$SANDBOX/ccache-calls"
 [ "$1" = "-s" ] && printf 'Hits: 42 / 50 (84.00 %%)\n'
 exit 0
 STUB
-    /usr/bin/chmod +x "$1/bin/ccache"
+    /usr/bin/chmod +x "$1/mnt/ccache"
+}
+
+# _stub_package_managers <dir> — every package manager the old entry script
+# used, each recording that it was called. The image under test must never
+# gain packages from cache plumbing (they could mask a missing catalog dep).
+_stub_package_managers() {
+    local pm
+    for pm in apk apt-get dnf microdnf; do
+        printf '#!/bin/sh\nprintf "%%s\\n" "%s $*" >>"$SANDBOX/pm-calls"\n' "$pm" >"$1/bin/$pm"
+        /usr/bin/chmod +x "$1/bin/$pm"
+    done
 }
 
 # _run <dir> [env...] — run the entry with ONLY the sandbox stubs + a few
 # symlinked core tools on PATH (so the host's real apk/apt-get/ccache are
-# invisible), under env -i so BASH_ENV cannot rebuild PATH.
+# invisible), under env -i so BASH_ENV cannot rebuild PATH. The stub luggage
+# also records whether `ccache` resolves on the PATH it was given.
 _run() {
     local d="$1"
     shift
-    /usr/bin/env -i PATH="$d/bin:$d/sys" SANDBOX="$d" CCACHE_STATS_OUT="$d/out/stats.txt" "$@" \
+    /usr/bin/env -i PATH="$d/bin:$d/sys" SANDBOX="$d" CCACHE_STATS_OUT="$d/out/stats.txt" \
+        EVIDENCE_CCACHE_BIN="$d/mnt/ccache" "$@" \
         /bin/sh "$ENTRY" luggage install node@22.22.3
 }
 
-test_opts_in_when_ccache_is_present() {
+test_opts_in_when_ccache_is_mounted() {
     local d rc=0
     d="$(_sandbox)"
     _stub_ccache "$d"
+    _stub_package_managers "$d"
     _run "$d" || rc=$?
     assert_equals "0" "$rc" "wrapped success passes through"
     assert_equals "ccache" "$(/usr/bin/cat "$d/launcher-seen")" "luggage sees LUGGAGE_COMPILER_LAUNCHER=ccache"
-    assert_equals $'-z\n-s' "$(/usr/bin/cat "$d/ccache-calls")" "stats zeroed before, read after"
+    assert_equals "$d/mnt/ccache" "$(/usr/bin/cat "$d/ccache-on-path")" "the mounted binary is what luggage's PATH resolves"
+    assert_equals $'--version\n-z\n-s' "$(/usr/bin/cat "$d/ccache-calls")" "probed, stats zeroed before, read after"
     assert_contains "$(/usr/bin/cat "$d/out/stats.txt")" "Hits: 42" "stats written for the summary"
+    if [ -e "$d/pm-calls" ]; then
+        assert_true false "no package manager may run: $(/usr/bin/cat "$d/pm-calls")"
+    else
+        assert_true true "nothing is installed into the image under test"
+    fi
     /usr/bin/rm -rf "$d"
 }
 
@@ -83,78 +107,23 @@ test_failure_status_passes_through() {
     /usr/bin/rm -rf "$d"
 }
 
-test_installs_ccache_via_apk() {
-    local d rc=0
-    d="$(_sandbox)"
-    # apk "installs" ccache by dropping the stub into place.
-    /usr/bin/cat >"$d/bin/apk" <<STUB
-#!/bin/sh
-printf '%s\n' "\$*" >"\$SANDBOX/apk-args"
-/bin/cp "$d/ccache.pending" "$d/bin/ccache"
-STUB
-    /usr/bin/chmod +x "$d/bin/apk"
-    _stub_ccache "$d"
-    /usr/bin/mv "$d/bin/ccache" "$d/ccache.pending"
-    _run "$d" || rc=$?
-    assert_equals "0" "$rc" "install + build succeed"
-    assert_equals "add --no-cache ccache" "$(/usr/bin/cat "$d/apk-args")" "alpine installs via apk"
-    assert_equals "ccache" "$(/usr/bin/cat "$d/launcher-seen")" "launcher set after a fresh install"
-    /usr/bin/rm -rf "$d"
-}
-
-# _pm_installs <manager> <expected argv> — a stub <manager> that records its
-# argv and "installs" ccache; asserts the exact argv and the opt-in.
-_pm_installs() {
-    local pm="$1" want="$2" d rc=0
-    d="$(_sandbox)"
-    _stub_ccache "$d"
-    /usr/bin/mv "$d/bin/ccache" "$d/ccache.pending"
-    /usr/bin/cat >"$d/bin/$pm" <<STUB
-#!/bin/sh
-printf '%s\n' "\$*" >>"\$SANDBOX/pm-args"
-/bin/cp "$d/ccache.pending" "$d/bin/ccache"
-STUB
-    /usr/bin/chmod +x "$d/bin/$pm"
-    _run "$d" || rc=$?
-    assert_equals "0" "$rc" "$pm: install + build succeed"
-    assert_equals "$want" "$(/usr/bin/cat "$d/pm-args")" "$pm argv"
-    assert_equals "ccache" "$(/usr/bin/cat "$d/launcher-seen")" "$pm: launcher set after install"
-    /usr/bin/rm -rf "$d"
-}
-
-test_installs_ccache_via_apt_get() {
-    _pm_installs apt-get $'update\ninstall -y --no-install-recommends ccache'
-}
-
-test_installs_ccache_via_dnf() {
-    _pm_installs dnf "install -y ccache"
-}
-
-test_installs_ccache_via_microdnf() {
-    _pm_installs microdnf "install -y ccache"
-}
-
-test_no_package_manager_falls_back() {
+test_missing_binary_falls_back_without_installing() {
+    # No mount (the fetch failed): build uncached, and still never reach for
+    # a package manager — even one that would happily "install" ccache.
     local d rc=0 err
     d="$(_sandbox)"
-    err="$(_run "$d" 2>&1 >/dev/null)" || rc=$?
-    assert_equals "0" "$rc" "no package manager never fails the cell"
-    assert_contains "$err" "no known package manager" "the missing manager is named"
-    assert_equals "<unset>" "$(/usr/bin/cat "$d/launcher-seen")" "luggage builds without a launcher"
-    /usr/bin/rm -rf "$d"
-}
-
-test_falls_back_uncached_when_install_fails() {
-    local d rc=0 err
-    d="$(_sandbox)"
-    printf '#!/bin/sh\nexit 1\n' >"$d/bin/apk"
-    /usr/bin/chmod +x "$d/bin/apk"
+    _stub_package_managers "$d"
     # Even a launcher inherited from the caller is dropped: luggage would
     # otherwise spawn a `ccache` that does not exist and fail the cell.
     err="$(_run "$d" LUGGAGE_COMPILER_LAUNCHER=ccache 2>&1 >/dev/null)" || rc=$?
     assert_equals "0" "$rc" "cache plumbing never fails the cell"
     assert_equals "<unset>" "$(/usr/bin/cat "$d/launcher-seen")" "luggage builds without a launcher"
     assert_contains "$err" "::warning::" "the fallback is surfaced as a warning"
+    if [ -e "$d/pm-calls" ]; then
+        assert_true false "fallback must not install: $(/usr/bin/cat "$d/pm-calls")"
+    else
+        assert_true true "fallback installs nothing"
+    fi
     if [ -e "$d/out/stats.txt" ]; then
         assert_true false "no stats file when ccache never ran"
     else
@@ -163,16 +132,16 @@ test_falls_back_uncached_when_install_fails() {
     /usr/bin/rm -rf "$d"
 }
 
-test_install_success_without_ccache_falls_back() {
-    # A package manager can exit 0 yet leave no `ccache` on PATH. Opting
-    # luggage in then would make it spawn a missing launcher and fail the
-    # cell, so the post-install `command -v ccache` check must hold.
+test_unrunnable_binary_falls_back() {
+    # A mounted binary that will not execute (wrong arch, corrupt) must not
+    # opt luggage in, or every compile would fail the cell.
     local d rc=0 err
     d="$(_sandbox)"
-    printf '#!/bin/sh\nexit 0\n' >"$d/bin/apk"
-    /usr/bin/chmod +x "$d/bin/apk"
+    /usr/bin/mkdir -p "$d/mnt"
+    printf '#!/bin/sh\nexit 126\n' >"$d/mnt/ccache"
+    /usr/bin/chmod +x "$d/mnt/ccache"
     err="$(_run "$d" 2>&1 >/dev/null)" || rc=$?
-    assert_equals "0" "$rc" "a no-op install never fails the cell"
+    assert_equals "0" "$rc" "an unrunnable binary never fails the cell"
     assert_equals "<unset>" "$(/usr/bin/cat "$d/launcher-seen")" "luggage builds without a launcher"
     assert_contains "$err" "::warning::" "the fallback is surfaced as a warning"
     /usr/bin/rm -rf "$d"
@@ -185,7 +154,7 @@ test_stats_write_failure_keeps_the_build_status() {
     d="$(_sandbox)"
     _stub_ccache "$d"
     err="$(/usr/bin/env -i PATH="$d/bin:$d/sys" SANDBOX="$d" LUGGAGE_STUB_RC=3 \
-        CCACHE_STATS_OUT="$d/missing-dir/stats.txt" \
+        CCACHE_STATS_OUT="$d/missing-dir/stats.txt" EVIDENCE_CCACHE_BIN="$d/mnt/ccache" \
         /bin/sh "$ENTRY" luggage install node@22.22.3 2>&1 >/dev/null)" || rc=$?
     assert_equals "3" "$rc" "luggage's status survives a failed stats write"
     assert_contains "$err" "could not write ccache stats" "the stats failure is reported"
@@ -198,15 +167,10 @@ test_requires_a_command() {
     assert_equals "64" "$rc" "no command is a usage error"
 }
 
-run_test test_opts_in_when_ccache_is_present "opts luggage into ccache when it is present"
+run_test test_opts_in_when_ccache_is_mounted "opts luggage into the mounted static ccache, installing nothing"
 run_test test_failure_status_passes_through "a failed build's exit status passes through"
-run_test test_installs_ccache_via_apk "installs ccache with apk on alpine"
-run_test test_installs_ccache_via_apt_get "installs ccache with apt-get on debian/ubuntu"
-run_test test_installs_ccache_via_dnf "installs ccache with dnf on rhel"
-run_test test_installs_ccache_via_microdnf "installs ccache with microdnf on ubi-minimal"
-run_test test_no_package_manager_falls_back "falls back uncached when no package manager exists"
-run_test test_falls_back_uncached_when_install_fails "falls back to an uncached build when ccache cannot install"
-run_test test_install_success_without_ccache_falls_back "falls back when an install exits 0 but leaves no ccache"
+run_test test_missing_binary_falls_back_without_installing "no mounted ccache builds uncached and installs nothing"
+run_test test_unrunnable_binary_falls_back "an unrunnable mounted ccache builds uncached"
 run_test test_stats_write_failure_keeps_the_build_status "a failed stats write keeps luggage's exit status"
 run_test test_requires_a_command "refuses to run with no command"
 
