@@ -788,34 +788,14 @@ jobs:
               echo "Only timestamp updates detected — skipping commit"
               git checkout -- version-compatibility-matrix.json
             else
-              # Land the update as a PR with an API-created (GitHub-signed)
-              # commit instead of pushing to main (#1573): a direct push is
-              # unsigned and bypasses required checks. The head ref does not
-              # start with auto-patch/, so its merge does not re-enter this job.
-              source bin/lib/github-api-commit.sh
-              MATRIX_BRANCH="chore/compat-matrix-v${VERSION}"
-              printf 'chore: update compatibility matrix for v%s\n\nPassing test results from the automated patch release.\n' \
-                "$VERSION" > /tmp/matrix-message.txt
-              gh_api_publish_branch "$GITHUB_REPOSITORY" "$MATRIX_BRANCH" . \
-                /tmp/matrix-message.txt version-compatibility-matrix.json
-              # Reuses the open PR for the branch (a previous run, or a create
-              # whose response was lost) instead of opening a second one.
-              MATRIX_PR=$(gh_api_create_pr --base main --head "$MATRIX_BRANCH" \
-                --title "chore: update compatibility matrix for v${VERSION}" \
-                --body "Passing test results from the automated patch release v${VERSION}. Auto-merges when checks pass.")
+              # Land the update as an auto-merging PR with an API-created
+              # (GitHub-signed) commit instead of pushing to main (#1573).
+              # Create-or-reuse + auto-merge retry live in a sourced, unit-
+              # tested function (#1584).
+              source bin/lib/compat-matrix-pr.sh
+              MATRIX_PR=$(compat_matrix_publish_pr "$GITHUB_REPOSITORY" "$VERSION" . \
+                version-compatibility-matrix.json)
               echo "Matrix PR: $MATRIX_PR"
-              # Retry: auto-merge can be refused right after PR creation.
-              for attempt in 1 2 3 4 5; do
-                if gh pr merge "$MATRIX_PR" --auto --squash --delete-branch; then
-                  echo "Auto-merge enabled on attempt $attempt"
-                  break
-                fi
-                if [ "$attempt" -eq 5 ]; then
-                  echo "::warning::could not enable auto-merge on $MATRIX_PR; merge it manually"
-                else
-                  sleep 10
-                fi
-              done
             fi
           else
             echo "Warning: version-compatibility-matrix.json not found"

@@ -85,13 +85,17 @@ test_many_rows_one_pr_with_automerge() {
     assert_equals "1" "$(command grep -c '^pr merge .*--auto --squash --delete-branch' "$GH_LOG")" \
         "auto-merge is enabled on it"
     assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "in ONE API commit"
-    assert_equals "1" "$(command grep -c '^api -X POST repos/joshjhall/containers-db/git/refs -f ref=refs/heads/evidence/batch/4242 -f sha='"$(git -C "$db" rev-parse HEAD)"'$' "$GH_LOG")" \
-        "the branch is created through the API at the checkout's HEAD"
+    assert_equals "1" "$(command grep -c '^api -X POST repos/joshjhall/containers-db/git/refs -f ref=refs/heads/evidence-staging/batch/4242 -f sha='"$(git -C "$db" rev-parse HEAD)"'$' "$GH_LOG")" \
+        "the staging ref is created through the API at the checkout's HEAD"
     local p
     p="$(gh_stub_payload)"
-    assert_equals "joshjhall/containers-db evidence/batch/4242 $(git -C "$db" rev-parse HEAD)" \
+    assert_equals "joshjhall/containers-db evidence-staging/batch/4242 $(git -C "$db" rev-parse HEAD)" \
         "$(command jq -r '.variables.input | "\(.branch.repositoryNameWithOwner) \(.branch.branchName) \(.expectedHeadOid)"' "$p")" \
-        "the commit targets the batch branch, expecting the checkout's HEAD"
+        "the commit is built on the staging ref, expecting the checkout's HEAD"
+    assert_equals "1" "$(command grep -c '^api -X POST repos/joshjhall/containers-db/git/refs -f ref=refs/heads/evidence/batch/4242 -f sha=c0ffee0001$' "$GH_LOG")" \
+        "the batch branch is created only at the finished commit"
+    assert_equals "1" "$(command grep -c '^api -X DELETE repos/joshjhall/containers-db/git/refs/heads/evidence-staging/batch/4242$' "$GH_LOG")" \
+        "the staging ref is deleted"
     assert_equals "feat(evidence): record 5 evidence row(s) across 2 version file(s)" \
         "$(command jq -r '.variables.input.message.headline' "$p")" "headline carries the counts"
     assert_equals "3" "$(gh_stub_file "$p" tools/rust/versions/1.82.0.json | command jq '.tested|length')" \
@@ -199,6 +203,13 @@ test_api_commit_failure_fails_the_ingest_and_opens_no_pr() {
     GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_FAIL=1 _run "$rows" "$db"
     assert_equals "1" "$RC" "a failed API commit is a runtime error"
     assert_equals "0" "$(command grep -c '^pr create' "$GH_LOG" || true)" "no PR is opened for a commit that never landed"
+    # The stub keeps no ref store, so "no branch left behind" is read off the
+    # call log: evidence/batch/* is never created or moved (#1584) ...
+    assert_equals "0" "$(command grep -cE '^api -X (POST|PATCH) .*(refs/heads/)evidence/batch/' "$GH_LOG" || true)" \
+        "no evidence/batch/* ref is created or moved for a commit that never landed"
+    # ... and the staging ref the commit was attempted on is deleted.
+    assert_equals "1" "$(command grep -c '^api -X DELETE repos/joshjhall/containers-db/git/refs/heads/evidence-staging/batch/4242$' "$GH_LOG")" \
+        "the staging ref is deleted on the failure path"
 }
 
 test_unsafe_run_id_is_refused() {

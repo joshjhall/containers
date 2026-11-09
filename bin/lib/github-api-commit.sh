@@ -7,7 +7,8 @@
 # GitHub signs the result (`verification.verified == true`) for any token.
 #
 # Shared by bin/ingest-evidence-batch.sh (containers-db evidence PRs) and
-# .github/workflows/auto-patch.yml (patch branch + compatibility-matrix PR).
+# .github/workflows/auto-patch.yml (patch branch; the compatibility-matrix PR
+# via bin/lib/compat-matrix-pr.sh).
 #
 # The flow: stage the local working tree, create the remote branch at the
 # local HEAD (which must already exist on the remote), then send the staged

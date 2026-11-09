@@ -236,10 +236,10 @@ fi
 
 # Commit through the GitHub API, not git push: containers-db main requires
 # signed commits, and only an API-created commit is signed by GitHub (#1573).
-# The branch starts at the checkout's HEAD, which is on the remote's main.
-gh_api_ensure_branch "$DB_REPO" "$BRANCH" "$(git -C "$DB_PATH" rev-parse HEAD)" ||
-    die "could not create $BRANCH on $DB_REPO"
-gh_api_commit_worktree "$DB_REPO" "$BRANCH" "$DB_PATH" "$MSG_FILE" tools >/dev/null ||
+# The commit is built on a staging ref at the checkout's HEAD (on the remote's
+# main) and $BRANCH is pointed at it only once it is finished, so a failed
+# commit leaves no evidence/batch/* branch behind (#1584).
+gh_api_publish_branch "$DB_REPO" "$BRANCH" "$DB_PATH" "$MSG_FILE" tools >/dev/null ||
     die "could not commit evidence to $DB_REPO:$BRANCH"
 
 BODY="$(
