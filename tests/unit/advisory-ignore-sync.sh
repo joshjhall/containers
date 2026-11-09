@@ -49,6 +49,27 @@ _osv_ids() {
         command sort -u
 }
 
+# _block_literal_count <file> — every RUSTSEC id literal inside the file's
+# `ignore = [ ... ]` block, comments stripped. The parsers above each accept
+# one entry shape; this counts ids in ANY shape (bare string, several per line,
+# a single-line array), so an entry a parser skips makes the counts differ.
+_block_literal_count() {
+    command awk '
+        /^[[:space:]]*ignore[[:space:]]*=[[:space:]]*\[/ { inside = 1 }
+        inside { line = $0; sub(/#.*/, "", line); print line }
+        inside && /\][[:space:]]*(#.*)?$/ { inside = 0 }
+    ' "$1" |
+        command grep -oE 'RUSTSEC-[0-9]{4}-[0-9]{4}' |
+        command sort -u |
+        command wc -l |
+        command tr -d '[:space:]'
+}
+
+# _count <list> — number of non-empty lines in a newline list.
+_count() {
+    printf '%s\n' "$1" | command sed '/^$/d' | command wc -l | command tr -d '[:space:]'
+}
+
 # _missing <want> <have> — ids in the newline list <want> absent from <have>.
 _missing() {
     command comm -23 <(printf '%s\n' "$1") <(printf '%s\n' "$2") | command sed '/^$/d'
@@ -71,6 +92,15 @@ test_parsers_find_known_entry() {
     assert_contains "$DENY_IDS" "RUSTSEC-2023-0071" "deny.toml parser must find the rsa entry"
     assert_contains "$AUDIT_IDS" "RUSTSEC-2023-0071" "audit.toml parser must find the rsa entry"
     assert_contains "$OSV_IDS" "RUSTSEC-2023-0071" "osv parser must find the rsa entry"
+}
+
+# A parser that silently skips an entry written in another shape would let
+# drift pass; the shape-agnostic literal count catches the shortfall.
+test_parsers_see_every_entry() {
+    assert_equals "$(_block_literal_count "$DENY")" "$(_count "$DENY_IDS")" \
+        "deny.toml: every RUSTSEC id in the ignore block must be parsed (one '{ id = ... }' per line)"
+    assert_equals "$(_block_literal_count "$AUDIT")" "$(_count "$AUDIT_IDS")" \
+        ".cargo/audit.toml: every RUSTSEC id in the ignore block must be parsed (one quoted id per line)"
 }
 
 test_deny_ids_in_audit() {
@@ -107,12 +137,42 @@ test_mutation_dropped_id_detected() {
         "removing $dropped from audit.toml must be reported as exactly that id missing"
 }
 
+# The reverse direction: an id dropped from deny.toml must surface as an
+# audit.toml ignore that deny.toml no longer backs.
+test_mutation_dropped_deny_id_detected() {
+    local scratch="$TEST_SCRATCH_BASE/advisory-sync-mutation-deny" dropped extra
+    dropped="$(printf '%s\n' "$DENY_IDS" | command tail -n 1)"
+    /bin/mkdir -p "$scratch"
+    command grep -v "id = \"$dropped\"" "$DENY" >"$scratch/deny.toml"
+    extra="$(_missing "$AUDIT_IDS" "$(_deny_ids "$scratch/deny.toml")")"
+    /bin/rm -rf "$scratch"
+    assert_equals "$dropped" "$extra" \
+        "removing $dropped from deny.toml must be reported as exactly that id unbacked"
+}
+
+# A shape the parser does not accept (a second id on an existing line) must
+# trip the literal-count guard rather than vanish.
+test_mutation_unparsed_shape_detected() {
+    local scratch="$TEST_SCRATCH_BASE/advisory-sync-mutation-shape" parsed literal
+    /bin/mkdir -p "$scratch"
+    command sed -E '0,/^[[:space:]]*"RUSTSEC-/s//  "RUSTSEC-9999-0001", "RUSTSEC-/' "$AUDIT" \
+        >"$scratch/audit.toml"
+    parsed="$(_count "$(_audit_ids "$scratch/audit.toml")")"
+    literal="$(_block_literal_count "$scratch/audit.toml")"
+    /bin/rm -rf "$scratch"
+    assert_not_equals "$literal" "$parsed" \
+        "a second id on one line must make the literal count exceed the parsed count"
+}
+
 run_test test_each_file_yields_ids "each config parses to a non-empty RUSTSEC list"
 run_test test_parsers_find_known_entry "each parser finds a known entry"
+run_test test_parsers_see_every_entry "parsers see every RUSTSEC id in each ignore block"
 run_test test_deny_ids_in_audit "deny.toml ignores are mirrored in .cargo/audit.toml"
 run_test test_audit_ids_in_deny ".cargo/audit.toml ignores are backed by deny.toml"
 run_test test_deny_ids_in_osv "deny.toml ignores are mirrored in .osv-scanner.toml"
 run_test test_audit_entries_have_reasons ".cargo/audit.toml entries carry reason comments"
 run_test test_mutation_dropped_id_detected "a dropped audit.toml id is detected"
+run_test test_mutation_dropped_deny_id_detected "a dropped deny.toml id is detected"
+run_test test_mutation_unparsed_shape_detected "an id in an unparsed shape trips the count guard"
 
 generate_report
