@@ -54,6 +54,12 @@ _workflow_files() {
     command find "$WORKFLOWS_DIR" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | command sort
 }
 
+# _all_workflows — fill the global WORKFLOW_FILES array (both extensions), so
+# every plain-text scan below sees exactly what the yq rows see.
+_all_workflows() {
+    mapfile -t WORKFLOW_FILES < <(_workflow_files)
+}
+
 # _runner_labels <file> — "<file>: <label>" for every literal runner label:
 # each job's runs-on (string or list) plus every matrix `os` value (plain
 # list or include entries). A templated runs-on (`${{ matrix.os }}`) is
@@ -100,7 +106,8 @@ test_no_latest_runner_labels() {
 # string, a new matrix key name). Comments are ignored.
 test_no_latest_label_anywhere_in_workflows() {
     local hits
-    hits=$(command grep -nE '\b(ubuntu|macos|windows)-latest\b' "$WORKFLOWS_DIR"/*.yml |
+    _all_workflows
+    hits=$(command grep -nHE '\b(ubuntu|macos|windows)-latest\b' "${WORKFLOW_FILES[@]}" |
         command grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)
     if [ -n "$hits" ]; then
         /usr/bin/echo "$hits" | command sed 's/^/  /'
@@ -158,7 +165,13 @@ test_runner_labels_known_to_actionlint() {
 # continuation lines, so a per-line grep would miss both.
 _curl_lines() {
     local f
-    while IFS= read -r f; do
+    local -a files
+    if [ -n "${CURL_SCAN_FILES:-}" ]; then
+        files=("$CURL_SCAN_FILES")
+    else
+        mapfile -t files < <(_workflow_files)
+    fi
+    for f in "${files[@]}"; do
         command awk -v file="$f" '
             /^[[:space:]]*#/ && cmd == "" { next }
             {
@@ -168,10 +181,29 @@ _curl_lines() {
                 cmd = ""
             }
         ' "$f"
-    done < <(_workflow_files)
+    done
 }
 
 test_every_curl_retries() {
+    # Positive control: the continuation-joining matcher must flag a
+    # multi-line curl whose --retry is missing, see the flag when it sits on
+    # a continuation line, and skip a commented curl — otherwise a broken
+    # awk would make this row (and the helper row below) pass on 0 calls.
+    local fixture="$TEST_TEMP_DIR/curl-fixture.yml" ctl
+    # The trailing backslashes are literal fixture content (YAML line
+    # continuations), not attempted quote escapes.
+    # shellcheck disable=SC1003
+    printf '%s\n' \
+        '          curl -fsSL \' \
+        '            -o /tmp/a https://example.invalid/a' \
+        '          curl -fsSL \' \
+        '            --retry 5 -o /tmp/b https://example.invalid/b' \
+        '          # curl https://example.invalid/commented' >"$fixture"
+    ctl=$(CURL_SCAN_FILES="$fixture" _curl_lines)
+    assert_equals "2" "$(/usr/bin/awk 'END { print NR }' <<<"$ctl")" \
+        "the curl matcher finds both multi-line calls and skips the comment"
+    assert_contains "$ctl" "--retry 5 -o /tmp/b" "a --retry on a continuation line is joined into its call"
+
     local line violations=0 seen=0
     while IFS= read -r line; do
         [ -n "$line" ] || continue
@@ -184,6 +216,9 @@ test_every_curl_retries() {
                 ;;
         esac
     done < <(_curl_lines)
+    # The workflows hold Pushover POSTs, the Trivy key and ccache — well
+    # above this floor; 0 would mean the matcher found nothing.
+    assert_greater_than "$seen" 5 "found the workflows' curl calls ($seen)"
     assert_equals "0" "$violations" "every workflow curl call passes --retry ($seen calls)"
 }
 
@@ -245,9 +280,10 @@ test_release_downloads_use_helper() {
 # must pass --sha256 so the helper verifies cache hits and downloads alike.
 test_every_helper_fetch_is_verified() {
     local hits seen
-    seen=$(command grep -c 'fetch-release-asset.sh --sha256' "$WORKFLOWS_DIR"/*.yml |
+    _all_workflows
+    seen=$(command grep -cH 'fetch-release-asset.sh --sha256' "${WORKFLOW_FILES[@]}" |
         /usr/bin/awk -F: '{ n += $2 } END { print n + 0 }')
-    hits=$(command grep -nE '(^|[[:space:]])bin/fetch-release-asset\.sh([[:space:]]|$)' "$WORKFLOWS_DIR"/*.yml |
+    hits=$(command grep -nHE '(^|[[:space:]])bin/fetch-release-asset\.sh([[:space:]]|$)' "${WORKFLOW_FILES[@]}" |
         command grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' |
         command grep -v -- '--sha256' || true)
     if [ -n "$hits" ]; then

@@ -91,7 +91,7 @@ test_curl_retries_every_transient_error() {
     _fetch
     assert_contains "$(_calls)" "--retry 5" "curl retries 5 times by default"
     assert_contains "$(_calls)" "--retry-all-errors" "curl retries every transient error, 5xx included"
-    assert_contains "$(_calls)" "-f" "curl fails on HTTP errors (so a 504 page is never saved as the asset)"
+    assert_contains "$(_calls)" "curl -fsSL " "curl fails on HTTP errors (-f), so a 504 page is never saved as the asset"
 }
 
 test_falls_back_to_gh_api_path() {
