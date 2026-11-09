@@ -458,11 +458,27 @@ test_ccache_binary_is_fetched_static_and_verified() {
     assert_contains "$fetch" 'if: ${{ matrix.source_build }}' "fetch runs only for source-build cells"
     assert_contains "$fetch" 'musl-static' "the binary is the static musl build"
     assert_contains "$fetch" 'sha256sum -c -' "the download is checksum-verified"
-    if /usr/bin/grep -qE 'CCACHE_SHA256_(X86_64|AARCH64): [0-9a-f]{64}$' <<<"$fetch"; then
-        assert_true true "per-arch sha256 pins are full digests"
+    # Each arch separately: one valid digest must not vouch for the other.
+    local a
+    for a in X86_64 AARCH64; do
+        if /usr/bin/grep -qE "^ +CCACHE_SHA256_${a}: [0-9a-f]{64}\$" <<<"$fetch"; then
+            assert_true true "$a sha256 pin is a full digest"
+        else
+            assert_true false "$a sha256 pin must be a 64-hex digest"
+        fi
+    done
+    # And each runner arch selects its own digest.
+    assert_contains "$fetch" 'amd64) CARCH=x86_64 SUM="$CCACHE_SHA256_X86_64"' "amd64 uses the x86_64 digest"
+    assert_contains "$fetch" 'arm64) CARCH=aarch64 SUM="$CCACHE_SHA256_AARCH64"' "arm64 uses the aarch64 digest"
+    # Cache plumbing never decides a verdict: the fetch step has no
+    # continue-on-error, so it must be unable to fail — no `set -e`, no
+    # non-zero exit; every failure branch warns and leaves `bin` empty.
+    if /usr/bin/grep -qE '^ +set -[a-z]*e|^ +exit [1-9]|\|\| *exit' <<<"$fetch"; then
+        assert_true false "Fetch static ccache must never exit non-zero (no set -e / exit N)"
     else
-        assert_true false "per-arch sha256 pins must be 64-hex digests"
+        assert_true true "Fetch static ccache cannot fail the cell"
     fi
+    assert_contains "$fetch" '::warning::could not fetch or verify static ccache' "a failed fetch or checksum only warns"
     run="$(_step "Run luggage install inside the base image")"
     assert_contains "$run" '"$CCACHE_BIN:/opt/evidence-ccache/ccache:ro"' "the static binary is mounted read-only"
     if /usr/bin/grep -qE 'apk add|apt-get install|dnf install' <<<"$run$(/usr/bin/cat "$PROJECT_ROOT/bin/lib/evidence-ccache-entry.sh")"; then
