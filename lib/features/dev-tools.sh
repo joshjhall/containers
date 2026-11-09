@@ -88,6 +88,13 @@ SHFMT_VERSION="${SHFMT_VERSION:-3.14.1}"
 CONFORM_VERSION="${CONFORM_VERSION:-0.1.0-alpha.32}"
 HADOLINT_VERSION="${HADOLINT_VERSION:-2.15.1}"
 ACTIONLINT_VERSION="${ACTIONLINT_VERSION:-1.7.12}"
+# SHELLCHECK_VERSION is consumed only by CI: .github/workflows/ci.yml installs
+# this checksum-verified release (#1607), while the image keeps the distro
+# package from lib/base/setup.sh. Pinned here so a new ShellCheck release (and
+# its new SC codes) lands through a reviewed auto-patch PR, never via a
+# runner-image refresh.
+# shellcheck disable=SC2034 # read by ci.yml and bin/check-versions.sh, not here
+SHELLCHECK_VERSION="${SHELLCHECK_VERSION:-0.11.0}"
 CODEGRAPH_VERSION="${CODEGRAPH_VERSION:-1.6.2}"
 # agnix is pinned (not @latest) so a rule-set bump can't fail a previously-green
 # tree with no code change. Keep in lockstep with the librarian consumers'

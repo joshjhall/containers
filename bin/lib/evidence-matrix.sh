@@ -41,8 +41,8 @@
 # Mirrors evidence-run.yml's arch_plumbing (dispatch path).
 _em_arch_plumbing() {
     case "$1" in
-        amd64) echo "ubuntu-latest native x86_64-unknown-linux-musl" ;;
-        arm64) echo "ubuntu-24.04-arm native aarch64-unknown-linux-musl" ;;
+        amd64) echo "ubuntu-26.04 native x86_64-unknown-linux-musl" ;;
+        arm64) echo "ubuntu-26.04-arm native aarch64-unknown-linux-musl" ;;
         *) return 1 ;;
     esac
 }

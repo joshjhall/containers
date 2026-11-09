@@ -1,0 +1,12 @@
+# actionlint configuration.
+#
+# Every runner label in .github/workflows/ is pinned to an explicit image
+# (#1607) so an OS move happens in a reviewed PR, never through GitHub
+# quietly migrating a `*-latest` label (tests/unit/ci-runner-pins.sh enforces
+# it). actionlint ships a hard-coded list of GitHub-hosted labels, and v1.7.12
+# predates the Ubuntu 26.04 images, so it reports these as unknown. List them
+# here until a pinned actionlint knows them, then drop the entries.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm

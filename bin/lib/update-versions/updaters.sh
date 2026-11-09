@@ -377,6 +377,10 @@ update_version() {
                     sed_inplace "s/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-[^}]*}\"/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     sed_inplace "s/^ACTIONLINT_VERSION=\"[0-9][^\"]*\"/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     ;;
+                shellcheck)
+                    sed_inplace "s/SHELLCHECK_VERSION=\"\${SHELLCHECK_VERSION:-[^}]*}\"/SHELLCHECK_VERSION=\"\${SHELLCHECK_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    sed_inplace "s/^SHELLCHECK_VERSION=\"[0-9][^\"]*\"/SHELLCHECK_VERSION=\"\${SHELLCHECK_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
+                    ;;
                 shfmt)
                     sed_inplace "s/SHFMT_VERSION=\"\${SHFMT_VERSION:-[^}]*}\"/SHFMT_VERSION=\"\${SHFMT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"
                     sed_inplace "s/^SHFMT_VERSION=\"[0-9][^\"]*\"/SHFMT_VERSION=\"\${SHFMT_VERSION:-$latest}\"/" "$script_path" || return "$RC_UPDATE_FAILED"

@@ -79,7 +79,7 @@ test_cells_carry_arch_plumbing() {
     _version "$r/catalog" 1.90.0 debian-13-arm64
     out="$(evidence_matrix "$r/catalog" rust "$r" v9)"
     assert_equals \
-        '{"tool":"rust","version":"1.90.0","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-24.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl","source_build":false}' \
+        '{"tool":"rust","version":"1.90.0","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-26.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl","source_build":false}' \
         "$(command jq -c '.include[0]' <<<"$out")" \
         "each cell carries the same fields the dispatch path builds"
 }

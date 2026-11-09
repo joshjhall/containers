@@ -136,7 +136,7 @@ jobs:
     # A closed/merged PR's run exists only to cancel its dry run (see
     # `concurrency`); it does no work. `evidence` and `collect` follow setup.
     if: github.event.action != 'closed'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
@@ -219,11 +219,11 @@ jobs:
           # the triple luggage/record-evidence are BUILT for, whatever tool the
           # leg installs — go legs carry it too (#1341).
           #   native   → arch-matched runner, no docker --platform.
-          #   emulated → ubuntu-latest + QEMU + docker run --platform.
+          #   emulated → ubuntu-26.04 + QEMU + docker run --platform.
           arch_plumbing() {
             case "$1" in
-              amd64) echo "ubuntu-latest native x86_64-unknown-linux-musl" ;;
-              arm64) echo "ubuntu-24.04-arm native aarch64-unknown-linux-musl" ;;
+              amd64) echo "ubuntu-26.04 native x86_64-unknown-linux-musl" ;;
+              arm64) echo "ubuntu-26.04-arm native aarch64-unknown-linux-musl" ;;
               *) echo "Unsupported arch: $1" >&2; return 1 ;;
             esac
           }
@@ -326,7 +326,7 @@ jobs:
   reconcile:
     name: Reconcile coverage (report)
     if: github.event.action != 'closed'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - name: Checkout containers
@@ -785,7 +785,7 @@ jobs:
     name: Ingest evidence (one PR)
     needs: [setup, evidence]
     if: ${{ !cancelled() && github.event.action != 'closed' && needs.setup.outputs.has_cells == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read

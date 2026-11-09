@@ -115,7 +115,7 @@ together in the `setup` job (`arch_plumbing`): `runtime`, `runner`, and
 | `runtime`  | `runner`           | `docker run`               | binary build                        |
 | ---------- | ------------------ | -------------------------- | ----------------------------------- |
 | `native`   | arch-matched       | no `--platform`            | compiled on an arch-matched runner  |
-| `emulated` | `ubuntu-latest`    | `--platform linux/<arch>`  | **cross-compiled** for the leg arch |
+| `emulated` | `ubuntu-26.04`     | `--platform linux/<arch>`  | **cross-compiled** for the leg arch |
 
 An **emulated** leg adds a `docker/setup-qemu-action@v3` step (registers binfmt
 handlers) so an amd64 runner can run a foreign-arch container.
@@ -226,8 +226,8 @@ newest patch of each minor, minimum_recommended floor and up
 - **Pull requests** dry-run only the first pending cell in that order. That
   proves the pipeline still works without re-evidencing the backlog on every PR.
 
-Both arches run natively: arm64 on `ubuntu-24.04-arm`, amd64 on
-`ubuntu-latest`. The supported platform set lives in
+Both arches run natively: arm64 on `ubuntu-26.04-arm`, amd64 on
+`ubuntu-26.04`. The supported platform set lives in
 [`docs/reference/supported-platforms.md`](../reference/supported-platforms.md).
 
 **Per-cell job timeout (#1569).** Each cell carries a `source_build` flag, and

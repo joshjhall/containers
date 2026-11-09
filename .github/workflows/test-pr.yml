@@ -56,7 +56,7 @@ jobs:
     # Skip on an irrelevant-label event (#1099); build-feature follows via
     # `needs`, and pr-tier mirrors the prior verdict.
     if: github.event.action != 'labeled' || github.event.label.name == 'ci/full-build'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
       features: ${{ steps.compute.outputs.features }}
@@ -220,7 +220,7 @@ jobs:
     name: Build ${{ matrix.feature }}
     needs: detect-changes
     if: needs.detect-changes.outputs.mode != 'skip'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # 25 min ceiling — down from 40 (#531). The <15min acceptance target is for
     # a *typical* single-feature change (most cells finish well under), but a
     # foundational change (Dockerfile / lib/base / a workflow edit) triggers a
@@ -382,7 +382,7 @@ jobs:
     name: PR Tier
     needs: [detect-changes, build-feature]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read

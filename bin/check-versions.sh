@@ -320,6 +320,7 @@ extract_all_versions() {
     _add_feature_version CONFORM_VERSION "conform" "dev-tools.sh"
     _add_feature_version HADOLINT_VERSION "hadolint" "dev-tools.sh"
     _add_feature_version ACTIONLINT_VERSION "actionlint" "dev-tools.sh"
+    _add_feature_version SHELLCHECK_VERSION "shellcheck" "dev-tools.sh"
     _add_feature_version CODEGRAPH_VERSION "codegraph" "dev-tools.sh"
     # agnix is an npm-global install (not a GitHub release); checked against the
     # npm registry below. Pinned to stay in lockstep with librarian (#769).
@@ -526,6 +527,7 @@ main() {
             conform) check_github_release_prerelease "conform" "siderolabs/conform" ;;
             hadolint) check_github_release "hadolint" "hadolint/hadolint" ;;
             actionlint) check_github_release "actionlint" "rhysd/actionlint" ;;
+            shellcheck) check_github_release "shellcheck" "koalaman/shellcheck" ;;
             codegraph) check_github_release "codegraph" "colbymchenry/codegraph" ;;
             cargo-release) check_crates_io "cargo-release" ;;
             cargo-watch) check_crates_io "cargo-watch" ;;

@@ -13,7 +13,7 @@ permissions:
 jobs:
   security-scan:
     name: Run dep scanners
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - name: Checkout code
@@ -28,7 +28,11 @@ jobs:
           toolchain: "1.99"
 
       - name: Install pinned scanners
+        env:
+          # gh's fallback in bin/fetch-release-asset.sh (API asset path).
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           OSV_VERSION=$(grep -oP 'OSV_SCANNER_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
           DENY_VERSION=$(grep -oP 'CARGO_DENY_VERSION:-\K[0-9.]+' lib/features/rust-dev.sh)
           AUDIT_VERSION=$(grep -oP 'CARGO_AUDIT_VERSION:-\K[0-9.]+' lib/features/rust-dev.sh)
@@ -37,11 +41,22 @@ jobs:
           echo "cargo-deny: ${DENY_VERSION}"
           echo "cargo-audit: ${AUDIT_VERSION}"
 
-          # osv-scanner prebuilt binary
-          curl -fsSL -o /tmp/osv-scanner \
-            "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64"
-          chmod +x /tmp/osv-scanner
-          sudo mv /tmp/osv-scanner /usr/local/bin/osv-scanner
+          # osv-scanner prebuilt binary, fetched with retries + the gh API
+          # fallback (#1607) and verified against its pinned SHA256.
+          EXPECTED_SHA=$(jq -r \
+            --arg v "$OSV_VERSION" \
+            '.tools["osv-scanner"].versions[$v].checksums.amd64.sha256 // empty' \
+            lib/checksums.json)
+          if [ -z "$EXPECTED_SHA" ]; then
+            echo "::error::no amd64 SHA256 pinned for osv-scanner $OSV_VERSION in lib/checksums.json"
+            exit 1
+          fi
+          WORK=$(mktemp -d)
+          bin/fetch-release-asset.sh \
+            "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" \
+            "$WORK/osv-scanner"
+          echo "${EXPECTED_SHA}  $WORK/osv-scanner" | sha256sum -c -
+          sudo install -m 0755 "$WORK/osv-scanner" /usr/local/bin/osv-scanner
           osv-scanner --version
 
           # cargo-deny / cargo-audit via cargo install (matches rust-dev feature)
