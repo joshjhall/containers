@@ -254,7 +254,7 @@ Ingestion contract: [\`docs/operations/evidence-runs.md\`](https://github.com/jo
 EOF
 )"
 
-pr_url="$(gh_api_retry gh pr create --repo "$DB_REPO" --base main --head "$BRANCH" --title "$SUBJECT" --body "$BODY")"
+pr_url="$(gh_api_create_pr --repo "$DB_REPO" --base main --head "$BRANCH" --title "$SUBJECT" --body "$BODY")"
 command echo "$SCRIPT_NAME: opened $pr_url" >&2
 # Squash + delete branch once the required check passes. Best-effort: if
 # auto-merge is unavailable the PR is still open and correct.

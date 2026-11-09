@@ -798,16 +798,12 @@ jobs:
                 "$VERSION" > /tmp/matrix-message.txt
               gh_api_publish_branch "$GITHUB_REPOSITORY" "$MATRIX_BRANCH" . \
                 /tmp/matrix-message.txt version-compatibility-matrix.json
-              # Reuse the PR a previous run of this job opened for the branch.
-              MATRIX_PR=$(gh pr list --head "$MATRIX_BRANCH" --state open --json url --jq '.[0].url // empty')
-              if [ -n "$MATRIX_PR" ]; then
-                echo "Reusing $MATRIX_PR"
-              else
-                MATRIX_PR=$(gh_api_retry gh pr create --base main --head "$MATRIX_BRANCH" \
-                  --title "chore: update compatibility matrix for v${VERSION}" \
-                  --body "Passing test results from the automated patch release v${VERSION}. Auto-merges when checks pass.")
-                echo "Opened $MATRIX_PR"
-              fi
+              # Reuses the open PR for the branch (a previous run, or a create
+              # whose response was lost) instead of opening a second one.
+              MATRIX_PR=$(gh_api_create_pr --base main --head "$MATRIX_BRANCH" \
+                --title "chore: update compatibility matrix for v${VERSION}" \
+                --body "Passing test results from the automated patch release v${VERSION}. Auto-merges when checks pass.")
+              echo "Matrix PR: $MATRIX_PR"
               # Retry: auto-merge can be refused right after PR creation.
               for attempt in 1 2 3 4 5; do
                 if gh pr merge "$MATRIX_PR" --auto --squash --delete-branch; then

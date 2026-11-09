@@ -378,6 +378,355 @@ test_truncated_tree_warns_and_tree_read_failure_errors() {
     assert_contains "$ERR" "could not read the tree" "and says why"
 }
 
+# _ensure <status> — gh_api_ensure_branch on a missing branch whose ref
+# create/move both fail with "HTTP <status>"; sets RC and ERR.
+_ensure() {
+    local rc=0
+    GH_API_RETRY_DELAY=0 GH_STUB_FAIL_MATCH='git/refs' GH_STUB_FAIL_STATUS="$1" PATH="$STUB_DIR:$PATH" \
+        gh_api_ensure_branch o/r feat/x abc123 2>"$STUB_DIR/err" || rc=$?
+    RC="$rc"
+    ERR="$(command cat "$STUB_DIR/err")"
+}
+
+test_permanent_4xx_is_not_retried_and_logged() {
+    gh_stub_install
+    _ensure 403
+    assert_equals "1" "$RC" "a 403 fails the call"
+    assert_equals "1" "$(command grep -c 'X POST' "$GH_LOG")" "after ONE attempt"
+    assert_contains "$ERR" "gh: Failed (HTTP 403)" "GitHub's message is shown"
+    assert_contains "$ERR" "permanent error from _gh_api_create_or_move" "and why it stopped"
+}
+
+test_429_and_5xx_are_retried() {
+    local s
+    for s in 429 502; do
+        gh_stub_install
+        _ensure "$s"
+        assert_equals "1" "$RC" "HTTP $s still fails in the end"
+        assert_equals "3" "$(command grep -c 'X POST' "$GH_LOG")" "but HTTP $s is retried three times"
+        assert_not_contains "$ERR" "permanent error" "HTTP $s is transient"
+    done
+}
+
+test_graphql_permission_error_is_not_retried_and_logged() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS='FORBIDDEN:Resource not accessible by integration' _commit
+    assert_equals "1" "$RC" "a permission error fails the commit"
+    assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "after ONE attempt"
+    assert_contains "$ERR" "FORBIDDEN: Resource not accessible by integration" "the errors body is logged"
+    assert_contains "$ERR" "permanent error on o/r:b, not retrying" "and why it stopped"
+}
+
+test_graphql_unresolvable_repository_is_not_retried() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS='NOT_FOUND:Could not resolve to a Repository with the name o/r.' _commit
+    assert_equals "1" "$RC" "a missing repository fails the commit"
+    assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "after ONE attempt"
+    assert_contains "$ERR" "permanent error on o/r:b, not retrying" "and says why it stopped"
+}
+
+test_create_pr_stderr_cannot_issue_workflow_commands() {
+    gh_stub_install
+    GH_STUB_PR_CREATE_FAIL=1 GH_STUB_PR_CREATE_URL='::add-mask::x' _pr
+    assert_contains "$ERR" "  ::add-mask::x" "gh pr create's stderr is replayed indented"
+    assert_equals "0" "$(command grep -c '^::' <<<"$ERR")" "so no line starts with '::'"
+}
+
+test_graphql_forbidden_rate_limit_is_retried() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS='FORBIDDEN:You have exceeded a secondary rate limit' _commit
+    assert_equals "3" "$(command grep -c '^api graphql' "$GH_LOG")" "a FORBIDDEN rate limit is retried every attempt"
+    assert_not_contains "$ERR" "permanent error" "and is not called permanent"
+}
+
+test_exit0_errors_body_is_logged_and_classified() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS_EXIT0=1 \
+        GH_STUB_GRAPHQL_ERRORS='UNPROCESSABLE:Repository rule violations found' _commit
+    assert_equals "1" "$RC" "an exit-0 errors body fails the commit"
+    assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "a ruleset rejection is not retried"
+    assert_contains "$ERR" "$(command printf '(exit 0):\n  UNPROCESSABLE: Repository rule violations found')" \
+        "its message is logged, indented on its own line"
+    gh_stub_install
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS_EXIT0=1 GH_STUB_GRAPHQL_ERRORS='INTERNAL:Something went wrong' _commit
+    assert_equals "1" "$RC" "an unknown errors body fails the commit"
+    assert_equals "3" "$(command grep -c '^api graphql' "$GH_LOG")" "but an unknown error is retried"
+    assert_contains "$ERR" "INTERNAL: Something went wrong" "and logged"
+}
+
+# _pr — gh_api_create_pr with the stub on PATH; sets OUT, ERR and RC.
+_pr() {
+    local rc=0
+    OUT="$(GH_API_RETRY_DELAY=0 PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr --repo o/r --base main --head ev/b --title t --body b 2>"$STUB_DIR/err")" || rc=$?
+    RC="$rc"
+    ERR="$(command cat "$STUB_DIR/err")"
+}
+
+test_create_pr_reuses_an_open_pr() {
+    gh_stub_install
+    GH_STUB_PR_EXISTING=https://x/pull/7 _pr
+    assert_equals "0" "$RC" "an open PR for the head is success"
+    assert_equals "https://x/pull/7" "$OUT" "and resolves to that PR"
+    assert_equals "0" "$(command grep -c '^pr create' "$GH_LOG" || true)" "no second PR is created"
+    assert_equals "1" "$(command grep -c '^pr list --repo o/r --head ev/b --state open --json url,isCrossRepository,baseRefName ' "$GH_LOG")" \
+        "the lookup is scoped to the repo and head"
+}
+
+test_create_pr_whose_attempt_landed_resolves_to_it() {
+    gh_stub_install
+    GH_STUB_PR_CREATE_FAIL=1 GH_STUB_PR_AFTER_CREATE=https://x/pull/8 _pr
+    assert_equals "0" "$RC" "a create that landed but failed here is success"
+    assert_equals "https://x/pull/8" "$OUT" "and resolves to the existing PR"
+    assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" "without re-sending the create"
+    assert_contains "$ERR" "create failed but a PR for ev/b is open; using it" "and says so"
+}
+
+test_create_pr_failure_with_no_pr_fails() {
+    gh_stub_install
+    GH_STUB_PR_CREATE_FAIL=1 _pr
+    assert_equals "1" "$RC" "no PR anywhere is a failure"
+    assert_equals "" "$OUT" "and prints no URL"
+    assert_contains "$ERR" "already exists" "gh's message is shown"
+    gh_stub_install
+    _pr
+    assert_equals "https://github.com/joshjhall/containers-db/pull/9" "$OUT" "a plain create prints the new PR"
+}
+
+# _perm <stderr text> — "permanent" or "transient" per _gh_api_is_permanent.
+_perm() {
+    local f="$STUB_DIR/perm.err"
+    command printf '%b' "$1" >"$f"
+    if _gh_api_is_permanent "$f"; then command echo permanent; else command echo transient; fi
+}
+
+test_is_permanent_classifies_by_last_line() {
+    gh_stub_install
+    local want text
+    while IFS='|' read -r want text; do
+        assert_equals "$want" "$(_perm "$text")" "'$text' is $want"
+    done <<'TABLE'
+permanent|gh: Bad credentials (HTTP 401)
+permanent|gh: Not Found (HTTP 404)
+permanent|gh: Validation Failed (HTTP 422)
+permanent|GraphQL: No commits between main and x (createPullRequest)
+permanent|GraphQL: Could not resolve to a Repository
+permanent|gh: Resource not accessible by integration (HTTP 403)
+permanent|gh: Repository rule violations found
+permanent|gh: Merge not permitted
+transient|gh: Object does not exist (HTTP 422)
+transient|gh: Reference does not exist (HTTP 422)
+transient|gh: Conflict (HTTP 409)
+transient|gh: Request Timeout (HTTP 408)
+transient|gh: API rate limit exceeded (HTTP 403)
+transient|gh: You have triggered an abuse detection mechanism (HTTP 403)
+transient|gh: Too Many Requests (HTTP 429)
+transient|gh: Bad Gateway (HTTP 502)
+transient|dial tcp: i/o timeout
+transient|Could not resolve host: api.github.com
+transient|
+transient|gh: Reference already exists (HTTP 422)\ngh: Bad Gateway (HTTP 502)\n\n
+permanent|gh: Bad Gateway (HTTP 502)\ngh: Forbidden (HTTP 403)
+transient|gh: Bad Gateway (HTTP 502)\ngh: Reference already exists (HTTP 422)
+permanent|gh: Forbidden (HTTP 403)\ngh: Reference already exists (HTTP 422)
+transient|GraphQL: Could not resolve to a PullRequest with the number of 7.
+transient|GraphQL: Could not resolve to a Ref with the name b
+transient|gh: Reference already exists (HTTP 422)
+permanent|GraphQL: Could not resolve to a Repository\ngh: Reference already exists (HTTP 422)
+TABLE
+}
+
+test_transient_move_then_existing_create_is_retried() {
+    gh_stub_install
+    local rc=0
+    # Probe sees the branch; the force-move hits a 502 once and the fallback
+    # create answers "already exists". That last line must not make the
+    # transient 502 permanent: the retry's force-move succeeds.
+    GH_API_RETRY_DELAY=0 GH_STUB_REF_EXISTS=1 GH_STUB_CREATE_EXISTS=1 \
+        GH_STUB_FAIL_MATCH='-X PATCH' GH_STUB_FAIL_TIMES=1 GH_STUB_FAIL_STATUS=502 \
+        GH_STUB_FAIL_MSG='Bad Gateway' PATH="$STUB_DIR:$PATH" \
+        gh_api_ensure_branch o/r chore/m abc123 2>"$STUB_DIR/err" || rc=$?
+    assert_equals "0" "$rc" "a transient force-move failure is recovered"
+    assert_equals "2" "$(command grep -cx 'api -X PATCH repos/o/r/git/refs/heads/chore/m -f sha=abc123 -F force=true' "$GH_LOG")" \
+        "by retrying the force-move once"
+    assert_not_contains "$(command cat "$STUB_DIR/err")" "permanent error" "and is not called permanent"
+}
+
+test_permanent_move_then_existing_create_is_not_retried() {
+    gh_stub_install
+    local rc=0
+    GH_API_RETRY_DELAY=0 GH_STUB_REF_EXISTS=1 GH_STUB_CREATE_EXISTS=1 \
+        GH_STUB_FAIL_MATCH='-X PATCH' GH_STUB_FAIL_STATUS=403 GH_STUB_FAIL_MSG='Forbidden' \
+        PATH="$STUB_DIR:$PATH" gh_api_ensure_branch o/r chore/m abc123 2>"$STUB_DIR/err" || rc=$?
+    assert_equals "1" "$rc" "a refused force-move fails"
+    assert_equals "1" "$(command grep -c 'X PATCH' "$GH_LOG")" "after ONE attempt"
+    assert_contains "$(command cat "$STUB_DIR/err")" "Forbidden (HTTP 403)" "with GitHub's message"
+}
+
+test_409_conflict_is_retried() {
+    gh_stub_install
+    _ensure 409
+    assert_equals "3" "$(command grep -c 'X POST' "$GH_LOG")" "a racing-update 409 is retried"
+    assert_not_contains "$ERR" "permanent error" "and is not called permanent"
+}
+
+test_replayed_stderr_cannot_issue_workflow_commands() {
+    gh_stub_install
+    _ensure 403
+    assert_contains "$ERR" "  gh: Failed (HTTP 403)" "gh's stderr is replayed indented"
+    assert_equals "0" "$(command grep -c '^gh:' <<<"$ERR" || true)" "never at column 0, where :: would be a command"
+}
+
+test_create_pr_requires_head_and_scopes_lookup_without_repo() {
+    gh_stub_install
+    local rc=0
+    PATH="$STUB_DIR:$PATH" gh_api_create_pr --base main --title t 2>"$STUB_DIR/err" || rc=$?
+    assert_equals "1" "$rc" "no --head is an error"
+    assert_contains "$(command cat "$STUB_DIR/err")" "gh_api_create_pr: --head is required" "and says why"
+    assert_equals "0" "$(command grep -c '^pr ' "$GH_LOG" || true)" "before any gh call"
+    local out
+    out="$(GH_STUB_PR_EXISTING=https://x/pull/3 PATH="$STUB_DIR:$PATH" gh_api_create_pr -H m/x --base main 2>/dev/null)"
+    assert_equals "https://x/pull/3" "$out" "the -H alias and the current repo work"
+    assert_equals "1" "$(command grep -c '^pr list --head m/x ' "$GH_LOG")" "the lookup carries no --repo"
+}
+
+test_create_pr_ignores_a_fork_pr_on_the_same_branch() {
+    gh_stub_install
+    GH_STUB_PR_EXISTING=https://x/pull/66 GH_STUB_PR_FORK=1 _pr
+    assert_equals "0" "$RC" "a fork PR does not block creating ours"
+    assert_equals "https://github.com/joshjhall/containers-db/pull/9" "$OUT" "ours is created, the fork PR never adopted"
+    assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" "with one create"
+}
+
+test_graphql_errors_cannot_issue_workflow_commands() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS_EXIT0=1 \
+        GH_STUB_GRAPHQL_ERRORS="$(command printf 'FORBIDDEN:denied\n::add-mask::x')" _commit
+    assert_equals "1" "$RC" "the commit fails"
+    assert_contains "$ERR" "  ::add-mask::x" "a later '::' line of GitHub's message is logged indented"
+    assert_equals "0" "$(command grep -c '^::add-mask::' <<<"$ERR" || true)" "and never at column 0"
+}
+
+test_not_found_graphql_error_is_retried() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS="NOT_FOUND:Could not resolve to a Ref with the name b" _commit
+    assert_equals "1" "$RC" "an unresolved branch still fails in the end"
+    assert_equals "3" "$(command grep -c '^api graphql' "$GH_LOG")" "but is retried: a new ref can lag"
+    assert_not_contains "$ERR" "permanent error" "and is not called permanent"
+}
+
+test_permanent_error_does_not_preempt_adopting_a_landed_commit() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    local base
+    base="$(git -C "$REPO" rev-parse HEAD)"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS='FORBIDDEN:Resource not accessible by integration' \
+        GH_STUB_REF_EXISTS=1 GH_STUB_BRANCH_HEAD=d00dfeed GH_STUB_PARENT="$base" _commit
+    assert_equals "0" "$RC" "a commit that landed is adopted despite the permanent error"
+    assert_equals "d00dfeed" "$OUT" "and its oid is printed"
+    assert_not_contains "$ERR" "permanent error on" "the read-back runs before the permanent stop"
+}
+
+test_create_pr_with_failing_lookup_still_creates_or_fails() {
+    gh_stub_install
+    GH_STUB_PR_LIST_FAIL=1 _pr
+    assert_equals "0" "$RC" "a failed lookup does not block the create"
+    assert_equals "https://github.com/joshjhall/containers-db/pull/9" "$OUT" "the new PR is printed"
+    gh_stub_install
+    GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 _pr
+    assert_equals "1" "$RC" "a failed create with no lookup to rescue it fails"
+    assert_equals "" "$OUT" "and prints no URL"
+    assert_equals "3" "$(command grep -c '^pr create' "$GH_LOG")" "after the transient retries"
+}
+
+test_ref_replication_lag_422_is_retried_until_it_clears() {
+    gh_stub_install
+    local rc=0 n
+    # create and move both fail with a lag 422 on the first two attempts.
+    GH_STUB_FAIL_MATCH='git/refs' GH_STUB_FAIL_STATUS=422 GH_STUB_FAIL_MSG='Reference does not exist' \
+        GH_API_RETRY_DELAY=0 PATH="$STUB_DIR:$PATH" gh_api_ensure_branch o/r feat/x abc123 2>"$STUB_DIR/err" || rc=$?
+    n="$(command grep -c 'X POST' "$GH_LOG")"
+    assert_equals "3" "$n" "a lag 422 is retried, not failed after one attempt"
+    assert_not_contains "$(command cat "$STUB_DIR/err")" "permanent error" "and is not called permanent"
+}
+
+test_create_pr_uses_the_url_gh_reports_when_lookup_fails() {
+    gh_stub_install
+    GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 GH_STUB_PR_CREATE_URL=https://github.com/o/r/pull/12 _pr
+    assert_equals "0" "$RC" "an 'already exists' create is success"
+    assert_equals "https://github.com/o/r/pull/12" "$OUT" "resolving to the PR gh names"
+    assert_equals "1" "$(command grep -c '^pr create' "$GH_LOG")" "without re-sending the create"
+}
+
+test_create_pr_ignores_a_reported_url_for_another_repo() {
+    gh_stub_install
+    GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 GH_STUB_PR_CREATE_URL=https://github.com/evil/r/pull/12 _pr
+    assert_equals "1" "$RC" "a URL naming another repo is not adopted"
+    assert_equals "" "$OUT" "and nothing is printed for auto-merge"
+    gh_stub_install
+    GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 GH_STUB_PR_CREATE_URL=https://evil.example/o/r/pull/12 _pr
+    assert_equals "1" "$RC" "nor one on another host"
+    local out rc=0
+    gh_stub_install
+    out="$(GH_API_RETRY_DELAY=0 GITHUB_REPOSITORY=o/r GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 \
+        GH_STUB_PR_CREATE_URL=https://github.com/o/r/pull/5 PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr --base main --head m/x 2>/dev/null)" || rc=$?
+    assert_equals "0" "$rc" "without --repo, GITHUB_REPOSITORY names the target"
+    assert_equals "https://github.com/o/r/pull/5" "$out" "and its PR is adopted"
+    rc=0
+    gh_stub_install
+    out="$(GH_API_RETRY_DELAY=0 GITHUB_REPOSITORY='' GH_STUB_PR_LIST_FAIL=1 GH_STUB_PR_CREATE_FAIL=1 \
+        GH_STUB_PR_CREATE_URL=https://github.com/o/r/pull/5 PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr --base main --head m/x 2>/dev/null)" || rc=$?
+    assert_equals "1" "$rc" "with no repository known, no URL is adopted"
+}
+
+test_create_pr_short_repo_and_base_flags() {
+    gh_stub_install
+    local out
+    out="$(GH_STUB_PR_EXISTING=https://github.com/o/r/pull/4 GH_STUB_PR_BASE=dev PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr -R o/r -H x -B dev --title t 2>/dev/null)"
+    assert_equals "https://github.com/o/r/pull/4" "$out" "-R/-H/-B find the open PR"
+    assert_equals "1" "$(command grep -c '^pr list --repo o/r --head x ' "$GH_LOG")" "the lookup carries -R as --repo"
+    out="$(GH_STUB_PR_EXISTING=https://github.com/o/r/pull/4 GH_STUB_PR_BASE=main PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr -R o/r -H x -B dev --title t 2>/dev/null)" || true
+    assert_not_contains "$out" "pull/4" "and -B filters out a PR into another base"
+}
+
+test_graphql_insufficient_scopes_is_not_retried() {
+    _repo
+    gh_stub_install
+    command printf 'changed\n' >"$REPO/keep.txt"
+    GH_API_RETRY_DELAY=0 GH_STUB_GRAPHQL_ERRORS='INSUFFICIENT_SCOPES:Your token has not been granted the required scopes' _commit
+    assert_equals "1" "$RC" "a scope error fails the commit"
+    assert_equals "1" "$(command grep -c '^api graphql' "$GH_LOG")" "after ONE attempt"
+}
+
+test_create_pr_parses_equals_forms_and_filters_on_base() {
+    gh_stub_install
+    local out
+    out="$(GH_STUB_PR_EXISTING=https://x/pull/5 PATH="$STUB_DIR:$PATH" \
+        gh_api_create_pr --repo=o/r --head=ev/b --base=main --title t 2>/dev/null)"
+    assert_equals "https://x/pull/5" "$out" "--repo=/--head=/--base= are understood"
+    assert_equals "1" "$(command grep -c '^pr list --repo o/r --head ev/b ' "$GH_LOG")" "the lookup targets that repo and head"
+    gh_stub_install
+    GH_STUB_PR_EXISTING=https://x/pull/6 GH_STUB_PR_BASE=release _pr
+    assert_equals "https://github.com/joshjhall/containers-db/pull/9" "$OUT" "a PR into another base is not adopted"
+}
+
 run_test test_payload_carries_additions_deletions_and_expected_head "payload carries additions, deletions and expected head"
 run_test test_pathspec_limits_what_is_committed "pathspec limits what is committed"
 run_test test_new_executable_is_refused_before_any_api_call "a new executable is refused before any API call"
@@ -406,5 +755,35 @@ run_test test_symlink_and_submodule_changes_are_refused "symlink and submodule c
 run_test test_staging_create_failure_still_cleans_up_staging "a staging create failure still cleans up staging"
 run_test test_staging_delete_failure_only_warns "a staging delete failure only warns"
 run_test test_truncated_tree_warns_and_tree_read_failure_errors "truncated tree warns; unreadable tree errors"
+
+run_test test_permanent_4xx_is_not_retried_and_logged "a permanent 4xx is not retried and is logged"
+run_test test_429_and_5xx_are_retried "429 and 5xx are retried"
+run_test test_graphql_permission_error_is_not_retried_and_logged "a GraphQL permission error is not retried and is logged"
+run_test test_graphql_unresolvable_repository_is_not_retried "an unresolvable GraphQL Repository is not retried"
+run_test test_create_pr_stderr_cannot_issue_workflow_commands "gh pr create stderr cannot issue workflow commands"
+run_test test_graphql_forbidden_rate_limit_is_retried "a GraphQL FORBIDDEN rate limit is retried"
+run_test test_exit0_errors_body_is_logged_and_classified "an exit-0 errors body is logged and classified"
+run_test test_create_pr_reuses_an_open_pr "create_pr reuses an open PR"
+run_test test_create_pr_whose_attempt_landed_resolves_to_it "create_pr whose attempt landed resolves to it"
+run_test test_create_pr_failure_with_no_pr_fails "create_pr failure with no PR fails"
+
+run_test test_is_permanent_classifies_by_last_line "the classifier judges the last stderr line"
+run_test test_transient_move_then_existing_create_is_retried "a transient force-move then an existing create is retried"
+run_test test_permanent_move_then_existing_create_is_not_retried "a refused force-move then an existing create is not retried"
+run_test test_409_conflict_is_retried "a 409 conflict is retried"
+run_test test_replayed_stderr_cannot_issue_workflow_commands "replayed stderr cannot issue workflow commands"
+run_test test_create_pr_requires_head_and_scopes_lookup_without_repo "create_pr requires --head; works without --repo"
+run_test test_create_pr_ignores_a_fork_pr_on_the_same_branch "create_pr ignores a fork PR on the same branch"
+
+run_test test_graphql_errors_cannot_issue_workflow_commands "GraphQL errors cannot issue workflow commands"
+run_test test_not_found_graphql_error_is_retried "a NOT_FOUND GraphQL error is retried"
+run_test test_permanent_error_does_not_preempt_adopting_a_landed_commit "a permanent error does not pre-empt adopting a landed commit"
+run_test test_create_pr_with_failing_lookup_still_creates_or_fails "create_pr with a failing lookup still creates or fails"
+run_test test_ref_replication_lag_422_is_retried_until_it_clears "a ref replication-lag 422 is retried"
+run_test test_create_pr_uses_the_url_gh_reports_when_lookup_fails "create_pr uses the URL gh reports when the lookup fails"
+run_test test_create_pr_ignores_a_reported_url_for_another_repo "create_pr ignores a reported URL for another repo"
+run_test test_create_pr_short_repo_and_base_flags "create_pr accepts -R and -B"
+run_test test_graphql_insufficient_scopes_is_not_retried "an INSUFFICIENT_SCOPES error is not retried"
+run_test test_create_pr_parses_equals_forms_and_filters_on_base "create_pr parses --x= forms and filters on base"
 
 generate_report
