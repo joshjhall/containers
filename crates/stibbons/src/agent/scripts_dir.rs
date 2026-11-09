@@ -137,15 +137,15 @@ pub fn state_root() -> Result<PathBuf, ScriptsDirError> {
 /// Off Unix there is no uid or mode to inspect; the directory is accepted as-is
 /// (see the module note on why that is safe there).
 fn ensure_private_dir(path: &Path) -> Result<(), ScriptsDirError> {
-    ensure_owned_dir(path)?;
+    // One `lstat` for all three checks: re-reading the path for the mode would
+    // open a window in which a concurrent invocation renames it away (#927).
+    let meta = ensure_owned_dir(path)?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
 
-        let mode =
-            std::fs::symlink_metadata(path).map_err(|e| io_err(path, e))?.permissions().mode()
-                & 0o777;
+        let mode = meta.permissions().mode() & 0o777;
         if mode != DIR_MODE {
             return Err(unsafe_path(
                 path,
@@ -156,8 +156,30 @@ fn ensure_private_dir(path: &Path) -> Result<(), ScriptsDirError> {
             ));
         }
     }
+    #[cfg(not(unix))]
+    let _ = meta;
 
     Ok(())
+}
+
+/// [`ensure_private_dir`], with "nothing is there" as a value rather than an
+/// error: `Ok(true)` — a private dir of ours; `Ok(false)` — absent.
+///
+/// This is the race-tolerant existence check (#927). Checking existence and
+/// then validating are two reads of a path that a concurrent invocation may
+/// rename away in between, turning a benign "it just moved" into a hard
+/// `NotFound`. Validating once and reading `NotFound` from that single `lstat`
+/// closes the gap instead of narrowing it.
+fn private_dir_state(path: &Path) -> Result<bool, ScriptsDirError> {
+    match ensure_private_dir(path) {
+        Ok(()) => Ok(true),
+        Err(ScriptsDirError::Io { source, .. })
+            if source.kind() == std::io::ErrorKind::NotFound =>
+        {
+            Ok(false)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// The ownership half of [`ensure_private_dir`]: a real directory, not a
@@ -171,7 +193,10 @@ fn ensure_private_dir(path: &Path) -> Result<(), ScriptsDirError> {
 /// to stop — and a symlink planted at an ancestor would otherwise be followed,
 /// letting an attacker relocate the whole tree even though the leaf check
 /// passes.
-fn ensure_owned_dir(path: &Path) -> Result<(), ScriptsDirError> {
+///
+/// Returns the metadata it checked, so a caller needing more of it does not
+/// re-read a path that may have changed since.
+fn ensure_owned_dir(path: &Path) -> Result<std::fs::Metadata, ScriptsDirError> {
     let meta = std::fs::symlink_metadata(path).map_err(|e| io_err(path, e))?;
 
     if meta.file_type().is_symlink() {
@@ -194,7 +219,7 @@ fn ensure_owned_dir(path: &Path) -> Result<(), ScriptsDirError> {
         }
     }
 
-    Ok(())
+    Ok(meta)
 }
 
 /// Sets `mode` on `path` on Unix. A no-op elsewhere.
@@ -312,26 +337,34 @@ fn prepare_with_hook(
     let mut parent = state_root.to_path_buf();
     for segment in ["stibbons", "agent-scripts"] {
         parent.push(segment);
-        if std::fs::symlink_metadata(&parent).is_ok() {
-            ensure_owned_dir(&parent)?;
-        } else {
-            std::fs::create_dir(&parent).map_err(|e| io_err(&parent, e))?;
+        if std::fs::symlink_metadata(&parent).is_err() {
+            hook(Stage::AncestorAbsent);
+            match std::fs::create_dir(&parent) {
+                Ok(()) => continue,
+                // A concurrent first start created it between our check and
+                // here (#927). These two are shared by every container, so
+                // that is routine under parallel dispatch, not an error. Fall
+                // through to the ownership check: whoever created it must
+                // still be us, and a symlink planted in the gap is refused.
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(io_err(&parent, e)),
+            }
         }
+        ensure_owned_dir(&parent)?;
     }
     // Lock down the shared parent: it is what makes the umask window in
     // `build_staged` unobservable, and it hides which agents exist.
     set_mode(&parent, DIR_MODE)?;
 
     let dir = parent.join(container_name);
-    if std::fs::symlink_metadata(&dir).is_ok() {
-        // Ours from a previous start? Anything else is rejected by
-        // `ensure_private_dir` rather than adopted. If it already holds exactly
-        // these scripts, leave it alone: a concurrent start of the same agent
-        // may have bind-mounted it already (#927).
-        ensure_private_dir(&dir)?;
-        if matches(&dir, scripts) {
-            return Ok(dir);
-        }
+    hook(Stage::BeforeTargetCheck);
+    // Ours from a previous start? Anything else is rejected rather than
+    // adopted. If it already holds exactly these scripts, leave it alone: a
+    // concurrent start of the same agent may have bind-mounted it already. If
+    // it is absent — including moved aside by a concurrent start a moment ago
+    // — build (#927).
+    if private_dir_state(&dir)? && matches(&dir, scripts) {
+        return Ok(dir);
     }
 
     let staged = build_staged(&parent, container_name, scripts)?;
@@ -360,6 +393,11 @@ fn is_single_component(name: &str) -> bool {
 /// interleaving deterministically, instead of relying on timing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Stage {
+    /// An owned ancestor (`stibbons` or `agent-scripts`) was just found
+    /// absent; it has not been created yet.
+    AncestorAbsent,
+    /// The ancestors are in place; the target has not been inspected yet.
+    BeforeTargetCheck,
     /// The full script set is written to the staging directory, not yet
     /// installed.
     Built,
@@ -563,10 +601,9 @@ fn install_loop(
         // The target is (still, or again) occupied — or it vanished between
         // the rename and here because another invocation moved it aside, in
         // which case just retry.
-        if std::fs::symlink_metadata(dir).is_err() {
+        if !private_dir_state(dir)? {
             continue;
         }
-        ensure_private_dir(dir)?;
         if matches(dir, scripts) {
             return Ok(());
         }
@@ -936,7 +973,14 @@ mod tests {
                         resume.wait();
                     }
                 });
-                assert!(hit, "A never reached {pause_at:?}");
+                // A that returns before its pause point must still release the
+                // main thread, or a regression hangs the suite instead of
+                // failing it.
+                if !hit {
+                    paused.wait();
+                    resume.wait();
+                }
+                assert!(hit, "A never reached {pause_at:?}: {dir:?}");
                 dir
             })
         };
@@ -992,6 +1036,96 @@ mod tests {
 
         assert_eq!(a, b);
         assert_complete(&a, &other_scripts());
+        assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
+    }
+
+    /// Finding (1), post-PR cycle 1: two FIRST-EVER starts race to create the
+    /// shared ancestors. A sees `stibbons` absent and pauses; B then runs a
+    /// whole prepare, creating it. A's `create_dir` now gets `AlreadyExists` —
+    /// which must read as "exists", not abort the start. Different containers,
+    /// because the ancestors are shared by all of them.
+    #[test]
+    fn concurrent_first_start_ancestor_race_is_tolerated() {
+        use std::sync::{Arc, Barrier};
+        let tmp = tempfile::tempdir().unwrap();
+        let (paused, resume) = (Arc::new(Barrier::new(2)), Arc::new(Barrier::new(2)));
+
+        let a = {
+            let root = tmp.path().to_path_buf();
+            let (paused, resume) = (Arc::clone(&paused), Arc::clone(&resume));
+            std::thread::spawn(move || {
+                let mut hit = false;
+                let dir =
+                    prepare_with_hook(Some(&root), "myproject-agent-1", &scripts(), &mut |s| {
+                        if s == Stage::AncestorAbsent && !hit {
+                            hit = true;
+                            paused.wait();
+                            resume.wait();
+                        }
+                    });
+                if !hit {
+                    paused.wait();
+                    resume.wait();
+                }
+                assert!(hit, "A never saw an absent ancestor: {dir:?}");
+                dir
+            })
+        };
+        paused.wait();
+        let b = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-2", &scripts()).unwrap();
+        resume.wait();
+        let a = a.join().unwrap().expect("AlreadyExists on a shared ancestor must be tolerated");
+
+        assert_complete(&a, &scripts());
+        assert_complete(&b, &scripts());
+    }
+
+    /// The tolerated `AlreadyExists` still goes through the ownership check: a
+    /// symlink planted at the ancestor in that same gap is refused, not
+    /// followed — the #924 boundary must not open up for the race fix.
+    #[cfg(unix)]
+    #[test]
+    fn ancestor_symlink_planted_in_race_gap_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let ancestor = tmp.path().join("stibbons");
+
+        let err = prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &scripts(), &mut |s| {
+            if s == Stage::AncestorAbsent && !ancestor.exists() {
+                std::os::unix::fs::symlink(elsewhere.path(), &ancestor).unwrap();
+            }
+        })
+        .expect_err("a symlink at the ancestor must be refused");
+
+        assert!(err.to_string().contains("is a symlink"), "{err}");
+        assert_eq!(
+            std::fs::read_dir(elsewhere.path()).unwrap().count(),
+            0,
+            "nothing written through the link"
+        );
+    }
+
+    /// Finding (2), post-PR cycle 1, first site: the target exists when the
+    /// ancestors are done, then a concurrent start moves it aside before it is
+    /// inspected. That is "absent — build", not a hard `NotFound`.
+    #[test]
+    fn target_vanishing_before_inspection_builds() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
+        let elsewhere = tmp.path().join("moved-by-someone-else");
+
+        let mut vanished = false;
+        let got =
+            prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &other_scripts(), &mut |s| {
+                if s == Stage::BeforeTargetCheck && !vanished {
+                    vanished = true;
+                    std::fs::rename(&dir, &elsewhere).unwrap();
+                }
+            })
+            .expect("a target that vanished before inspection must be rebuilt");
+
+        assert!(vanished);
+        assert_complete(&got, &other_scripts());
         assert_eq!(leftovers(tmp.path()), Vec::<String>::new(), "leaked siblings");
     }
 
