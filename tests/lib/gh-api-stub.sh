@@ -26,6 +26,10 @@
 #   GH_STUB_GRAPHQL_ERRORS="TYPE:message"  graphql prints {"errors":[...]} on
 #                         stdout and "gh: message" on stderr, then exits 1
 #   GH_STUB_GRAPHQL_ERRORS_EXIT0=1  with GRAPHQL_ERRORS, exit 0 instead
+#   GH_STUB_FAIL_TIMES=N  GH_STUB_FAIL_MATCH fails only its first N matching
+#                         calls, then lets them through (default: every call)
+#   GH_STUB_CREATE_EXISTS=1  `api -X POST .../git/refs` fails with
+#                         "gh: Reference already exists (HTTP 422)"
 #   GH_STUB_FAIL_STATUS=N  a GH_STUB_FAIL_MATCH failure prints
 #                         "gh: <GH_STUB_FAIL_MSG|Failed> (HTTP N)" on stderr
 #                         (default: silent)
@@ -103,10 +107,24 @@ case "$1 $2" in
     "api "*)
         if [ -n "${GH_STUB_FAIL_MATCH:-}" ]; then
             case "$*" in *"$GH_STUB_FAIL_MATCH"*)
-                [ -n "${GH_STUB_FAIL_STATUS:-}" ] && echo "gh: ${GH_STUB_FAIL_MSG:-Failed} (HTTP $GH_STUB_FAIL_STATUS)" >&2
-                exit 1 ;;
+                fails=0
+                if [ -n "${GH_STUB_FAIL_TIMES:-}" ]; then
+                    fails="$(command cat "$GH_PAYLOADS/.fail-count" 2>/dev/null || echo 0)"
+                    fails=$((fails + 1))
+                    echo "$fails" >"$GH_PAYLOADS/.fail-count"
+                fi
+                if [ -z "${GH_STUB_FAIL_TIMES:-}" ] || [ "$fails" -le "$GH_STUB_FAIL_TIMES" ]; then
+                    [ -n "${GH_STUB_FAIL_STATUS:-}" ] && echo "gh: ${GH_STUB_FAIL_MSG:-Failed} (HTTP $GH_STUB_FAIL_STATUS)" >&2
+                    exit 1
+                fi ;;
             esac
         fi
+        case "$*" in *"-X POST"*"/git/refs "* | *"-X POST"*"/git/refs")
+            if [ "${GH_STUB_CREATE_EXISTS:-}" = 1 ]; then
+                echo "gh: Reference already exists (HTTP 422)" >&2
+                exit 1
+            fi ;;
+        esac
         for a in "$@"; do path="$a"; case "$a" in repos/*) break ;; esac; done
         case "$path" in
             */git/ref/heads/*)

@@ -25,21 +25,26 @@
 # failed gh call's stderr is an error a retry cannot fix (#1583): an HTTP 4xx
 # other than 408 (timeout), 409 (conflict, e.g. a racing ref update), 429 or
 # a rate/abuse limit (a 403 secondary limit), or a GraphQL permission,
-# validation or ruleset message. Only the last line counts:
-# _gh_api_create_or_move logs an expected create 422 before a move that may
-# have failed transiently. Anything unrecognised (no status, network error,
-# 5xx) is transient, as is a 422 "Object/Reference does not exist": a ref or
-# commit created moments earlier can lag on GitHub's replicas.
+# validation or ruleset message. Only the last line counts, and a 422
+# "Reference already exists" line is skipped: it is the expected answer of
+# the create half of _gh_api_create_or_move / _gh_api_move_or_create, so the
+# move's own result decides (a transient PATCH 502 followed by the fallback
+# create's "already exists" is still transient). Anything unrecognised (no
+# status, network error, 5xx) is transient, as is a 422 "Object/Reference
+# does not exist" or a GraphQL "Could not resolve to a" PullRequest/Ref: a
+# ref, commit or PR created moments earlier can lag on GitHub's replicas.
+# Only an unresolvable Repository is permanent.
 _gh_api_is_permanent() {
     local line
-    line="$(command sed '/^[[:space:]]*$/d' "$1" 2>/dev/null | command tail -n 1)"
+    line="$(command sed -e '/^[[:space:]]*$/d' -e '/Reference already exists/d' "$1" 2>/dev/null |
+        command tail -n 1)"
     [ -n "$line" ] || return 1
     case "$line" in
         *[Rr]ate\ limit* | *[Aa]buse* | *"HTTP 408"* | *"HTTP 409"* | *"HTTP 429"* | \
             *"Object does not exist"* | *"Reference does not exist"*) return 1 ;;
         *"HTTP 4"[0-9][0-9]*) return 0 ;;
         *"Resource not accessible"* | *"Repository rule violations"* | \
-            *"Could not resolve to a"* | *"No commits between"* | *"not permitted"*) return 0 ;;
+            *"Could not resolve to a Repository"* | *"No commits between"* | *"not permitted"*) return 0 ;;
     esac
     return 1
 }

@@ -509,7 +509,38 @@ transient|Could not resolve host: api.github.com
 transient|
 transient|gh: Reference already exists (HTTP 422)\ngh: Bad Gateway (HTTP 502)\n\n
 permanent|gh: Bad Gateway (HTTP 502)\ngh: Forbidden (HTTP 403)
+transient|gh: Bad Gateway (HTTP 502)\ngh: Reference already exists (HTTP 422)
+permanent|gh: Forbidden (HTTP 403)\ngh: Reference already exists (HTTP 422)
+transient|GraphQL: Could not resolve to a PullRequest with the number of 7.
+transient|GraphQL: Could not resolve to a Ref with the name b
 TABLE
+}
+
+test_transient_move_then_existing_create_is_retried() {
+    gh_stub_install
+    local rc=0
+    # Probe sees the branch; the force-move hits a 502 once and the fallback
+    # create answers "already exists". That last line must not make the
+    # transient 502 permanent: the retry's force-move succeeds.
+    GH_API_RETRY_DELAY=0 GH_STUB_REF_EXISTS=1 GH_STUB_CREATE_EXISTS=1 \
+        GH_STUB_FAIL_MATCH='-X PATCH' GH_STUB_FAIL_TIMES=1 GH_STUB_FAIL_STATUS=502 \
+        GH_STUB_FAIL_MSG='Bad Gateway' PATH="$STUB_DIR:$PATH" \
+        gh_api_ensure_branch o/r chore/m abc123 2>"$STUB_DIR/err" || rc=$?
+    assert_equals "0" "$rc" "a transient force-move failure is recovered"
+    assert_equals "2" "$(command grep -cx 'api -X PATCH repos/o/r/git/refs/heads/chore/m -f sha=abc123 -F force=true' "$GH_LOG")" \
+        "by retrying the force-move once"
+    assert_not_contains "$(command cat "$STUB_DIR/err")" "permanent error" "and is not called permanent"
+}
+
+test_permanent_move_then_existing_create_is_not_retried() {
+    gh_stub_install
+    local rc=0
+    GH_API_RETRY_DELAY=0 GH_STUB_REF_EXISTS=1 GH_STUB_CREATE_EXISTS=1 \
+        GH_STUB_FAIL_MATCH='-X PATCH' GH_STUB_FAIL_STATUS=403 GH_STUB_FAIL_MSG='Forbidden' \
+        PATH="$STUB_DIR:$PATH" gh_api_ensure_branch o/r chore/m abc123 2>"$STUB_DIR/err" || rc=$?
+    assert_equals "1" "$rc" "a refused force-move fails"
+    assert_equals "1" "$(command grep -c 'X PATCH' "$GH_LOG")" "after ONE attempt"
+    assert_contains "$(command cat "$STUB_DIR/err")" "Forbidden (HTTP 403)" "with GitHub's message"
 }
 
 test_409_conflict_is_retried() {
@@ -662,6 +693,8 @@ run_test test_create_pr_whose_attempt_landed_resolves_to_it "create_pr whose att
 run_test test_create_pr_failure_with_no_pr_fails "create_pr failure with no PR fails"
 
 run_test test_is_permanent_classifies_by_last_line "the classifier judges the last stderr line"
+run_test test_transient_move_then_existing_create_is_retried "a transient force-move then an existing create is retried"
+run_test test_permanent_move_then_existing_create_is_not_retried "a refused force-move then an existing create is not retried"
 run_test test_409_conflict_is_retried "a 409 conflict is retried"
 run_test test_replayed_stderr_cannot_issue_workflow_commands "replayed stderr cannot issue workflow commands"
 run_test test_create_pr_requires_head_and_scopes_lookup_without_repo "create_pr requires --head; works without --repo"
