@@ -438,6 +438,17 @@ test_ccache_run_wires_the_cache_into_the_container() {
     fi
 }
 
+test_ccache_post_steps_never_fail_the_cell() {
+    # Stats and save run after the install; if either failed the job, the
+    # non-always() "Build evidence row" step would be skipped and a good
+    # install would yield no row.
+    local name
+    for name in "Report ccache stats" "Save ccache"; do
+        assert_contains "$(_step "$name")" "continue-on-error: true" \
+            "$name cannot skip the evidence row"
+    done
+}
+
 test_ccache_actions_are_sha_pinned() {
     # Repo convention: third-party actions are pinned by commit SHA with a
     # version comment, never a movable tag.
@@ -489,6 +500,7 @@ run_test test_ccache_save_runs_on_failure "ccache stats + save run even when the
 run_test test_ccache_key_is_per_tool_and_tuple "ccache key is tool-tuple-major-version (#1594)"
 run_test test_ccache_major_never_fails_the_cell "a version with no numeric major never fails the cell (#1594)"
 run_test test_ccache_run_wires_the_cache_into_the_container "docker run mounts the cache and wraps luggage (#1594)"
+run_test test_ccache_post_steps_never_fail_the_cell "ccache stats/save failures never skip the evidence row (#1594)"
 run_test test_ccache_actions_are_sha_pinned "ccache cache actions are SHA-pinned (#1594)"
 run_test test_ccache_guards_discriminate "ccache gate assertion catches a dropped gate"
 

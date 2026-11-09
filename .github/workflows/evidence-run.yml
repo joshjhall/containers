@@ -627,6 +627,9 @@ jobs:
       # cold build has still populated objects worth saving.
       - name: Report ccache stats
         if: ${{ always() && matrix.source_build && steps.ccache.outputs.dir != '' }}
+        # Cache plumbing never decides a verdict: a failure here must not skip
+        # the evidence row and artifact upload below.
+        continue-on-error: true
         env:
           CCACHE_HOST_DIR: ${{ steps.ccache.outputs.dir }}
           CCACHE_RESTORED_KEY: ${{ steps.ccache-restore.outputs.cache-matched-key }}
@@ -648,6 +651,9 @@ jobs:
 
       - name: Save ccache
         if: ${{ always() && matrix.source_build && steps.ccache.outputs.dir != '' }}
+        # Cache plumbing never decides a verdict: a failure here must not skip
+        # the evidence row and artifact upload below.
+        continue-on-error: true
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ steps.ccache.outputs.dir }}

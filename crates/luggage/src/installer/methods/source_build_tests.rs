@@ -714,6 +714,17 @@ fn launcher_wraps_an_inherited_compiler_and_the_catalog_still_wins() {
     apply_compiler_launcher(&mut env, "ccache", |var: &str| (var == "CC").then(|| "  ".to_owned()));
     assert_eq!(env["CC"], "ccache cc", "a blank inherited CC is unset");
     assert_eq!(env["CXX"], "ccache c++");
+
+    // A blank catalog value is unset too: it falls through to the inherited
+    // compiler (or the default), never to a bare `ccache ` with no compiler.
+    let mut env =
+        BTreeMap::from([("CC".to_owned(), String::new()), ("CXX".to_owned(), " ".to_owned())]);
+    apply_compiler_launcher(&mut env, "ccache", inherited);
+    assert_eq!(env["CC"], "ccache clang", "a blank catalog CC defers to the inherited one");
+    assert_eq!(env["CXX"], "ccache clang++");
+    let mut env = BTreeMap::from([("CC".to_owned(), String::new())]);
+    apply_compiler_launcher(&mut env, "ccache", |_: &str| None);
+    assert_eq!(env["CC"], "ccache cc", "a blank catalog CC with nothing inherited is the default");
 }
 
 #[test]

@@ -115,15 +115,17 @@ pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
 /// The compiler each wraps is the one the unwrapped build would have used,
 /// so caching never changes the toolchain:
 ///
-/// 1. the catalog's own `CC`/`CXX` when it exports one (it wins in the step
-///    env, so it wins here too);
+/// 1. the catalog's own non-empty `CC`/`CXX` when it exports one (it wins in
+///    the step env, so it wins here too);
 /// 2. else a non-empty `CC`/`CXX` inherited from luggage's environment — the
 ///    streaming runner passes the process env through to every step, so an
 ///    image-level `CC=clang` would otherwise reach `configure` unwrapped but
 ///    be silently replaced by `cc` once the launcher is on;
 /// 3. else the POSIX defaults `cc`/`c++`, the names autoconf and node's gyp
-///    fall back to when neither is set (an empty value counts as unset, as
-///    autoconf's `test -z "$CC"` treats it).
+///    fall back to when neither is set.
+///
+/// A blank value at either level counts as unset, as autoconf's
+/// `test -z "$CC"` treats it — wrapping it would hand ccache no compiler.
 ///
 /// `inherited` looks a variable up in the process environment; it is a
 /// parameter so tests can supply one without `std::env::set_var`.
@@ -133,10 +135,12 @@ fn apply_compiler_launcher(
     inherited: impl Fn(&str) -> Option<String>,
 ) {
     for (var, default) in [("CC", "cc"), ("CXX", "c++")] {
+        let set = |v: &String| !v.trim().is_empty();
         let base = env
             .get(var)
+            .filter(|v| set(v))
             .cloned()
-            .or_else(|| inherited(var).filter(|v| !v.trim().is_empty()))
+            .or_else(|| inherited(var).filter(set))
             .unwrap_or_else(|| default.to_owned());
         env.insert(var.to_owned(), format!("{launcher} {base}"));
     }
