@@ -1092,8 +1092,14 @@ jobs:
       - name: Install Trivy via APT
         run: |
           # Install Trivy from official APT repository (GitHub releases are no longer available)
-          sudo apt-get install -y wget apt-transport-https gnupg
-          wget -qO - https://get.trivy.dev/deb/public.key | sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+          set -euo pipefail
+          sudo apt-get install -y apt-transport-https gnupg
+          # Fetched to a file (with retries, #1607) rather than piped: a
+          # failed pipe into gpg would otherwise leave an empty keyring.
+          KEY=$(mktemp)
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+            -o "$KEY" https://get.trivy.dev/deb/public.key
+          sudo gpg --dearmor --yes -o /usr/share/keyrings/trivy.gpg "$KEY"
           echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://get.trivy.dev/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
           sudo apt-get update
           sudo apt-get install -y trivy

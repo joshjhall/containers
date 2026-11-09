@@ -187,6 +187,19 @@ test_every_curl_retries() {
     assert_equals "0" "$violations" "every workflow curl call passes --retry ($seen calls)"
 }
 
+# wget's defaults retry nothing useful for an HTTP 5xx, and the curl row above
+# cannot see it — so workflow downloads use curl (whose retries this suite
+# checks) and wget is not used at all.
+test_no_wget_downloads() {
+    local hits
+    hits=$(command grep -nE '(^|[[:space:];|&(])wget[[:space:]]' "$WORKFLOWS_DIR"/*.yml |
+        command grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)
+    if [ -n "$hits" ]; then
+        /usr/bin/echo "$hits" | command sed "s|^$WORKFLOWS_DIR/|  |"
+    fi
+    assert_empty "$hits" "no workflow downloads with wget"
+}
+
 # Release assets must go through the helper (retries + gh API fallback +
 # cache), not curl — even a retrying curl has no fallback for an hours-long
 # releases/download outage.
@@ -313,6 +326,7 @@ run_test test_evidence_arch_plumbing_pinned_and_matched "evidence runners pinned
 run_test test_release_binaries_linux_legs_match "release-binaries Linux legs share one Ubuntu release"
 run_test test_runner_labels_known_to_actionlint "runner labels are known to actionlint or declared"
 run_test test_every_curl_retries "every workflow curl retries"
+run_test test_no_wget_downloads "workflows download with retrying curl, not wget"
 run_test test_release_downloads_use_helper "release assets download via bin/fetch-release-asset.sh"
 run_test test_every_helper_fetch_is_verified "every helper fetch passes --sha256"
 run_test test_lint_toolchain_checksums_recorded "every lint-toolchain asset is checksum-pinned"
