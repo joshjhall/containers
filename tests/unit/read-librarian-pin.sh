@@ -256,6 +256,18 @@ test_escape_directive_rejected() {
     assert_rejected "backtick escape directive"
     assert_contains "$ERR" "unsupported '# escape=' parser directive in $df at line 1" "escape directive is named"
 
+    # Directive keys are case-insensitive, tolerate spaces around `=`, and may
+    # follow other directives. Each case also carries a multi-key pin, so the
+    # exact message proves the escape check wins over the form check.
+    local directives
+    for directives in '# ESCAPE=`' '# escape = `' '# syntax=docker/dockerfile:1\n# escape=`'; do
+        df=$(command printf "${directives}\nFROM debian:13\nARG FOO=1 LIBRARIAN_REF=v0.19.0\n" | write_dockerfile)
+        run_pin "$df"
+        assert_rejected "escape directive '$directives'"
+        assert_contains "$ERR" "unsupported '# escape=' parser directive" "'$directives' is recognised as an escape directive"
+        assert_not_contains "$ERR" "unsupported ARG form" "'$directives': the escape error takes precedence"
+    done
+
     # The default escape, and an escape-looking comment AFTER the directive
     # block (no longer a directive), are both fine.
     df=$(command printf '# syntax=docker/dockerfile:1\n# escape=\\\nFROM debian:13\n# escape=`\nARG LIBRARIAN_REF=v0.18.0\n' | write_dockerfile)
