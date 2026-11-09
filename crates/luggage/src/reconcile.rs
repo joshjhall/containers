@@ -290,6 +290,7 @@ mod tests {
             version_output: None,
             error_class: None,
             dependencies: None,
+            removed_build_dependencies: Vec::new(),
             verification_warnings: Vec::new(),
             verification_tier: None,
             notes: None,

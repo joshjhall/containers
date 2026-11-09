@@ -69,6 +69,7 @@ only — **if this list and the schema disagree, the schema wins.**
 | `version_output`   | string (opt)          | no       | captured `<tool> --version` stdout                 |
 | `error_class`      | enum (opt)            | no       | populated when `result == fail`                    |
 | `dependencies`     | array (opt)           | no       | resolved system-dep versions; best-effort, pass rows |
+| `removed_build_dependencies` | string array (opt) | no | build packages purged before validation; pass rows |
 | `notes`            | string (opt)          | no       | reserved for future maintainer-supplied annotation |
 
 `image_ref` and `image_digest` are a paired requirement
@@ -94,10 +95,22 @@ It is captured **best-effort** and only on the success path of a
 (`dpkg-query -W` / `apk info -v` / `rpm -q`) after installing the
 dependencies, and before any `purpose: build` packages are removed. Build
 deps therefore appear here even though the final image no longer has them.
-The luggage report lists those in `removed_build_dependencies` (#1524). That
-field is not copied into the evidence row. A failed query leaves that entry's `version` unset rather than
-failing the install; skip, dry-run, and failure rows omit `dependencies`
-entirely (`skip_serializing_if`).
+They are listed separately in `removed_build_dependencies` (see below). A
+failed query leaves that entry's `version` unset rather than failing the
+install; skip, dry-run, and failure rows omit `dependencies` entirely
+(`skip_serializing_if`).
+
+### `removed_build_dependencies` — build packages purged before validation
+
+`removed_build_dependencies` is an array of per-distro package names (`g++`,
+`make`, `linux-headers`, …) that luggage installed only for the build and
+purged after the install method finished, before validation ran (#1524).
+`record-evidence` copies it from the luggage report's
+`InstallReport.removed_build_dependencies` (#1620), so a `pass` row carrying it
+shows the tool validated **without** its build toolchain present. Like
+`dependencies`, it is written on pass rows only — a failed install may never
+have reached the removal — and is omitted when empty, so rows with nothing
+removed are byte-identical to the pre-#1620 shape.
 
 The containers-db `TestEntry` schema carries the matching `InstalledDependency`
 `$def` + optional `dependencies[]`

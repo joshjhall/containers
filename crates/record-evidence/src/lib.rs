@@ -111,6 +111,15 @@ pub fn build_test_entry(inputs: RecorderInputs) -> Result<TestEntry, RecorderErr
         // enforce the "pass rows only" invariant here rather than relying on
         // the producer always leaving them `None` on skip/fail paths.
         dependencies: if result == TestResult::Pass { report.dependencies.clone() } else { None },
+        // Gated like `dependencies`, and for the same reason: a fail row must
+        // never claim a build-dependency removal that a failed install may not
+        // have reached. On a pass row it is the evidence that the tool
+        // validated with its build toolchain already purged (#1620).
+        removed_build_dependencies: if result == TestResult::Pass {
+            report.removed_build_dependencies.clone()
+        } else {
+            Vec::new()
+        },
         // Carried structurally rather than joined into `notes` (#850): a
         // tier-4 TOFU acceptance means the artifact was installed with nothing
         // establishing its authenticity, and an audit has to be able to *query*
@@ -390,6 +399,47 @@ mod tests {
         // recording disabled) yields a row with no `dependencies` field.
         let entry = build_test_entry(base_inputs()).unwrap();
         assert!(entry.dependencies.is_none());
+    }
+
+    #[test]
+    fn removed_build_dependencies_carried_on_pass_row() {
+        let mut inputs = base_inputs();
+        inputs.luggage_report.removed_build_dependencies = vec!["g++".into(), "make".into()];
+        let entry = build_test_entry(inputs).unwrap();
+        assert_eq!(entry.result, TestResult::Pass);
+        assert_eq!(entry.removed_build_dependencies, vec!["g++".to_string(), "make".to_string()]);
+        let json = serde_json::to_value(&entry).unwrap();
+        assert_eq!(json["removed_build_dependencies"], serde_json::json!(["g++", "make"]));
+    }
+
+    #[test]
+    fn removed_build_dependencies_dropped_on_non_pass_rows() {
+        let mut fail = base_inputs();
+        fail.luggage_report.error_class = Some(LuggageErrorClass::Validate);
+        fail.luggage_report.removed_build_dependencies = vec!["make".into()];
+        let mut skip = base_inputs();
+        skip.luggage_report.already_installed = true;
+        skip.luggage_report.removed_build_dependencies = vec!["make".into()];
+
+        for (inputs, want) in [(fail, TestResult::Fail), (skip, TestResult::Skip)] {
+            let entry = build_test_entry(inputs).unwrap();
+            assert_eq!(entry.result, want);
+            assert_eq!(
+                entry.removed_build_dependencies,
+                Vec::<String>::new(),
+                "{want:?} row must drop it"
+            );
+            let json = serde_json::to_value(&entry).unwrap();
+            assert!(json.get("removed_build_dependencies").is_none(), "{want:?} row serialized it");
+        }
+    }
+
+    #[test]
+    fn removed_build_dependencies_omitted_when_report_list_empty() {
+        let entry = build_test_entry(base_inputs()).unwrap();
+        assert_eq!(entry.result, TestResult::Pass);
+        let json = serde_json::to_value(&entry).unwrap();
+        assert!(json.get("removed_build_dependencies").is_none(), "empty list must be omitted");
     }
 
     #[test]
