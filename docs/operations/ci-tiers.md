@@ -228,9 +228,9 @@ Median over the 20 most recent successful `ci.yml` PR runs before #1593
 
 | | Before (measured) | After, non-Rust PR (projected) | After (measured, #1593's own PR run) |
 | --- | --- | --- | --- |
-| Runner-minutes | 19 | ~14 (12 ubuntu; macOS 3 and Windows 3 gone; +~2 for the detector and rollup jobs) | MEASURED_MINUTES |
-| Billable minutes (macOS ×10, Windows ×2) | 49.5 | ~14 | MEASURED_BILLABLE |
-| macOS / Windows runner slots per PR | 2 | 0 | MEASURED_SLOTS |
+| Runner-minutes | 19 | ~14 (12 ubuntu; macOS 3 and Windows 3 gone; +~2 for the detector and rollup jobs) | 15 (run 42692668810) |
+| Billable minutes (macOS ×10, Windows ×2) | 49.5 | ~14 | 15 |
+| macOS / Windows runner slots per PR | 2 | 0 | 0 |
 
 "Projected" removes the macOS/Windows legs from the measured before-runs. The
 measured column is one run, so treat it as a check on the projection. Re-take
