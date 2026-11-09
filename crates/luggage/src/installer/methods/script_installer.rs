@@ -158,6 +158,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -213,6 +214,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -268,6 +270,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -309,6 +312,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -342,6 +346,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -389,6 +394,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -438,6 +444,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -486,6 +493,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -534,6 +542,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -577,6 +586,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -617,6 +627,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -667,6 +678,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -719,6 +731,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };
@@ -768,6 +781,7 @@ mod tests {
             strip_components: 0,
             max_extract_bytes: crate::installer::methods::archive_limit::DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: &[],
+            compiler_launcher: None,
             log: None,
             runner: &runner,
         };

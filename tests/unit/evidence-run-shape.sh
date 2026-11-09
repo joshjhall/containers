@@ -328,6 +328,197 @@ test_closed_pr_runs_do_nothing() {
         "collect (!cancelled()) ANDs the closed guard explicitly"
 }
 
+# _step <name> [file] — one step's block in the evidence job, comments dropped.
+_step() {
+    /usr/bin/awk -v want="- name: $1" '
+        index($0, want) && !on { on = 1; print; next }
+        on && /^      - name: / { exit }
+        on { print }
+    ' "${2:-$WF}" | /usr/bin/grep -vE '^[[:space:]]*#'
+}
+
+test_ccache_steps_gate_on_source_build() {
+    # Only a source build compiles anything; every other cell must keep the
+    # plain docker run with no cache restore/save (#1594).
+    local name blk
+    for name in "Prepare ccache" "Restore ccache" "Report ccache stats" "Save ccache"; do
+        blk="$(_step "$name")"
+        if /usr/bin/grep -qE '^ +if: .*matrix\.source_build' <<<"$blk"; then
+            assert_true true "$name gates on matrix.source_build"
+        else
+            assert_true false "$name must gate on matrix.source_build"
+        fi
+    done
+}
+
+test_ccache_save_runs_on_failure() {
+    # A timed-out or failed cold build has still filled the cache; saving only
+    # on success would make the expensive first run worthless.
+    local name
+    for name in "Report ccache stats" "Save ccache"; do
+        if /usr/bin/grep -qE '^ +if: \$\{\{ always\(\) && ' <<<"$(_step "$name")"; then
+            assert_true true "$name runs under always()"
+        else
+            assert_true false "$name must run under always()"
+        fi
+    done
+}
+
+test_ccache_key_is_per_tool_and_tuple() {
+    # Tool + tuple lead the key so restore-keys never cross into another
+    # tool's or another tuple's objects, and version comes last so the
+    # major / any-version restore-keys are real prefixes of it.
+    local prefix='ccache-${{ matrix.tool }}-${{ matrix.tuple }}-'
+    local key="key: ${prefix}"'${{ steps.ccache.outputs.major }}-${{ matrix.version }}'
+    assert_contains "$(_step "Restore ccache")" "$key" "restore key is tool-tuple-major-version"
+    assert_contains "$(_step "Save ccache")" "$key" "save key matches the restore key"
+    assert_contains "$(_step "Restore ccache")" "${prefix}"'${{ steps.ccache.outputs.major }}-' \
+        "restore falls back to the same major"
+    # Cache entries are immutable: a fixed save key would freeze the first
+    # (possibly timed-out, partial) cold build's objects for that version
+    # forever. The save key must be unique per run.
+    local unique='-${{ github.run_id }}-${{ github.run_attempt }}'
+    assert_contains "$(_step "Save ccache")" "key: ${key#key: }${unique}" \
+        "save key is unique per run and attempt (entries are immutable)"
+    # With a run-unique key the exact key never exists, so the FIRST
+    # restore-key must be the exact-version prefix, or a warm rerun of the
+    # same version would restore a sibling version's objects instead.
+    local first
+    first="$(_step "Restore ccache" | /usr/bin/awk '/restore-keys:/ { getline; print; exit }')"
+    assert_equals "${prefix}"'${{ steps.ccache.outputs.major }}-${{ matrix.version }}-' \
+        "${first#"${first%%[![:space:]]*}"}" "first restore-key is the exact-version prefix"
+}
+
+test_ccache_major_never_fails_the_cell() {
+    # Cache plumbing never decides a verdict: a version with no numeric
+    # major falls back to `x` instead of exiting.
+    local prep
+    prep="$(_step "Prepare ccache")"
+    assert_contains "$prep" 'MAJOR=x' "non-numeric versions fall back to major x"
+    if /usr/bin/grep -qE '^[[:space:]]+exit [1-9]' <<<"$prep"; then
+        assert_true false "Prepare ccache must not exit non-zero"
+    else
+        assert_true true "Prepare ccache never fails the cell"
+    fi
+    # Pin the step's regex, then prove that exact pattern on sample versions.
+    local re='^([0-9]+)(\.|$)'
+    assert_contains "$prep" "=~ ${re} ]]" "major regex is the pinned pattern"
+    local v want got
+    for v in "22.22.3:22" "7:7" "nightly:x" "v1.2:x"; do
+        want="${v#*:}"
+        got=x
+        if [[ "${v%%:*}" =~ $re ]]; then got="${BASH_REMATCH[1]}"; fi
+        assert_equals "$want" "$got" "major of ${v%%:*}"
+    done
+}
+
+test_ccache_run_wires_the_cache_into_the_container() {
+    local run
+    run="$(_step "Run luggage install inside the base image")"
+    local want
+    for want in '"$CCACHE_HOST_DIR:/ccache"' 'CCACHE_DIR=/ccache' 'CCACHE_MAXSIZE=' \
+        'CCACHE_BASEDIR=/tmp' 'CCACHE_NOHASHDIR=1' 'CCACHE_COMPILERCHECK=content' \
+        'CCACHE_STATS_OUT=/out/ccache-stats.txt' 'evidence-ccache-entry.sh:/usr/local/bin/evidence-ccache-entry:ro' \
+        '"${CCACHE_FLAGS[@]}"' '"${CCACHE_WRAP[@]}"' 'if [ -n "$CCACHE_HOST_DIR" ]; then'; do
+        assert_contains "$run" "$want" "source-build docker run carries $want"
+    done
+    # --init lives in CCACHE_FLAGS (source cells only): a bare `sh` as PID 1
+    # ignores SIGTERM, so a cancelled build would keep writing the cache
+    # while the always() save step archives it.
+    local flags
+    flags="$(/usr/bin/awk '/CCACHE_FLAGS=\($/ { on = 1; next } on && /^ *\)$/ { exit } on' <<<"$run")"
+    assert_contains "$flags" '--init' "source-build cells run under an init that forwards signals"
+    # The launcher opt-in belongs to the entry script, set only once ccache is
+    # actually installed; the workflow exporting it would break the
+    # uncached fallback (luggage would spawn a missing `ccache`).
+    if /usr/bin/grep -q 'LUGGAGE_COMPILER_LAUNCHER' <<<"$run"; then
+        assert_true false "the docker run must not set LUGGAGE_COMPILER_LAUNCHER itself"
+    else
+        assert_true true "only the entry script opts luggage into the launcher"
+    fi
+}
+
+test_ccache_post_steps_never_fail_the_cell() {
+    # Stats and save run after the install; if either failed the job, the
+    # non-always() "Build evidence row" step would be skipped and a good
+    # install would yield no row.
+    local name
+    for name in "Report ccache stats" "Save ccache"; do
+        assert_contains "$(_step "$name")" "continue-on-error: true" \
+            "$name cannot skip the evidence row"
+    done
+}
+
+test_ccache_binary_is_fetched_static_and_verified() {
+    # ccache must never be installed into the image under test (its package
+    # libs could mask a missing catalog dep). The runner fetches a pinned
+    # musl-static release, checks its sha256, and mounts it read-only.
+    local fetch run
+    fetch="$(_step "Fetch static ccache")"
+    assert_contains "$fetch" 'if: ${{ matrix.source_build }}' "fetch runs only for source-build cells"
+    assert_contains "$fetch" 'musl-static' "the binary is the static musl build"
+    assert_contains "$fetch" 'sha256sum -c -' "the download is checksum-verified"
+    # Each arch separately: one valid digest must not vouch for the other.
+    local a
+    for a in X86_64 AARCH64; do
+        if /usr/bin/grep -qE "^ +CCACHE_SHA256_${a}: [0-9a-f]{64}\$" <<<"$fetch"; then
+            assert_true true "$a sha256 pin is a full digest"
+        else
+            assert_true false "$a sha256 pin must be a 64-hex digest"
+        fi
+    done
+    # And each runner arch selects its own digest.
+    assert_contains "$fetch" 'amd64) CARCH=x86_64 SUM="$CCACHE_SHA256_X86_64"' "amd64 uses the x86_64 digest"
+    assert_contains "$fetch" 'arm64) CARCH=aarch64 SUM="$CCACHE_SHA256_AARCH64"' "arm64 uses the aarch64 digest"
+    # Cache plumbing never decides a verdict: the fetch step has no
+    # continue-on-error, so it must be unable to fail — no `set -e`, no
+    # non-zero exit; every failure branch warns and leaves `bin` empty.
+    if /usr/bin/grep -qE '^ +set -[a-z]*e|^ +exit [1-9]|\|\| *exit' <<<"$fetch"; then
+        assert_true false "Fetch static ccache must never exit non-zero (no set -e / exit N)"
+    else
+        assert_true true "Fetch static ccache cannot fail the cell"
+    fi
+    assert_contains "$fetch" '::warning::could not fetch or verify static ccache' "a failed fetch or checksum only warns"
+    run="$(_step "Run luggage install inside the base image")"
+    assert_contains "$run" '"$CCACHE_BIN:/opt/evidence-ccache/ccache:ro"' "the static binary is mounted read-only"
+    if /usr/bin/grep -qE 'apk add|apt-get install|dnf install' <<<"$run$(/usr/bin/cat "$PROJECT_ROOT/bin/lib/evidence-ccache-entry.sh")"; then
+        assert_true false "nothing may install ccache into the image under test"
+    else
+        assert_true true "no package install of ccache in the cell"
+    fi
+}
+
+test_ccache_actions_are_sha_pinned() {
+    # Repo convention: third-party actions are pinned by commit SHA with a
+    # version comment, never a movable tag.
+    local name
+    for name in "Restore ccache" "Save ccache"; do
+        if /usr/bin/grep -qE 'uses: actions/cache/(restore|save)@[0-9a-f]{40} # v[0-9]' <<<"$(_step "$name")"; then
+            assert_true true "$name is SHA-pinned"
+        else
+            assert_true false "$name must pin actions/cache by 40-hex SHA with a # vX comment"
+        fi
+    done
+}
+
+test_ccache_guards_discriminate() {
+    # Mutation check on a scratch copy: dropping the source_build gate from
+    # Save ccache must make the gate assertion fail.
+    local tmp
+    tmp="$(/usr/bin/mktemp)"
+    /usr/bin/awk '
+        /- name: Save ccache/ { on = 1 }
+        on && /^        if:/ { print "        if: ${{ always() }}"; on = 0; next }
+        { print }
+    ' "$WF" >"$tmp"
+    if /usr/bin/grep -qE '^ +if: .*matrix\.source_build' <<<"$(_step "Save ccache" "$tmp")"; then
+        assert_true false "mutated copy still matched the source_build gate (guard is vacuous)"
+    else
+        assert_true true "dropping the gate is detected"
+    fi
+    /usr/bin/rm -f "$tmp"
+}
+
 run_test test_cells_install_as_the_container_user "cells install as the container user (--user runner)"
 run_test test_cells_open_no_prs_or_issues "cells open no PRs or issues"
 run_test test_collect_job_batches_into_one_pr "collect job batches into one PR and one issue"
@@ -343,5 +534,14 @@ run_test test_cells_install_from_the_vendored_catalog "cells install from the ve
 run_test test_pr_runs_cancel_per_pr "PR runs cancel per PR (#1591)"
 run_test test_main_runs_never_cancel "main/dispatch runs never cancel (#1591)"
 run_test test_closed_pr_runs_do_nothing "a closed PR run cancels and does nothing (#1591)"
+run_test test_ccache_steps_gate_on_source_build "ccache steps run only for source-build cells (#1594)"
+run_test test_ccache_save_runs_on_failure "ccache stats + save run even when the build fails (#1594)"
+run_test test_ccache_key_is_per_tool_and_tuple "ccache key is tool-tuple-major-version (#1594)"
+run_test test_ccache_major_never_fails_the_cell "a version with no numeric major never fails the cell (#1594)"
+run_test test_ccache_run_wires_the_cache_into_the_container "docker run mounts the cache and wraps luggage (#1594)"
+run_test test_ccache_post_steps_never_fail_the_cell "ccache stats/save failures never skip the evidence row (#1594)"
+run_test test_ccache_binary_is_fetched_static_and_verified "ccache is a verified static binary, never installed in the image (#1594)"
+run_test test_ccache_actions_are_sha_pinned "ccache cache actions are SHA-pinned (#1594)"
+run_test test_ccache_guards_discriminate "ccache gate assertion catches a dropped gate"
 
 generate_report
