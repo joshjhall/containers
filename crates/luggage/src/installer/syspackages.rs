@@ -253,27 +253,61 @@ pub fn is_installed(mgr: PackageManager, package: &str) -> bool {
 
 /// Remove `packages` from the host via `mgr` (#1524). A no-op when empty.
 ///
+/// `rpm -e` is one transaction: if any single package is refused (something
+/// installed still depends on it), nothing is removed. `dpkg --purge` removes
+/// what it can and exits non-zero for the rest. Either way a failed batch is
+/// retried one package at a time, so everything that can go does go, and only
+/// the packages still refused on their own are reported. Purging a package
+/// that is already gone exits 0 on dpkg, so the retry costs nothing there.
+/// (Verified on debian:trixie-slim, 2026-11-09.)
+///
 /// # Errors
 ///
-/// [`LuggageError::PackageManagerFailed`] when the package manager exits
-/// non-zero (including a refusal because something still depends on a
-/// package) or fails to launch.
+/// [`LuggageError::PackageManagerFailed`] naming each package that could not
+/// be removed, with the manager's stderr. A package refused because an
+/// installed package depends on it means the catalog declared a runtime need
+/// as `purpose: build`. That fails loudly rather than shipping a silently
+/// broken image.
 pub fn remove_packages(packages: &[&str], mgr: PackageManager) -> Result<()> {
-    let Some((program, args)) = remove_argv(mgr, packages) else { return Ok(()) };
-    let out = Command::new(program).args(&args).output().map_err(|e| {
-        LuggageError::PackageManagerFailed { message: format!("{program} failed to launch: {e}") }
-    })?;
-    if out.status.success() {
+    let refused: Vec<String> = match run_removal(mgr, packages) {
+        Ok(()) => return Ok(()),
+        // A lone package has nothing to retry.
+        Err(e) if packages.len() <= 1 => vec![e],
+        Err(_) => remove_individually(mgr, packages),
+    };
+    if refused.is_empty() {
         return Ok(());
     }
     Err(LuggageError::PackageManagerFailed {
-        message: format!(
-            "{program} {} exited {}: {}",
-            args.join(" "),
-            out.status,
-            String::from_utf8_lossy(&out.stderr).trim_end(),
-        ),
+        message: format!("could not remove build dependencies: {}", refused.join("; ")),
     })
+}
+
+/// Remove each package in its own transaction, returning a description of
+/// every one that was still refused.
+fn remove_individually(mgr: PackageManager, packages: &[&str]) -> Vec<String> {
+    packages
+        .iter()
+        .filter_map(|p| run_removal(mgr, &[p]).err().map(|e| format!("{p}: {e}")))
+        .collect()
+}
+
+/// Run one removal transaction. `Ok` when `packages` is empty.
+fn run_removal(mgr: PackageManager, packages: &[&str]) -> std::result::Result<(), String> {
+    let Some((program, args)) = remove_argv(mgr, packages) else { return Ok(()) };
+    let out = Command::new(program)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("{program} failed to launch: {e}"))?;
+    if out.status.success() {
+        return Ok(());
+    }
+    Err(format!(
+        "{program} {} exited {}: {}",
+        args.join(" "),
+        out.status,
+        String::from_utf8_lossy(&out.stderr).trim_end(),
+    ))
 }
 
 /// Pick the binary to run for `program` given what is on `PATH`.
