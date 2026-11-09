@@ -261,7 +261,7 @@ test_escape_directive_rejected() {
     # exact message proves the escape check wins over the form check.
     local directives
     for directives in '# ESCAPE=`' '# escape = `' '# syntax=docker/dockerfile:1\n# escape=`'; do
-        df=$(command printf "${directives}\nFROM debian:13\nARG FOO=1 LIBRARIAN_REF=v0.19.0\n" | write_dockerfile)
+        df=$(command printf '%b\nFROM debian:13\nARG FOO=1 LIBRARIAN_REF=v0.19.0\n' "$directives" | write_dockerfile)
         run_pin "$df"
         assert_rejected "escape directive '$directives'"
         assert_contains "$ERR" "unsupported '# escape=' parser directive" "'$directives' is recognised as an escape directive"
@@ -313,6 +313,23 @@ EOF
     assert_equals "0" "$RC" "non-ARG and non-key mentions are ignored"
     assert_equals "v0.18.0" "$OUT" "the single pin is printed"
     assert_equals "" "$ERR" "no error output"
+
+    # An ARG-looking line after a continued RUN is part of the RUN to Docker,
+    # so it is not a second pin; parse it the same way.
+    df=$(command printf 'ARG LIBRARIAN_REF=v0.18.0\nRUN true \\\nARG LIBRARIAN_REF=v0.19.0\n' | write_dockerfile)
+    run_pin "$df"
+    assert_equals "0" "$RC" "ARG text inside a continued RUN is not a pin"
+    assert_equals "v0.18.0" "$OUT" "only the real pin is printed"
+}
+
+# Dockerfiles have no inline comments: `# note` after the value is two more
+# ARG keys to Docker, so it is the multi-key form and must fail closed.
+test_trailing_inline_comment_rejected() {
+    local df
+    df=$(command printf 'ARG LIBRARIAN_REF=v1.2.3 # note\n' | write_dockerfile)
+    run_pin "$df"
+    assert_rejected "pin with a trailing '# note'"
+    assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF in $df at line 1" "inline '#' is treated as extra keys"
 }
 
 # Count LIBRARIAN_REF mentions in a workflow file outside whole-line comments.
@@ -376,6 +393,7 @@ run_test test_multi_key_pin_rejected "multi-key ARG pin is rejected, not skipped
 run_test test_escape_directive_rejected "non-default # escape= directive is rejected (#1580)"
 run_test test_continued_pin_rejected "backslash-continued ARG pin is rejected (#1580)"
 run_test test_other_instruction_mention_ignored "LIBRARIAN_REF outside an ARG key is not a pin"
+run_test test_trailing_inline_comment_rejected "pin followed by an inline '# note' is rejected"
 run_test test_ci_steps_use_shared_script "ci.yml pin steps share bin/read-librarian-pin.sh"
 run_test test_inline_read_guard_discriminates "ci.yml inline-read guard catches any spelling (#1580)"
 
