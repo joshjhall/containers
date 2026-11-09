@@ -172,9 +172,210 @@ fn write_outputs(inputs: &InitInputs, reg: &Registry) -> Result<(), Box<dyn std:
     Ok(())
 }
 
+/// Unit tests for `init`'s command logic.
+///
+/// `tests/init_integration.rs` already pins the end-to-end non-interactive
+/// path as a subprocess (files exist, YAML/JSON validity, `.igor.yml`
+/// round-trip of project + features, hash-map shape, the missing-`--config`
+/// error). These tests cover what that suite does not: the explicit vs
+/// auto-resolved split, versions/agents/services surviving load *and* save,
+/// `run()`'s guard firing before any write, and `force = true` overwriting a
+/// hand-edited file.
+///
+/// **Declined scope:** `load_from_wizard` is not unit-tested. It is TUI-bound
+/// (`wizard::run_wizard` needs a terminal) and covering it would need a
+/// wizard-injection seam in a production signature — the same reason #867
+/// declined `run_setup` / `run_labels_sync`.
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+
+    use containers_common::generate::hash_content;
+
     use super::*;
+    use crate::test_support::with_cwd;
+
+    /// Writes `yaml` to `<dir>/fixture.igor.yml` and returns its path.
+    fn write_cfg(dir: &Path, yaml: &str) -> PathBuf {
+        let path = dir.join("fixture.igor.yml");
+        fs::write(&path, yaml).unwrap();
+        path
+    }
+
+    /// Only `python_dev` is listed, so `python` can reach the selection solely
+    /// through dependency resolution.
+    const DEV_ONLY_CFG: &str = "\
+schema_version: 1
+containers_dir: containers
+project:
+  name: myapp
+  username: developer
+  base_image: \"debian:trixie-slim\"
+features:
+  - python_dev
+";
+
+    /// Carries every field `init` must pass through untouched.
+    const RICH_CFG: &str = "\
+schema_version: 1
+containers_dir: containers
+project:
+  name: richapp
+  username: builder
+  base_image: \"debian:bookworm-slim\"
+features:
+  - python
+versions:
+  PYTHON_VERSION: \"3.9-pinned\"
+agents:
+  max: 3
+  network: richapp-dev-network
+services:
+  postgres:
+    image: postgres:16
+    port: 5432
+    per_agent_db: true
+";
+
+    #[test]
+    fn load_from_config_resolves_dependencies_and_keeps_explicit_set() {
+        let reg = Registry::new();
+        let tmp = tempfile::tempdir().unwrap();
+
+        let inputs = load_from_config(&reg, &write_cfg(tmp.path(), DEV_ONLY_CFG)).unwrap();
+
+        let explicit: Vec<&str> = inputs.selection.explicit.iter().map(String::as_str).collect();
+        assert_eq!(explicit, ["python_dev"], "explicit set must be exactly the config's list");
+        assert!(
+            inputs.selection.auto_resolved.contains("python"),
+            "python_dev requires python, so it must be auto-resolved; got {:?}",
+            inputs.selection.auto_resolved
+        );
+        assert!(inputs.selection.has("python"), "resolved selection must include python");
+    }
+
+    #[test]
+    fn load_from_config_carries_project_versions_agents_services() {
+        let reg = Registry::new();
+        let tmp = tempfile::tempdir().unwrap();
+
+        let inputs = load_from_config(&reg, &write_cfg(tmp.path(), RICH_CFG)).unwrap();
+
+        assert_eq!(inputs.project.name, "richapp");
+        assert_eq!(inputs.project.username, "builder");
+        assert_eq!(inputs.project.base_image, "debian:bookworm-slim");
+        assert_eq!(inputs.containers_dir, "containers");
+        assert_eq!(
+            inputs.versions.get("PYTHON_VERSION").map(String::as_str),
+            Some("3.9-pinned"),
+            "a pinned version must come through load unchanged"
+        );
+        assert_eq!(inputs.agents.max, 3);
+        assert_eq!(inputs.agents.network, "richapp-dev-network");
+        let pg = inputs.services.get("postgres").expect("postgres service must be loaded");
+        assert_eq!(pg.image, "postgres:16");
+        assert_eq!(pg.port, 5432);
+        assert!(pg.per_agent_db);
+    }
+
+    #[test]
+    fn load_from_config_errors_on_missing_file() {
+        let reg = Registry::new();
+        let tmp = tempfile::tempdir().unwrap();
+
+        let result = load_from_config(&reg, &tmp.path().join("absent.igor.yml"));
+
+        assert!(result.is_err(), "a missing config must be an error, not a default");
+    }
+
+    #[test]
+    fn load_from_config_errors_on_malformed_yaml() {
+        let reg = Registry::new();
+        let tmp = tempfile::tempdir().unwrap();
+
+        let result = load_from_config(&reg, &write_cfg(tmp.path(), "features: [unclosed\n"));
+
+        assert!(result.is_err(), "malformed YAML must be an error");
+    }
+
+    /// The guard must fire before anything else: no wizard, no render, no
+    /// `.igor.yml`. Asserting the CWD stays empty is what fails if the check
+    /// is moved below the load/write steps.
+    #[test]
+    fn run_non_interactive_without_config_errors_before_writing() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let err = with_cwd(tmp.path(), || run(true, None)).expect_err("guard must reject");
+
+        let msg = err.to_string();
+        assert!(
+            msg.contains("--config") && msg.contains("--non-interactive"),
+            "error should name both flags, got: {msg}"
+        );
+        let entries: Vec<_> = fs::read_dir(tmp.path()).unwrap().collect();
+        assert!(entries.is_empty(), "guard must return before writing anything: {entries:?}");
+    }
+
+    #[test]
+    fn write_outputs_preserves_versions_agents_services_on_save() {
+        let reg = Registry::new();
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg_path = write_cfg(tmp.path(), RICH_CFG);
+        let inputs = load_from_config(&reg, &cfg_path).unwrap();
+
+        with_cwd(tmp.path(), || write_outputs(&inputs, &reg)).unwrap();
+
+        let saved = IgorConfig::load(tmp.path().join(".igor.yml")).unwrap();
+        assert_eq!(saved.features, ["python"], "the explicit feature list is persisted");
+        assert_eq!(saved.versions, inputs.versions, "versions must survive init's save");
+        assert_eq!(saved.agents.max, 3);
+        assert_eq!(saved.agents.network, "richapp-dev-network");
+        let pg = saved.services.get("postgres").expect("services must survive init's save");
+        assert_eq!(pg.image, "postgres:16");
+        assert_eq!(pg.port, 5432);
+        assert!(pg.per_agent_db);
+    }
+
+    #[test]
+    fn write_outputs_saves_explicit_not_auto_resolved_features() {
+        let reg = Registry::new();
+        let tmp = tempfile::tempdir().unwrap();
+        let inputs = load_from_config(&reg, &write_cfg(tmp.path(), DEV_ONLY_CFG)).unwrap();
+
+        with_cwd(tmp.path(), || write_outputs(&inputs, &reg)).unwrap();
+
+        let saved = IgorConfig::load(tmp.path().join(".igor.yml")).unwrap();
+        assert_eq!(
+            saved.features,
+            ["python_dev"],
+            "auto-resolved python must not be promoted to an explicit selection"
+        );
+    }
+
+    /// `init` renders with `force = true`: a hand-edited generated file is
+    /// overwritten, and the recorded hash matches the fresh content.
+    #[test]
+    fn write_outputs_overwrites_existing_generated_file() {
+        const SENTINEL: &str = "HAND_EDITED_SENTINEL=1\n";
+        let reg = Registry::new();
+        let tmp = tempfile::tempdir().unwrap();
+        let inputs = load_from_config(&reg, &write_cfg(tmp.path(), DEV_ONLY_CFG)).unwrap();
+        let env_rel = ".devcontainer/.env";
+        fs::create_dir_all(tmp.path().join(".devcontainer")).unwrap();
+        fs::write(tmp.path().join(env_rel), SENTINEL).unwrap();
+
+        with_cwd(tmp.path(), || write_outputs(&inputs, &reg)).unwrap();
+
+        let content = fs::read_to_string(tmp.path().join(env_rel)).unwrap();
+        assert!(!content.contains("HAND_EDITED_SENTINEL"), "existing file must be overwritten");
+        let saved = IgorConfig::load(tmp.path().join(".igor.yml")).unwrap();
+        assert_eq!(
+            saved.generated.get(env_rel),
+            Some(&hash_content(&content)),
+            "recorded hash must describe the freshly written content"
+        );
+    }
 
     fn selection_of(ids: &[&str], reg: &Registry) -> Selection {
         let explicit: HashSet<String> = ids.iter().map(|s| (*s).to_string()).collect();
