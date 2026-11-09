@@ -608,13 +608,25 @@ fn steps_stream_banner_and_output_into_the_feature_log() {
 
 // ---- compiler launcher (#1594) -----------------------------------------
 
-/// What `run()` wraps when the catalog names no compiler: `run()` reads the
-/// real process env (see [`apply_compiler_launcher`]), so a `CC`/`CXX`
-/// exported where the tests run must not turn these assertions red.
-fn launched(var: &str, default: &str) -> String {
-    let base = std::env::var(var).ok().filter(|v| !v.trim().is_empty());
-    format!("ccache {}", base.as_deref().unwrap_or(default))
+/// What `run()` sets `var` to when the catalog names no compiler: `run()`
+/// reads the real process env and `PATH` (see [`apply_compiler_launcher`]),
+/// so a `CC`/`CXX` exported where the tests run, or a host without `g++`,
+/// must not turn these assertions red. `None` = left unset.
+fn launched(var: &str) -> Option<String> {
+    let probe = if var == "CC" { ["gcc", "cc"] } else { ["g++", "c++"] };
+    let base = std::env::var(var).ok().filter(|v| !v.trim().is_empty()).or_else(|| {
+        probe.into_iter().find(|p| step_on_path(&BTreeMap::new())(p)).map(str::to_owned)
+    })?;
+    Some(if already_launched(&base, "ccache") { base } else { format!("ccache {base}") })
 }
+
+/// A `PATH` holding exactly `present`, for [`apply_compiler_launcher`].
+fn path_with(present: &'static [&'static str]) -> impl Fn(&str) -> bool {
+    move |p: &str| present.contains(&p)
+}
+
+/// Every probed compiler present — the common full-toolchain image.
+const ALL: &[&str] = &["gcc", "cc", "g++", "c++"];
 
 /// Off by default: with no launcher every step's env is exactly what
 /// `build_env` produces — no `CC`/`CXX` appears. This is the production
@@ -632,8 +644,8 @@ fn no_launcher_leaves_the_build_env_untouched() {
     }
 }
 
-/// Opted in, every step compiles through the launcher, wrapping the POSIX
-/// default compilers when the catalog names none.
+/// Opted in, every step compiles through the launcher, wrapping the
+/// compiler autoconf would probe when the catalog names none.
 #[test]
 fn launcher_wraps_the_default_compilers_for_every_step() {
     let mut f = Fixture::python();
@@ -643,8 +655,8 @@ fn launcher_wraps_the_default_compilers_for_every_step() {
     let calls = f.runner.streaming_calls();
     assert_eq!(calls.len(), 3);
     for call in calls {
-        assert_eq!(call.env.get("CC"), Some(&launched("CC", "cc")), "{}", call.program);
-        assert_eq!(call.env.get("CXX"), Some(&launched("CXX", "c++")), "{}", call.program);
+        assert_eq!(call.env.get("CC"), launched("CC").as_ref(), "{}", call.program);
+        assert_eq!(call.env.get("CXX"), launched("CXX").as_ref(), "{}", call.program);
     }
 }
 
@@ -659,7 +671,7 @@ fn launcher_wraps_a_catalog_compiler_rather_than_replacing_it() {
 
     let call = &f.runner.streaming_calls()[0];
     assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc-13"));
-    assert_eq!(call.env.get("CXX"), Some(&launched("CXX", "c++")));
+    assert_eq!(call.env.get("CXX"), launched("CXX").as_ref());
 }
 
 /// The same holds for `CXX`, and for both at once: neither variable falls
@@ -667,11 +679,11 @@ fn launcher_wraps_a_catalog_compiler_rather_than_replacing_it() {
 #[test]
 fn launcher_wraps_a_catalog_cxx_and_both_together() {
     for (env, want_cc, want_cxx) in [
-        (vec![("CXX", "g++-13")], launched("CC", "cc"), "ccache g++-13".to_owned()),
+        (vec![("CXX", "g++-13")], launched("CC"), Some("ccache g++-13".to_owned())),
         (
             vec![("CC", "clang"), ("CXX", "clang++")],
-            "ccache clang".to_owned(),
-            "ccache clang++".to_owned(),
+            Some("ccache clang".to_owned()),
+            Some("ccache clang++".to_owned()),
         ),
     ] {
         let mut f = Fixture::python();
@@ -681,8 +693,8 @@ fn launcher_wraps_a_catalog_cxx_and_both_together() {
         f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
 
         let call = &f.runner.streaming_calls()[0];
-        assert_eq!(call.env.get("CC"), Some(&want_cc), "{env:?}");
-        assert_eq!(call.env.get("CXX"), Some(&want_cxx), "{env:?}");
+        assert_eq!(call.env.get("CC"), want_cc.as_ref(), "{env:?}");
+        assert_eq!(call.env.get("CXX"), want_cxx.as_ref(), "{env:?}");
     }
 }
 
@@ -701,30 +713,165 @@ fn launcher_wraps_an_inherited_compiler_and_the_catalog_still_wins() {
     };
 
     let mut env = BTreeMap::new();
-    apply_compiler_launcher(&mut env, "ccache", inherited);
+    apply_compiler_launcher(&mut env, "ccache", inherited, path_with(ALL));
     assert_eq!(env["CC"], "ccache clang");
     assert_eq!(env["CXX"], "ccache clang++");
 
     let mut env = BTreeMap::from([("CC".to_owned(), "gcc-13".to_owned())]);
-    apply_compiler_launcher(&mut env, "ccache", inherited);
+    apply_compiler_launcher(&mut env, "ccache", inherited, path_with(ALL));
     assert_eq!(env["CC"], "ccache gcc-13", "catalog CC must beat the inherited one");
     assert_eq!(env["CXX"], "ccache clang++");
 
     let mut env = BTreeMap::new();
-    apply_compiler_launcher(&mut env, "ccache", |var: &str| (var == "CC").then(|| "  ".to_owned()));
-    assert_eq!(env["CC"], "ccache cc", "a blank inherited CC is unset");
-    assert_eq!(env["CXX"], "ccache c++");
+    apply_compiler_launcher(
+        &mut env,
+        "ccache",
+        |var: &str| (var == "CC").then(|| "  ".to_owned()),
+        path_with(ALL),
+    );
+    assert_eq!(env["CC"], "ccache gcc", "a blank inherited CC is unset");
+    assert_eq!(env["CXX"], "ccache g++");
 
     // A blank catalog value is unset too: it falls through to the inherited
     // compiler (or the default), never to a bare `ccache ` with no compiler.
     let mut env =
         BTreeMap::from([("CC".to_owned(), String::new()), ("CXX".to_owned(), " ".to_owned())]);
-    apply_compiler_launcher(&mut env, "ccache", inherited);
+    apply_compiler_launcher(&mut env, "ccache", inherited, path_with(ALL));
     assert_eq!(env["CC"], "ccache clang", "a blank catalog CC defers to the inherited one");
     assert_eq!(env["CXX"], "ccache clang++");
     let mut env = BTreeMap::from([("CC".to_owned(), String::new())]);
-    apply_compiler_launcher(&mut env, "ccache", |_: &str| None);
-    assert_eq!(env["CC"], "ccache cc", "a blank catalog CC with nothing inherited is the default");
+    apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(ALL));
+    assert_eq!(env["CC"], "ccache gcc", "a blank catalog CC with nothing inherited is probed");
+}
+
+/// With nothing named, the default follows autoconf's probe order —
+/// `gcc` before `cc`, `g++` before `c++` — so an image whose `cc` is not its
+/// `gcc` still caches the compiler `configure` would have picked.
+#[test]
+fn launcher_default_follows_the_autoconf_probe_order() {
+    for (present, want_cc, want_cxx) in [
+        (ALL, "ccache gcc", "ccache g++"),
+        (&["cc", "c++"][..], "ccache cc", "ccache c++"),
+        (&["cc", "gcc", "c++", "g++"][..], "ccache gcc", "ccache g++"),
+        (&["gcc", "c++"][..], "ccache gcc", "ccache c++"),
+    ] {
+        let mut env = BTreeMap::new();
+        apply_compiler_launcher(&mut env, "ccache", |_: &str| None, |p: &str| present.contains(&p));
+        assert_eq!(env.get("CC").map(String::as_str), Some(want_cc), "{present:?}");
+        assert_eq!(env.get("CXX").map(String::as_str), Some(want_cxx), "{present:?}");
+    }
+}
+
+/// A compiler that is not on `PATH` is not invented: a C-only image keeps
+/// `CXX` unset (as the unwrapped build would), and with no compiler at all
+/// neither variable is touched.
+#[test]
+fn launcher_leaves_a_missing_compiler_unset() {
+    let mut env = BTreeMap::new();
+    apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&["gcc", "cc"]));
+    assert_eq!(env.get("CC").map(String::as_str), Some("ccache gcc"));
+    assert!(!env.contains_key("CXX"), "C-only image must not get a CXX: {env:?}");
+
+    let mut env = BTreeMap::from([("CFLAGS".to_owned(), "-O2".to_owned())]);
+    let before = env.clone();
+    apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&[]));
+    assert_eq!(env, before, "no compiler anywhere: env must be untouched");
+
+    // An explicit compiler still wins over an empty PATH.
+    let mut env = BTreeMap::new();
+    apply_compiler_launcher(
+        &mut env,
+        "ccache",
+        |var: &str| (var == "CXX").then(|| "clang++".to_owned()),
+        path_with(&[]),
+    );
+    assert!(!env.contains_key("CC"), "{env:?}");
+    assert_eq!(env["CXX"], "ccache clang++");
+}
+
+/// The compiler probe searches the `PATH` the steps run with: a catalog
+/// `PATH` replaces luggage's, so a compiler only there is found and one only
+/// on luggage's `PATH` is not.
+#[cfg(unix)]
+#[test]
+fn launcher_probes_the_step_path_when_the_catalog_sets_one() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempdir().unwrap();
+    let gcc = dir.path().join("gcc-luggage-probe");
+    fs::write(&gcc, "#!/bin/sh\n").unwrap();
+    fs::set_permissions(&gcc, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(dir.path().join("not-executable"), "").unwrap();
+
+    let env = BTreeMap::from([("PATH".to_owned(), dir.path().display().to_string())]);
+    let probe = step_on_path(&env);
+    assert!(probe("gcc-luggage-probe"), "a compiler on the catalog PATH is found");
+    assert!(!probe("not-executable"), "a non-executable file is not a compiler");
+    assert!(!probe("sh"), "luggage's own PATH is not searched when the catalog sets one");
+
+    // Empty and relative entries resolve against the steps' cwd (the scratch
+    // tree), not luggage's, so they are never probed. `rel` reaches the probe
+    // directory from luggage's own cwd (`../` up to `/`, then down), so a
+    // probe that honoured relative entries would wrongly find the compiler.
+    let cwd = std::env::current_dir().unwrap();
+    let up = "../".repeat(cwd.components().count() - 1);
+    let rel = format!("{up}{}", dir.path().strip_prefix("/").unwrap().display());
+    assert!(
+        std::path::Path::new(&rel).join("gcc-luggage-probe").is_file(),
+        "{rel} must reach the probe dir from the cwd, or this test proves nothing",
+    );
+    for path in [String::new(), ":".to_owned(), rel.clone(), format!(":{rel}:")] {
+        let env = BTreeMap::from([("PATH".to_owned(), path.clone())]);
+        assert!(!step_on_path(&env)("gcc-luggage-probe"), "PATH={path:?}");
+    }
+    let env = BTreeMap::from([("PATH".to_owned(), format!("{rel}:{}", dir.path().display()))]);
+    assert!(step_on_path(&env)("gcc-luggage-probe"), "the absolute entry still counts");
+
+    // No catalog PATH: luggage's own is searched.
+    assert!(step_on_path(&BTreeMap::new())("sh"), "sh is on luggage's PATH");
+    assert!(!step_on_path(&BTreeMap::new())("gcc-luggage-probe"));
+}
+
+/// The log note survives a compiler left unset (indexing `env["CXX"]` used
+/// to panic on a C-only image) and names exactly what each step receives.
+#[test]
+fn launcher_note_shows_an_unset_compiler() {
+    let mut env = BTreeMap::new();
+    apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&["gcc"]));
+    assert_eq!(
+        launcher_note("ccache", &env),
+        "compiler launcher: ccache (CC=`ccache gcc`, CXX=`unset`)"
+    );
+    assert_eq!(
+        launcher_note("ccache", &BTreeMap::new()),
+        "compiler launcher: ccache (CC=`unset`, CXX=`unset`)",
+    );
+}
+
+/// A compiler already routed through the launcher is kept verbatim, never
+/// `ccache ccache gcc` — whether it came from the catalog or the env, and
+/// whether the launcher was named bare or by path. A program that merely
+/// shares a prefix with the launcher is still wrapped.
+#[test]
+fn launcher_does_not_wrap_an_already_launched_compiler() {
+    let inherited = |var: &str| match var {
+        "CC" => Some("ccache gcc".to_owned()),
+        "CXX" => Some("/opt/evidence-ccache/ccache g++".to_owned()),
+        _ => None,
+    };
+    for launcher in ["ccache", "/opt/evidence-ccache/ccache"] {
+        let mut env = BTreeMap::new();
+        apply_compiler_launcher(&mut env, launcher, inherited, path_with(ALL));
+        assert_eq!(env["CC"], "ccache gcc", "{launcher}");
+        assert_eq!(env["CXX"], "/opt/evidence-ccache/ccache g++", "{launcher}");
+
+        let mut env = BTreeMap::from([("CC".to_owned(), "ccache clang".to_owned())]);
+        apply_compiler_launcher(&mut env, launcher, |_: &str| None, path_with(&[]));
+        assert_eq!(env["CC"], "ccache clang", "catalog value, {launcher}");
+    }
+
+    let mut env = BTreeMap::from([("CC".to_owned(), "ccache-wrapper gcc".to_owned())]);
+    apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&[]));
+    assert_eq!(env["CC"], "ccache ccache-wrapper gcc", "a prefix match is not the launcher");
 }
 
 #[test]
@@ -739,16 +886,43 @@ fn launcher_env_names_the_program() {
         parse_compiler_launcher(Some("/usr/bin/sccache")).unwrap().as_deref(),
         Some("/usr/bin/sccache"),
     );
+    for ok in [".ccache", "ccache-4.10", "/opt/evidence-ccache/ccache"] {
+        assert_eq!(parse_compiler_launcher(Some(ok)).unwrap().as_deref(), Some(ok));
+    }
 }
 
-/// Empty, multi-word, and shell-metacharacter values are refused by name
-/// rather than silently treated as "off" (a silent two-hour cold build),
-/// word-split by `make`, or run as shell code by `configure` as root.
+/// Empty, multi-word, shell-metacharacter, and directory values are refused
+/// by name rather than silently treated as "off" (a silent two-hour cold
+/// build), word-split by `make`, run as shell code by `configure` as root, or
+/// handed to `make` as a "launcher" that is really a directory or a path that
+/// resolves differently in every sub-make.
 #[test]
 fn launcher_env_rejects_empty_and_whitespace() {
-    for bad in
-        ["", " ", "ccache --foo", "ccache\t", "ccache;id", "$(id)", "`id`", "cc&&id", "-x", "--foo"]
-    {
+    for bad in [
+        "",
+        " ",
+        "ccache --foo",
+        "ccache\t",
+        "ccache;id",
+        "$(id)",
+        "`id`",
+        "cc&&id",
+        "-x",
+        "--foo",
+        // Directories, not programs.
+        "/",
+        ".",
+        "..",
+        "bin/",
+        "/usr/..",
+        "/usr/bin/.",
+        "//",
+        // Relative paths: each step and sub-make resolves them from a
+        // different cwd.
+        "./ccache",
+        "../bin/ccache",
+        "bin/ccache",
+    ] {
         match parse_compiler_launcher(Some(bad)).unwrap_err() {
             LuggageError::Catalog(msg) => {
                 assert!(msg.contains(COMPILER_LAUNCHER_ENV), "{bad:?}: {msg}");
