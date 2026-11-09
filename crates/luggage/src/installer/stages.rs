@@ -37,29 +37,34 @@ impl Installer {
     /// method is done (#1524; see [`super::build_deps`]).
     ///
     /// Presence is snapshotted *before* installing: a build dep the host
-    /// already had is not luggage's to remove. If the install itself fails
-    /// nothing is queued — the error is returned before any method ran.
+    /// already had is not luggage's to remove. The pending set is returned
+    /// even when the install fails, because a multi-package install is not
+    /// atomic. Some build deps may already be in, and the orchestrator still
+    /// removes the ones that landed (re-checked by [`PendingBuildDeps::retain_installed`]).
     pub(super) fn stage_system_packages(
         &self,
         resolved: &ResolvedInstall,
         logger: Option<&logging::FeatureLogger>,
-    ) -> Result<PendingBuildDeps> {
+    ) -> (PendingBuildDeps, Result<()>) {
         if !self.options.install_system_packages {
-            return Ok(PendingBuildDeps::default());
+            return (PendingBuildDeps::default(), Ok(()));
         }
         let Ok(mgr) = PackageManager::for_platform(&resolved.platform) else {
-            return Ok(PendingBuildDeps::default());
+            return (PendingBuildDeps::default(), Ok(()));
         };
         let deps = &resolved.system_deps;
         if deps.packages.is_empty() && deps.unmapped.is_empty() {
-            return Ok(PendingBuildDeps::default());
+            return (PendingBuildDeps::default(), Ok(()));
         }
-        let pending = removal_candidates(deps, |p| is_installed(mgr, p));
+        let pending =
+            PendingBuildDeps::new(mgr, removal_candidates(deps, |p| is_installed(mgr, p)));
         if let Some(l) = logger {
             l.step("install system packages");
         }
-        install_dependencies(deps, mgr, self.options.fail_on_unknown_deps)?;
-        Ok(PendingBuildDeps::new(mgr, pending))
+        match install_dependencies(deps, mgr, self.options.fail_on_unknown_deps) {
+            Ok(()) => (pending, Ok(())),
+            Err(e) => (pending.retain_installed(|p| is_installed(mgr, p)), Err(e)),
+        }
     }
 
     /// Query the host package manager for each dependency's resolved version,

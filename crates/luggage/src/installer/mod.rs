@@ -524,10 +524,12 @@ impl Installer {
         logger: Option<&logging::FeatureLogger>,
     ) -> (Vec<String>, Result<StageOutcome>) {
         // The verification guard already ran in `plan()`, which produced `plan`.
-        let pending = match self.stage_system_packages(resolved, logger) {
-            Ok(p) => p,
-            Err(e) => return (Vec::new(), Err(e)),
-        };
+        let (pending, installed) = self.stage_system_packages(resolved, logger);
+        if let Err(e) = installed {
+            // Still remove whatever build deps a partial install left behind.
+            let (removed, cleanup) = build_deps::remove_build_deps(pending, logger);
+            return (removed, build_deps::merge_cleanup(Err(e), cleanup, logger));
+        }
         // Queried now, while the build deps are still installed, so the
         // evidence row records every dependency the build used.
         let dependencies = self.captured_dependency_versions(resolved);

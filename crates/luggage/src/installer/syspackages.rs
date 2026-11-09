@@ -156,9 +156,16 @@ pub fn install_dependencies(
 /// luggage installs is explicit (apt marks it manual, apk adds it to `world`,
 /// dnf records it as user-installed), so a runtime dependency that is also a
 /// transitive dependency of a removed build package survives the removal.
-/// apt's `--auto-remove` drops the build package's own now-unneeded
-/// dependencies; dnf's default `clean_requirements_on_remove` and apk's world
-/// model do the same. Returns `None` when `packages` is empty.
+///
+/// apt deliberately gets no `--auto-remove`: that purges *every* auto-installed
+/// orphan on the host, including ones the base image left behind, which would
+/// remove packages luggage never installed. The cost is that the build
+/// packages' own pulled-in dependencies stay. apk's `del` prunes only what no
+/// `world` entry still needs, and dnf's `clean_requirements_on_remove` only
+/// what came in with the removed packages, so neither reaches past this run.
+/// A removal the manager refuses (e.g. something installed depends on the
+/// package) fails loudly rather than being forced. Returns `None` when
+/// `packages` is empty.
 #[must_use]
 pub fn remove_argv(mgr: PackageManager, packages: &[&str]) -> Option<(&'static str, Vec<String>)> {
     if packages.is_empty() {
@@ -167,7 +174,7 @@ pub fn remove_argv(mgr: PackageManager, packages: &[&str]) -> Option<(&'static s
     let owned = packages.iter().map(|p| (*p).to_owned());
     Some(match mgr {
         PackageManager::Apt => {
-            let mut args = vec!["purge".to_owned(), "-y".to_owned(), "--auto-remove".to_owned()];
+            let mut args = vec!["purge".to_owned(), "-y".to_owned()];
             args.extend(owned);
             ("apt-get", args)
         }
@@ -511,13 +518,7 @@ mod tests {
     fn remove_argv_per_manager() {
         assert_eq!(
             remove_argv(PackageManager::Apt, &["g++", "make"]).unwrap(),
-            (
-                "apt-get",
-                vec!["purge", "-y", "--auto-remove", "g++", "make"]
-                    .into_iter()
-                    .map(String::from)
-                    .collect()
-            )
+            ("apt-get", vec!["purge", "-y", "g++", "make"].into_iter().map(String::from).collect())
         );
         assert_eq!(
             remove_argv(PackageManager::Apk, &["g++"]).unwrap(),
@@ -528,6 +529,25 @@ mod tests {
             ("dnf", vec!["remove".to_owned(), "-y".to_owned(), "gcc-c++".to_owned()])
         );
         assert!(remove_argv(PackageManager::Apk, &[]).is_none());
+    }
+
+    /// `--auto-remove` would purge base-image orphans luggage never installed.
+    #[test]
+    fn apt_removal_purges_only_the_named_packages() {
+        let (_, args) = remove_argv(PackageManager::Apt, &["g++"]).unwrap();
+        assert!(!args.iter().any(|a| a.contains("auto")), "{args:?}");
+    }
+
+    #[test]
+    fn presence_query_that_cannot_launch_reads_as_present() {
+        // No package manager exists on the test host. "Unknown" must never
+        // make a package look removable.
+        if !on_path("dpkg-query") {
+            assert!(is_installed(PackageManager::Apt, "luggage-no-such-pkg"));
+        }
+        if !on_path("rpm") {
+            assert!(is_installed(PackageManager::Dnf, "luggage-no-such-pkg"));
+        }
     }
 
     #[test]

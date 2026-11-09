@@ -40,6 +40,16 @@ impl PendingBuildDeps {
     pub(super) const fn new(mgr: PackageManager, packages: Vec<String>) -> Self {
         Self { mgr: Some(mgr), packages }
     }
+
+    /// Keep only the pending packages that are actually installed now. Used
+    /// after a partial install failure, so removal targets exactly what
+    /// landed and a package that never installed is not passed to the
+    /// package manager (which would fail the removal outright).
+    #[must_use]
+    pub(super) fn retain_installed(mut self, is_present: impl Fn(&str) -> bool) -> Self {
+        self.packages.retain(|p| is_present(p));
+        self
+    }
 }
 
 /// Package names whose every resolved dependency is `purpose: build`,
@@ -208,6 +218,14 @@ mod tests {
             remove_build_deps(PendingBuildDeps::new(PackageManager::Apk, vec![]), None);
         assert_eq!(removed, Vec::<String>::new());
         r.unwrap();
+    }
+
+    #[test]
+    fn retain_installed_keeps_only_what_landed() {
+        // A partial install: g++ went in, make did not.
+        let pending = PendingBuildDeps::new(PackageManager::Apk, vec!["g++".into(), "make".into()])
+            .retain_installed(|p| p == "g++");
+        assert_eq!(pending.packages, vec!["g++".to_owned()]);
     }
 
     fn pm_err(msg: &str) -> LuggageError {
