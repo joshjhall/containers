@@ -93,6 +93,9 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// `GIT_CEILING_DIRECTORIES` is set to root's (canonical) parent, git checks
 /// `root` itself for a `.git` but never ascends past it, and a root without
 /// its own `.git` (tracked by the outer repo or not) takes the walk fallback.
+/// When no ceiling can be expressed (see [`ceiling_for`]), the git path is
+/// taken only if `root` has its own `.git` entry, which git finds before it
+/// would ascend.
 ///
 /// `root` is often a freshly cloned, untrusted repo, and `ls-files` honors
 /// its `.git/config`: a `core.fsmonitor` command there runs on every call.
@@ -101,6 +104,9 @@ fn has_shell_shebang(path: &Path) -> bool {
 /// hooks today). Inherited repo-selecting and config-injecting env
 /// ([`GIT_REPO_ENV`]) is dropped so `-C root` alone picks the repository.
 fn git_files(root: &Path) -> Option<Vec<String>> {
+    if ceiling_for(root).is_none() && std::fs::symlink_metadata(root.join(".git")).is_err() {
+        return None;
+    }
     run_ls_files(ls_files_command(root))
 }
 
@@ -160,10 +166,19 @@ fn ls_files_command(root: &Path) -> Command {
 
 /// The directory git discovery must not ascend into: `root`'s parent, after
 /// resolving symlinks so a linked root cannot slip past to a different
-/// ancestor. `None` for `/` or an unresolvable root (git then fails on `-C`
-/// anyway, which selects the walk fallback).
+/// ancestor.
+///
+/// `None` when the ceiling cannot be expressed. That covers an unresolvable
+/// root, a root of `/`, and a parent of `/` (git ignores a bare `/` entry).
+/// It also covers a parent containing `:`, because `GIT_CEILING_DIRECTORIES`
+/// is `:`-separated with no escape, so such a path splits into bogus entries
+/// that bound nothing.
 fn ceiling_for(root: &Path) -> Option<std::path::PathBuf> {
-    root.canonicalize().ok()?.parent().map(Path::to_path_buf)
+    let parent = root.canonicalize().ok()?.parent()?.to_path_buf();
+    // A colon lives in an ASCII byte, so a lossy view finds it even in a
+    // non-UTF-8 path.
+    let colon = parent.as_os_str().to_string_lossy().contains(':');
+    (parent.parent().is_some() && !colon).then_some(parent)
 }
 
 /// Repo-relative paths of regular files under `root`, skipping [`SKIP_DIRS`]
@@ -627,6 +642,60 @@ mod tests {
         // The ceiling excludes only ancestors: the outer root itself is a
         // work tree top and keeps the git path.
         assert!(git_files(outer.path()).is_some());
+
+        // A symlink to the nested dir resolves to the same ancestor, so it
+        // cannot slip past the ceiling either.
+        let elsewhere = tempfile::tempdir().unwrap();
+        let link = elsewhere.path().join("link");
+        std::os::unix::fs::symlink(&sub, &link).unwrap();
+        assert_eq!(git_files(&link), None);
+
+        // A nested repo with its own `.git` (an inner clone or submodule)
+        // still answers from itself: the ceiling only stops the ascent.
+        assert!(git(&sub, &["init", "-q"]), "inner git init failed");
+        let mut inner = git_files(&sub).expect("nested repo lost the git path");
+        inner.sort();
+        assert_eq!(inner, files(&["a.sh", "vendor/x.py"]));
+    }
+
+    /// `GIT_CEILING_DIRECTORIES` is `:`-separated, so a parent containing `:`
+    /// cannot be a ceiling. A real git confirms this: such a ceiling is
+    /// ignored and git answers from the enclosing repo. Without the `.git`
+    /// guard in `git_files`, the nested root here would take the outer listing.
+    #[cfg(unix)]
+    #[test]
+    fn git_files_ignores_enclosing_repo_when_ceiling_unexpressible() {
+        let outer = tempfile::tempdir().unwrap();
+        assert!(git(outer.path(), &["init", "-q"]), "git init failed");
+        let sub = outer.path().join("a:b/sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("a.sh"), "").unwrap();
+
+        assert_eq!(ceiling_for(&sub), None);
+        // Positive control: the production command alone (no ceiling could
+        // be set) does answer from the ancestor.
+        let mut cmd = ls_files_command(&sub);
+        hermetic(&mut cmd);
+        assert_eq!(run_ls_files(cmd), Some(files(&["a.sh"])), "control: no enclosing repo found");
+        assert_eq!(git_files(&sub), None);
+
+        // With its own `.git`, the same root keeps the git path.
+        assert!(git(&sub, &["init", "-q"]), "inner git init failed");
+        assert_eq!(git_files(&sub), Some(files(&["a.sh"])));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ceiling_for_rejects_unexpressible_parents() {
+        assert_eq!(ceiling_for(Path::new("/")), None);
+        let tmp = tempfile::tempdir().unwrap();
+        let colon = tmp.path().join("x:y");
+        std::fs::create_dir_all(colon.join("root")).unwrap();
+        assert_eq!(ceiling_for(&colon.join("root")), None);
+        // A `:` in root's own name is fine; only the parent is a ceiling.
+        let named = tmp.path().join("r:oot");
+        std::fs::create_dir(&named).unwrap();
+        assert_eq!(ceiling_for(&named), Some(tmp.path().canonicalize().unwrap()));
     }
 
     #[cfg(unix)]
