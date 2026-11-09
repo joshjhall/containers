@@ -150,6 +150,217 @@ pub fn install_dependencies(
     }
 }
 
+/// Build the argv that removes `packages` via `mgr` (#1524).
+///
+/// Only build-only packages luggage itself installed reach this, and the
+/// removal must never reach past them. So each manager is driven at the level
+/// that **refuses** rather than cascades:
+///
+/// - apt: `dpkg --purge`, not `apt-get purge -y`. apt resolves a removal by
+///   also removing every installed reverse dependency, and `--auto-remove`
+///   would add every auto-installed orphan on the host (base-image leftovers
+///   included). dpkg removes only the named packages and refuses, non-zero,
+///   if anything still installed depends on one.
+/// - apk: `apk del` without `-r` drops the names from `world` and prunes only
+///   what no remaining `world` entry needs; a package still required by
+///   something else is kept, never forced out.
+/// - dnf: `rpm -e`, not `dnf remove -y`, for the same reason as apt: rpm
+///   refuses ("Failed dependencies") instead of removing dependents.
+///
+/// The cost is that a build package's own pulled-in dependencies stay on
+/// apt/rpm hosts. Returns `None` when `packages` is empty.
+#[must_use]
+pub fn remove_argv(mgr: PackageManager, packages: &[&str]) -> Option<(&'static str, Vec<String>)> {
+    if packages.is_empty() {
+        return None;
+    }
+    let owned = packages.iter().map(|p| (*p).to_owned());
+    let (program, mut args) = match mgr {
+        PackageManager::Apt => ("dpkg", vec!["--purge".to_owned()]),
+        PackageManager::Apk => ("apk", vec!["del".to_owned(), "--no-cache".to_owned()]),
+        PackageManager::Dnf => ("rpm", vec!["-e".to_owned()]),
+    };
+    args.extend(owned);
+    Some((program, args))
+}
+
+/// Build the argv that asks whether `package` is installed.
+///
+/// - apt: `dpkg-query -W -f='${db:Status-Status}\n' <pkg>`; dpkg-query expands
+///   the `\n` itself, giving one line per architecture instance.
+/// - apk: `apk info -e <pkg>`.
+/// - dnf: `rpm -q <pkg>`.
+///
+/// How each answer is read lives in [`presence_from_output`].
+#[must_use]
+fn presence_argv(mgr: PackageManager, package: &str) -> (&'static str, Vec<String>) {
+    match mgr {
+        PackageManager::Apt => (
+            "dpkg-query",
+            vec!["-W".to_owned(), "-f=${db:Status-Status}\\n".to_owned(), package.to_owned()],
+        ),
+        PackageManager::Apk => {
+            ("apk", vec!["info".to_owned(), "-e".to_owned(), package.to_owned()])
+        }
+        PackageManager::Dnf => ("rpm", vec!["-q".to_owned(), package.to_owned()]),
+    }
+}
+
+/// Read a presence query's result, failing **closed**: only an unambiguous
+/// "not installed" answer is `false`. Anything else (a launch failure, a
+/// locked or corrupt package DB, a permission error, an unexpected exit)
+/// reads as present. The caller uses this to decide what is safe to remove,
+/// and an unknown must never turn into removing a package luggage did not
+/// install.
+///
+/// - apt: exit 0 is decided by the status words, one line per architecture
+///   instance on a multiarch host. Absent only when every line is
+///   `not-installed` or `config-files`. Any other state (`installed`,
+///   `half-installed`, `unpacked`, `triggers-pending`, ...) or empty output
+///   reads as present. A non-zero
+///   exit is absence only when dpkg-query says it found no such package.
+/// - apk: `info -e` exits 0 when installed and 1 with nothing on stderr when
+///   not.
+/// - rpm: `-q` exits 1 and prints `package <p> is not installed` when not.
+#[must_use]
+fn presence_from_output(
+    mgr: PackageManager,
+    package: &str,
+    output: &std::io::Result<std::process::Output>,
+) -> bool {
+    let Ok(o) = output else { return true };
+    let stdout = String::from_utf8_lossy(&o.stdout);
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    let absent = match (mgr, o.status.code()) {
+        // One line per matching architecture instance on a multiarch host.
+        // Absent only when every instance is cleanly gone. A partial state
+        // (half-installed, unpacked, triggers-pending) or empty output is
+        // inconclusive and reads as present.
+        (PackageManager::Apt, Some(0)) => {
+            let states: Vec<&str> =
+                stdout.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+            if states.contains(&"installed") {
+                return true;
+            }
+            !states.is_empty()
+                && states.iter().all(|l| matches!(*l, "not-installed" | "config-files"))
+        }
+        (PackageManager::Apt, Some(1)) => stderr.contains("no packages found matching"),
+        (PackageManager::Apk | PackageManager::Dnf, Some(0)) => return true,
+        (PackageManager::Apk, Some(1)) => stderr.trim().is_empty(),
+        (PackageManager::Dnf, Some(1)) => {
+            stdout.trim() == format!("package {package} is not installed")
+        }
+        _ => false,
+    };
+    if !absent {
+        warn!(package, manager = ?mgr, status = %o.status, "presence query was inconclusive; treating as present");
+    }
+    !absent
+}
+
+/// `true` when `package` is installed on the host, or when that cannot be
+/// established (see [`presence_from_output`]).
+#[must_use]
+pub fn is_installed(mgr: PackageManager, package: &str) -> bool {
+    let (program, args) = presence_argv(mgr, package);
+    presence_from_output(mgr, package, &Command::new(program).args(&args).output())
+}
+
+/// Remove `packages` from the host via `mgr` (#1524). A no-op when empty.
+///
+/// `rpm -e` is one transaction: if any single package is refused (something
+/// installed still depends on it), nothing is removed. `dpkg --purge` removes
+/// what it can and exits non-zero for the rest. Either way a failed batch is
+/// retried one package at a time, so everything that can go does go, and only
+/// the packages still refused on their own are reported. Purging a package
+/// that is already gone exits 0 on dpkg, so the retry costs nothing there.
+/// (Verified on debian:trixie-slim, 2026-11-09.)
+///
+/// # Errors
+///
+/// [`LuggageError::PackageManagerFailed`] when a name is empty or starts with
+/// `-` (nothing is run), or naming each package that could not be removed, with the manager's stderr. A package refused because an
+/// installed package depends on it means the catalog declared a runtime need
+/// as `purpose: build`. That fails loudly rather than shipping a silently
+/// broken image.
+pub fn remove_packages(packages: &[&str], mgr: PackageManager) -> Result<()> {
+    // Names come from the catalog and land in argv after the manager's own
+    // flags. One starting with `-` would be parsed as an option, e.g.
+    // `--nodeps` or `--force-depends`, defeating the refuse-don't-cascade
+    // removal. Refuse the whole removal before anything runs.
+    if let Some(bad) = packages.iter().find(|p| p.is_empty() || p.starts_with('-')) {
+        return Err(LuggageError::PackageManagerFailed {
+            message: format!("refusing to remove package with option-like name {bad:?}"),
+        });
+    }
+    let refused: Vec<String> = match run_removal(mgr, packages) {
+        Ok(()) => return Ok(()),
+        // A lone package has nothing to retry.
+        Err(e) if packages.len() <= 1 => vec![e],
+        Err(_) => remove_individually(mgr, packages),
+    };
+    if refused.is_empty() {
+        return Ok(());
+    }
+    Err(LuggageError::PackageManagerFailed {
+        message: format!("could not remove build dependencies: {}", refused.join("; ")),
+    })
+}
+
+/// Remove each package in its own transaction, returning a description of
+/// every one that was still refused.
+fn remove_individually(mgr: PackageManager, packages: &[&str]) -> Vec<String> {
+    remove_until_fixed_point(packages, |p| run_removal(mgr, &[p]))
+}
+
+/// Pass over `packages` removing each one via `remove`, then pass again over
+/// the ones refused, until a pass removes nothing. Returns `"{pkg}: {err}"`
+/// for each package still refused at that point.
+///
+/// One pass is not enough: dpkg and rpm refuse a package while an installed
+/// package still depends on it, so when a build dep is listed before the
+/// build dep that needs it, the first is refused, the second goes, and only a
+/// second pass can take the first. Each extra pass must remove at least one
+/// package, so this runs at most `packages.len()` passes.
+fn remove_until_fixed_point<'a>(
+    packages: &[&'a str],
+    mut remove: impl FnMut(&'a str) -> std::result::Result<(), String>,
+) -> Vec<String> {
+    let mut pending: Vec<&'a str> = packages.to_vec();
+    loop {
+        let before = pending.len();
+        let mut refused = Vec::new();
+        for p in pending {
+            if let Err(e) = remove(p) {
+                refused.push((p, e));
+            }
+        }
+        if refused.is_empty() || refused.len() == before {
+            return refused.into_iter().map(|(p, e)| format!("{p}: {e}")).collect();
+        }
+        pending = refused.into_iter().map(|(p, _)| p).collect();
+    }
+}
+
+/// Run one removal transaction. `Ok` when `packages` is empty.
+fn run_removal(mgr: PackageManager, packages: &[&str]) -> std::result::Result<(), String> {
+    let Some((program, args)) = remove_argv(mgr, packages) else { return Ok(()) };
+    let out = Command::new(program)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("{program} failed to launch: {e}"))?;
+    if out.status.success() {
+        return Ok(());
+    }
+    Err(format!(
+        "{program} {} exited {}: {}",
+        args.join(" "),
+        out.status,
+        String::from_utf8_lossy(&out.stderr).trim_end(),
+    ))
+}
+
 /// Pick the binary to run for `program` given what is on `PATH`.
 ///
 /// `install_argv` names the canonical program; this resolves the one case
@@ -395,10 +606,216 @@ mod tests {
                 .map(|(t, p)| crate::sysdeps::SystemPackageDep {
                     tool: (*t).into(),
                     package: (*p).into(),
+                    purpose: containers_common::tooldb::DependencyPurpose::Both,
                 })
                 .collect(),
             unmapped: unmapped.iter().map(|u| (*u).to_string()).collect(),
         }
+    }
+
+    #[test]
+    fn remove_argv_per_manager() {
+        let argv = |prog: &'static str, args: &[&str]| {
+            Some((prog, args.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>()))
+        };
+        assert_eq!(
+            remove_argv(PackageManager::Apt, &["g++", "make"]),
+            argv("dpkg", &["--purge", "g++", "make"])
+        );
+        assert_eq!(
+            remove_argv(PackageManager::Apk, &["g++"]),
+            argv("apk", &["del", "--no-cache", "g++"])
+        );
+        assert_eq!(remove_argv(PackageManager::Dnf, &["gcc-c++"]), argv("rpm", &["-e", "gcc-c++"]));
+        assert_eq!(remove_argv(PackageManager::Apk, &[]), None);
+    }
+
+    /// The front ends that resolve a removal by also removing reverse
+    /// dependents (`apt-get`, `dnf`), auto-removing orphans, or recursing
+    /// (`apk del -r`) must never be used: each reaches past the named set.
+    #[test]
+    fn removal_never_cascades_past_the_named_packages() {
+        for mgr in [PackageManager::Apt, PackageManager::Apk, PackageManager::Dnf] {
+            let (prog, args) = remove_argv(mgr, &["g++"]).unwrap();
+            assert!(!matches!(prog, "apt-get" | "dnf" | "microdnf"), "{mgr:?}: {prog}");
+            for flag in ["--auto-remove", "autoremove", "-r", "--rdepends", "-y"] {
+                assert!(!args.iter().any(|a| a == flag), "{mgr:?}: {args:?} has {flag}");
+            }
+        }
+    }
+
+    #[test]
+    fn presence_argv_per_manager() {
+        assert_eq!(
+            presence_argv(PackageManager::Apt, "make"),
+            (
+                "dpkg-query",
+                vec!["-W".to_owned(), "-f=${db:Status-Status}\\n".to_owned(), "make".to_owned()]
+            )
+        );
+        assert_eq!(
+            presence_argv(PackageManager::Apk, "make"),
+            ("apk", vec!["info".to_owned(), "-e".to_owned(), "make".to_owned()])
+        );
+        assert_eq!(
+            presence_argv(PackageManager::Dnf, "make"),
+            ("rpm", vec!["-q".to_owned(), "make".to_owned()])
+        );
+    }
+
+    #[cfg(unix)]
+    fn out(code: i32, stdout: &str, stderr: &str) -> std::process::Output {
+        use std::os::unix::process::ExitStatusExt as _;
+        std::process::Output {
+            status: std::process::ExitStatus::from_raw(code << 8),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: stderr.as_bytes().to_vec(),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn presence_is_absent_only_on_an_unambiguous_not_installed() {
+        use PackageManager::{Apk, Apt, Dnf};
+        let present = |m, o| presence_from_output(m, "make", &Ok(o));
+        // apt: exit 0 is read from the status word.
+        assert!(present(Apt, out(0, "installed\n", "")));
+        assert!(!present(Apt, out(0, "config-files\n", "")));
+        // Multiarch: one status line per architecture instance.
+        assert!(present(Apt, out(0, "installed\ninstalled\n", "")));
+        assert!(present(Apt, out(0, "config-files\ninstalled\n", "")));
+        assert!(!present(Apt, out(0, "config-files\nnot-installed\n", "")));
+        // Partial states and empty output are inconclusive: present.
+        for partial in ["half-installed", "unpacked", "half-configured", "triggers-pending"] {
+            assert!(present(Apt, out(0, &format!("{partial}\n"), "")), "{partial}");
+        }
+        assert!(present(Apt, out(0, "not-installed\nunpacked\n", "")));
+        assert!(present(Apt, out(0, "", "")));
+        assert!(!present(Apt, out(1, "", "dpkg-query: no packages found matching make")));
+        // apk / rpm: their documented "not installed" answers.
+        assert!(present(Apk, out(0, "", "")));
+        assert!(!present(Apk, out(1, "", "")));
+        assert!(present(Dnf, out(0, "make-4.3-1.el9", "")));
+        assert!(!present(Dnf, out(1, "package make is not installed\n", "")));
+    }
+
+    /// A fake dpkg/rpm: refuses to remove a package while any package that
+    /// depends on it (per `deps`, `(dependent, dependency)`) is still
+    /// installed, and records every removal attempt in `calls`.
+    fn fake_manager<'a>(
+        installed: &'a std::cell::RefCell<Vec<&'static str>>,
+        deps: &'a [(&'static str, &'static str)],
+        calls: &'a std::cell::RefCell<Vec<&'static str>>,
+    ) -> impl FnMut(&'static str) -> std::result::Result<(), String> + 'a {
+        move |p| {
+            calls.borrow_mut().push(p);
+            let mut inst = installed.borrow_mut();
+            if let Some((dependent, _)) = deps.iter().find(|(d, dep)| *dep == p && inst.contains(d))
+            {
+                return Err(format!("dependency problems - {dependent} depends on {p}"));
+            }
+            inst.retain(|i| *i != p);
+            Ok(())
+        }
+    }
+
+    /// Cycle-8 defect: B depends on A, and A is listed first. A single pass
+    /// refuses A (B still installed), removes B, and stops — reporting A as
+    /// refused though it is removable. The fixed-point retry must take both.
+    #[test]
+    fn retry_removes_a_dependency_listed_before_its_dependent() {
+        let installed = std::cell::RefCell::new(vec!["libfoo-dev", "foo-build"]);
+        let deps = [("foo-build", "libfoo-dev")];
+        let calls = std::cell::RefCell::new(Vec::new());
+
+        let refused = remove_until_fixed_point(
+            &["libfoo-dev", "foo-build"],
+            fake_manager(&installed, &deps, &calls),
+        );
+
+        assert!(refused.is_empty(), "nothing should be reported refused: {refused:?}");
+        assert!(installed.borrow().is_empty(), "both removed: {:?}", installed.borrow());
+        // Proves the fix, not luck: the first attempt on libfoo-dev was
+        // refused, and a second pass retried it after foo-build went.
+        assert_eq!(*calls.borrow(), ["libfoo-dev", "foo-build", "libfoo-dev"]);
+    }
+
+    /// A dependent listed first needs only one pass; no spurious retries.
+    #[test]
+    fn retry_single_pass_when_dependent_listed_first() {
+        let installed = std::cell::RefCell::new(vec!["foo-build", "libfoo-dev"]);
+        let deps = [("foo-build", "libfoo-dev")];
+        let calls = std::cell::RefCell::new(Vec::new());
+
+        let refused = remove_until_fixed_point(
+            &["foo-build", "libfoo-dev"],
+            fake_manager(&installed, &deps, &calls),
+        );
+
+        assert!(refused.is_empty(), "{refused:?}");
+        assert!(installed.borrow().is_empty());
+        assert_eq!(*calls.borrow(), ["foo-build", "libfoo-dev"]);
+    }
+
+    /// A package held by something outside the removal set is genuinely
+    /// refused: the loop stops once a pass makes no progress and reports
+    /// exactly that package, after removing everything it could.
+    #[test]
+    fn retry_stops_and_reports_a_package_still_refused() {
+        // `runtime-tool` is installed and needs libfoo-dev; it is not ours to remove.
+        let installed = std::cell::RefCell::new(vec!["libfoo-dev", "foo-build", "runtime-tool"]);
+        let deps = [("foo-build", "libfoo-dev"), ("runtime-tool", "libfoo-dev")];
+        let calls = std::cell::RefCell::new(Vec::new());
+
+        let refused = remove_until_fixed_point(
+            &["libfoo-dev", "foo-build"],
+            fake_manager(&installed, &deps, &calls),
+        );
+
+        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert!(refused[0].starts_with("libfoo-dev: "), "{refused:?}");
+        assert!(refused[0].contains("runtime-tool depends on libfoo-dev"), "{refused:?}");
+        assert_eq!(*installed.borrow(), ["libfoo-dev", "runtime-tool"]);
+        // Pass 1: libfoo-dev refused, foo-build removed. Pass 2: libfoo-dev
+        // still refused, no progress -> stop (no third attempt).
+        assert_eq!(*calls.borrow(), ["libfoo-dev", "foo-build", "libfoo-dev"]);
+    }
+
+    /// Every probe failure that is not a clear "not installed" — a launch
+    /// failure, a locked DB, an unexpected exit — reads as present, for every
+    /// manager. Asserted unconditionally: nothing depends on the test host.
+    #[cfg(unix)]
+    #[test]
+    fn inconclusive_presence_fails_closed() {
+        for mgr in [PackageManager::Apt, PackageManager::Apk, PackageManager::Dnf] {
+            let launch = Err(std::io::Error::from(std::io::ErrorKind::NotFound));
+            assert!(presence_from_output(mgr, "make", &launch), "{mgr:?}: launch failure");
+            let locked = Ok(out(1, "", "error: database is locked"));
+            assert!(presence_from_output(mgr, "make", &locked), "{mgr:?}: locked db");
+            assert!(presence_from_output(mgr, "make", &Ok(out(2, "", ""))), "{mgr:?}: exit 2");
+        }
+        // rpm's exit 1 for a *different* package is not this one's absence.
+        let other = Ok(out(1, "package gmake is not installed", ""));
+        assert!(presence_from_output(PackageManager::Dnf, "make", &other));
+    }
+
+    /// An option-looking name is refused before any package manager runs
+    /// (none exists on the test host, so reaching one would surface as a
+    /// launch error naming the program, not this message).
+    #[test]
+    fn remove_packages_refuses_option_like_names() {
+        for mgr in [PackageManager::Apt, PackageManager::Apk, PackageManager::Dnf] {
+            for bad in ["--nodeps", "-r", ""] {
+                let err = remove_packages(&["make", bad], mgr).unwrap_err();
+                assert!(err.to_string().contains("option-like name"), "{mgr:?} {bad:?}: {err}");
+            }
+        }
+    }
+
+    #[test]
+    fn remove_packages_is_a_noop_when_empty() {
+        // Must not shell out at all: no package manager exists on the test host.
+        remove_packages(&[], PackageManager::Apt).unwrap();
     }
 
     #[test]

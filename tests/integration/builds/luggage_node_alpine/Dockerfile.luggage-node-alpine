@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1.7
+# Fixture for the luggage alpine node source-build test (issue #1524).
+#
+# node publishes no musl tarball, so the catalog's alpine method is a
+# `source-build` (`node-source`) whose g++/make/linux-headers/python3 are
+# declared `purpose: build`. luggage must remove them once the build is done,
+# keeping only the `purpose: runtime` libstdc++/libgcc. This fixture runs the
+# real install so the test can assert both halves: node runs, and the
+# toolchain is gone.
+#
+# Build context is the repo root (`BUILD_CONTEXT=$CONTAINERS_DIR`), so
+# every COPY here is repo-root-relative.
+
+ARG NODE_VERSION=26.13.0
+
+# ─── Stage 1: compile luggage natively against musl ───
+FROM rust:1.99-alpine AS builder
+
+RUN apk add --no-cache musl-dev
+
+WORKDIR /workspace
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/workspace/target-alpine \
+    CARGO_TARGET_DIR=/workspace/target-alpine \
+    cargo build --release -p luggage --bin luggage \
+    && cp target-alpine/release/luggage /tmp/luggage
+
+# ─── Stage 2: install node via luggage on a fresh alpine ───
+FROM alpine:3.24 AS runtime
+
+ARG NODE_VERSION
+
+# The same preinstalled set as the evidence base image
+# (base-images/alpine/3.24): bash for luggage's `su -c` steps, shadow for
+# useradd. None of node's build deps is present, so luggage installs — and
+# must then remove — all four.
+RUN apk add --no-cache bash ca-certificates shadow \
+    && useradd --create-home --shell /bin/bash vscode \
+    && mkdir -p /cache /var/log/luggage \
+    && chown vscode:vscode /cache /var/log/luggage
+ENV USERNAME=vscode
+
+COPY --from=builder /tmp/luggage /usr/local/bin/luggage
+COPY crates/luggage/testdata/catalog /opt/containers-db
+
+# --json-report keeps the report in the image so the test can read
+# `removed_build_dependencies` back.
+RUN /usr/local/bin/luggage install "node@${NODE_VERSION}" \
+        --catalog /opt/containers-db \
+        --user vscode \
+        --cache-root /cache \
+        --log-dir /var/log/luggage \
+        --json-report /var/log/luggage/node-report.json
+
+USER vscode
+WORKDIR /home/vscode
+CMD ["bash"]

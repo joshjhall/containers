@@ -277,7 +277,13 @@ For each feature script (e.g. `node.sh`, `python.sh`):
    `build_steps[]` (`./configure …`, `make -j{nproc}`, `make install`) run
    in the extracted source tree as root, streaming output to the feature
    log. Build-dependency packages stay in the method's `dependencies`, not
-   in `build_steps`. `package-manager` is not wired yet. If the kind isn't implemented
+   in `build_steps`. Declare a compile-only package `purpose: build`: luggage
+   removes it after the method and post-install steps finish (and before
+   validation, so validate proves the tool runs without it), on success and
+   on failure. It does this only when luggage installed the package in this
+   run and no dependency of the same method declares it `runtime`/`both`.
+   The JSON report lists what it removed in `removed_build_dependencies`
+   (#1524). `package-manager` is not wired yet. If the kind isn't implemented
    yet, that's a luggage-side issue, not a port — and a kind luggage doesn't
    recognise (or a missing `method_kind`) fails as a catalog error rather
    than being inferred from the method name.
