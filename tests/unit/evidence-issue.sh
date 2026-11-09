@@ -153,6 +153,10 @@ test_existing_guard_escapes_injected_number() {
     err="$(command cat "$TEST_TEMP_DIR/open-err")"
     assert_equals "Unexpected issue number from gh issue list: \$'1\\n::stop-commands::t'" "$err" \
         "injected EXISTING is rendered as an escape"
+    local calls
+    calls="$(command cat "$GH_CALLS")"
+    assert_not_contains "$calls" "issue create" "no issue is created for an injected EXISTING"
+    assert_not_contains "$calls" "issue edit" "no issue is edited for an injected EXISTING"
     install_gh_stub
     run_open "12x"
     err="$(command cat "$TEST_TEMP_DIR/open-err")"
@@ -286,6 +290,30 @@ test_run_issue_reject_message_names_dropped_row() {
     assert_not_contains "$calls" "in:title" "the dropped row's tuple never reached gh"
 }
 
+test_run_issue_escapes_injected_row_value() {
+    # Run-path row values come from container-written JSON via `jq -r`, which
+    # decodes a JSON "\n" into a real newline — so this caller can hand the
+    # validator LF + `::` with no CR/LF strip in between (#1589).
+    install_gh_stub
+    local rows="$TEST_TEMP_DIR/run-rows-inject" rc=0 err lines forged
+    command rm -rf "$rows"
+    command mkdir -p "$rows"
+    command jq -n '{tool:"x\n::stop-commands::t", version:"1.82.0", os:"debian", os_version:"13", arch:"amd64", result:"fail"}' \
+        >"$rows/bad.json"
+    GH="$GH_STUB" GH_CALLS="$GH_CALLS" open_run_tracking_issue "$rows" "https://x/run/11" \
+        >/dev/null 2>"$TEST_TEMP_DIR/run-err" || rc=$?
+    assert_equals "0" "$rc" "a run whose only row is dropped returns 0"
+    lines="$(command wc -l <"$TEST_TEMP_DIR/run-err")"
+    assert_equals "1" "${lines// /}" "injected row value → exactly one stderr line"
+    forged="$(command grep -c '^::' "$TEST_TEMP_DIR/run-err" || true)"
+    assert_equals "0" "$forged" "injected row value → no stderr line starts with ::"
+    err="$(command cat "$TEST_TEMP_DIR/run-err")"
+    assert_equals "Refusing to include fail row: unexpected tool slug \$'x\\n::stop-commands::t'" "$err" \
+        "injected row value is rendered as an escape"
+    assert_not_contains "$(command cat "$GH_CALLS" 2>/dev/null)" "issue create" \
+        "no tracking issue is filed for the dropped row"
+}
+
 run_test test_valid_inputs_pass_regexes "well-formed inputs pass all three regexes"
 run_test test_reject_tool_metachar "tool with a shell metacharacter is rejected"
 run_test test_reject_tool_uppercase "uppercase tool slug is rejected"
@@ -303,5 +331,6 @@ run_test test_run_issue_drops_rows_failing_validation "rows failing validation n
 run_test test_open_reject_message_names_issue_filing "per-cell caller logs the exact 'Refusing to file issue'"
 run_test test_run_issue_reject_message_names_dropped_row "run caller logs a dropped row, not a refused filing"
 run_test test_existing_guard_escapes_injected_number "corrupt gh issue number with LF+:: → one escaped stderr line"
+run_test test_run_issue_escapes_injected_row_value "run-path row value with LF+:: → one escaped stderr line"
 
 generate_report
