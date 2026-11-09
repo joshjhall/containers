@@ -52,7 +52,7 @@ jobs:
             exit 1
           fi
           WORK=$(mktemp -d)
-          bin/fetch-release-asset.sh \
+          bin/fetch-release-asset.sh --sha256 "$EXPECTED_SHA" \
             "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" \
             "$WORK/osv-scanner"
           echo "${EXPECTED_SHA}  $WORK/osv-scanner" | sha256sum -c -

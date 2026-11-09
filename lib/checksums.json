@@ -1140,6 +1140,91 @@
         }
       }
     },
+    "actionlint": {
+      "versions": {
+        "1.7.12": {
+          "checksums": {
+            "amd64": {
+              "sha256": "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
+              "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
+            },
+            "arm64": {
+              "sha256": "325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6",
+              "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_arm64.tar.gz"
+            }
+          },
+          "added": "2026-11-09"
+        }
+      }
+    },
+    "conform": {
+      "versions": {
+        "0.1.0-alpha.32": {
+          "checksums": {
+            "amd64": {
+              "sha256": "b1fb68219577f49216170cc6f56ef9c8286a9a4f4a6a1e02cc5881319be683a4",
+              "url": "https://github.com/siderolabs/conform/releases/download/v0.1.0-alpha.32/conform-linux-amd64"
+            },
+            "arm64": {
+              "sha256": "f930721757c9dd8e8579496a3ee0fd3def39c59e24e5e8b7932ba46a63e1aab1",
+              "url": "https://github.com/siderolabs/conform/releases/download/v0.1.0-alpha.32/conform-linux-arm64"
+            }
+          },
+          "added": "2026-11-09"
+        }
+      }
+    },
+    "just": {
+      "versions": {
+        "1.59.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "409044617b6f06517c1035e55ca38c8c856ff8b650e41bc2aa1ef82d5903a23e",
+              "url": "https://github.com/casey/just/releases/download/1.59.0/just-1.59.0-x86_64-unknown-linux-musl.tar.gz"
+            },
+            "arm64": {
+              "sha256": "23871b1702bfd550fb5f901778fd4290ecf2ee034a45a889fbe96d89b188086d",
+              "url": "https://github.com/casey/just/releases/download/1.59.0/just-1.59.0-aarch64-unknown-linux-musl.tar.gz"
+            }
+          },
+          "added": "2026-11-09"
+        }
+      }
+    },
+    "rumdl": {
+      "versions": {
+        "0.3.2": {
+          "checksums": {
+            "amd64": {
+              "sha256": "f527d1374765d826c1627ceab3d1f46e548268731a495b5b12a3af529b3d79e8",
+              "url": "https://github.com/rvben/rumdl/releases/download/v0.3.2/rumdl-v0.3.2-x86_64-unknown-linux-gnu.tar.gz"
+            },
+            "arm64": {
+              "sha256": "bdfca7a602f893fbe5d73d5e38f73b31f45a21d3bcf385b6ea819997d0449ec3",
+              "url": "https://github.com/rvben/rumdl/releases/download/v0.3.2/rumdl-v0.3.2-aarch64-unknown-linux-gnu.tar.gz"
+            }
+          },
+          "added": "2026-11-09"
+        }
+      }
+    },
+    "shfmt": {
+      "versions": {
+        "3.14.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf",
+              "url": "https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "5f2db09dae91fca848f7adbdd014632e921a383863a2ad7e0450ad3aba0c6489",
+              "url": "https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_linux_arm64"
+            }
+          },
+          "added": "2026-11-09"
+        }
+      }
+    },
     "yq": {
       "versions": {
         "4.53.2": {

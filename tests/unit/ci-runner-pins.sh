@@ -41,7 +41,7 @@ WORKFLOWS_DIR="${WORKFLOWS_DIR:-$PROJECT_ROOT/.github/workflows}"
 ACTIONLINT_CONFIG="${ACTIONLINT_CONFIG:-$PROJECT_ROOT/.github/actionlint.yaml}"
 EVIDENCE_MATRIX_LIB="${EVIDENCE_MATRIX_LIB:-$PROJECT_ROOT/bin/lib/evidence-matrix.sh}"
 DEV_TOOLS="$PROJECT_ROOT/lib/features/dev-tools.sh"
-CHECKSUMS="$PROJECT_ROOT/lib/checksums.json"
+CHECKSUMS="${CHECKSUMS:-$PROJECT_ROOT/lib/checksums.json}"
 
 # GitHub-hosted labels actionlint 1.7.12 already knows. A label in use that
 # is neither here nor in .github/actionlint.yaml fails actionlint's
@@ -203,6 +203,47 @@ test_release_downloads_use_helper() {
         "release assets are fetched via bin/fetch-release-asset.sh, not curl"
 }
 
+# The toolchain cache persists across runs (and PR runs can write it), so an
+# unverified asset in it would be reused until a pin changed. Every helper call
+# must pass --sha256 so the helper verifies cache hits and downloads alike.
+test_every_helper_fetch_is_verified() {
+    local hits seen
+    seen=$(command grep -c 'fetch-release-asset.sh --sha256' "$WORKFLOWS_DIR"/*.yml |
+        /usr/bin/awk -F: '{ n += $2 } END { print n + 0 }')
+    hits=$(command grep -nE '(^|[[:space:]])bin/fetch-release-asset\.sh([[:space:]]|$)' "$WORKFLOWS_DIR"/*.yml |
+        command grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' |
+        command grep -v -- '--sha256' || true)
+    if [ -n "$hits" ]; then
+        /usr/bin/echo "$hits" | command sed "s|^$WORKFLOWS_DIR/|  |"
+    fi
+    assert_greater_than "$seen" 2 "found the verified helper calls ($seen)"
+    assert_empty "$hits" "every bin/fetch-release-asset.sh call passes --sha256"
+}
+
+# Every lint-toolchain asset ci.yml installs must have its pinned amd64
+# checksum recorded, or the install step hard-fails at run time.
+test_lint_toolchain_checksums_recorded() {
+    local tool var version sha missing=0
+    for tool in lefthook:LEFTHOOK_VERSION shellcheck:SHELLCHECK_VERSION rumdl:RUMDL_VERSION \
+        dprint:DPRINT_VERSION shfmt:SHFMT_VERSION conform:CONFORM_VERSION taplo:TAPLO_VERSION \
+        just:JUST_VERSION actionlint:ACTIONLINT_VERSION; do
+        var="${tool#*:}"
+        tool="${tool%%:*}"
+        version=$(command sed -nE "s/^${var}=\"\\\$\{${var}:-([^}]*)\}\"$/\1/p" "$DEV_TOOLS")
+        sha=$(command jq -r --arg t "$tool" --arg v "$version" \
+            '.tools[$t].versions[$v].checksums.amd64.sha256 // empty' "$CHECKSUMS")
+        if [[ ! "$sha" =~ ^[0-9a-f]{64}$ ]]; then
+            /usr/bin/echo "  $tool ${version:-<unparsed>}: no amd64 sha256 in lib/checksums.json"
+            missing=$((missing + 1))
+        fi
+        if ! command grep -qE "^[[:space:]]*fetch_tool ${tool} " "$WORKFLOWS_DIR/ci.yml"; then
+            /usr/bin/echo "  $tool: ci.yml does not install it through fetch_tool"
+            missing=$((missing + 1))
+        fi
+    done
+    assert_equals "0" "$missing" "every lint-toolchain asset is checksum-pinned and fetched verified"
+}
+
 test_ci_toolchain_cache_wired() {
     require_yq || return 0
     local f="$WORKFLOWS_DIR/ci.yml" restore save restore_idx save_idx last_fetch_idx
@@ -241,9 +282,12 @@ test_ci_shellcheck_is_pinned_and_verified() {
         inside { print }
     ' "$f")
     assert_contains "$step" "SHELLCHECK_VERSION" "the lint install reads SHELLCHECK_VERSION"
-    assert_contains "$step" ".tools.shellcheck.versions" \
-        "the shellcheck install looks its checksum up in lib/checksums.json"
-    assert_contains "$step" 'sha256sum -c' "the lint install verifies with sha256sum -c"
+    assert_contains "$step" "fetch_tool shellcheck" \
+        "shellcheck is installed through the checksum-verifying fetch_tool"
+    assert_contains "$step" '.tools[$t].versions[$v].checksums.amd64.sha256' \
+        "fetch_tool looks each checksum up in lib/checksums.json"
+    assert_contains "$step" 'fetch-release-asset.sh --sha256' \
+        "fetch_tool hands the checksum to the helper to verify"
 
     version=$(command sed -nE 's/^SHELLCHECK_VERSION="\$\{SHELLCHECK_VERSION:-([^}]*)\}"$/\1/p' "$DEV_TOOLS")
     assert_matches "$version" '^[0-9]+\.[0-9]+\.[0-9]+$' \
@@ -270,6 +314,8 @@ run_test test_release_binaries_linux_legs_match "release-binaries Linux legs sha
 run_test test_runner_labels_known_to_actionlint "runner labels are known to actionlint or declared"
 run_test test_every_curl_retries "every workflow curl retries"
 run_test test_release_downloads_use_helper "release assets download via bin/fetch-release-asset.sh"
+run_test test_every_helper_fetch_is_verified "every helper fetch passes --sha256"
+run_test test_lint_toolchain_checksums_recorded "every lint-toolchain asset is checksum-pinned"
 run_test test_ci_toolchain_cache_wired "ci.yml restores, then saves, the toolchain cache around the downloads"
 run_test test_ci_shellcheck_is_pinned_and_verified "CI shellcheck is the pinned, checksum-verified release"
 run_test test_shellcheck_registered_for_auto_patch "shellcheck pin is visible to auto-patch"

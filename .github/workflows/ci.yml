@@ -111,8 +111,11 @@ jobs:
       # TOOLCHAIN_CACHE_DIR, cached across runs: the key hashes the files that
       # pin every version fetched here (plus the helper), so a bump starts a
       # fresh cache and a warm run logs `cache hit: <asset>` and downloads
-      # nothing. Integrity is unchanged — each asset with a recorded SHA256 is
-      # verified after the fetch, cache hit or not.
+      # nothing. Integrity: every fetch passes --sha256 with the asset's pin
+      # from lib/checksums.json, and the helper verifies cache hits and
+      # downloads alike — a mismatched cache entry is evicted and re-fetched,
+      # and only verified bytes are ever cached. So a cache entry written by
+      # any run (pull_request included) can only ever hold the pinned bytes.
       - name: Locate CI toolchain cache
         run: echo "TOOLCHAIN_CACHE_DIR=${RUNNER_TEMP}/ci-toolchain" >>"$GITHUB_ENV"
 
@@ -151,7 +154,7 @@ jobs:
           fi
 
           echo "Installing yq $YQ_VERSION"
-          bin/fetch-release-asset.sh \
+          bin/fetch-release-asset.sh --sha256 "$EXPECTED_SHA" \
             "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" /tmp/yq
           echo "${EXPECTED_SHA}  /tmp/yq" | sha256sum -c -
 
@@ -192,91 +195,115 @@ jobs:
         run: |
           set -euo pipefail
           DEV_TOOLS=lib/features/dev-tools.sh
-          FETCH=bin/fetch-release-asset.sh
-          # Private scratch dir: nothing can swap an asset between its fetch
-          # (and checksum) and its install.
+          # Private scratch dir: nothing can swap an asset between its
+          # verification and its install.
           WORK=$(mktemp -d)
 
-          # Pin lefthook to the version baked into the dev-tools feature
-          LEFTHOOK_VERSION=$(grep -oP 'LEFTHOOK_VERSION:-\K[0-9.]+' "$DEV_TOOLS")
-          "$FETCH" "https://github.com/evilmartians/lefthook/releases/download/v${LEFTHOOK_VERSION}/lefthook_${LEFTHOOK_VERSION}_Linux_x86_64.gz" \
+          # pin <VAR> — the default from dev-tools.sh's VAR="${VAR:-X.Y.Z}"
+          # line (pre-release suffixes like 0.1.0-alpha.31 included).
+          pin() {
+            local v
+            v=$(sed -nE "s/^$1=\"\\\$\{$1:-([0-9A-Za-z.-]+)\}\"\$/\1/p" "$DEV_TOOLS")
+            if [ -z "$v" ]; then
+              echo "::error::could not read $1 from $DEV_TOOLS" >&2
+              return 1
+            fi
+            echo "$v"
+          }
+
+          # fetch_tool <tool> <version> <url> <dest> — every asset here is
+          # checksum-verified (#1607): the toolchain cache persists across
+          # runs, so an unverified entry would be reused until a pin changed.
+          # bin/fetch-release-asset.sh verifies the cache hit and the
+          # download alike. A missing checksum is a hard error, never a
+          # silent fallback to trusting the download; auto-patch's
+          # update-checksums.sh records it when a pin is bumped.
+          fetch_tool() {
+            local sha
+            sha=$(jq -r --arg t "$1" --arg v "$2" \
+              '.tools[$t].versions[$v].checksums.amd64.sha256 // empty' lib/checksums.json)
+            if [ -z "$sha" ]; then
+              echo "::error::no amd64 SHA256 pinned for $1 $2 in lib/checksums.json" >&2
+              return 1
+            fi
+            bin/fetch-release-asset.sh --sha256 "$sha" "$3" "$4"
+          }
+
+          # lefthook — git hooks manager
+          V=$(pin LEFTHOOK_VERSION)
+          fetch_tool lefthook "$V" \
+            "https://github.com/evilmartians/lefthook/releases/download/v${V}/lefthook_${V}_Linux_x86_64.gz" \
             "$WORK/lefthook.gz"
           gunzip -c "$WORK/lefthook.gz" > "$WORK/lefthook"
           sudo install -m 0755 "$WORK/lefthook" /usr/local/bin/lefthook
           lefthook version
 
-          # ShellCheck: pinned + checksum-verified (#1607). It used to come
-          # from the runner's apt repo, so its version (and its new SC codes)
-          # followed the runner image: ubuntu 26.04's 0.11.0 added SC2232 and
-          # broke the full-repo sweep (#1599). Same verify-then-install
-          # contract as yq: a missing checksum is a hard error.
-          SHELLCHECK_VERSION=$(grep -oP 'SHELLCHECK_VERSION="\$\{SHELLCHECK_VERSION:-\K[0-9.]+' "$DEV_TOOLS" || true)
-          if [ -z "$SHELLCHECK_VERSION" ]; then
-            echo "::error::could not read SHELLCHECK_VERSION from $DEV_TOOLS"
-            exit 1
-          fi
-          EXPECTED_SHA=$(jq -r \
-            --arg v "$SHELLCHECK_VERSION" \
-            '.tools.shellcheck.versions[$v].checksums.amd64.sha256 // empty' \
-            lib/checksums.json)
-          if [ -z "$EXPECTED_SHA" ]; then
-            echo "::error::no amd64 SHA256 pinned for shellcheck $SHELLCHECK_VERSION in lib/checksums.json"
-            exit 1
-          fi
-          "$FETCH" "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+          # ShellCheck — pinned release (#1607). It used to come from the
+          # runner's apt repo, so its version (and its new SC codes) followed
+          # the runner image: ubuntu 26.04's 0.11.0 added SC2232 and broke the
+          # full-repo sweep (#1599).
+          V=$(pin SHELLCHECK_VERSION)
+          fetch_tool shellcheck "$V" \
+            "https://github.com/koalaman/shellcheck/releases/download/v${V}/shellcheck-v${V}.linux.x86_64.tar.xz" \
             "$WORK/shellcheck.tar.xz"
-          echo "${EXPECTED_SHA}  $WORK/shellcheck.tar.xz" | sha256sum -c -
-          tar -xJf "$WORK/shellcheck.tar.xz" -C "$WORK" --strip-components=1 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          tar -xJf "$WORK/shellcheck.tar.xz" -C "$WORK" --strip-components=1 "shellcheck-v${V}/shellcheck"
           sudo install -m 0755 "$WORK/shellcheck" /usr/local/bin/shellcheck
           shellcheck --version
 
-          # rumdl — markdown linter + formatter (version pinned in dev-tools.sh)
-          RUMDL_VERSION=$(grep -oP 'RUMDL_VERSION:-\K[0-9.]+' "$DEV_TOOLS")
-          "$FETCH" "https://github.com/rvben/rumdl/releases/download/v${RUMDL_VERSION}/rumdl-v${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+          # rumdl — markdown linter + formatter
+          V=$(pin RUMDL_VERSION)
+          fetch_tool rumdl "$V" \
+            "https://github.com/rvben/rumdl/releases/download/v${V}/rumdl-v${V}-x86_64-unknown-linux-gnu.tar.gz" \
             "$WORK/rumdl.tar.gz"
           sudo tar -xzf "$WORK/rumdl.tar.gz" -C /usr/local/bin rumdl
           rumdl --version
 
-          # dprint — polyglot formatter (version pinned in dev-tools.sh; release tag has no `v` prefix)
-          DPRINT_VERSION=$(grep -oP 'DPRINT_VERSION:-\K[0-9.]+' "$DEV_TOOLS")
-          "$FETCH" "https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}/dprint-x86_64-unknown-linux-gnu.zip" \
+          # dprint — polyglot formatter (release tag has no `v` prefix)
+          V=$(pin DPRINT_VERSION)
+          fetch_tool dprint "$V" \
+            "https://github.com/dprint/dprint/releases/download/${V}/dprint-x86_64-unknown-linux-gnu.zip" \
             "$WORK/dprint.zip"
           sudo unzip -o "$WORK/dprint.zip" -d /usr/local/bin dprint
           dprint --version
 
-          # shfmt — shell formatter (version pinned in dev-tools.sh; bare binary)
-          SHFMT_VERSION=$(grep -oP 'SHFMT_VERSION:-\K[0-9.]+' "$DEV_TOOLS")
-          "$FETCH" "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" \
+          # shfmt — shell formatter (bare binary)
+          V=$(pin SHFMT_VERSION)
+          fetch_tool shfmt "$V" \
+            "https://github.com/mvdan/sh/releases/download/v${V}/shfmt_v${V}_linux_amd64" \
             "$WORK/shfmt"
           sudo install -m 0755 "$WORK/shfmt" /usr/local/bin/shfmt
           shfmt --version
 
-          # conform — commit-message linter (version pinned in dev-tools.sh; bare binary)
-          # grep pattern allows pre-release suffixes like "0.1.0-alpha.31"
-          CONFORM_VERSION=$(grep -oP 'CONFORM_VERSION:-\K[0-9.a-z-]+' "$DEV_TOOLS")
-          "$FETCH" "https://github.com/siderolabs/conform/releases/download/v${CONFORM_VERSION}/conform-linux-amd64" \
+          # conform — commit-message linter (bare binary; pins may carry a
+          # pre-release suffix like "0.1.0-alpha.31")
+          V=$(pin CONFORM_VERSION)
+          fetch_tool conform "$V" \
+            "https://github.com/siderolabs/conform/releases/download/v${V}/conform-linux-amd64" \
             "$WORK/conform"
           sudo install -m 0755 "$WORK/conform" /usr/local/bin/conform
           conform version
 
-          # taplo — TOML formatter (version pinned in dev-tools.sh; release tag has no `v` prefix)
-          TAPLO_VERSION=$(grep -oP 'TAPLO_VERSION:-\K[0-9.]+' "$DEV_TOOLS")
-          "$FETCH" "https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}/taplo-linux-x86_64.gz" \
+          # taplo — TOML formatter (release tag has no `v` prefix)
+          V=$(pin TAPLO_VERSION)
+          fetch_tool taplo "$V" \
+            "https://github.com/tamasfe/taplo/releases/download/${V}/taplo-linux-x86_64.gz" \
             "$WORK/taplo.gz"
           gunzip -c "$WORK/taplo.gz" > "$WORK/taplo"
           sudo install -m 0755 "$WORK/taplo" /usr/local/bin/taplo
           taplo --version
 
-          # just — command runner (version pinned in dev-tools.sh; release tag has no `v` prefix)
-          JUST_VERSION=$(grep -oP 'JUST_VERSION:-\K[0-9.]+' "$DEV_TOOLS")
-          "$FETCH" "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+          # just — command runner (release tag has no `v` prefix)
+          V=$(pin JUST_VERSION)
+          fetch_tool just "$V" \
+            "https://github.com/casey/just/releases/download/${V}/just-${V}-x86_64-unknown-linux-musl.tar.gz" \
             "$WORK/just.tar.gz"
           sudo tar -xzf "$WORK/just.tar.gz" -C /usr/local/bin just
           just --version
 
-          # actionlint — GitHub Actions workflow linter (version pinned in dev-tools.sh)
-          ACTIONLINT_VERSION=$(grep -oP 'ACTIONLINT_VERSION:-\K[0-9.]+' "$DEV_TOOLS")
-          "$FETCH" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+          # actionlint — GitHub Actions workflow linter
+          V=$(pin ACTIONLINT_VERSION)
+          fetch_tool actionlint "$V" \
+            "https://github.com/rhysd/actionlint/releases/download/v${V}/actionlint_${V}_linux_amd64.tar.gz" \
             "$WORK/actionlint.tar.gz"
           sudo tar -xzf "$WORK/actionlint.tar.gz" -C /usr/local/bin actionlint
           actionlint --version
@@ -317,7 +344,7 @@ jobs:
           # tarball between the checksum and the extract.
           WORK=$(mktemp -d)
           TARBALL="${WORK}/gitleaks.tar.gz"
-          bin/fetch-release-asset.sh \
+          bin/fetch-release-asset.sh --sha256 "$EXPECTED_SHA" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
             "$TARBALL"
           echo "${EXPECTED_SHA}  ${TARBALL}" | sha256sum -c -
