@@ -31,7 +31,7 @@ env:
 jobs:
   lint:
     name: Lint Dockerfiles
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -47,7 +47,7 @@ jobs:
   build:
     name: Build ${{ matrix.distro }}-${{ matrix.distro_version }}-${{ matrix.arch }}
     needs: lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read

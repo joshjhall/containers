@@ -23,7 +23,7 @@ jobs:
   # =====================================
   version-check:
     name: Check Versions and Create Patch Branch
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     permissions:
@@ -397,8 +397,11 @@ jobs:
 
           Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          # Send CRITICAL priority notification
-          curl -s \
+          # Send CRITICAL priority notification. Every Pushover call in this
+          # workflow retries (#1607): a retried POST can duplicate an alert
+          # whose response was lost, which is accepted — a duplicate alert is
+          # harmless, a missed one is not.
+          curl -s --retry 3 \
             --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
             --form-string "user=${{ secrets.PUSHOVER_USER }}" \
             --form-string "title=🔐 CRITICAL: GPG Key Changes" \
@@ -420,7 +423,7 @@ jobs:
           This requires manual investigation."
 
           # Send notification
-          curl -s \
+          curl -s --retry 3 \
             --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
             --form-string "user=${{ secrets.PUSHOVER_USER }}" \
             --form-string "title=❌ Auto-Patch Version Check Failed" \
@@ -434,7 +437,7 @@ jobs:
   # =====================================
   auto-merge:
     name: Create PR for Patch Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     if: |
       github.event_name == 'workflow_run' &&
@@ -631,7 +634,7 @@ jobs:
           VERSION: ${{ steps.branch_info.outputs.version }}
           BRANCH: ${{ steps.branch_info.outputs.branch }}
         run: |
-          curl -s \
+          curl -s --retry 3 \
             --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
             --form-string "user=${{ secrets.PUSHOVER_USER }}" \
             --form-string "title=❌ Patch Release v${VERSION} PR Creation Failed" \
@@ -652,7 +655,7 @@ jobs:
   # =====================================
   post-merge:
     name: Post-Merge Tag and Cleanup
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     if: |
       github.event_name == 'pull_request' &&
@@ -825,7 +828,7 @@ jobs:
           BRANCH: ${{ steps.release_info.outputs.branch }}
           COMMIT_MSG: ${{ steps.release_info.outputs.commit_message }}
         run: |
-          curl -s \
+          curl -s --retry 3 \
             --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
             --form-string "user=${{ secrets.PUSHOVER_USER }}" \
             --form-string "title=✅ Patch Release v${VERSION} Deployed" \
@@ -848,7 +851,7 @@ jobs:
           VERSION: ${{ steps.release_info.outputs.version }}
           BRANCH: ${{ steps.release_info.outputs.branch }}
         run: |
-          curl -s \
+          curl -s --retry 3 \
             --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
             --form-string "user=${{ secrets.PUSHOVER_USER }}" \
             --form-string "title=❌ Patch Release v${VERSION} Post-Merge Failed" \
@@ -867,7 +870,7 @@ jobs:
   # =====================================
   ci-failure:
     name: Notify CI Failure on Patch Branch
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     if: |
       github.event_name == 'workflow_run' &&
@@ -920,7 +923,7 @@ jobs:
         run: |
           VERSION="${{ steps.info.outputs.version }}"
 
-          curl -s \
+          curl -s --retry 3 \
             --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
             --form-string "user=${{ secrets.PUSHOVER_USER }}" \
             --form-string "title=⚠️ Patch Release v${VERSION} CI Failed" \

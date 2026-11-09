@@ -65,7 +65,7 @@ concurrency:
 jobs:
   sweep:
     name: Delete bogus needs-triage nudge comments
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # The backfill is ~82 deletes paced 1s apart, so a healthy run is a couple
     # of minutes. Well under the 360-minute default, which is the point: a
     # future edit to the retry logic that spins should fail fast rather than

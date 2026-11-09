@@ -32,7 +32,7 @@ jobs:
   # =====================================
   test:
     name: Run Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 75
     steps:
       - name: Checkout code
@@ -42,7 +42,7 @@ jobs:
 
       # tests/unit/gitlab-templates.sh executes the triage policy's committed
       # Ruby conditions to prove the labeling logic works. It needs ruby (already
-      # on ubuntu-latest) AND yq — without yq those tests SKIPPED here, and a
+      # on ubuntu-26.04) AND yq — without yq those tests SKIPPED here, and a
       # skip renders identically to a pass, so they sat un-executed on every run
       # (#768). The suite now fails rather than skips when CI=true, so this step
       # is what keeps that check green.
@@ -103,7 +103,33 @@ jobs:
           # Same reasoning as the containers-db checkout: public, read-only.
           persist-credentials: false
 
+      # Every toolchain download in this job goes through
+      # bin/fetch-release-asset.sh — curl with retries on every transient
+      # error, then a `gh release download` fallback via the API asset path —
+      # because a bare `curl -fsSL` turned hours of upstream releases/download
+      # 504s into three failed release attempts (#1607). Downloads land in
+      # TOOLCHAIN_CACHE_DIR, cached across runs: the key hashes the files that
+      # pin every version fetched here (plus the helper), so a bump starts a
+      # fresh cache and a warm run logs `cache hit: <asset>` and downloads
+      # nothing. Integrity: every fetch passes --sha256 with the asset's pin
+      # from lib/checksums.json, and the helper verifies cache hits and
+      # downloads alike — a mismatched cache entry is evicted and re-fetched,
+      # and only verified bytes are ever cached. So a cache entry written by
+      # any run (pull_request included) can only ever hold the pinned bytes.
+      - name: Locate CI toolchain cache
+        run: echo "TOOLCHAIN_CACHE_DIR=${RUNNER_TEMP}/ci-toolchain" >>"$GITHUB_ENV"
+
+      - name: Restore CI toolchain cache
+        id: toolchain-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ci-toolchain
+          key: ci-toolchain-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lib/features/dev-tools.sh', 'lib/checksums.json', 'bin/fetch-release-asset.sh') }}
+
       - name: Install yq (for GitLab triage policy tests)
+        env:
+          # gh's fallback in bin/fetch-release-asset.sh (API asset path).
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           YQ_VERSION=$(grep -oP 'YQ_VERSION="\$\{YQ_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
@@ -128,13 +154,13 @@ jobs:
           fi
 
           echo "Installing yq $YQ_VERSION"
-          curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
-            -o /tmp/yq
+          bin/fetch-release-asset.sh --sha256 "$EXPECTED_SHA" \
+            "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" /tmp/yq
           echo "${EXPECTED_SHA}  /tmp/yq" | sha256sum -c -
 
-          # sudo because /usr/local/bin is root-owned on ubuntu-latest — the
-          # same reason every sibling install below (shfmt, conform, lefthook,
-          # rumdl, just, actionlint) uses it. Only ever moved into place AFTER
+          # sudo because /usr/local/bin is root-owned on ubuntu-26.04 — the
+          # same reason every sibling install below (shellcheck, shfmt,
+          # conform, lefthook, rumdl, just, actionlint) uses it. Only ever moved into place AFTER
           # the checksum passes.
           sudo install -m 0755 /tmp/yq /usr/local/bin/yq
           yq --version
@@ -163,65 +189,180 @@ jobs:
         run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 
       - name: Install lint toolchain (lefthook + hook binaries)
+        env:
+          # gh's fallback in bin/fetch-release-asset.sh (API asset path).
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Pin lefthook to the version baked into the dev-tools feature
-          LEFTHOOK_VERSION=$(grep -oP 'LEFTHOOK_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
-          curl -fsSL "https://github.com/evilmartians/lefthook/releases/download/v${LEFTHOOK_VERSION}/lefthook_${LEFTHOOK_VERSION}_Linux_x86_64.gz" \
-            | gunzip > /tmp/lefthook
-          chmod +x /tmp/lefthook
-          sudo mv /tmp/lefthook /usr/local/bin/lefthook
+          set -euo pipefail
+          DEV_TOOLS=lib/features/dev-tools.sh
+          # Private scratch dir: nothing can swap an asset between its
+          # verification and its install.
+          WORK=$(mktemp -d)
+
+          # pin <VAR> — the default from dev-tools.sh's VAR="${VAR:-X.Y.Z}"
+          # line (pre-release suffixes like 0.1.0-alpha.31 included).
+          pin() {
+            local v
+            v=$(sed -nE "s/^$1=\"\\\$\{$1:-([0-9A-Za-z.-]+)\}\"\$/\1/p" "$DEV_TOOLS")
+            if [ -z "$v" ]; then
+              echo "::error::could not read $1 from $DEV_TOOLS" >&2
+              return 1
+            fi
+            echo "$v"
+          }
+
+          # fetch_tool <tool> <version> <url> <dest> — every asset here is
+          # checksum-verified (#1607): the toolchain cache persists across
+          # runs, so an unverified entry would be reused until a pin changed.
+          # bin/fetch-release-asset.sh verifies the cache hit and the
+          # download alike. A missing checksum is a hard error, never a
+          # silent fallback to trusting the download; auto-patch's
+          # update-checksums.sh records it when a pin is bumped.
+          fetch_tool() {
+            local sha
+            sha=$(jq -r --arg t "$1" --arg v "$2" \
+              '.tools[$t].versions[$v].checksums.amd64.sha256 // empty' lib/checksums.json)
+            if [ -z "$sha" ]; then
+              echo "::error::no amd64 SHA256 pinned for $1 $2 in lib/checksums.json" >&2
+              return 1
+            fi
+            bin/fetch-release-asset.sh --sha256 "$sha" "$3" "$4"
+          }
+
+          # lefthook — git hooks manager
+          V=$(pin LEFTHOOK_VERSION)
+          fetch_tool lefthook "$V" \
+            "https://github.com/evilmartians/lefthook/releases/download/v${V}/lefthook_${V}_Linux_x86_64.gz" \
+            "$WORK/lefthook.gz"
+          gunzip -c "$WORK/lefthook.gz" > "$WORK/lefthook"
+          sudo install -m 0755 "$WORK/lefthook" /usr/local/bin/lefthook
           lefthook version
 
-          # Install shellcheck from the runner's apt repo
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
+          # ShellCheck — pinned release (#1607). It used to come from the
+          # runner's apt repo, so its version (and its new SC codes) followed
+          # the runner image: ubuntu 26.04's 0.11.0 added SC2232 and broke the
+          # full-repo sweep (#1599).
+          V=$(pin SHELLCHECK_VERSION)
+          fetch_tool shellcheck "$V" \
+            "https://github.com/koalaman/shellcheck/releases/download/v${V}/shellcheck-v${V}.linux.x86_64.tar.xz" \
+            "$WORK/shellcheck.tar.xz"
+          tar -xJf "$WORK/shellcheck.tar.xz" -C "$WORK" --strip-components=1 "shellcheck-v${V}/shellcheck"
+          sudo install -m 0755 "$WORK/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
 
-          # rumdl — markdown linter + formatter (version pinned in dev-tools.sh)
-          RUMDL_VERSION=$(grep -oP 'RUMDL_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
-          curl -fsSL "https://github.com/rvben/rumdl/releases/download/v${RUMDL_VERSION}/rumdl-v${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin rumdl
+          # rumdl — markdown linter + formatter
+          V=$(pin RUMDL_VERSION)
+          fetch_tool rumdl "$V" \
+            "https://github.com/rvben/rumdl/releases/download/v${V}/rumdl-v${V}-x86_64-unknown-linux-gnu.tar.gz" \
+            "$WORK/rumdl.tar.gz"
+          sudo tar -xzf "$WORK/rumdl.tar.gz" -C /usr/local/bin rumdl
           rumdl --version
 
-          # dprint — polyglot formatter (version pinned in dev-tools.sh; release tag has no `v` prefix)
-          DPRINT_VERSION=$(grep -oP 'DPRINT_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
-          curl -fsSL -o /tmp/dprint.zip "https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}/dprint-x86_64-unknown-linux-gnu.zip"
-          sudo unzip -o /tmp/dprint.zip -d /usr/local/bin dprint
-          rm /tmp/dprint.zip
+          # dprint — polyglot formatter (release tag has no `v` prefix)
+          V=$(pin DPRINT_VERSION)
+          fetch_tool dprint "$V" \
+            "https://github.com/dprint/dprint/releases/download/${V}/dprint-x86_64-unknown-linux-gnu.zip" \
+            "$WORK/dprint.zip"
+          sudo unzip -o "$WORK/dprint.zip" -d /usr/local/bin dprint
           dprint --version
 
-          # shfmt — shell formatter (version pinned in dev-tools.sh; bare binary)
-          SHFMT_VERSION=$(grep -oP 'SHFMT_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
-          sudo curl -fsSL -o /usr/local/bin/shfmt \
-            "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64"
-          sudo chmod +x /usr/local/bin/shfmt
+          # shfmt — shell formatter (bare binary)
+          V=$(pin SHFMT_VERSION)
+          fetch_tool shfmt "$V" \
+            "https://github.com/mvdan/sh/releases/download/v${V}/shfmt_v${V}_linux_amd64" \
+            "$WORK/shfmt"
+          sudo install -m 0755 "$WORK/shfmt" /usr/local/bin/shfmt
           shfmt --version
 
-          # conform — commit-message linter (version pinned in dev-tools.sh; bare binary)
-          # grep pattern allows pre-release suffixes like "0.1.0-alpha.31"
-          CONFORM_VERSION=$(grep -oP 'CONFORM_VERSION:-\K[0-9.a-z-]+' lib/features/dev-tools.sh)
-          sudo curl -fsSL -o /usr/local/bin/conform \
-            "https://github.com/siderolabs/conform/releases/download/v${CONFORM_VERSION}/conform-linux-amd64"
-          sudo chmod +x /usr/local/bin/conform
+          # conform — commit-message linter (bare binary; pins may carry a
+          # pre-release suffix like "0.1.0-alpha.31")
+          V=$(pin CONFORM_VERSION)
+          fetch_tool conform "$V" \
+            "https://github.com/siderolabs/conform/releases/download/v${V}/conform-linux-amd64" \
+            "$WORK/conform"
+          sudo install -m 0755 "$WORK/conform" /usr/local/bin/conform
           conform version
 
-          # taplo — TOML formatter (version pinned in dev-tools.sh; release tag has no `v` prefix)
-          TAPLO_VERSION=$(grep -oP 'TAPLO_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
-          curl -fsSL "https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}/taplo-linux-x86_64.gz" \
-            | gunzip | sudo tee /usr/local/bin/taplo > /dev/null
-          sudo chmod +x /usr/local/bin/taplo
+          # taplo — TOML formatter (release tag has no `v` prefix)
+          V=$(pin TAPLO_VERSION)
+          fetch_tool taplo "$V" \
+            "https://github.com/tamasfe/taplo/releases/download/${V}/taplo-linux-x86_64.gz" \
+            "$WORK/taplo.gz"
+          gunzip -c "$WORK/taplo.gz" > "$WORK/taplo"
+          sudo install -m 0755 "$WORK/taplo" /usr/local/bin/taplo
           taplo --version
 
-          # just — command runner (version pinned in dev-tools.sh; release tag has no `v` prefix)
-          JUST_VERSION=$(grep -oP 'JUST_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
-          curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin just
+          # just — command runner (release tag has no `v` prefix)
+          V=$(pin JUST_VERSION)
+          fetch_tool just "$V" \
+            "https://github.com/casey/just/releases/download/${V}/just-${V}-x86_64-unknown-linux-musl.tar.gz" \
+            "$WORK/just.tar.gz"
+          sudo tar -xzf "$WORK/just.tar.gz" -C /usr/local/bin just
           just --version
 
-          # actionlint — GitHub Actions workflow linter (version pinned in dev-tools.sh)
-          ACTIONLINT_VERSION=$(grep -oP 'ACTIONLINT_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
-          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin actionlint
+          # actionlint — GitHub Actions workflow linter
+          V=$(pin ACTIONLINT_VERSION)
+          fetch_tool actionlint "$V" \
+            "https://github.com/rhysd/actionlint/releases/download/v${V}/actionlint_${V}_linux_amd64.tar.gz" \
+            "$WORK/actionlint.tar.gz"
+          sudo tar -xzf "$WORK/actionlint.tar.gz" -C /usr/local/bin actionlint
           actionlint --version
+
+      # gitleaks runs as a checksum-verified binary rather than through
+      # gitleaks/gitleaks-action, which downloads its release tarball unverified
+      # (#1064). The version is read from lib/features/dev-tools.sh — the single
+      # gitleaks pin, bumped by auto-patch — and its SHA256 from
+      # lib/checksums.json, which auto-patch's update-checksums.sh fills in for
+      # the new version. Keeping no version literal in this file also means a
+      # gitleaks bump never has to push a workflow-file change.
+      - name: Install gitleaks (checksum-verified)
+        env:
+          # gh's fallback in bin/fetch-release-asset.sh (API asset path).
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # `|| true`: under set -e a no-match grep would abort here, before
+          # the ::error:: below could say why.
+          GITLEAKS_VERSION=$(grep -oP 'GITLEAKS_VERSION="\$\{GITLEAKS_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh || true)
+          if [ -z "$GITLEAKS_VERSION" ]; then
+            echo "::error::could not read GITLEAKS_VERSION from lib/features/dev-tools.sh"
+            exit 1
+          fi
+          # A missing entry is a hard error, as for yq above: an unrecorded
+          # checksum must stop CI, never fall back to trusting the download.
+          EXPECTED_SHA=$(jq -r \
+            --arg v "$GITLEAKS_VERSION" \
+            '.tools.gitleaks.versions[$v].checksums.amd64.sha256 // empty' \
+            lib/checksums.json)
+          if [ -z "$EXPECTED_SHA" ]; then
+            echo "::error::no amd64 SHA256 pinned for gitleaks $GITLEAKS_VERSION in lib/checksums.json"
+            exit 1
+          fi
+
+          echo "Installing gitleaks $GITLEAKS_VERSION"
+          # Private scratch dir, not a fixed /tmp name, so nothing can swap the
+          # tarball between the checksum and the extract.
+          WORK=$(mktemp -d)
+          TARBALL="${WORK}/gitleaks.tar.gz"
+          bin/fetch-release-asset.sh --sha256 "$EXPECTED_SHA" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            "$TARBALL"
+          echo "${EXPECTED_SHA}  ${TARBALL}" | sha256sum -c -
+
+          # Extracted and moved into place only AFTER the checksum passes.
+          tar -xzf "$TARBALL" -C "$WORK" gitleaks
+          sudo install -m 0755 "${WORK}/gitleaks" /usr/local/bin/gitleaks
+          gitleaks version
+
+      # Saved right after the last toolchain download — before any lint or
+      # test step that can fail — so a red run still warms the cache. Skipped
+      # on an exact-key hit (nothing new to store).
+      - name: Save CI toolchain cache
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ci-toolchain
+          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
 
       - name: Validate commit messages (conform)
         if: github.event_name == 'pull_request'
@@ -285,48 +426,6 @@ jobs:
             lefthook run pre-commit --all-files
           fi
 
-      # gitleaks runs as a checksum-verified binary rather than through
-      # gitleaks/gitleaks-action, which downloads its release tarball unverified
-      # (#1064). The version is read from lib/features/dev-tools.sh — the single
-      # gitleaks pin, bumped by auto-patch — and its SHA256 from
-      # lib/checksums.json, which auto-patch's update-checksums.sh fills in for
-      # the new version. Keeping no version literal in this file also means a
-      # gitleaks bump never has to push a workflow-file change.
-      - name: Install gitleaks (checksum-verified)
-        run: |
-          set -euo pipefail
-          # `|| true`: under set -e a no-match grep would abort here, before
-          # the ::error:: below could say why.
-          GITLEAKS_VERSION=$(grep -oP 'GITLEAKS_VERSION="\$\{GITLEAKS_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh || true)
-          if [ -z "$GITLEAKS_VERSION" ]; then
-            echo "::error::could not read GITLEAKS_VERSION from lib/features/dev-tools.sh"
-            exit 1
-          fi
-          # A missing entry is a hard error, as for yq above: an unrecorded
-          # checksum must stop CI, never fall back to trusting the download.
-          EXPECTED_SHA=$(jq -r \
-            --arg v "$GITLEAKS_VERSION" \
-            '.tools.gitleaks.versions[$v].checksums.amd64.sha256 // empty' \
-            lib/checksums.json)
-          if [ -z "$EXPECTED_SHA" ]; then
-            echo "::error::no amd64 SHA256 pinned for gitleaks $GITLEAKS_VERSION in lib/checksums.json"
-            exit 1
-          fi
-
-          echo "Installing gitleaks $GITLEAKS_VERSION"
-          # Private scratch dir, not a fixed /tmp name, so nothing can swap the
-          # tarball between the checksum and the extract.
-          WORK=$(mktemp -d)
-          TARBALL="${WORK}/gitleaks.tar.gz"
-          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            -o "$TARBALL"
-          echo "${EXPECTED_SHA}  ${TARBALL}" | sha256sum -c -
-
-          # Extracted and moved into place only AFTER the checksum passes.
-          tar -xzf "$TARBALL" -C "$WORK" gitleaks
-          sudo install -m 0755 "${WORK}/gitleaks" /usr/local/bin/gitleaks
-          gitleaks version
-
       - name: Run secret scanning with Gitleaks
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -368,7 +467,7 @@ jobs:
   # =====================================
   lint-ai-templates:
     name: Lint AI Templates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Checkout code
@@ -417,7 +516,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-26.04, macos-26, windows-2025]
     steps:
       - name: Disable CRLF conversion
         if: runner.os == 'Windows'
@@ -493,7 +592,7 @@ jobs:
   # weeks early instead of mid-release.
   rust-latest-stable:
     name: Rust lints on latest stable (non-blocking)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     continue-on-error: true
     steps:
@@ -530,7 +629,7 @@ jobs:
     # {name, build_args}, and GitHub otherwise appends the serialized object —
     # including the newline-laden build_args block — to the display name (#583).
     name: Build (Merge Tier) — ${{ matrix.variant.name }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     needs: [test, rust-test]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -688,7 +787,7 @@ jobs:
   # =====================================
   integration-test:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -816,7 +915,7 @@ jobs:
   # =====================================
   debian-version-test:
     name: Debian Version Compatibility
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     needs: test
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -889,7 +988,7 @@ jobs:
   # =====================================
   security-test:
     name: Security Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -934,7 +1033,7 @@ jobs:
   # =====================================
   security-scan:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -993,8 +1092,14 @@ jobs:
       - name: Install Trivy via APT
         run: |
           # Install Trivy from official APT repository (GitHub releases are no longer available)
-          sudo apt-get install -y wget apt-transport-https gnupg
-          wget -qO - https://get.trivy.dev/deb/public.key | sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+          set -euo pipefail
+          sudo apt-get install -y apt-transport-https gnupg
+          # Fetched to a file (with retries, #1607) rather than piped: a
+          # failed pipe into gpg would otherwise leave an empty keyring.
+          KEY=$(mktemp)
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+            -o "$KEY" https://get.trivy.dev/deb/public.key
+          sudo gpg --dearmor --yes -o /usr/share/keyrings/trivy.gpg "$KEY"
           echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://get.trivy.dev/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
           sudo apt-get update
           sudo apt-get install -y trivy
@@ -1103,7 +1208,7 @@ jobs:
   # =====================================
   benchmark:
     name: Performance Benchmarks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     timeout-minutes: 60
@@ -1162,7 +1267,7 @@ jobs:
   # =====================================
   release:
     name: Create Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')

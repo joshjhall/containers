@@ -7,7 +7,7 @@
 #
 # Cross-compilation strategy: native CI matrix (one runner per OS/arch), with
 # rustup targets per triple. The Linux arm64 leg builds on a native
-# `ubuntu-24.04-arm` runner (musl-gcc from musl-tools) rather than
+# `ubuntu-26.04-arm` runner (musl-gcc from musl-tools) rather than
 # cross-compiling from amd64 — mirroring the proven native-arm64 pattern in
 # evidence-run.yml. This avoids the aws-lc-sys C build needing an aarch64
 # cross sysroot (missing target libc/kernel headers, #724).
@@ -32,17 +32,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-26.04
             target: x86_64-unknown-linux-musl
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-26.04-arm
             target: aarch64-unknown-linux-musl
-          - os: macos-latest
+          - os: macos-26
             target: x86_64-apple-darwin
-          - os: macos-latest
+          - os: macos-26
             target: aarch64-apple-darwin
-          - os: windows-latest
+          - os: windows-2025
             target: x86_64-pc-windows-msvc
-          - os: windows-latest
+          - os: windows-2025
             target: aarch64-pc-windows-msvc
     env:
       # Read the coordinates into env rather than interpolating ${{ }} into
@@ -69,8 +69,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          # Both Linux legs now build natively (amd64 on ubuntu-latest, arm64 on
-          # ubuntu-24.04-arm), so each links with musl-gcc from musl-tools — no
+          # Both Linux legs now build natively (amd64 on ubuntu-26.04, arm64 on
+          # ubuntu-26.04-arm), so each links with musl-gcc from musl-tools — no
           # aarch64 cross-linker or cross sysroot required (#724).
           sudo apt-get install -y --no-install-recommends musl-tools
 
@@ -109,7 +109,7 @@ jobs:
 
   release:
     name: Attach binaries to release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     needs: build
     # Only publish on a real tag push — workflow_dispatch has no release to
