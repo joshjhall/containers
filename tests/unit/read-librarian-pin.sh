@@ -233,7 +233,7 @@ test_multi_key_pin_rejected() {
     run_pin "$df"
     assert_rejected "lone multi-key pin"
     assert_contains "$ERR" "unsupported ARG form for LIBRARIAN_REF" "multi-key pin names the form rule"
-    assert_contains "$ERR" "at line 2" "multi-key error names the line"
+    assert_contains "$ERR" "in $df at line 2 (" "multi-key error names exactly line 2"
 
     df=$(command printf 'ARG LIBRARIAN_REF=v0.18.0\narg FOO=1 LIBRARIAN_REF=v0.19.0\n' | write_dockerfile)
     run_pin "$df"
@@ -286,6 +286,16 @@ test_escape_directive_rejected() {
     run_pin "$df"
     assert_equals "0" "$RC" "default escape + late comment are accepted"
     assert_equals "v0.18.0" "$OUT" "pin printed under the default escape"
+
+    # Directives are only read before the first plain comment or blank line,
+    # too: an escape-looking line after either is just a comment.
+    local lead
+    for lead in '# a plain note' ''; do
+        df=$(command printf '%s\n# escape=`\nARG LIBRARIAN_REF=v0.18.0\n' "$lead" | write_dockerfile)
+        run_pin "$df"
+        assert_equals "0" "$RC" "escape-looking line after '$lead' is not a directive"
+        assert_equals "v0.18.0" "$OUT" "pin printed after '$lead'"
+    done
 }
 
 test_continued_pin_rejected() {
@@ -304,7 +314,7 @@ test_continued_pin_rejected() {
     df=$(command printf 'ARG LIBRARIAN_REF=v0.18.0\nARG FOO=1 \\\n# note\n\n    LIBRARIAN_REF=v0.19.0\n' | write_dockerfile)
     run_pin "$df"
     assert_rejected "continued pin across comment + blank lines"
-    assert_contains "$ERR" "at line 2" "continuation through a comment is still joined"
+    assert_contains "$ERR" "in $df at line 2 (" "continuation through a comment reports its start line"
 }
 
 # The new rejection must not fire on LIBRARIAN_REF outside an ARG key: the
