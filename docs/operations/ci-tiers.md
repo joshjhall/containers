@@ -16,7 +16,8 @@ today, and what's planned.
 | Weekly    | Cron Sundays 03:00 UTC               | <2 h             | All features × all distros × all arches     | Planned (#408-B)      |
 | Monthly   | Cron 1st of month 04:00 UTC          | <4 h             | Long-tail: image size, abandonment scan     | Planned (#408-C)      |
 | Quarterly | Cron 1st of Q 09:00 UTC (existing)   | Best-effort      | Cross-version dependency drift              | Planned (#408-D)      |
-| Evidence  | `pull_request` + `push` → main       | <30 min          | Pilot: rust × debian-12-amd64 (extensible)  | Implemented (#478)    |
+| Nightly / RC | Cron daily 05:00 UTC (`ci.yml`), 05:30 UTC (evidence); `v*` tags | <1 h | Full rust-test OS matrix; full pending evidence matrix | Implemented (#1593) |
+| Evidence  | `pull_request` (sampled) + `push` → main, nightly, `v*` tags (full) | <30 min (PR, no source build) | Every pending (tool × version × tuple) cell; a PR runs one per (tool × method kind × libc) | Implemented (#478, #1593) |
 
 Promotion criteria are unidirectional — passing a faster tier is a prereq
 for letting code reach the next slower tier, but a failure at a slower tier
@@ -25,8 +26,8 @@ runs are off to the side of this chain: they don't gate merges, they record
 what a published base image actually does when a tool is installed onto it.
 
 The evidence tier records per-tool installs against signed base images, with
-results landing in `joshjhall/containers-db`. It is event-driven (no cron) and
-path-scoped — see the [Evidence runs](#evidence-runs) section below and
+results landing in `joshjhall/containers-db`. It is path-scoped on PRs and
+main pushes, and also runs nightly and on `v*` tags (#1593) — see the [Evidence runs](#evidence-runs) section below and
 [evidence-runs.md](evidence-runs.md) for the ingestion contract.
 
 ## PR tier
@@ -179,6 +180,83 @@ for the full contract and the BuildKit line-prefix caveat.
 
 If the PR tier passes, the PR is eligible for review and merge. On merge,
 the same SHA triggers the merge tier (`ci.yml`).
+
+### Rust tests: path-filtered OS matrix
+
+`rust-test` runs on **ubuntu only** for a PR that touches no Rust input, and on
+ubuntu + macOS + Windows for a PR touching `crates/`, `Cargo.toml`,
+`Cargo.lock`, or `rust-toolchain*` (#1593). Push to main, `v*` tags, the nightly
+schedule, and `workflow_dispatch` always run all three — `build` needs them.
+
+[`bin/rust-test-matrix.sh`](../../bin/rust-test-matrix.sh), run by the
+`rust-changes` job (`Rust Test Matrix`), picks the list and fails safe to the
+full matrix if the diff cannot be computed. The per-OS legs carry a templated
+name, so the required context is the always-running rollup
+**`Rust Tests`** (`rust-test-result`), the same pattern as `PR Tier`. It passes
+only when the detector and every leg it chose succeeded; a skipped or cancelled
+leg is never a pass (#904). Tested by
+[`tests/unit/required-checks-rust-tests.sh`](../../tests/unit/required-checks-rust-tests.sh).
+
+## ci.yml job tiers
+
+Audit of every `ci.yml` job (#1593): which ones gate a PR and which run only
+after merge. PR-tier jobs are the required contexts or feed one.
+
+| Job (`name:`)                                   | PR | main push | Nightly | `v*` tag | Why |
+| ----------------------------------------------- | -- | --------- | ------- | -------- | --- |
+| `test` (Run Tests)                              | ✅ diff-scoped lint | ✅ full | ✅ full | ✅ | Required context; the only shell/unit gate |
+| `lint-ai-templates`                             | ✅ (no-op unless templates change) | ✅ | ✅ | ✅ | Seconds when skipped; cheap |
+| `rust-changes` (Rust Test Matrix)               | ✅ | ✅ | ✅ | ✅ | Picks the rust-test OS list |
+| `rust-test` (Rust Tests (stibbons) — *os*)      | ubuntu; all 3 if Rust paths change | all 3 | all 3 | all 3 | macOS/Windows are the scarce, 10×/2×-billed runners |
+| `rust-test-result` (Rust Tests)                 | ✅ | ✅ | ✅ | ✅ | Required-context rollup |
+| `rust-latest-stable`                            | ✅ (non-blocking) | ✅ | ✅ | ✅ | One ubuntu runner; early warning for the next MSRV bump |
+| `build` (Build (Merge Tier))                    | — | ✅ | — | ✅ | Merge tier; the PR tier covers PRs |
+| `integration-test`                              | — | ✅ | — | ✅ | Needs `build` |
+| `debian-version-test`                           | — | ✅ | — | ✅ | Heavy; merge tier |
+| `security-test`, `security-scan`                | — | ✅ | — | ✅ | Need `build`; `security-scan.yml` also runs weekly |
+| `benchmark`                                     | — | ✅ (main only) | — | — | Trend data, not a gate |
+| `release`                                       | — | — | — | ✅ | Publishes the release |
+
+Nightly runs only the jobs without a `push`/`workflow_dispatch` gate; the
+merge-tier jobs are deliberately left on push so a nightly is a cheap full
+code-level sweep, not a second merge-tier build.
+
+### Measured runner time
+
+Median over the 20 most recent successful `ci.yml` PR runs before #1593
+(per-job minutes, rounded up per job as GitHub bills them):
+
+| | Before (measured) | After, non-Rust PR (projected) | After (measured, #1593's own PR run) |
+| --- | --- | --- | --- |
+| Runner-minutes | 19 | ~14 (12 ubuntu; macOS 3 and Windows 3 gone; +~2 for the detector and rollup jobs) | 15 (run 42692668810) |
+| Billable minutes (macOS ×10, Windows ×2) | 49.5 | ~14 | 15 |
+| macOS / Windows runner slots per PR | 2 | 0 | 0 |
+
+"Projected" removes the macOS/Windows legs from the measured before-runs. The
+measured column is one run, so treat it as a check on the projection. Re-take
+the median over the first ~20 post-#1593 PR runs to replace both.
+
+A PR that touches Rust inputs is unchanged. The raw-minute saving on a non-Rust
+PR is about a quarter; the large saving is in the scarce macOS/Windows pools
+(the ones that never got a runner on 2026-11-02) and in billable minutes. The
+evidence median before #1593 was ~6 min over 15 PR runs, but a PR whose sample
+included an alpine source-build cell paid ~115 min more — that cell now runs
+only when the PR touches source-build code or that tool's catalog entry.
+
+## Nightly / RC tier
+
+**Status:** Implemented (#1593) as `schedule:` triggers on
+[`ci.yml`](../../.github/workflows/ci.yml) (`0 5 * * *`) and
+[`evidence-run.yml`](../../.github/workflows/evidence-run.yml) (`30 5 * * *`),
+plus `v*` tag pushes on both.
+
+What PRs no longer run, these do: the full rust-test OS matrix, and every
+pending evidence cell with a real ingest (source builds included). A scheduled
+run is never cancelled — `ci.yml` gives non-PR events a run-unique concurrency
+group, and evidence-run serializes schedule and tag runs with main's group so
+two ingests cannot open duplicate containers-db PRs. The evidence nightly is
+self-limiting: once a cell's evidence lands it stops being pending, so a quiet
+night has nothing to run.
 
 ## Merge tier
 
@@ -369,23 +447,37 @@ inside it, and assembles a `TestEntry`-shaped row. The row is delivered to
 
 ### Cadence
 
-Event-driven, not cron. Per [#473](https://github.com/joshjhall/containers/issues/473),
-while the tool catalog is small "just enumerate" beats sampling, so the matrix is
-exhaustive rather than scheduled. Three triggers, all **path-scoped** to evidence
-sources (`crates/luggage/**`, `crates/record-evidence/**`,
-`crates/containers-common/**`, `base-images/**`, `bin/ingest-evidence.sh`, and the
-workflow itself) so unrelated PRs don't pay the build-and-install cost:
+Per [#473](https://github.com/joshjhall/containers/issues/473), "just enumerate"
+beats sampling, so main, nightly, and tag runs take the exhaustive pending
+matrix. A PR dry run proves only row shape and the luggage install path, so it
+takes a sample (#1593). The PR and main-push triggers are **path-scoped** to
+evidence sources (`crates/luggage/**`, `crates/record-evidence/**`,
+`crates/containers-common/**`, `base-images/**`, the evidence `bin/` scripts, and
+the workflow itself) so unrelated PRs don't pay the build-and-install cost:
 
-| Trigger             | Ingest behavior                                       |
-| ------------------- | ----------------------------------------------------- |
-| `pull_request` → main | Dry-run: validate the row merges cleanly against the catalog schema. Fork-safe — no secrets. |
-| `push` → main       | Real ingest: open a PR against `joshjhall/containers-db` (requires the `CONTAINERS_DB_PAT` secret). |
-| `workflow_dispatch` | Single ad-hoc leg from inputs; the `dry_run` input chooses validate vs. real ingest. |
+| Trigger             | Matrix | Ingest behavior                                       |
+| ------------------- | ------ | ----------------------------------------------------- |
+| `pull_request` → main | Sample (below) | Dry-run: validate the row merges cleanly against the catalog schema. Fork-safe — no secrets. |
+| `push` → main       | Every pending cell (cap 200) | Real ingest: open a PR against `joshjhall/containers-db` (requires the `CONTAINERS_DB_PAT` secret). |
+| `schedule` (05:30 UTC) | Every pending cell (cap 200) | Real ingest, as push → main. |
+| `push` → `v*` tag   | Every pending cell (cap 200) | Real ingest, as push → main (tags ignore `paths:`). |
+| `workflow_dispatch` | Single ad-hoc leg from inputs | The `dry_run` input chooses validate vs. real ingest. |
+
+**PR sample** (`evidence_pr_legs` in
+[`bin/lib/evidence-matrix.sh`](../../bin/lib/evidence-matrix.sh)): the first
+pending cell of each (tool × `method_kind` × libc) group — libc is musl for
+alpine tuples, glibc otherwise. `source-build` cells (up to 3 h each; ~115 min
+for node on alpine) are dropped unless `evidence_pr_source_build_scope` allows
+them from the PR's changed files: every tool's when the PR touches
+`crates/luggage/src/installer/methods/source_build*.rs`, or one tool's when the
+PR touches `crates/luggage/testdata/catalog/tools/<tool>/`. If the PR's file
+list cannot be read, no source build runs; main and nightly still cover it.
 
 A `setup` job resolves the matrix (a single input-derived leg for dispatch, the
 enumerated pilot legs for PR/push) and the effective dry-run flag, keeping the
 `evidence` job body identical across events. A `concurrency` group serializes
-runs on the same ref so two main pushes can't race to open duplicate PRs.
+runs on the same ref (tag runs share main's group) so two ingests can't race to
+open duplicate PRs.
 
 ### What it produces
 
@@ -484,8 +576,8 @@ This is correct behavior for docs-only PRs. The summary job emits
 ## Workflow files
 
 - [`.github/workflows/test-pr.yml`](../../.github/workflows/test-pr.yml) — PR tier
-- [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — merge tier
-- [`.github/workflows/evidence-run.yml`](../../.github/workflows/evidence-run.yml) — evidence runs (#478)
+- [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — code-level PR checks, merge tier, nightly/RC rust matrix
+- [`.github/workflows/evidence-run.yml`](../../.github/workflows/evidence-run.yml) — evidence runs (#478; sampled on PRs, full nightly/RC, #1593)
 - `.github/workflows/test-weekly.yml` — planned (#408-B)
 - `.github/workflows/test-monthly.yml` — planned (#408-C)
 - `.github/workflows/quarterly-review.yml` — extends for #408-D

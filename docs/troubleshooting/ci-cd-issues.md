@@ -161,10 +161,14 @@ Settings to apply:
 
 | Setting | Value |
 | --- | --- |
-| Required contexts | `Run Tests` (`ci.yml`), `PR Tier` (`test-pr.yml`) |
+| Required contexts | `Run Tests` (`ci.yml`), `PR Tier` (`test-pr.yml`), `Rust Tests` (`ci.yml`, #1593) |
 | `strict` (branch must be up to date) | `false` |
 | `enforce_admins` | `false` |
 | Required reviews | none |
+
+> **Order matters for `Rust Tests` (#1593):** add it to branch protection only
+> **after** the PR that introduces the `rust-test-result` job has merged. A
+> required context that no workflow on `main` reports yet blocks every PR.
 
 The context list lives in [`.github/required-checks.txt`](../../.github/required-checks.txt)
 — the manifest is the only in-repo trace of a setting that otherwise lives
@@ -173,7 +177,7 @@ invisibly in repo settings. Apply it, then read the live values back:
 ```bash
 gh api -X PUT repos/OWNER/REPO/branches/main/protection --input - <<'JSON'
 {
-  "required_status_checks": {"strict": false, "contexts": ["Run Tests", "PR Tier"]},
+  "required_status_checks": {"strict": false, "contexts": ["Run Tests", "PR Tier", "Rust Tests"]},
   "enforce_admins": false,
   "required_pull_request_reviews": null,
   "restrictions": null

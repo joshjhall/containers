@@ -37,7 +37,7 @@ test_all_tools_covers_every_versioned_tool() {
     assert_equals $'go 1.23.4 debian-13-arm64\nrust 1.90.0 debian-13-amd64' "$(_tool_cells "$out")" \
         "one leg per pending cell of each tool with a versions/ dir"
     assert_equals \
-        '{"tool":"go","version":"1.23.4","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-26.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl","source_build":false}' \
+        '{"tool":"go","version":"1.23.4","tuple":"debian-13-arm64","image_tag":"v9","arch":"arm64","runner":"ubuntu-26.04-arm","runtime":"native","rust_target":"aarch64-unknown-linux-musl","method_kind":"","source_build":false}' \
         "$(command jq -c '.include[0]' <<<"$out")" \
         "a go leg carries the same arch plumbing (rust_target builds luggage itself)"
 }
@@ -155,6 +155,72 @@ test_pr_legs_take_first_cell_not_min() {
     assert_equals $'go 1.23.4 debian-13-arm64\nrust 1.80.0 debian-13-amd64' \
         "$(_tool_cells "$(evidence_pr_legs <<<"$out")")" \
         "the go PR leg is go's first pending cell, not its lexical minimum"
+}
+
+test_pr_legs_one_per_method_kind_and_libc() {
+    # #1593: the PR sample keeps one cell per (tool, method_kind, libc), so a
+    # tool with a glibc tarball and a musl script install gets both paths
+    # covered, while a second glibc tarball tuple is not re-run.
+    local r out
+    r="$(_fixture 1.0.0)"
+    _version "$r/catalog" 1.90.0 debian-13-amd64,debian-13-arm64,alpine-3.24-amd64
+    _methods "$r/catalog/tools/rust/versions/1.90.0.json" '[
+      {"method_kind":"binary-tarball","platform":{"os":"debian"}},
+      {"method_kind":"script-installer","platform":{"os":"alpine"}}]'
+    out="$(evidence_matrix_all "$r/catalog" "$r" | evidence_pr_legs)"
+    assert_equals $'rust 1.90.0 alpine-3.24-amd64\nrust 1.90.0 debian-13-amd64' \
+        "$(_tool_cells "$out" | command sort)" \
+        "one leg per (method_kind, libc); the second glibc tarball tuple is dropped"
+}
+
+test_pr_legs_gate_source_build_cells() {
+    # #1593: a source-build cell runs for up to 3h, so the PR sample keeps it
+    # only when the PR is allowed to (evidence_pr_source_build_scope).
+    local r m
+    r="$(_fixture 1.0.0)"
+    _tool "$r/catalog" go 1.22.0
+    _version "$r/catalog" 1.90.0 debian-13-amd64,alpine-3.24-amd64
+    _methods "$r/catalog/tools/rust/versions/1.90.0.json" "$_NODE_LIKE_METHODS"
+    _version "$r/catalog" 1.23.4 alpine-3.24-amd64 "" go
+    _methods "$r/catalog/tools/go/versions/1.23.4.json" "$_NODE_LIKE_METHODS"
+    m="$(evidence_matrix_all "$r/catalog" "$r")"
+    assert_equals $'go 1.23.4 alpine-3.24-amd64\nrust 1.90.0 alpine-3.24-amd64\nrust 1.90.0 debian-13-amd64' \
+        "$(_tool_cells "$m" | command sort)" "precondition: the full matrix has both source builds"
+    assert_equals "rust 1.90.0 debian-13-amd64" \
+        "$(_tool_cells "$(evidence_pr_legs <<<"$m")")" \
+        "no allow-list: every source-build cell is dropped, the tarball cell stays"
+    assert_equals $'rust 1.90.0 alpine-3.24-amd64\nrust 1.90.0 debian-13-amd64' \
+        "$(_tool_cells "$(evidence_pr_legs rust <<<"$m")" | command sort)" \
+        "an allow-listed tool keeps its source build; go's is still dropped"
+    assert_equals $'go 1.23.4 alpine-3.24-amd64\nrust 1.90.0 alpine-3.24-amd64\nrust 1.90.0 debian-13-amd64' \
+        "$(_tool_cells "$(evidence_pr_legs '*' <<<"$m")" | command sort)" \
+        "'*' keeps every tool's source build"
+    assert_equals "rust 1.90.0 debian-13-amd64" \
+        "$(_tool_cells "$(evidence_pr_legs gox <<<"$m")")" \
+        "the allow-list matches whole tool names, not substrings"
+}
+
+test_pr_source_build_scope() {
+    local cases row input want why got violations=0
+    # changed paths (\n-separated) | expected scope | why
+    cases=(
+        "bin/lib/evidence-matrix.sh\n.github/workflows/evidence-run.yml||evidence scripts only: no source build"
+        "crates/luggage/testdata/catalog/tools/node/versions/22.22.3.json|node|node's catalog entry: node"
+        "crates/luggage/testdata/catalog/tools/node/index.json\ncrates/luggage/testdata/catalog/tools/go/versions/1.json\ncrates/luggage/testdata/catalog/tools/node/versions/2.json|go node|several tools: sorted, de-duplicated"
+        "crates/luggage/src/installer/methods/source_build.rs|*|source_build.rs: every tool"
+        "crates/luggage/src/installer/methods/source_build_tests.rs\ncrates/luggage/testdata/catalog/tools/go/index.json|*|source-build tests outrank a per-tool scope"
+        "crates/luggage/src/resolver.rs||other luggage code: no source build"
+        "crates/luggage/testdata/catalog/tools/README.md||a file directly under tools/ names no tool"
+    )
+    for row in "${cases[@]}"; do
+        IFS='|' read -r input want why <<<"$row"
+        got="$(/usr/bin/printf '%b\n' "$input" | evidence_pr_source_build_scope)"
+        if [ "$got" != "$want" ]; then
+            /usr/bin/echo "  expected '$want', got '$got' — $why"
+            violations=$((violations + 1))
+        fi
+    done
+    assert_equals 0 "$violations" "source-build scope is right for all ${#cases[@]} PR shapes"
 }
 
 test_available_tuples_json_propagates_failure() {
@@ -351,6 +417,9 @@ run_test test_all_tools_retries_interleave_too "failure retries also interleave 
 run_test test_all_tools_probe_publication_once "base-image publication is probed once per run"
 run_test test_pr_legs_one_per_tool "PR dry-run keeps one leg per tool"
 run_test test_pr_legs_take_first_cell_not_min "PR dry-run keeps each tool's first cell, not its minimum"
+run_test test_pr_legs_one_per_method_kind_and_libc "PR legs keep one cell per (tool, method_kind, libc) (#1593)"
+run_test test_pr_legs_gate_source_build_cells "PR legs drop source builds outside the allow-list (#1593)"
+run_test test_pr_source_build_scope "a PR's changed paths decide its source-build scope (#1593)"
 run_test test_available_tuples_json_propagates_failure "a failing tuple scan is not an empty tuple list"
 run_test test_all_tools_exit_3_only_when_all_covered "exit 3 only when every tool is covered"
 run_test test_all_tools_one_failing_tool_is_an_error "one tool's error fails the merged matrix"
