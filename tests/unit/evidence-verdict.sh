@@ -301,11 +301,13 @@ test_validate_rejected_value_is_escaped_on_stderr() {
     # message is asserted too, so an empty stderr cannot pass the `^::` check.
     local rc i bad lines forged err
     local -a args labels=('tool slug' 'version' 'tuple')
-    local -a payloads=($'x\n::stop-commands::t' $'x\r\n::add-mask::t')
-    local -a escaped=("\$'x\\n::stop-commands::t'" "\$'x\\r\\n::add-mask::t'")
+    # Payload 2 has no line break: it proves the escape branch keys on any
+    # control char (here ESC), not just CR/LF.
+    local -a payloads=($'x\n::stop-commands::t' $'x\r\n::add-mask::t' $'x\e[0m')
+    local -a escaped=("\$'x\\n::stop-commands::t'" "\$'x\\r\\n::add-mask::t'" "\$'x\\E[0m'")
     local p
     for i in 0 1 2; do
-        for p in 0 1; do
+        for p in 0 1 2; do
             bad="${payloads[p]}"
             args=(node 20.13.1 alpine-3.22-amd64)
             args[i]="$bad"
@@ -333,6 +335,19 @@ test_validate_rejected_value_is_escaped_on_stderr() {
     err="$(command cat "$TEST_TEMP_DIR/err")"
     assert_equals "Refusing to annotate: unexpected tool slug ${escaped[0]}" "$err" \
         "annotate reject message renders the value as an escape"
+    # error_class is validated separately from the coordinates, so its reject
+    # message needs the same escaping (a caller may skip read_evidence_verdict).
+    rc=0
+    GITHUB_STEP_SUMMARY="$TEST_TEMP_DIR/summary.md" \
+        annotate_fail_verdict fail "${payloads[0]}" node 20.13.1 alpine-3.22-amd64 \
+        >/dev/null 2>"$TEST_TEMP_DIR/err" || rc=$?
+    assert_equals "1" "$rc" "annotate with injected error_class → rc 1"
+    lines="$(command wc -l <"$TEST_TEMP_DIR/err")"
+    assert_equals "1" "${lines// /}" "injected error_class → exactly one stderr line"
+    err="$(command cat "$TEST_TEMP_DIR/err")"
+    assert_equals "Refusing to annotate: unexpected error_class ${escaped[0]}" "$err" \
+        "error_class reject message renders the value as an escape"
+    assert_file_not_exists "$TEST_TEMP_DIR/summary.md" "no summary line on a rejected annotation"
 }
 
 # --- Run -------------------------------------------------------------------

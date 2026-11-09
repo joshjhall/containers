@@ -183,7 +183,8 @@ annotate_fail_verdict() {
     [ "$result" = "fail" ] || return 0
     validate_issue_inputs "$tool" "$version" "$tuple" annotate || return 1
     if [[ ! "$error_class" =~ ^[a-z_]+$ ]]; then
-        echo "Refusing to annotate: unexpected error_class '$error_class'" >&2
+        command printf 'Refusing to annotate: unexpected error_class %s\n' \
+            "$(_quote_rejected_value "$error_class")" >&2
         return 1
     fi
     printf '::error title=Evidence fail: %s@%s on %s::install failed (error_class=%s); a fail row was recorded and the job stays green by design\n' \
@@ -257,7 +258,8 @@ EOF
     # Guard the captured number: a transient gh/jq hiccup must not fall
     # through to `gh issue create` and open a duplicate. Empty = no match.
     if [ -n "${EXISTING}" ] && [[ ! "${EXISTING}" =~ ^[0-9]+$ ]]; then
-        echo "Unexpected issue number from gh issue list: '${EXISTING}'" >&2
+        command printf 'Unexpected issue number from gh issue list: %s\n' \
+            "$(_quote_rejected_value "${EXISTING}")" >&2
         return 1
     fi
     if [ -n "${EXISTING}" ]; then
