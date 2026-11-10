@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 12013225-e60d-4081-8fdb-17b3696bcbea
+  modified: 2026-11-09T16:13:22.882Z
 ---
 
 `gh pr merge --auto --squash --delete-branch` (the auto-merge fast path
@@ -24,6 +25,14 @@ inform intent but do not satisfy the consent gate.
 2. Wait for the user to invoke with `AUTOMERGE=1` in env.
 3. Stop after PR open and let the user run `gh pr merge --auto`
    themselves.
+
+**User's stated rule (2026-11-09, containers-db PR #544):** "if review is
+clean and ci is green, then merge." So the intent is settled: don't ask
+whether to merge a green + clean PR. The classifier still blocked
+`gh pr merge --squash` at L3 until the user said this in-turn. When it
+blocks, park the PR and report it in one line (CI/review status plus the
+merge command) instead of a long explanation. Re-verify green + clean right
+before merging, since the user's consent is conditional on both.
 
 Mis-step (2026-05-17, PR #486 / issue #477): jumped to auto-merge
 based on the memory note alone; classifier denied the follow-up

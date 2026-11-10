@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 70fff190-ee3f-408b-b8e8-d31247eeaa88
-  modified: 2026-10-25T14:14:07.744Z
+  modified: 2026-10-28T15:31:51.724Z
 ---
 
 Post-merge teardown of a golem worktree can leave `.worktrees/issue-N/` behind
@@ -57,6 +57,17 @@ shell (~200M). That "expected" message does **not** rule out a killable holder.
    names them), not the `rust-analyzer` itself: they go `<defunct>`, `lsof`
    drops to 0, `rm -rf` succeeds, and the session's LSP respawns a helper when it
    needs one. Ask first, because the process belongs to someone else's session.
+
+   **Usually it is the golem's OWN session's LSP** (observed 2026-10-28,
+   containers-db #507). `/workflow:golem` edits `.rs` files in the worktree, so
+   this session's own `claude` spawns a `rust-analyzer` rooted there. After
+   `worktree-rm.sh`, that LSP pins ~100M of `target/debug/deps` in a
+   `.wedged-issue-N-*` shell. Under `--permission-mode auto`, the classifier
+   **denies `kill`** on it ("Interfere With Workloads") even though it is your
+   own child process. So don't try the kill in-turn. Report the PID and the
+   one-liner, and let the user run `! kill <proc-macro-srv-pid>` followed by
+   `rm -rf .worktrees/.wedged-issue-N-*`. The shell clears by itself once the
+   session exits.
    Plain `sudo lsof +D` works here; reading `/proc/<pid>/cwd` is denied even
    under sudo, so don't rely on the cwd scan to confirm.
 
