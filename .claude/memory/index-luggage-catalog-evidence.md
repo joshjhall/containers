@@ -17,3 +17,4 @@ Sub-index of [MEMORY.md](MEMORY.md): open when touching luggage install methods,
 - [Evidence-run arch-aware](evidence-run-arch-aware.md) — native arm64+amd64
 - [Evidence-run validates live vs db main](evidence-run-validates-live-against-db-main.md) — new TestEntry field needs containers-db schema PR merged
 - [Rust split triage by production LOC](rust-split-triage-by-production-loc.md) — rank .rs split candidates by production LOC; check test_excluded first (#874 miscount)
+- [containers-db signed main](containers-db-signed-main.md) — required checks + signed commits; writers must use API-created commits (scanner done #527, ingest pending containers#1573)

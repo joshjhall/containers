@@ -9,8 +9,8 @@
 - [Prefer just recipes](prefer-just-recipes.md) — Use `just <recipe>` over bare cargo/shell when one exists
 - [Use file-issue skill](use-file-issue-skill.md) — Always file new issues via `/file-issue`, not raw `gh issue create`
 - [PR merge + prune is the default ship](feedback_pr_merge_default.md) — `/next-issue-ship` Option 1 ends at merged + branch deleted, not at "PR open"
-- [Auto-merge needs explicit consent](feedback_auto_merge_consent.md) — gh pr merge --auto needs per-turn authorization, separate from default-ship
-- [Golem autonomy contract](feedback_golem_autonomy_contract.md) — auto-approve push/PR-create + auto-merge green PRs
+- [Auto-merge needs explicit consent](feedback_auto_merge_consent.md) — user rule: merge when review clean + CI green; classifier may still need in-turn OK — park + one-line ask
+- [Golem autonomy contract](feedback_golem_autonomy_contract.md) — auto-approve push/PR-create, broker golem keystrokes, auto-merge green PRs; force-push needs per-branch OK (never merge-main: conform fails)
 - [Skip all-files lint](feedback_local_lint_scope.md) — `just lint` scans the whole repo
 - [Full review before merge](feedback-full-review-before-merge.md) — a cap-stop on a narrow clean cycle isn't mergeable
 - [Assertions must discriminate](assertions-must-discriminate.md) — exit codes and substring fragments pass for the wrong reason
@@ -37,11 +37,11 @@
 
 ## Topic indexes
 
-- [Review harness & golem internals](index-review-harness-golem.md) — open when driving golems, the ship-issue/next-issue review harness, PR/merge automation, or host monitors (25)
+- [Review harness & golem internals](index-review-harness-golem.md) — open when driving golems, the ship-issue/next-issue review harness, PR/merge automation, or host monitors (30)
 - [Filesystem, virtiofs, FUSE & case-sensitivity](index-filesystem-mounts.md) — open on wedged files, EBADF/ELOOP, stale symlinks, case-shadowed paths, or env leaking across process boundaries (8)
-- [CI & test-framework gotchas](index-ci-test-gotchas.md) — open when a test or CI job fails oddly, flakes, or passes suspiciously (30)
+- [CI & test-framework gotchas](index-ci-test-gotchas.md) — open when a test or CI job fails oddly, flakes, or passes suspiciously (36)
 - [Dependencies, advisories & version pinning](index-deps-security.md) — open when handling osv/cargo-deny advisories, version pins, auto-patch, checksums or signatures (16)
-- [Luggage, catalog, evidence & containers-db](index-luggage-catalog-evidence.md) — open when touching luggage install methods, the vendored catalog, evidence runs, or containers-db schema (14)
+- [Luggage, catalog, evidence & containers-db](index-luggage-catalog-evidence.md) — open when touching luggage install methods, the vendored catalog, evidence runs, or containers-db schema (15)
 - [Container runtime, entrypoint, Zed & permissions](index-runtime-devcontainer.md) — open when debugging the entrypoint, UID handling, Zed/devcontainer startup, cron or logging inside the image (11)
 - [Build & feature-script specifics](index-build-features.md) — open when editing Dockerfile/base-image layers, per-language feature scripts, or stibbons packaging (15)
 - [Resolved, historical & superseded](index-historical.md) — open only for the background of a finished extraction or plugin-wiring change; these are done (4)

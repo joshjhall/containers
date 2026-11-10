@@ -4,9 +4,14 @@
 Sub-index of [MEMORY.md](MEMORY.md): open when driving golems, the ship-issue/next-issue review harness, PR/merge automation, or host monitors.
 
 - [Golem feed event classification](golem-feed-event-classification.md) — feed events gate|idle
+- [Operator priority takes the next free slot](operator-priority-takes-next-free-slot.md) — a "next free track" bump preempts lane queues and rebalances; file overlap is not a reason to wait
+- [Golem reads-outside-worktree prompt](golem-reads-outside-worktree-prompt.md) — golems stall on /opt/librarian skill reads; broker with option 4, never 1
 - [Golem launch bare slash-command fails](golem-launch-bare-slash-command-fails.md) — golem-launch.sh passes bare /next-issue but plugin registers
 - [Golem teardown trips on own scaffolding](golem-teardown-untracked-scaffolding.md) — worktree-rm refuses on copied settings.local.json + staged harness
 - [Handoff relaunch refuses dim suggestion](handoff-relaunch-refuses-dim-suggestion.md) — type /clear directly when the composer holds only the dim suggestion (librarian#1223)
+- [Handoff marker must be an object](handoff-marker-must-be-object.md) — `handoff_marker: true` makes relaunch report not-due forever; have the golem rewrite it from context-budget.sh
+- [Outage-corrupted PR rollup](outage-corrupted-pr-rollup.md) — BLOCKED PR with green checks after an Actions incident: close+reopen, never --admin
+- [Gate-watch misses repeat prompts](gate-watch-misses-repeat-prompts.md) — missed plan/merge/cleanup prompts; sweep panes directly, check labels+branch before teardown
 - [Harness placeholder args fake a review](harness-placeholder-args-fake-review.md) — a stand-in or cross-repo-omitted `args.diff` returns clean:true on the wrong bytes
 - [Harness resume replays a fake review](harness-resume-replays-fake-review.md) — resumeFromRunId on the next cycle replays cache: 0 tokens, stale clean
 - [Ship review harness agent-type missing](ship-review-harness-agent-type-missing.md) — ship-issue review harness hardcodes dev-core:code-reviewer
