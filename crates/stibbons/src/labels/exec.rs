@@ -85,8 +85,8 @@ pub fn run_with_timeout(mut cmd: Command, timeout: Duration) -> Result<Output, E
         }
     };
 
-    let stdout = stdout_reader.map(join_drain).unwrap_or_default();
-    let stderr = stderr_reader.map(join_drain).unwrap_or_default();
+    let stdout = stdout_reader.map_or_else(Vec::new, join_drain);
+    let stderr = stderr_reader.map_or_else(Vec::new, join_drain);
     Ok(Output { status, stdout, stderr })
 }
 
