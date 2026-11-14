@@ -606,8 +606,7 @@ fn invoke_env_map(resolved: &ResolvedInstall) -> BTreeMap<String, String> {
         .invoke
         .as_ref()
         .and_then(|i| i.env.clone())
-        .map(|m| m.into_iter().collect())
-        .unwrap_or_default()
+        .map_or_else(BTreeMap::new, |m| m.into_iter().collect())
 }
 
 /// Strip the trailing path segment from a URL for use as the on-disk
