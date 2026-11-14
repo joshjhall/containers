@@ -648,6 +648,23 @@ mod tests {
         assert!(err.to_string().contains("LUGGAGE_X"), "{err}");
     }
 
+    /// `invoke_env_map` yields an empty map when there is no `invoke` block or
+    /// it carries no `env`, and the `invoke.env` entries otherwise (#1659).
+    #[test]
+    fn invoke_env_map_empty_without_env_and_copies_env_when_present() {
+        use containers_common::tooldb::Invoke;
+
+        let mut resolved = sample_resolved_with_deps();
+        assert!(invoke_env_map(&resolved).is_empty(), "invoke: None");
+
+        resolved.invoke = Some(Invoke { args: None, env: None });
+        assert!(invoke_env_map(&resolved).is_empty(), "invoke.env: None");
+
+        let env = BTreeMap::from([("RUSTUP_HOME".to_string(), "/cache/rustup".to_string())]);
+        resolved.invoke = Some(Invoke { args: None, env: Some(env.clone()) });
+        assert_eq!(invoke_env_map(&resolved), env);
+    }
+
     /// A minimal debian/amd64 [`ResolvedInstall`] carrying one dependency,
     /// for exercising [`Installer::captured_dependency_versions`]'s gating
     /// without touching the catalog or the network.
