@@ -14,8 +14,6 @@ Sub-index of [MEMORY.md](MEMORY.md): open when handling osv/cargo-deny advisorie
 - [check-versions scrape pins nonexistent](check-versions-scrape-pins-nonexistent.md) — read downloadable artifact filenames, not scraped HTML
 - [update-versions script](update-versions-script.md) — bin/update-versions.sh applies check-versions drift (not just-wired)
 - [Rust toolchain pin sync](rust-toolchain-pin-sync.md) — split since #1111: build chain/MSRV frozen (deliberate PR), container default…
-- [Octarine publishes as octarine-core](octarine-package-renamed-core.md) — `package =` rename since beta.5
-- [Octarine Windows](octarine-windows.md) — Octarine doesn't compile on Windows yet, blocks stibbons Windows CI
 - [Librarian signature verification](librarian-signature-verification.md) — #671: build verifies signed release tarball via cosign (not git clone)
 - [gpg keyboxd ignores --keyring](gpg-keyboxd-ignores-keyring-flag.md) — under use-keyboxd no .kbx is created even with --keyring; pin an empty common.conf + assert the file
 - [known_hosts seeded system-wide](known-hosts-seeded-system-wide.md) — pinned github/gitlab host keys → /etc/ssh/ssh_known_hosts at build

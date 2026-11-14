@@ -21,7 +21,7 @@ system. Native plugins give cross-machine install + `plugin update` semver
 rolling updates for free.
 
 **Repo name `librarian`**: Discworld house style (cf. stibbons/igor/luggage/
-octarine/golem). The Librarian curates the UU library and travels L-space —
+golem). The Librarian curates the UU library and travels L-space —
 maps to "one skills library reachable from any machine." Plugins *inside*
 stay plainly named for discoverability: `dev-core`, `review-audit`,
 `workflow`. Users type `owner/librarian` so the repo is namespaced anyway.
@@ -161,9 +161,9 @@ re-applied after transfer, remapped to plugin names (workflow/review-audit/
 tests/marketplace). Added `type/bug` + `status/on-hold` to librarian's taxonomy
 first so next-issue works there.
 
-Exemplars to copy from when resuming: submodule/devcontainer wiring →
-`joshjhall/octarine` (`update = none` pinned submodule, build
-`context: ../containers`, post-create/post-start split); editor/lint config →
+Patterns to reuse when resuming: submodule/devcontainer wiring
+(`update = none` pinned submodule, build `context: ../containers`,
+post-create/post-start split); editor/lint config →
 this `containers` repo (`.zed/settings.json`, dprint/taplo/conform/lefthook).
 Drop Rust/Postgres/Redis/docker-in-docker for librarian (docs+shell+node repo).
 See [[claude-setup-template-stamp-resync]], [[tmpfs-uid-cannot-be-templated]],

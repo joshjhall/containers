@@ -13,7 +13,6 @@ workspace = true
 
 [dependencies]
 containers-common = { workspace = true }
-octarine = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

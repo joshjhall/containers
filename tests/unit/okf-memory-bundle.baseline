@@ -7,5 +7,5 @@
 #
 # Regenerate with: tests/unit/okf-memory-bundle.sh --regen
 
-memory-missing-why 63
-okf-missing-type 145
+memory-missing-why 62
+okf-missing-type 144

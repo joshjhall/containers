@@ -391,7 +391,7 @@ The `cargo-sweep` cron job (installed with `INCLUDE_RUST_DEV=true`) runs every
 
 `CARGO_SWEEP_ROOTS` is deliberately independent of `WORKING_DIR`: deployments
 narrow `WORKING_DIR` to a single project directory (e.g. `/workspace/containers`),
-which would hide sibling checkouts under `/workspace` (e.g. `/workspace/octarine`)
+which would hide sibling checkouts under `/workspace` (e.g. `/workspace/other-project`)
 from the sweep. The cron scans `/workspace` broadly by design.
 
 ### Bindfs Configuration

@@ -10,7 +10,7 @@ metadata:
 Initiative: run N independent **golems** (per-issue sub-orchestrators), each owning
 one issue → branch → worktree → PR, iterating to a green, review-clean PR that a
 human merges. Master orchestrator dispatches + monitors + resolves cross-PR
-conflicts. Goal: churn hundreds of Octarine issues with little oversight.
+conflicts. Goal: churn through hundreds of issues with little oversight.
 
 **Naming (decided):** `golem` for the per-issue sub-orchestrator — fits the
 Discworld theme (stibbons/igor/luggage); one instruction, tireless autonomous
