@@ -702,6 +702,19 @@
             }
           },
           "added": "2026-11-09"
+        },
+        "2.6.7": {
+          "checksums": {
+            "amd64": {
+              "sha256": "d924b8407471748465121f0a2dc1a0bc277038b0b89142e77583e3ce0dda3746",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.6.7/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "9fb030ad316bbbf9a7379e52c0a1d2ad44d6b97cc7fec91745f4901961804732",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.6.7/biome-linux-arm64"
+            }
+          },
+          "added": "2026-11-14"
         }
       }
     },
@@ -1171,6 +1184,19 @@
             }
           },
           "added": "2026-11-09"
+        },
+        "0.1.0-alpha.33": {
+          "checksums": {
+            "amd64": {
+              "sha256": "a901c01b69abf349d250acfb5bb6846300f29e343b9a6f7baf7edb22f218b098",
+              "url": "https://github.com/siderolabs/conform/releases/download/v0.1.0-alpha.33/conform-linux-amd64"
+            },
+            "arm64": {
+              "sha256": "b982830de71da069b3c7e675c47b6db24095fdd6224eb4e96a32708cd4ea8a2a",
+              "url": "https://github.com/siderolabs/conform/releases/download/v0.1.0-alpha.33/conform-linux-arm64"
+            }
+          },
+          "added": "2026-11-14"
         }
       }
     },
@@ -1205,6 +1231,19 @@
             }
           },
           "added": "2026-11-09"
+        },
+        "0.3.4": {
+          "checksums": {
+            "amd64": {
+              "sha256": "36f1524f0cfaf33f5dfe68ac19220e1bd57ded1f0f9205931f6ee1de32f4a040",
+              "url": "https://github.com/rvben/rumdl/releases/download/v0.3.4/rumdl-v0.3.4-x86_64-unknown-linux-gnu.tar.gz"
+            },
+            "arm64": {
+              "sha256": "d51bfff8c4aacebb786f701918389b3b568129cb9c16aee12567ede6869a61ad",
+              "url": "https://github.com/rvben/rumdl/releases/download/v0.3.4/rumdl-v0.3.4-aarch64-unknown-linux-gnu.tar.gz"
+            }
+          },
+          "added": "2026-11-14"
         }
       }
     },
@@ -1524,12 +1563,25 @@
             }
           },
           "added": "2026-11-09"
+        },
+        "1.27.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "b2e4b70fcddc5bd6fd90c5cf8dc17b4cf0ea54a3db16c65ee0307f42c9bd3187",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.27.0/cargo-binstall-x86_64-unknown-linux-musl.tgz"
+            },
+            "arm64": {
+              "sha256": "84f2afefd325e52c92702a1f2a396902301ccdafd7614270cbbf46b9cff3accf",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.27.0/cargo-binstall-aarch64-unknown-linux-musl.tgz"
+            }
+          },
+          "added": "2026-11-14"
         }
       }
     }
   },
   "metadata": {
-    "generated": "2026-11-09T05:03:42Z",
+    "generated": "2026-11-14T21:39:34Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }

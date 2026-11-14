@@ -1,0 +1,536 @@
+{
+  "channel": "stable",
+  "install_methods": [
+    {
+      "bin_source_dir": "go/bin",
+      "binaries": [
+        "go",
+        "gofmt"
+      ],
+      "cache_dirs": {
+        "GOCACHE": "go-build",
+        "GOMODCACHE": "go-mod",
+        "GOPATH": "go"
+      },
+      "dependencies": [
+        {
+          "tool": "ca_certificates"
+        }
+      ],
+      "method_kind": "binary-tarball",
+      "name": "go-tarball",
+      "platform": {
+        "arch": [
+          "amd64",
+          "arm64"
+        ],
+        "os": [
+          "debian",
+          "ubuntu",
+          "rhel"
+        ]
+      },
+      "prefix": "/usr/local",
+      "source_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz",
+      "strip_components": 0,
+      "verification": {
+        "algorithm": "gpg",
+        "gpg_keyring": "keyrings/golang.asc",
+        "signature_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz.asc",
+        "tier": 1
+      }
+    },
+    {
+      "bin_source_dir": "go/bin",
+      "binaries": [
+        "go",
+        "gofmt"
+      ],
+      "cache_dirs": {
+        "GOCACHE": "go-build",
+        "GOMODCACHE": "go-mod",
+        "GOPATH": "go"
+      },
+      "dependencies": [
+        {
+          "tool": "ca_certificates"
+        }
+      ],
+      "method_kind": "binary-tarball",
+      "name": "go-tarball",
+      "platform": {
+        "arch": [
+          "amd64",
+          "arm64"
+        ],
+        "os": "alpine"
+      },
+      "prefix": "/usr/local",
+      "source_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz",
+      "strip_components": 0,
+      "verification": {
+        "algorithm": "gpg",
+        "gpg_keyring": "keyrings/golang.asc",
+        "signature_url_template": "https://dl.google.com/go/go{version}.linux-{arch}.tar.gz.asc",
+        "tier": 1
+      }
+    }
+  ],
+  "metadata": {
+    "added_at": "2026-11-14T21:36:20.950022836Z",
+    "schema_version": 1,
+    "updated_at": "2026-11-14T21:36:20.950022836Z"
+  },
+  "released": "2026-11-14",
+  "schemaVersion": 1,
+  "support_matrix": [
+    {
+      "arch": "amd64",
+      "os": "debian",
+      "os_version": "12",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "debian",
+      "os_version": "12",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "debian",
+      "os_version": "13",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "debian",
+      "os_version": "13",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "alpine",
+      "os_version": "3.22",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "alpine",
+      "os_version": "3.22",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "alpine",
+      "os_version": "3.23",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "alpine",
+      "os_version": "3.23",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "alpine",
+      "os_version": "3.24",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "alpine",
+      "os_version": "3.24",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "rhel",
+      "os_version": "9",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "rhel",
+      "os_version": "9",
+      "status": "supported"
+    },
+    {
+      "arch": "amd64",
+      "os": "rhel",
+      "os_version": "10",
+      "status": "supported"
+    },
+    {
+      "arch": "arm64",
+      "os": "rhel",
+      "os_version": "10",
+      "status": "supported"
+    }
+  ],
+  "tested": [
+    {
+      "arch": "amd64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/39905085095",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "20250419~deb12u2"
+        }
+      ],
+      "duration_seconds": 6.921573322,
+      "image_digest": "sha256:55251c7911c0fc12eedd6a8a5ec7af89ddb8336a445447fecac5c455b5eeb2b8",
+      "image_ref": "ghcr.io/joshjhall/containers/base-debian-12-amd64",
+      "os": "debian",
+      "os_version": "12",
+      "result": "pass",
+      "tested_at": "2026-10-23T05:22:34.442913266Z",
+      "version_output": "go version go1.27.3 linux/amd64"
+    },
+    {
+      "arch": "arm64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/39905085095",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "20250419~deb12u2"
+        }
+      ],
+      "duration_seconds": 6.061372791,
+      "image_digest": "sha256:2bb56dfd98de322426156f92d9226abe718f115785a46b22f6d8f61111e2d19c",
+      "image_ref": "ghcr.io/joshjhall/containers/base-debian-12-arm64",
+      "os": "debian",
+      "os_version": "12",
+      "result": "pass",
+      "tested_at": "2026-10-23T05:23:03.364049104Z",
+      "version_output": "go version go1.27.3 linux/arm64"
+    },
+    {
+      "arch": "amd64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/39905085095",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "20250419+deb13u1"
+        }
+      ],
+      "duration_seconds": 9.159415476,
+      "image_digest": "sha256:c7fa81526212cacc073844b0703dd20335715c729a80834c93fc7d69c07efecf",
+      "image_ref": "ghcr.io/joshjhall/containers/base-debian-13-amd64",
+      "os": "debian",
+      "os_version": "13",
+      "result": "pass",
+      "tested_at": "2026-10-23T05:22:45.468210089Z",
+      "version_output": "go version go1.27.3 linux/amd64"
+    },
+    {
+      "arch": "arm64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/39905085095",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "20250419+deb13u1"
+        }
+      ],
+      "duration_seconds": 7.407521339,
+      "image_digest": "sha256:5329b5d5dfb1cd5476ea77349db8c25b14a6185edec05ef85afe2d299d0b0067",
+      "image_ref": "ghcr.io/joshjhall/containers/base-debian-13-arm64",
+      "os": "debian",
+      "os_version": "13",
+      "result": "pass",
+      "tested_at": "2026-10-23T05:23:58.216456805Z",
+      "version_output": "go version go1.27.3 linux/arm64"
+    },
+    {
+      "arch": "amd64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/39905085095",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "20260816ubuntu0.24.04.1"
+        }
+      ],
+      "duration_seconds": 12.463955003,
+      "image_digest": "sha256:8acb458fa0d04c2e0ad37571632311d4e9ff586e5c0f3e2295c5ae1a269e8149",
+      "image_ref": "ghcr.io/joshjhall/containers/base-ubuntu-24.04-amd64",
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "result": "pass",
+      "tested_at": "2026-10-23T05:24:29.7795411Z",
+      "version_output": "go version go1.27.3 linux/amd64"
+    },
+    {
+      "arch": "arm64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/39905085095",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "20260816ubuntu0.24.04.1"
+        }
+      ],
+      "duration_seconds": 8.902816041,
+      "image_digest": "sha256:7f406a7cf782b718ccadb9e0d582c45e78a826ae63c51e4150bb5c14c9e3d24e",
+      "image_ref": "ghcr.io/joshjhall/containers/base-ubuntu-24.04-arm64",
+      "os": "ubuntu",
+      "os_version": "24.04",
+      "result": "pass",
+      "tested_at": "2026-10-23T05:22:07.737703612Z",
+      "version_output": "go version go1.27.3 linux/arm64"
+    },
+    {
+      "arch": "amd64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/39905085095",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "20260816ubuntu0.26.04.1"
+        }
+      ],
+      "duration_seconds": 12.449011261,
+      "image_digest": "sha256:ef9c28936aff2b14781c6fe7340d144e3eafaa875580e1370952e0f9895cc40d",
+      "image_ref": "ghcr.io/joshjhall/containers/base-ubuntu-26.04-amd64",
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "result": "pass",
+      "tested_at": "2026-10-23T05:24:19.622251282Z",
+      "version_output": "go version go1.27.3 linux/amd64"
+    },
+    {
+      "arch": "arm64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/39905085095",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "20260816ubuntu0.26.04.1"
+        }
+      ],
+      "duration_seconds": 11.89744231,
+      "image_digest": "sha256:948c10e0bace7373f48c9f914ac0d03f36068d4c85dbdfebc565b3e9ad9f58a1",
+      "image_ref": "ghcr.io/joshjhall/containers/base-ubuntu-26.04-arm64",
+      "os": "ubuntu",
+      "os_version": "26.04",
+      "result": "pass",
+      "tested_at": "2026-10-23T05:23:45.507320527Z",
+      "version_output": "go version go1.27.3 linux/arm64"
+    },
+    {
+      "arch": "amd64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates"
+        }
+      ],
+      "duration_seconds": 3.197996294,
+      "image_digest": "sha256:965cf4895d385c764a21b79cc1eef167720b530b02587bf5a2b02456d83c7872",
+      "image_ref": "ghcr.io/joshjhall/containers/base-alpine-3.22-amd64",
+      "os": "alpine",
+      "os_version": "3.22",
+      "result": "pass",
+      "tested_at": "2026-10-27T14:14:50.289770724Z",
+      "version_output": "go version go1.27.3 linux/amd64"
+    },
+    {
+      "arch": "arm64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates"
+        }
+      ],
+      "duration_seconds": 4.052022261,
+      "image_digest": "sha256:0bf27908f3c63b3c9f4d98eb682ca21494a14cd6dbabaa912d86dec77ee0b1ee",
+      "image_ref": "ghcr.io/joshjhall/containers/base-alpine-3.22-arm64",
+      "os": "alpine",
+      "os_version": "3.22",
+      "result": "pass",
+      "tested_at": "2026-10-27T14:16:15.149260317Z",
+      "version_output": "go version go1.27.3 linux/arm64"
+    },
+    {
+      "arch": "amd64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates"
+        }
+      ],
+      "duration_seconds": 3.732201313,
+      "image_digest": "sha256:942fef53a56ff36a994abaa292c56c5c188996c41ae7cf33e4ade4cbb43919e9",
+      "image_ref": "ghcr.io/joshjhall/containers/base-alpine-3.23-amd64",
+      "os": "alpine",
+      "os_version": "3.23",
+      "result": "pass",
+      "tested_at": "2026-10-27T14:15:08.682895832Z",
+      "version_output": "go version go1.27.3 linux/amd64"
+    },
+    {
+      "arch": "arm64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates"
+        }
+      ],
+      "duration_seconds": 2.19468606,
+      "image_digest": "sha256:24b1a817b36fab294d0358c68df88a113202392aa24b1a3c305ecc422f70859c",
+      "image_ref": "ghcr.io/joshjhall/containers/base-alpine-3.23-arm64",
+      "os": "alpine",
+      "os_version": "3.23",
+      "result": "pass",
+      "tested_at": "2026-10-27T14:15:53.587323324Z",
+      "version_output": "go version go1.27.3 linux/arm64"
+    },
+    {
+      "arch": "amd64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates"
+        }
+      ],
+      "duration_seconds": 3.978576057,
+      "image_digest": "sha256:bb028a80ea88a35427a981f4b2047bf7c4af67a324a3f148ba05fd19ef819193",
+      "image_ref": "ghcr.io/joshjhall/containers/base-alpine-3.24-amd64",
+      "os": "alpine",
+      "os_version": "3.24",
+      "result": "pass",
+      "tested_at": "2026-10-27T14:15:17.858004955Z",
+      "version_output": "go version go1.27.3 linux/amd64"
+    },
+    {
+      "arch": "arm64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates"
+        }
+      ],
+      "duration_seconds": 2.4919438,
+      "image_digest": "sha256:46854cb6dd1d9e3053cce4ed7c94b894d96c6b29da5826232c2d5150a0e2616b",
+      "image_ref": "ghcr.io/joshjhall/containers/base-alpine-3.24-arm64",
+      "os": "alpine",
+      "os_version": "3.24",
+      "result": "pass",
+      "tested_at": "2026-10-27T14:16:41.127385746Z",
+      "version_output": "go version go1.27.3 linux/arm64"
+    },
+    {
+      "arch": "amd64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "2026.2.92_v9.0.319-100.3.el10_2"
+        }
+      ],
+      "duration_seconds": 4.326044584,
+      "image_digest": "sha256:44955a54d54359bb1b08e733b7dedf7e379465cf98b73f173c7d301347e543f3",
+      "image_ref": "ghcr.io/joshjhall/containers/base-rhel-10-amd64",
+      "os": "rhel",
+      "os_version": "10",
+      "result": "pass",
+      "tested_at": "2026-10-27T14:14:30.032874502Z",
+      "version_output": "go version go1.27.3 linux/amd64"
+    },
+    {
+      "arch": "arm64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "2026.2.92_v9.0.319-100.3.el10_2"
+        }
+      ],
+      "duration_seconds": 2.258886351,
+      "image_digest": "sha256:72383076d5def5f62876c273baf167eb8324c2e03e83c0f15d641efb7a724943",
+      "image_ref": "ghcr.io/joshjhall/containers/base-rhel-10-arm64",
+      "os": "rhel",
+      "os_version": "10",
+      "result": "pass",
+      "tested_at": "2026-10-27T14:17:07.861965685Z",
+      "version_output": "go version go1.27.3 linux/arm64"
+    },
+    {
+      "arch": "amd64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "2026.2.92_v9.0.319-90.3.el9_8"
+        }
+      ],
+      "duration_seconds": 5.188260949,
+      "image_digest": "sha256:c21dc73b8baaa9c23e40d91738c29689d6ce7fd4c5dcf5ce9e26ffb6726f79ba",
+      "image_ref": "ghcr.io/joshjhall/containers/base-rhel-9-amd64",
+      "os": "rhel",
+      "os_version": "9",
+      "result": "pass",
+      "tested_at": "2026-10-27T14:16:42.161997611Z",
+      "version_output": "go version go1.27.3 linux/amd64"
+    },
+    {
+      "arch": "arm64",
+      "ci_run": "https://github.com/joshjhall/containers/actions/runs/40518353045",
+      "dependencies": [
+        {
+          "package": "ca-certificates",
+          "tool": "ca_certificates",
+          "version": "2026.2.92_v9.0.319-90.3.el9_8"
+        }
+      ],
+      "duration_seconds": 3.124052112,
+      "image_digest": "sha256:a97f766cd1cb4316e10f8570b1b0e40ff2e553be154281be100d45262dee3f19",
+      "image_ref": "ghcr.io/joshjhall/containers/base-rhel-9-arm64",
+      "os": "rhel",
+      "os_version": "9",
+      "result": "pass",
+      "tested_at": "2026-10-27T14:17:10.105724879Z",
+      "version_output": "go version go1.27.3 linux/arm64"
+    }
+  ],
+  "tool": "go",
+  "version": "1.27.4"
+}
