@@ -18,15 +18,7 @@ repository = "https://github.com/joshjhall/containers"
 containers-common = { path = "crates/containers-common" }
 luggage = { path = "crates/luggage" }
 
-# Octarine foundation.
-# Published as `octarine-core` since v0.3.0-beta.5 (the bare `octarine` name on
-# crates.io belongs to an unrelated crate). The lib name is still `octarine`, so
-# the `package =` rename here keeps `use octarine::` working unchanged.
-octarine = { package = "octarine-core", git = "https://github.com/joshjhall/octarine.git", tag = "v0.3.0-beta.7", features = [
-  "full",
-] }
-
-# Shared dependencies (version-aligned with octarine's workspace.dependencies)
+# Shared dependencies
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

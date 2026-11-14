@@ -40,7 +40,7 @@
 - [Review harness & golem internals](index-review-harness-golem.md) — open when driving golems, the ship-issue/next-issue review harness, PR/merge automation, or host monitors (30)
 - [Filesystem, virtiofs, FUSE & case-sensitivity](index-filesystem-mounts.md) — open on wedged files, EBADF/ELOOP, stale symlinks, case-shadowed paths, or env leaking across process boundaries (8)
 - [CI & test-framework gotchas](index-ci-test-gotchas.md) — open when a test or CI job fails oddly, flakes, or passes suspiciously (36)
-- [Dependencies, advisories & version pinning](index-deps-security.md) — open when handling osv/cargo-deny advisories, version pins, auto-patch, checksums or signatures (16)
+- [Dependencies, advisories & version pinning](index-deps-security.md) — open when handling osv/cargo-deny advisories, version pins, auto-patch, checksums or signatures (14)
 - [Luggage, catalog, evidence & containers-db](index-luggage-catalog-evidence.md) — open when touching luggage install methods, the vendored catalog, evidence runs, or containers-db schema (15)
 - [Container runtime, entrypoint, Zed & permissions](index-runtime-devcontainer.md) — open when debugging the entrypoint, UID handling, Zed/devcontainer startup, cron or logging inside the image (11)
 - [Build & feature-script specifics](index-build-features.md) — open when editing Dockerfile/base-image layers, per-language feature scripts, or stibbons packaging (15)

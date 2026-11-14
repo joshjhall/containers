@@ -11,8 +11,10 @@ dependency declared only under embedded `cfg` predicates still appears.
 
 Worked example: RUSTSEC-2023-0089 (`atomic-polyfill` unmaintained, upstream
 archived, no successor version) entered via
-`octarine -> phonenumber -> postcard -> heapless 0.7`. heapless declares
+`<former dep> -> phonenumber -> postcard -> heapless 0.7`. heapless declares
 atomic-polyfill only for `thumbv6m-none-eabi`, `riscv32*`, `avr`, `xtensa`.
+(That suppression was retired once the dependency was dropped from the
+workspace — cargo-deny reports a stale ignore as `advisory-not-detected`.)
 
 **Prove unreachability, don't assert it.** `cargo tree -i <crate>` per shipped
 triple prints nothing when the crate is genuinely unreachable; it resolves only
@@ -33,5 +35,4 @@ two blind spots. Prefer the narrow per-advisory ignore.
 
 Verify each new skip/ignore is load-bearing by commenting it out and confirming
 *that* check fails — see [[assertions-must-discriminate]]. Related:
-[[preexisting-osv-vuln-blocks-push]], [[skips-render-as-passes]],
-[[octarine-package-renamed-core]].
+[[preexisting-osv-vuln-blocks-push]], [[skips-render-as-passes]].

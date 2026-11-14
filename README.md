@@ -389,8 +389,7 @@ Dual-licensed under either of:
   <https://opensource.org/licenses/MIT>)
 
 at your option. This is the standard dual-license used across the Rust
-ecosystem; it matches the license of [octarine](https://github.com/joshjhall/octarine),
-the foundation crate v5 is built on.
+ecosystem.
 
 ### Contribution
 

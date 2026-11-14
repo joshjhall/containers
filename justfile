@@ -109,7 +109,10 @@ lint SCOPE="":
       v5)
           cargo clippy --workspace -- -D warnings
           cargo fmt --all -- --check
-          taplo fmt --check
+          # Tracked files only: CI checks sibling repos out inside the
+          # workspace (_librarian/, _containers-db/), and a bare
+          # `taplo fmt --check` would lint their TOML against our style.
+          git ls-files -z '*.toml' | xargs -0 taplo fmt --check
           ;;
       v4)
           files=$(git ls-files '*.sh' | /usr/bin/grep -v '^tests/results/' || true)
@@ -139,7 +142,7 @@ lint-rust:
 lint-docs:
     rumdl check .
     dprint check
-    taplo fmt --check
+    git ls-files -z '*.toml' | xargs -0 taplo fmt --check
 
 # Lint Dockerfile(s) with hadolint — root Dockerfile + every base-images/**/Dockerfile.
 lint-docker:

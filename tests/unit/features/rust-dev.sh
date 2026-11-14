@@ -422,10 +422,10 @@ exit 0
 STUB
     chmod +x "$stub_dir/cargo-sweep" "$stub_dir/logger"
 
-    # Two sibling Rust projects, mirroring /workspace/containers + /workspace/octarine.
+    # Two sibling Rust projects, mirroring /workspace/containers + /workspace/other-project.
     local ws="$TEST_TEMP_DIR/workspace"
-    mkdir -p "$ws/containers/target" "$ws/octarine/target"
-    touch "$ws/containers/Cargo.toml" "$ws/octarine/Cargo.toml"
+    mkdir -p "$ws/containers/target" "$ws/other-project/target"
+    touch "$ws/containers/Cargo.toml" "$ws/other-project/Cargo.toml"
 
     # Run the wrapper with WORKING_DIR narrowed to a single project (the trap),
     # roots pointed at the parent, and backstops disabled to keep the stub calls
@@ -442,8 +442,8 @@ STUB
     ) >/dev/null 2>&1
 
     # The sibling under CARGO_SWEEP_ROOTS must be swept despite WORKING_DIR narrowing.
-    if command grep -q "octarine" "$sweep_log"; then
-        assert_true true "Sibling checkout (octarine) is discovered and swept"
+    if command grep -q "other-project" "$sweep_log"; then
+        assert_true true "Sibling checkout (other-project) is discovered and swept"
     else
         assert_true false "Sibling checkout was NOT swept — WORKING_DIR narrowed the sweep"
     fi

@@ -35,5 +35,4 @@ it).
 **Why:** the issue's stale ACs referenced `.pre-commit-config.yaml` + `cmd/igor`
 `go build` — both gone (repo is on lefthook, no Go hook). Host compilation is
 already covered by `cargo-lint` (pre-commit) + `cargo-test` (pre-push), so no
-new build hook was added. See [[v5-architecture]], [[octarine-windows]]
-(Windows targets viable since octarine beta.1 fixed Windows compilation).
+new build hook was added. See [[v5-architecture]].

@@ -499,7 +499,7 @@ fi
 SWEEP_DAYS="${CARGO_SWEEP_DAYS:-14}"
 # Discovery roots are DELIBERATELY decoupled from WORKING_DIR. Real deployments
 # set WORKING_DIR to a single project dir (e.g. /workspace/containers), which
-# would hide sibling checkouts (e.g. /workspace/octarine) from the sweep and let
+# would hide sibling checkouts (e.g. /workspace/other-project) from the sweep and let
 # their target/ grow unbounded. CARGO_SWEEP_ROOTS (colon-separated, default
 # /workspace) scans the whole parent so every sibling is reclaimed (#678).
 CARGO_SWEEP_ROOTS="${CARGO_SWEEP_ROOTS:-/workspace}"
