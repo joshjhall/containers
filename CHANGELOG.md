@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.22.2] - 2026-11-15
+
+### Added
+
+- Remove purpose: build dependencies after a method installs (#1621)
+- Record removed_build_dependencies in evidence rows (#1647)
+
+### CI/CD
+
+- Pin runner images, pin shellcheck, retry and cache tool downloads (#1622)
+
+### Changed
+
+- Chain standards init errors and split write helpers (#1626)
+- Split luggage catalog-failure tests out of update-versions.sh (#1637)
+
+### Fixed
+
+- Fail evidence ingest when auto-merge can't be enabled (#1619)
+- Stop git_files answering a nested root from an ancestor repo (#1609)
+- Make agent scripts-dir prepare atomic against concurrent start (#1644)
+- Compiler launcher default and recursion edge cases (#1642)
+
+### Miscellaneous
+
+- Update compatibility matrix for v4.22.1 (#1618)
+- Register static ccache pin with check-versions and auto-patch (#1628)
+- Save evidence ccache only on main runs, not PR dry runs (#1636)
+- Tier PR CI to cut runner load on PRs (#1639)
+- Record orchestrator run lessons and rebalance MEMORY.md (#1652)
+- Remove octarine and bump Cargo dependencies (#1658)
+
+### Testing
+
+- Harden read-librarian-pin.sh against multi-key ARG and tighten its CI-wiring guard (#1623)
+- Unit-cover init's load, guard, and write paths (#1634)
+- Cover the success path of luggage-backed update_version arms (#1638)
+- Unit-cover print_render_plan via a writer sink (#1640)
+
 ## [4.22.1] - 2026-11-09
 
 ### Added
@@ -12,11 +51,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add setup standards init/check/accept (#1539)
 - Commit evidence and auto-patch changes via the GitHub API (#1582)
 - Re-vendor stibbons repo-baseline on LIBRARIAN_REF bump (#1585)
+- Ccache source-build evidence cells via an opt-in compiler launcher (#1596)
 
 ### CI/CD
 
 - Cancel superseded PR pipeline runs with a concurrency group (#1570)
 - Require exactly one ARG LIBRARIAN_REF match in librarian pin reads (#1581)
+- Cancel superseded and merged-PR evidence runs (#1595)
+- Mirror accepted RUSTSEC ignores into cargo audit (#1606)
 
 ### Changed
 
@@ -39,10 +81,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-cell evidence timeout and a clear all-cancelled ingest (#1571)
 - Survive bash 5.3's null-directory cd on ubuntu-26.04 (#1598)
 - Drop sudo-wrapped command builtin flagged by shellcheck 0.11 (#1599)
+- Stop luggage-stub bodies running real node/go via backticks (#1600)
+- Escape rejected values in validate_issue_inputs stderr messages (#1603)
+- Retry only transient GitHub API failures and surface GraphQL errors (#1601)
+- Leave no evidence branch on API commit failure; test matrix PR (#1616)
 
 ### Miscellaneous
 
 - Record staged harness blocking worktree teardown
+- Automated version updates to v4.22.1
 
 ### Testing
 
@@ -54,6 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cover standards init/accept error branches (#1586)
 - Prove git_files ignores a hostile inherited git env (#1590)
 - Cover underscore error classes in annotate_fail_verdict and fix its reject message (#1588)
+- Pin the standards walk cap on nested trees (#1605)
+- Trap-clean guard-test scratch dirs and check fixture preconditions (#1608)
 
 ## [4.22.0] - 2026-10-28
 
@@ -2870,6 +2919,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.22.2]: https://github.com/joshjhall/containers/compare/v4.22.1...v4.22.2
 [4.22.1]: https://github.com/joshjhall/containers/compare/v4.22.0...v4.22.1
 [4.22.0]: https://github.com/joshjhall/containers/compare/v4.21.3...v4.22.0
 [4.21.3]: https://github.com/joshjhall/containers/compare/v4.21.2...v4.21.3
