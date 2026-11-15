@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-11-15T08:44:50Z",
+  "last_updated": "2026-11-15T09:25:35Z",
   "base_images": [
     {
       "name": "debian:12-slim",
@@ -65,7 +65,8 @@
         "1.97.1",
         "1.98.1",
         "1.99.0",
-        "1.99.1"
+        "1.99.1",
+        "1.100.0"
       ],
       "deprecated": []
     },
@@ -89,7 +90,8 @@
         "1.26.6",
         "1.27.1",
         "1.27.2",
-        "1.27.3"
+        "1.27.3",
+        "1.27.4"
       ],
       "deprecated": []
     },
@@ -137,7 +139,8 @@
         "4.5.2",
         "4.5.3",
         "4.6.0",
-        "4.6.1"
+        "4.6.1",
+        "4.6.2"
       ],
       "deprecated": []
     },
@@ -159,7 +162,7 @@
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2026-11-09T15:25:09Z",
+      "tested_at": "2026-11-15T09:25:35Z",
       "notes": "Base system only, no language runtimes"
     },
     {
@@ -169,7 +172,7 @@
         "python": "3.15.2"
       },
       "status": "passing",
-      "tested_at": "2026-11-09T15:25:09Z"
+      "tested_at": "2026-11-15T09:25:35Z"
     },
     {
       "variant": "node-dev",
@@ -178,24 +181,24 @@
         "node": "22"
       },
       "status": "passing",
-      "tested_at": "2026-11-09T15:25:09Z"
+      "tested_at": "2026-11-15T09:25:35Z"
     },
     {
       "variant": "rust-golang",
       "base_image": "debian:13-slim",
       "versions": {
-        "rust": "1.99.1",
-        "go": "1.27.3"
+        "rust": "1.100.0",
+        "go": "1.27.4"
       },
       "status": "passing",
-      "tested_at": "2026-11-09T15:25:09Z"
+      "tested_at": "2026-11-15T09:25:35Z"
     },
     {
       "variant": "cloud-ops",
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2026-11-09T15:25:09Z",
+      "tested_at": "2026-11-15T09:25:35Z",
       "notes": "Docker, Kubernetes, Terraform, AWS CLI"
     },
     {
@@ -204,11 +207,11 @@
       "versions": {
         "python": "3.15.2",
         "node": "22",
-        "rust": "1.99.1",
-        "go": "1.27.3"
+        "rust": "1.100.0",
+        "go": "1.27.4"
       },
       "status": "passing",
-      "tested_at": "2026-11-09T15:25:09Z"
+      "tested_at": "2026-11-15T09:25:35Z"
     }
   ]
 }
