@@ -746,27 +746,46 @@ mod tests {
         }
     }
 
-    /// The build deps `run_stages` removed reach a successful report (#1635).
+    /// The build deps `run_stages` removed reach a successful report, along
+    /// with every other stage output the success arm passes through (#1635).
     #[test]
     fn report_from_stages_carries_removed_build_deps_on_success() {
         let resolved = sample_resolved_with_deps();
+        let warning = verify::VerificationWarning {
+            tier: 4,
+            tool: "rust".into(),
+            version: "1.96.0".into(),
+            algorithm: Some("sha256".into()),
+            digest: "deadbeef".into(),
+            message: "TIER 4 TOFU".into(),
+        };
+        let deps = vec![InstalledDependency {
+            tool: "gcc".into(),
+            package: "gcc".into(),
+            version: Some("12.2.0".into()),
+        }];
         let outcome = StageOutcome {
             version_output: "rustc 1.96.0".into(),
-            warnings: Vec::new(),
-            dependencies: None,
+            warnings: vec![warning.clone()],
+            dependencies: Some(deps.clone()),
         };
         let (report, result) = Installer::report_from_stages(
             &resolved,
             vec!["g++".into(), "make".into()],
             Ok(outcome),
-            Vec::new(),
+            vec!["libfoo".into()],
             None,
-            0.0,
+            2.5,
         );
         assert!(result.is_ok(), "{result:?}");
         assert_eq!(report.error_class, None);
         assert_eq!(report.version_output.as_deref(), Some("rustc 1.96.0"));
         assert_eq!(report.removed_build_dependencies, vec!["g++".to_string(), "make".into()]);
+        assert_eq!(report.skipped_dependencies, vec!["libfoo".to_string()]);
+        assert_eq!(report.warnings, vec![warning]);
+        assert_eq!(report.dependencies, Some(deps));
+        assert_eq!(report.verification_tier, Some(resolved.verification_tier));
+        assert!((report.duration_seconds - 2.5).abs() < f64::EPSILON);
     }
 
     /// A stage failing after the package stage (here the method) still
