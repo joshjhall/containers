@@ -1,0 +1,107 @@
+# syntax=docker/dockerfile:1.7
+# Fixture for luggage build-dep removal on apt hosts (issue #1632).
+#
+# luggage removes `purpose: build` packages with `dpkg --purge`, never
+# `apt-get purge`/`--auto-remove`, so a build dep another installed package
+# still needs is REFUSED rather than cascading its dependents away
+# (installer/sysremove.rs remove_argv). This fixture runs the real removal on
+# debian, in one of two modes:
+#
+#   MODE=happy   node's tarball method gains make + patch as `purpose: build`;
+#                both must be gone after the install, node must still run.
+#   MODE=refuse  it gains `file` (default purpose) + libmagic1t64 as
+#                `purpose: build`. file depends on libmagic1t64, so dpkg must
+#                refuse, luggage must fail loudly, and BOTH must still be
+#                installed. The failing install's exit code, stderr and report
+#                are recorded under /var/log/luggage and the build step exits
+#                0, so the test can inspect what was left behind.
+#
+# The catalog edits are applied by patch-catalog.sh to a copy of the vendored
+# catalog — the snapshot itself is never modified.
+#
+# Build context is the repo root (`BUILD_CONTEXT=$CONTAINERS_DIR`), so every
+# COPY here is repo-root-relative.
+
+ARG NODE_VERSION=26.13.0
+ARG MODE=happy
+
+# ─── Stage 1: compile a static (musl) luggage ───
+# Static so the same binary runs on debian here and UBI in the rhel fixture.
+FROM rust:1.99-alpine AS builder
+
+RUN apk add --no-cache musl-dev
+
+WORKDIR /workspace
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+# The cache id is a build arg so a mutation check built from a scratch copy
+# (#1632) never shares a target dir with — and leaves a stale mutant binary
+# behind for — the normal fixture builds.
+ARG LUGGAGE_TARGET_CACHE=luggage-build-deps-target
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=${LUGGAGE_TARGET_CACHE},target=/workspace/target-musl \
+    CARGO_TARGET_DIR=/workspace/target-musl \
+    cargo build --release -p luggage --bin luggage \
+    && cp target-musl/release/luggage /tmp/luggage
+
+# ─── Stage 2: patch a copy of the catalog ───
+FROM alpine:3.24 AS catalog
+
+ARG NODE_VERSION
+ARG MODE
+
+RUN apk add --no-cache bash jq
+
+COPY crates/luggage/testdata/catalog /catalog
+COPY tests/integration/builds/luggage_build_deps/catalog-overlay /overlay
+COPY tests/integration/builds/luggage_build_deps/patch-catalog.sh /patch-catalog.sh
+
+RUN case "$MODE" in \
+        happy) m=happy ;; \
+        refuse) m=refuse-debian ;; \
+        *) echo "MODE must be happy or refuse, got '$MODE'" >&2; exit 1 ;; \
+    esac \
+    && bash /patch-catalog.sh "$m" /catalog /overlay "$NODE_VERSION"
+
+# ─── Stage 3: install node via luggage on a fresh debian ───
+FROM debian:trixie-slim AS runtime
+
+ARG NODE_VERSION
+ARG MODE
+
+# None of make, patch, file, libmagic1t64 is in trixie-slim (verified
+# 2026-11-16), so luggage installs — and owns the removal of — every build
+# dep it declares. libatomic1 (node's arm64 runtime dep, #983) is left to the
+# catalog's own `purpose: runtime` declaration on the arm64 method.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends adduser ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN adduser --disabled-password --gecos '' --shell /bin/bash vscode \
+    && mkdir -p /cache /var/log/luggage \
+    && chown vscode:vscode /cache /var/log/luggage
+ENV USERNAME=vscode
+
+COPY --from=builder /tmp/luggage /usr/local/bin/luggage
+COPY --from=catalog /catalog /opt/containers-db
+
+# happy: the install must succeed, so a failure fails the build.
+# refuse: the install must fail; record how, and let the test judge it.
+SHELL ["/bin/bash", "-uo", "pipefail", "-c"]
+RUN /usr/local/bin/luggage install "node@${NODE_VERSION}" \
+        --catalog /opt/containers-db \
+        --user vscode \
+        --cache-root /cache \
+        --log-dir /var/log/luggage \
+        --json-report /var/log/luggage/node-report.json \
+        2> /var/log/luggage/install.stderr; \
+    rc=$?; \
+    cat /var/log/luggage/install.stderr >&2; \
+    echo "$rc" > /var/log/luggage/install.rc; \
+    if [ "$MODE" = refuse ]; then exit 0; fi; \
+    exit "$rc"
+
+USER vscode
+WORKDIR /home/vscode
+CMD ["bash"]

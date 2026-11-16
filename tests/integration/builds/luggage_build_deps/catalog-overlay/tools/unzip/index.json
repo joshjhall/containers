@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "unzip",
+  "display_name": "Info-ZIP unzip",
+  "kind": "system_package",
+  "homepage": "https://example.invalid/test-overlay",
+  "license": "NOASSERTION",
+  "activity": {
+    "score": "active",
+    "scan_cadence_days": 30,
+    "scanned_at": "2026-11-16T00:00:00Z"
+  },
+  "system_package": {
+    "platforms": {
+      "debian": { "name": "unzip" },
+      "ubuntu": { "name": "unzip" },
+      "rhel": { "name": "unzip" }
+    }
+  }
+}
