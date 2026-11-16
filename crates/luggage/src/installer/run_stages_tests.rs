@@ -445,3 +445,28 @@ fn runtime_only_deps_never_reach_removal() {
     assert_eq!(fake.events(), ["install"], "no removal call at all");
     assert_eq!(removed_build_dependencies, Vec::<String>::new());
 }
+
+/// An install that fails before anything lands leaves nothing to remove, so
+/// the removal never reaches the package manager (an empty `dpkg --purge`
+/// would fail and replace the install's own error).
+#[test]
+fn an_install_failing_before_anything_lands_removes_nothing() {
+    let host = Host::new();
+    let fake = Arc::new(FakeSystemPackages {
+        lands: Some(Vec::new()),
+        install_error: Some("E: Could not get lock /var/lib/dpkg/lock-frontend".into()),
+        ..host.fake()
+    });
+    let installer = installer(&host, fake.clone(), Arc::new(RecordingRunner::new()));
+
+    let StageRun { removed_build_dependencies, result } = run(&installer, &node_like());
+
+    match result.unwrap_err() {
+        LuggageError::PackageManagerFailed { message } => {
+            assert!(message.contains("Could not get lock"), "{message}");
+        }
+        other => panic!("expected the install's own error, got {other:?}"),
+    }
+    assert_eq!(fake.events(), ["install"], "no removal call at all");
+    assert_eq!(removed_build_dependencies, Vec::<String>::new());
+}

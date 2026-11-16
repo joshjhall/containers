@@ -22,8 +22,10 @@ use super::sysremove;
 
 /// Install, presence and removal against the host package manager.
 pub trait SystemPackages: Send + Sync {
-    /// Whether `package` is installed. Fails closed: an unreadable answer is
-    /// `false` (see [`sysremove::is_installed`]).
+    /// Whether `package` is installed. Fails closed: an answer that cannot be
+    /// read is `true` (present), so an unknown never makes a package look
+    /// like luggage's to remove, nor counts it as gone after a removal (see
+    /// [`sysremove::is_installed`]).
     fn is_installed(&self, mgr: PackageManager, package: &str) -> bool;
 
     /// Install every resolved package (see
