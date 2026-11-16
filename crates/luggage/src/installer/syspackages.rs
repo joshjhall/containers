@@ -599,6 +599,41 @@ mod tests {
         assert_eq!(resolve_program("dnf", |_| false), "dnf");
     }
 
+    /// Only absolute `PATH` entries are searched (#1648): empty and relative
+    /// entries resolve against the *caller's* cwd, so they are skipped even
+    /// when, from luggage's own cwd, they would reach the program.
+    #[cfg(unix)]
+    #[test]
+    fn on_absolute_search_path_skips_empty_and_relative_entries() {
+        use std::ffi::OsStr;
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("luggage-abs-probe");
+        std::fs::write(&exe, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(dir.path().join("luggage-not-exec"), "").unwrap();
+        let abs = dir.path().display().to_string();
+
+        assert!(on_absolute_search_path(OsStr::new(&abs), "luggage-abs-probe"));
+        assert!(!on_absolute_search_path(OsStr::new(&abs), "luggage-not-exec"));
+        assert!(!on_absolute_search_path(OsStr::new(&abs), "luggage-missing"));
+
+        // `rel` reaches the dir from the test's cwd (`../` up to `/`, then
+        // down), so a probe that honoured relative entries would find it.
+        let cwd = std::env::current_dir().unwrap();
+        let up = "../".repeat(cwd.components().count() - 1);
+        let rel = format!("{up}{}", dir.path().strip_prefix("/").unwrap().display());
+        assert!(
+            std::path::Path::new(&rel).join("luggage-abs-probe").is_file(),
+            "{rel} must reach the probe dir from the cwd, or this test proves nothing",
+        );
+        for paths in [String::new(), ":".to_owned(), rel.clone(), format!(":{rel}:")] {
+            assert!(!on_absolute_search_path(OsStr::new(&paths), "luggage-abs-probe"), "{paths:?}");
+        }
+        let mixed = format!("{rel}::{abs}");
+        assert!(on_absolute_search_path(OsStr::new(&mixed), "luggage-abs-probe"), "{mixed:?}");
+    }
+
     #[test]
     fn resolve_program_leaves_other_managers_alone() {
         assert_eq!(resolve_program("apt-get", |_| false), "apt-get");

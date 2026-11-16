@@ -614,7 +614,8 @@ fn steps_stream_banner_and_output_into_the_feature_log() {
 /// must not turn these assertions red. `None` = left unset.
 fn launched(var: &str) -> Option<String> {
     let probe = if var == "CC" { ["gcc", "cc"] } else { ["g++", "c++"] };
-    let base = std::env::var(var).ok().filter(|v| !v.trim().is_empty()).or_else(|| {
+    let usable = |v: &String| !v.trim().is_empty() && !bare_launcher(v, "ccache");
+    let base = std::env::var(var).ok().filter(usable).or_else(|| {
         probe.into_iter().find(|p| step_on_path(&BTreeMap::new())(p)).map(str::to_owned)
     })?;
     Some(if already_launched(&base, "ccache") { base } else { format!("ccache {base}") })
@@ -872,6 +873,47 @@ fn launcher_does_not_wrap_an_already_launched_compiler() {
     let mut env = BTreeMap::from([("CC".to_owned(), "ccache-wrapper gcc".to_owned())]);
     apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&[]));
     assert_eq!(env["CC"], "ccache ccache-wrapper gcc", "a prefix match is not the launcher");
+}
+
+/// A `CC`/`CXX` that is only the launcher names no compiler (#1648). It is
+/// neither kept verbatim (`ccache`, a launcher with nothing to launch) nor
+/// doubled (`ccache ccache`): it is skipped like an empty value, so the next
+/// source — inherited, then the PATH probe — supplies the compiler.
+#[test]
+fn launcher_ignores_a_bare_launcher_compiler() {
+    // Catalog bare launcher, bare or by path → the probe.
+    for bare in ["ccache", "/opt/x/ccache", "  ccache  "] {
+        let mut env = BTreeMap::from([("CC".to_owned(), bare.to_owned())]);
+        apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(ALL));
+        assert_eq!(env["CC"], "ccache gcc", "catalog CC={bare:?}");
+    }
+
+    // Inherited bare launcher, launcher named by path → the probe.
+    let mut env = BTreeMap::new();
+    let inherited = |var: &str| (var == "CC").then(|| "ccache".to_owned());
+    apply_compiler_launcher(&mut env, "/opt/x/ccache", inherited, path_with(ALL));
+    assert_eq!(env["CC"], "/opt/x/ccache gcc");
+
+    // Catalog bare launcher falls to the inherited compiler before the probe.
+    let mut env = BTreeMap::from([("CC".to_owned(), "ccache".to_owned())]);
+    let inherited = |var: &str| (var == "CC").then(|| "clang".to_owned());
+    apply_compiler_launcher(&mut env, "ccache", inherited, path_with(ALL));
+    assert_eq!(env["CC"], "ccache clang");
+
+    // Nothing behind it: CC is left unset, as with no compiler at all — not
+    // the bare launcher verbatim and not `ccache ccache`.
+    let mut env = BTreeMap::from([("CC".to_owned(), "ccache".to_owned())]);
+    apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&[]));
+    assert!(env.is_empty(), "{env:?}");
+
+    // The predicates directly: the filter above keeps a bare launcher from
+    // ever reaching `already_launched`, so pin that it would not count anyway.
+    for launcher in ["ccache", "/opt/x/ccache"] {
+        assert!(!already_launched("ccache", launcher), "{launcher}");
+        assert!(bare_launcher("/opt/x/ccache", launcher), "{launcher}");
+        assert!(!bare_launcher("ccache gcc", launcher), "{launcher}");
+        assert!(!bare_launcher("gcc", launcher), "{launcher}");
+    }
 }
 
 #[test]

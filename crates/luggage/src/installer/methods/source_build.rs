@@ -162,7 +162,13 @@ fn apply_compiler_launcher(
     on_path: impl Fn(&str) -> bool,
 ) {
     for (var, probe) in [("CC", ["gcc", "cc"]), ("CXX", ["g++", "c++"])] {
-        let set = |v: &String| !v.trim().is_empty();
+        // A value that is only the launcher names no compiler: skip it like
+        // an empty one so the next source (inherited, then the probe) wins,
+        // and drop a catalog one so it never reaches a step verbatim.
+        let set = |v: &String| !v.trim().is_empty() && !bare_launcher(v, launcher);
+        if env.get(var).is_some_and(|v| bare_launcher(v, launcher)) {
+            env.remove(var);
+        }
         let Some(base) = env
             .get(var)
             .filter(|v| set(v))
@@ -178,11 +184,27 @@ fn apply_compiler_launcher(
     }
 }
 
-/// `true` when `base`'s first word is `launcher` — compared by file name, so
-/// `ccache gcc` counts as launched for both `ccache` and `/opt/x/ccache`.
+/// `true` when `base` is the launcher followed by a compiler — its first word
+/// is `launcher`, compared by file name, so `ccache gcc` counts as launched
+/// for both `ccache` and `/opt/x/ccache`. A bare launcher (`ccache` alone)
+/// names no compiler and is not launched; see [`bare_launcher`].
 fn already_launched(base: &str, launcher: &str) -> bool {
+    launcher_words(base, launcher).is_some_and(|n| n >= 2)
+}
+
+/// `true` when `base` is the launcher and nothing else (`ccache`,
+/// `/opt/x/ccache`): a `CC`/`CXX` that would run the launcher with no compiler.
+fn bare_launcher(base: &str, launcher: &str) -> bool {
+    launcher_words(base, launcher) == Some(1)
+}
+
+/// The word count of `base` when its first word is `launcher` (compared by
+/// file name), else `None`.
+fn launcher_words(base: &str, launcher: &str) -> Option<usize> {
     let name = |s: &str| s.rsplit('/').next().unwrap_or(s).to_owned();
-    base.split_whitespace().next().is_some_and(|first| name(first) == name(launcher))
+    let mut words = base.split_whitespace();
+    let first = words.next()?;
+    (name(first) == name(launcher)).then(|| 1 + words.count())
 }
 
 /// The `on_path` probe for [`apply_compiler_launcher`]: searches the `PATH`
