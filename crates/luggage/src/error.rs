@@ -61,7 +61,13 @@ impl From<&LuggageError> for ErrorClass {
                 Self::Download
             }
             LuggageError::VerificationFailed { .. } => Self::Verify,
-            LuggageError::PostInstallFailed { .. } => Self::PostInstall,
+            // Build-dep removal runs after the method and its post-install
+            // steps and before validation, and the schema's closed enum has
+            // no cleanup stage, so it classifies with post-install. A refusal
+            // there is a catalog defect, not a CI/network fault (#1668).
+            LuggageError::PostInstallFailed { .. } | LuggageError::BuildDepRemovalFailed { .. } => {
+                Self::PostInstall
+            }
             LuggageError::ValidationFailed { .. } => Self::Validate,
             // `chown` and `spawn` are emitted inside install-method
             // execution; any other stage value from a future method
@@ -281,6 +287,19 @@ pub enum LuggageError {
     #[error("package manager failed: {message}")]
     PackageManagerFailed {
         /// Human-readable detail.
+        message: String,
+    },
+
+    /// Removing the `purpose: build` system packages after the install
+    /// failed (#1524). The package manager itself worked: it refused a
+    /// package because something installed still depends on it, or refused
+    /// an option-like name before running anything. That points at the
+    /// catalog (a runtime need declared as `purpose: build`), not at the
+    /// host, so this is kept apart from [`Self::PackageManagerFailed`] and
+    /// does not classify as infra (#1668).
+    #[error("could not remove build dependencies: {message}")]
+    BuildDepRemovalFailed {
+        /// Each refused package with the manager's stderr.
         message: String,
     },
 
@@ -660,6 +679,12 @@ mod tests {
     fn error_class_maps_runtime_variants_to_their_stage() {
         let cases: &[(LuggageError, ErrorClass)] = &[
             (LuggageError::PackageManagerFailed { message: "apt".into() }, ErrorClass::Infra),
+            // A refused build-dep removal is a catalog defect surfacing at the
+            // cleanup stage, not infra (#1668).
+            (
+                LuggageError::BuildDepRemovalFailed { message: "util-linux".into() },
+                ErrorClass::PostInstall,
+            ),
             (
                 LuggageError::DownloadFailed {
                     url: "https://x".into(),

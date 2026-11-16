@@ -279,39 +279,88 @@ pub fn is_installed(mgr: PackageManager, package: &str) -> bool {
 ///
 /// # Errors
 ///
-/// [`LuggageError::PackageManagerFailed`] when a name is empty or starts with
-/// `-` (nothing is run), or naming each package that could not be removed, with the manager's stderr. A package refused because an
+/// [`LuggageError::BuildDepRemovalFailed`] when a name is empty or starts
+/// with `-` (nothing is run), or naming each package that could not be
+/// removed, with the manager's stderr. A package refused because an
 /// installed package depends on it means the catalog declared a runtime need
 /// as `purpose: build`. That fails loudly rather than shipping a silently
-/// broken image.
+/// broken image, and is classified as a cleanup failure, not infra (#1668).
+///
+/// [`LuggageError::PackageManagerFailed`] when the manager cannot be
+/// launched: a host fault, classified as infra.
 pub fn remove_packages(packages: &[&str], mgr: PackageManager) -> Result<()> {
     // Names come from the catalog and land in argv after the manager's own
     // flags. One starting with `-` would be parsed as an option, e.g.
     // `--nodeps` or `--force-depends`, defeating the refuse-don't-cascade
     // removal. Refuse the whole removal before anything runs.
     if let Some(bad) = packages.iter().find(|p| p.is_empty() || p.starts_with('-')) {
-        return Err(LuggageError::PackageManagerFailed {
+        return Err(LuggageError::BuildDepRemovalFailed {
             message: format!("refusing to remove package with option-like name {bad:?}"),
         });
     }
-    let refused: Vec<String> = match run_removal(mgr, packages) {
+    remove_with(packages, |pkgs| run_removal(mgr, pkgs))
+}
+
+/// Why one removal transaction did not succeed.
+#[derive(Debug)]
+enum RemovalFault {
+    /// The manager could not be started at all: a host fault, not a refusal.
+    Launch(String),
+    /// The manager ran and exited non-zero.
+    Refused(String),
+}
+
+/// [`remove_packages`] with the transaction runner injected, so the batch,
+/// retry, and error-class decisions are testable without a package manager.
+///
+/// A manager that cannot launch fails as [`LuggageError::PackageManagerFailed`]
+/// (infra), because nothing about the catalog is implied. Only packages the
+/// manager ran and refused become [`LuggageError::BuildDepRemovalFailed`]
+/// (#1668).
+fn remove_with<'a>(
+    packages: &[&'a str],
+    mut run: impl FnMut(&[&'a str]) -> std::result::Result<(), RemovalFault>,
+) -> Result<()> {
+    let refused: Vec<String> = match run(packages) {
         Ok(()) => return Ok(()),
+        Err(RemovalFault::Launch(message)) => {
+            return Err(LuggageError::PackageManagerFailed { message });
+        }
         // A lone package has nothing to retry.
-        Err(e) if packages.len() <= 1 => vec![e],
-        Err(_) => remove_individually(mgr, packages),
+        Err(RemovalFault::Refused(e)) if packages.len() <= 1 => vec![e],
+        // Retry each package on its own; a launch failure mid-retry still
+        // wins over any refusal, since the host is what broke.
+        Err(RemovalFault::Refused(_)) => {
+            let mut launch = None;
+            let refused = remove_until_fixed_point(packages, |p| match run(&[p]) {
+                Ok(()) => Ok(()),
+                Err(RemovalFault::Refused(e)) => Err(e),
+                Err(RemovalFault::Launch(m)) => {
+                    let e = m.clone();
+                    launch.get_or_insert(m);
+                    Err(e)
+                }
+            });
+            if let Some(message) = launch {
+                return Err(LuggageError::PackageManagerFailed { message });
+            }
+            refused
+        }
     };
+    refusals_to_result(&refused)
+}
+
+/// Turn the per-package refusals into the removal's result: `Ok` when none,
+/// else one [`LuggageError::BuildDepRemovalFailed`] naming every refusal.
+/// Split out so the error shape and its class are testable without a
+/// package manager (#1668).
+fn refusals_to_result(refused: &[String]) -> Result<()> {
     if refused.is_empty() {
         return Ok(());
     }
-    Err(LuggageError::PackageManagerFailed {
-        message: format!("could not remove build dependencies: {}", refused.join("; ")),
-    })
-}
-
-/// Remove each package in its own transaction, returning a description of
-/// every one that was still refused.
-fn remove_individually(mgr: PackageManager, packages: &[&str]) -> Vec<String> {
-    remove_until_fixed_point(packages, |p| run_removal(mgr, &[p]))
+    // The variant's Display already says "could not remove build
+    // dependencies", so the message carries only the refusals.
+    Err(LuggageError::BuildDepRemovalFailed { message: refused.join("; ") })
 }
 
 /// Pass over `packages` removing each one via `remove`, then pass again over
@@ -344,21 +393,21 @@ fn remove_until_fixed_point<'a>(
 }
 
 /// Run one removal transaction. `Ok` when `packages` is empty.
-fn run_removal(mgr: PackageManager, packages: &[&str]) -> std::result::Result<(), String> {
+fn run_removal(mgr: PackageManager, packages: &[&str]) -> std::result::Result<(), RemovalFault> {
     let Some((program, args)) = remove_argv(mgr, packages) else { return Ok(()) };
     let out = Command::new(program)
         .args(&args)
         .output()
-        .map_err(|e| format!("{program} failed to launch: {e}"))?;
+        .map_err(|e| RemovalFault::Launch(format!("{program} failed to launch: {e}")))?;
     if out.status.success() {
         return Ok(());
     }
-    Err(format!(
+    Err(RemovalFault::Refused(format!(
         "{program} {} exited {}: {}",
         args.join(" "),
         out.status,
         String::from_utf8_lossy(&out.stderr).trim_end(),
-    ))
+    )))
 }
 
 /// Pick the binary to run for `program` given what is on `PATH`.
@@ -792,6 +841,94 @@ mod tests {
         assert_eq!(*calls.borrow(), ["libfoo-dev", "foo-build", "libfoo-dev"]);
     }
 
+    /// #1668 end to end, minus the host: on UBI 9, gcc pulls in systemd,
+    /// which needs util-linux, so `rpm -e util-linux` is refused with rpm's
+    /// own text. The refusal must survive the fixed-point loop, still name
+    /// the package and rpm's reason, and classify as a cleanup failure —
+    /// not `infra`, which made evidence read it as a CI fault.
+    #[test]
+    fn a_dependency_refused_build_dep_fails_as_cleanup_not_infra() {
+        use crate::error::ErrorClass;
+        const RPM: &str = "rpm -e util-linux exited exit status: 1: error: Failed dependencies:\n\
+                           \tutil-linux is needed by (installed) systemd-252-79.el9_9.x86_64";
+        let mut calls = Vec::new();
+        let refused = remove_until_fixed_point(&["util-linux", "make"], |p| {
+            calls.push(p);
+            if p == "util-linux" { Err(RPM.to_owned()) } else { Ok(()) }
+        });
+        // make went; util-linux was retried once more and still refused.
+        assert_eq!(calls, ["util-linux", "make", "util-linux"]);
+
+        let err = refusals_to_result(&refused).unwrap_err();
+        assert!(matches!(err, LuggageError::BuildDepRemovalFailed { .. }), "{err:?}");
+        let shown = err.to_string();
+        assert!(shown.starts_with("could not remove build dependencies: util-linux: "), "{shown}");
+        assert!(shown.contains("needed by (installed) systemd"), "{shown}");
+        assert!(!shown.contains("make"), "only the refused package is named: {shown}");
+        assert_eq!(ErrorClass::from(&err), ErrorClass::PostInstall);
+    }
+
+    #[test]
+    fn no_refusals_is_ok() {
+        refusals_to_result(&[]).unwrap();
+    }
+
+    /// The other half of #1668's classification: a manager that cannot be
+    /// started says nothing about the catalog, so it stays infra, whether it
+    /// fails on the batch or only on a per-package retry.
+    #[test]
+    fn a_manager_that_cannot_launch_fails_as_infra() {
+        use crate::error::ErrorClass;
+        let gone =
+            || RemovalFault::Launch("rpm failed to launch: No such file or directory".into());
+
+        let err = remove_with(&["make"], |_| Err(gone())).unwrap_err();
+        assert!(matches!(err, LuggageError::PackageManagerFailed { .. }), "{err:?}");
+        assert_eq!(ErrorClass::from(&err), ErrorClass::Infra);
+
+        // Batch refused, then the manager vanishes mid-retry: still infra,
+        // and the launch failure is what gets reported.
+        let mut calls = 0;
+        let err = remove_with(&["util-linux", "make"], |_| {
+            calls += 1;
+            if calls == 1 {
+                Err(RemovalFault::Refused("batch refused".into()))
+            } else {
+                Err(gone())
+            }
+        })
+        .unwrap_err();
+        assert!(matches!(err, LuggageError::PackageManagerFailed { .. }), "{err:?}");
+        assert!(err.to_string().contains("failed to launch"), "{err}");
+        assert!(!err.to_string().contains("batch refused"), "{err}");
+        assert_eq!(ErrorClass::from(&err), ErrorClass::Infra);
+    }
+
+    /// A refused batch goes through the per-package retry and comes out as a
+    /// cleanup failure naming only what stayed refused.
+    #[test]
+    fn a_refused_batch_is_retried_and_fails_as_cleanup() {
+        use crate::error::ErrorClass;
+        let mut calls: Vec<Vec<&str>> = Vec::new();
+        let err = remove_with(&["util-linux", "make"], |pkgs| {
+            calls.push(pkgs.to_vec());
+            if pkgs.contains(&"util-linux") {
+                Err(RemovalFault::Refused("util-linux is needed by systemd".into()))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+        assert_eq!(
+            calls,
+            [vec!["util-linux", "make"], vec!["util-linux"], vec!["make"], vec!["util-linux"]]
+        );
+        assert!(matches!(err, LuggageError::BuildDepRemovalFailed { .. }), "{err:?}");
+        assert!(err.to_string().contains("util-linux: util-linux is needed by systemd"), "{err}");
+        assert!(!err.to_string().contains("make"), "{err}");
+        assert_eq!(ErrorClass::from(&err), ErrorClass::PostInstall);
+    }
+
     /// Every probe failure that is not a clear "not installed" — a launch
     /// failure, a locked DB, an unexpected exit — reads as present, for every
     /// manager. Asserted unconditionally: nothing depends on the test host.
@@ -819,6 +956,17 @@ mod tests {
             for bad in ["--nodeps", "-r", ""] {
                 let err = remove_packages(&["make", bad], mgr).unwrap_err();
                 assert!(err.to_string().contains("option-like name"), "{mgr:?} {bad:?}: {err}");
+                // The variant, not just the text: a regression back to
+                // PackageManagerFailed would classify as infra (#1668).
+                assert!(
+                    matches!(err, LuggageError::BuildDepRemovalFailed { .. }),
+                    "{mgr:?} {bad:?}: {err:?}"
+                );
+                assert_eq!(
+                    crate::error::ErrorClass::from(&err),
+                    crate::error::ErrorClass::PostInstall,
+                    "{mgr:?} {bad:?}"
+                );
             }
         }
     }
