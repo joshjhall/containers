@@ -860,6 +860,17 @@ mod tests {
             for bad in ["--nodeps", "-r", ""] {
                 let err = remove_packages(&["make", bad], mgr).unwrap_err();
                 assert!(err.to_string().contains("option-like name"), "{mgr:?} {bad:?}: {err}");
+                // The variant, not just the text: a regression back to
+                // PackageManagerFailed would classify as infra (#1668).
+                assert!(
+                    matches!(err, LuggageError::BuildDepRemovalFailed { .. }),
+                    "{mgr:?} {bad:?}: {err:?}"
+                );
+                assert_eq!(
+                    crate::error::ErrorClass::from(&err),
+                    crate::error::ErrorClass::PostInstall,
+                    "{mgr:?} {bad:?}"
+                );
             }
         }
     }
