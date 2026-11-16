@@ -212,16 +212,20 @@ pub trait HttpClient: Send + Sync {
 /// between attempts. Sleep delay is configurable so tests can avoid
 /// real-time waits.
 ///
-/// Requests go through a held [`ureq::Agent`] built with ureq's defaults —
-/// the same configuration the free `ureq::get` uses, including proxy
-/// detection from `HTTP(S)_PROXY` / `ALL_PROXY` / `NO_PROXY`. Holding it
-/// (rather than calling `ureq::get`) lets the loopback adapter tests swap in
-/// a proxy-free agent without touching the process environment (#856).
+/// Every attempt runs on a fresh, use-once [`ureq::Agent`] — exactly what the
+/// free `ureq::get` does — so each retry opens a new connection and re-reads
+/// `HTTP(S)_PROXY` / `ALL_PROXY` / `NO_PROXY` at request time. The only knob
+/// is the test-only [`Self::without_proxy`], which lets the loopback adapter
+/// tests bypass the proxy env without touching the process environment
+/// (#856).
 #[derive(Debug, Clone)]
 pub struct UreqClient {
     max_attempts: u32,
     retry_delay: Duration,
-    agent: ureq::Agent,
+    /// Build each attempt's agent with proxy detection off. Only ever set by
+    /// the `#[cfg(test)]` [`Self::without_proxy`]; production is always
+    /// `false`.
+    bypass_proxy: bool,
 }
 
 impl Default for UreqClient {
@@ -233,40 +237,47 @@ impl Default for UreqClient {
 impl UreqClient {
     /// Build a client with custom retry tuning. Mostly useful in tests.
     #[must_use]
-    pub fn with_retry(max_attempts: u32, retry_delay: Duration) -> Self {
-        Self { max_attempts, retry_delay, agent: ureq::Agent::new_with_defaults() }
+    pub const fn with_retry(max_attempts: u32, retry_delay: Duration) -> Self {
+        Self { max_attempts, retry_delay, bypass_proxy: false }
     }
 
-    /// Replace the agent with one that ignores proxy environment variables,
-    /// so a loopback test server is reached directly even when CI exports
-    /// `HTTP(S)_PROXY`. Test-only: production must honour the proxy env.
+    /// Ignore proxy environment variables, so a loopback test server is
+    /// reached directly even when CI exports `HTTP(S)_PROXY`. Test-only:
+    /// production must honour the proxy env.
     #[cfg(test)]
     #[must_use]
-    fn without_proxy(mut self) -> Self {
-        self.agent = ureq::Agent::config_builder().proxy(None).build().new_agent();
+    const fn without_proxy(mut self) -> Self {
+        self.bypass_proxy = true;
         self
+    }
+
+    /// A use-once agent for one attempt — the same agent `ureq::get` builds,
+    /// unless the test-only proxy bypass is set.
+    fn agent(&self) -> ureq::Agent {
+        if self.bypass_proxy {
+            ureq::Agent::config_builder().proxy(None).build().new_agent()
+        } else {
+            ureq::Agent::new_with_defaults()
+        }
+    }
+
+    /// Open `url` on a fresh agent, mapping a call error to its display form.
+    fn open(&self, url: &str) -> std::result::Result<impl Read, String> {
+        self.agent()
+            .get(url)
+            .call()
+            .map(|r| r.into_body().into_reader())
+            .map_err(|e| format!("{e}"))
     }
 }
 
 impl HttpClient for UreqClient {
     fn get(&self, url: &str) -> Result<Vec<u8>> {
-        buffer_with_retry(url, self.max_attempts, self.retry_delay, || {
-            self.agent
-                .get(url)
-                .call()
-                .map(|r| r.into_body().into_reader())
-                .map_err(|e| format!("{e}"))
-        })
+        buffer_with_retry(url, self.max_attempts, self.retry_delay, || self.open(url))
     }
 
     fn get_to_writer(&self, url: &str, sink: &mut dyn RestartableSink) -> Result<u64> {
-        stream_with_retry(url, sink, self.max_attempts, self.retry_delay, || {
-            self.agent
-                .get(url)
-                .call()
-                .map(|r| r.into_body().into_reader())
-                .map_err(|e| format!("{e}"))
-        })
+        stream_with_retry(url, sink, self.max_attempts, self.retry_delay, || self.open(url))
     }
 }
 

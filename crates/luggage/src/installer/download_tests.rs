@@ -109,6 +109,25 @@ fn ureq_default_uses_published_constants() {
     let c = UreqClient::default();
     assert_eq!(c.max_attempts, DEFAULT_MAX_ATTEMPTS);
     assert_eq!(c.retry_delay, DEFAULT_RETRY_DELAY);
+    assert!(!c.bypass_proxy, "production must honour the proxy env");
+}
+
+/// The production agent keeps ureq's env-driven proxy detection (it is the
+/// same `Agent::new_with_defaults` the free `ureq::get` uses), and only the
+/// test-only constructor turns it off. Compared against ureq's own env read so
+/// the check holds whether or not this process has a proxy exported.
+#[test]
+fn ureq_agent_proxy_detection_is_production_default_and_test_bypass() {
+    let prod = UreqClient::with_retry(1, Duration::ZERO);
+    assert!(!prod.bypass_proxy);
+    assert_eq!(
+        prod.agent().config().proxy().is_some(),
+        ureq::Proxy::try_from_env().is_some(),
+        "production agent must read the proxy env exactly as ureq::get does"
+    );
+    let test = prod.without_proxy();
+    assert!(test.bypass_proxy);
+    assert!(test.agent().config().proxy().is_none(), "bypass must drop the proxy");
 }
 
 #[test]
@@ -604,5 +623,17 @@ fn ureq_get_returns_a_2xx_body() {
     let client = UreqClient::with_retry(3, Duration::ZERO).without_proxy();
     let bytes = client.get(&url).unwrap();
     assert_eq!(bytes, b"sha256  artifact.tar.gz\n");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+/// The response ceiling holds through the real `get` adapter, and an
+/// oversized body is not retried.
+#[test]
+fn ureq_get_rejects_an_oversized_body_without_retrying() {
+    let limit = usize::try_from(MAX_BUFFERED_RESPONSE_BYTES).unwrap();
+    let (url, hits) = counting_server(200, vec![b'x'; limit + 1]);
+    let client = UreqClient::with_retry(3, Duration::ZERO).without_proxy();
+    let err = client.get(&url).unwrap_err();
+    assert!(matches!(err, LuggageError::ResponseTooLarge { .. }), "got {err:?}");
     assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
 }
