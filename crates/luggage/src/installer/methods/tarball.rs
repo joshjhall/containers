@@ -54,6 +54,13 @@
 //! regardless of what a future tar release or a later change to the
 //! unpack options does.
 //!
+//! A link's target is checked lexically, which cannot see links extracted
+//! earlier: `a -> .` then `a/b -> ..` each stay inside on paper, yet
+//! together make `a/b/` the staging dir's parent (issue #1698). So no entry
+//! may be written *through* an already-extracted symlink — every ancestor of
+//! an entry's path under the staging root must be a real directory, checked
+//! before anything is created for that entry.
+//!
 //! # Partial-install behaviour
 //!
 //! The archive unpacks into a staging directory first and is merged into the
@@ -359,6 +366,12 @@ fn unpack_entries<R: std::io::Read>(
 
         let target = dest.join(&relative);
 
+        // Both `create_dir_all` below and tar-rs's own unpack follow any
+        // symlink in `target`'s parent chain, so an earlier in-archive link
+        // could redirect this write outside staging even though every link
+        // passed `validate_link_target` on its own (issue #1698).
+        reject_symlinked_ancestor(dest, &relative, &raw, artifact_name)?;
+
         // A link's *target* escaping the prefix is the subtler half of the
         // traversal problem: the link itself sits safely inside, but a later
         // entry written through it lands outside. Hard links never get here —
@@ -391,6 +404,48 @@ fn unpack_entries<R: std::io::Read>(
         })?;
     }
 
+    Ok(())
+}
+
+/// Refuse an entry whose parent path under `dest` passes through a symlink.
+///
+/// Walks `dest/c1`, `dest/c1/c2`, … up to (not including) the entry itself,
+/// never `dest` — the staging root is ours. Stops at the first missing
+/// component: nothing beneath a path that does not exist can be a link. The
+/// final component is not checked here: tar-rs writes a file with
+/// `create_new` (unlinking whatever stood there) and refuses to treat a
+/// non-directory as a directory entry, so a link *at* the target is replaced
+/// or rejected, never written through.
+fn reject_symlinked_ancestor(
+    dest: &Path,
+    relative: &Path,
+    raw: &Path,
+    artifact_name: &str,
+) -> Result<()> {
+    let Some(parent) = relative.parent() else {
+        return Ok(());
+    };
+    let mut walked = PathBuf::new();
+    for component in parent.components() {
+        walked.push(component);
+        let path = dest.join(&walked);
+        match fs::symlink_metadata(&path) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                return Err(LuggageError::UnsafeArchiveEntry {
+                    artifact: artifact_name.to_owned(),
+                    entry: raw.display().to_string(),
+                    reason: format!(
+                        "path passes through symlink `{}` extracted earlier; writing \
+                         through it could escape the prefix",
+                        walked.display()
+                    ),
+                });
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(LuggageError::Io { path, source: e }),
+        }
+    }
     Ok(())
 }
 

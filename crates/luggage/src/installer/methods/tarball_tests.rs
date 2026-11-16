@@ -419,6 +419,219 @@ fn allows_symlink_that_stays_inside_the_prefix() {
     assert_eq!(fs::read(&alias).unwrap(), b"real");
 }
 
+// ---- chained symlinks (issue #1698) ------------------------------------
+
+/// Assert nothing was written beside the staging dir. Staging is created
+/// in the artifact's own directory (`Fixture::_tmp`), so an entry that
+/// escaped staging by one level lands there; after `run` returns, the
+/// staging dir is gone and only the artifact may remain.
+fn assert_nothing_escaped(f: &Fixture) {
+    let stray: Vec<_> = fs::read_dir(f.artifact.parent().unwrap())
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| *p != f.artifact)
+        .collect();
+    assert!(stray.is_empty(), "nothing may land beside staging, found {stray:?}");
+}
+
+/// Run a chained-symlink archive and assert it is refused at `entry_name`
+/// for writing through the earlier link `link` (named by its post-strip
+/// path), with nothing reaching the prefix or staging's parent.
+fn assert_chain_rejected(entries: &[Entry<'_>], entry_name: &str, link: &str) {
+    assert_chain_rejected_at_strip(entries, entry_name, link, 0);
+}
+
+/// [`assert_chain_rejected`] at a given strip depth.
+fn assert_chain_rejected_at_strip(entries: &[Entry<'_>], entry_name: &str, link: &str, strip: u32) {
+    let f = Fixture::new("evil.tar.gz", &gzip(&tar_of(entries)));
+
+    match f.run_plain(strip).unwrap_err() {
+        LuggageError::UnsafeArchiveEntry { entry, reason, .. } => {
+            assert_eq!(entry, entry_name, "error should name the entry");
+            assert!(
+                reason.contains(&format!("passes through symlink `{link}` ")),
+                "reason should name the earlier link `{link}`: {reason}"
+            );
+        }
+        other => panic!("expected UnsafeArchiveEntry, got {other:?}"),
+    }
+    assert_prefix_empty(&f);
+    assert_nothing_escaped(&f);
+}
+
+/// `a -> .` and `a/b -> ..` each stay inside lexically, but `a/b` is
+/// written through `a` into staging itself, pointing at staging's parent —
+/// so `a/b/evil` would land outside. Refused at `a/b`, the first entry
+/// written through a link, so the payload is never reached.
+#[test]
+fn rejects_symlink_chain_through_self_link() {
+    assert_chain_rejected(
+        &[
+            Entry::Link("a", ".", EntryType::Symlink),
+            Entry::Link("a/b", "..", EntryType::Symlink),
+            Entry::File("a/b/evil", b"pwned"),
+        ],
+        "a/b",
+        "a",
+    );
+}
+
+/// The issue's second shape: the payload would be written via the link's
+/// resolved location (`b/evil`) rather than through `a`. It trips at the
+/// same `a/b` entry as the shape above — pinned separately because, before
+/// the fix, each shape escaped by its own path.
+#[test]
+fn rejects_symlink_chain_writing_beside_the_link() {
+    assert_chain_rejected(
+        &[
+            Entry::Link("a", ".", EntryType::Symlink),
+            Entry::Link("a/b", "..", EntryType::Symlink),
+            Entry::File("b/evil", b"pwned"),
+        ],
+        "a/b",
+        "a",
+    );
+}
+
+/// A longer chain: no link is written through another, but `l2`'s target
+/// `x/l1/..` resolves physically through `x/l1 -> ..`, landing on staging's
+/// parent. Refused at the payload, which is the first write through a link.
+#[test]
+fn rejects_longer_symlink_chain() {
+    assert_chain_rejected(
+        &[
+            Entry::Link("x/l1", "..", EntryType::Symlink),
+            Entry::Link("l2", "x/l1/..", EntryType::Symlink),
+            Entry::File("l2/evil", b"pwned"),
+        ],
+        "l2/evil",
+        "l2",
+    );
+}
+
+/// Deliberate behaviour change: writing through *any* earlier symlink is
+/// refused, even a directory alias that stays inside the prefix. Resolving
+/// it physically and re-checking would be more permissive and racier, so
+/// an archive that needs this is refused rather than half-trusted.
+#[test]
+fn rejects_write_through_benign_in_prefix_dir_alias() {
+    assert_chain_rejected(
+        &[
+            Entry::Dir("real/", 0o755),
+            Entry::Link("lib", "real", EntryType::Symlink),
+            Entry::File("lib/libfoo.so", b"elf"),
+        ],
+        "lib/libfoo.so",
+        "lib",
+    );
+}
+
+/// A directory entry under an earlier link is refused before
+/// `create_dir_all` can follow the link.
+#[test]
+fn rejects_dir_entry_under_an_earlier_symlink() {
+    assert_chain_rejected(
+        &[Entry::Link("a", ".", EntryType::Symlink), Entry::Dir("a/sub/", 0o755)],
+        "a/sub/",
+        "a",
+    );
+}
+
+/// The check runs on the post-strip path: the issue's first chain nested
+/// under a versioned top-level directory is refused at strip 1 too.
+#[test]
+fn rejects_symlink_chain_after_stripping() {
+    assert_chain_rejected_at_strip(
+        &[
+            Entry::Link("pkg-v1/a", ".", EntryType::Symlink),
+            Entry::Link("pkg-v1/a/b", "..", EntryType::Symlink),
+            Entry::File("pkg-v1/a/b/evil", b"pwned"),
+        ],
+        "pkg-v1/a/b",
+        "a",
+        1,
+    );
+}
+
+/// The walk continues past real directories: a link deeper in the parent
+/// chain (`d/l`, under a real `d/`) is still caught, not just the first
+/// component.
+#[test]
+fn rejects_symlink_deeper_in_the_parent_chain() {
+    assert_chain_rejected(
+        &[
+            Entry::Dir("d/", 0o755),
+            Entry::Link("d/l", ".", EntryType::Symlink),
+            Entry::File("d/l/x", b"pwned"),
+        ],
+        "d/l/x",
+        "d/l",
+    );
+}
+
+/// An existing *file* as an ancestor is not a link, so the walk lets it
+/// through — and `create_dir_all` then fails on that file (a file cannot
+/// hold children), leaving the prefix untouched and nothing outside staging.
+#[test]
+fn file_as_ancestor_is_still_refused_without_touching_the_prefix() {
+    let raw = tar_of(&[Entry::File("a", b"file"), Entry::File("a/b", b"child")]);
+    let f = Fixture::new("bad.tar.gz", &gzip(&raw));
+
+    let err = f.run_plain(0).unwrap_err();
+    assert!(
+        matches!(err, LuggageError::Io { ref path, .. } if path.ends_with("a")),
+        "the parent dir create must fail on the file `a`, got {err:?}"
+    );
+    assert_prefix_empty(&f);
+    assert_nothing_escaped(&f);
+}
+
+/// A directory entry landing *on* an earlier symlink is not treated as
+/// that directory: tar-rs checks the existing path with
+/// `symlink_metadata`, so the link is not followed and the archive fails
+/// — the link's target keeps its own mode. Pinned because
+/// `reject_symlinked_ancestor` skips the final component on the strength
+/// of this behaviour. (`d` points in-prefix so the lexical link check
+/// passes and this behaviour is what decides the outcome.)
+#[test]
+fn dir_entry_on_an_earlier_symlink_is_refused() {
+    let raw = tar_of(&[
+        Entry::Dir("real/", 0o755),
+        Entry::Link("d", "real", EntryType::Symlink),
+        Entry::Dir("d/", 0o700),
+    ]);
+    let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+    let err = f.run_plain(0).unwrap_err();
+    assert!(
+        matches!(err, LuggageError::ArchiveExtractionFailed { ref message, .. }
+            if message.contains("`d/`")),
+        "expected the dir entry to fail, got {err:?}"
+    );
+    assert_prefix_empty(&f);
+    assert_nothing_escaped(&f);
+}
+
+/// A link at the *final* component is not written through: tar-rs
+/// replaces it with the file entry (`create_new` after unlink), so the
+/// link's target is untouched. This is why `reject_symlinked_ancestor`
+/// checks only the parent chain.
+#[test]
+fn file_entry_replaces_a_symlink_at_its_own_path() {
+    let raw = tar_of(&[
+        Entry::File("pkg/real.txt", b"real"),
+        Entry::Link("pkg/x", "real.txt", EntryType::Symlink),
+        Entry::File("pkg/x", b"replaced"),
+    ]);
+    let f = Fixture::new("ok.tar.gz", &gzip(&raw));
+    f.run_plain(0).unwrap();
+
+    let x = f.prefix.path().join("pkg/x");
+    assert!(fs::symlink_metadata(&x).unwrap().file_type().is_file(), "link must be replaced");
+    assert_eq!(fs::read(&x).unwrap(), b"replaced");
+    assert_eq!(fs::read(f.prefix.path().join("pkg/real.txt")).unwrap(), b"real");
+}
+
 // ---- entry-type allowlist (issue #862) --------------------------------
 
 /// Assert `err` is an `UnsafeArchiveEntry` naming `entry` and the type.
