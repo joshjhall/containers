@@ -553,9 +553,25 @@ fn rejects_symlink_chain_after_stripping() {
     );
 }
 
+/// The walk continues past real directories: a link deeper in the parent
+/// chain (`d/l`, under a real `d/`) is still caught, not just the first
+/// component.
+#[test]
+fn rejects_symlink_deeper_in_the_parent_chain() {
+    assert_chain_rejected(
+        &[
+            Entry::Dir("d/", 0o755),
+            Entry::Link("d/l", ".", EntryType::Symlink),
+            Entry::File("d/l/x", b"pwned"),
+        ],
+        "d/l/x",
+        "d/l",
+    );
+}
+
 /// An existing *file* as an ancestor is not a link, so the walk lets it
-/// through — and the write still fails (a file cannot hold children),
-/// leaving the prefix untouched and nothing outside staging.
+/// through — and `create_dir_all` then fails on that file (a file cannot
+/// hold children), leaving the prefix untouched and nothing outside staging.
 #[test]
 fn file_as_ancestor_is_still_refused_without_touching_the_prefix() {
     let raw = tar_of(&[Entry::File("a", b"file"), Entry::File("a/b", b"child")]);
@@ -563,8 +579,8 @@ fn file_as_ancestor_is_still_refused_without_touching_the_prefix() {
 
     let err = f.run_plain(0).unwrap_err();
     assert!(
-        !matches!(err, LuggageError::UnsafeArchiveEntry { .. }),
-        "a file ancestor is not a symlink and must not be reported as one: {err:?}"
+        matches!(err, LuggageError::Io { ref path, .. } if path.ends_with("a")),
+        "the parent dir create must fail on the file `a`, got {err:?}"
     );
     assert_prefix_empty(&f);
     assert_nothing_escaped(&f);
