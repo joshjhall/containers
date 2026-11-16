@@ -81,15 +81,21 @@ fn resolve_falls_back_to_pkg_version() {
     let nested = dir.path().join("no").join("version").join("here");
     fs::create_dir_all(&nested).unwrap();
 
+    // Precondition: the walk-up must find no VERSION anywhere above the temp
+    // subtree. Asserted (not `if`-guarded) so an environment with a stray
+    // ancestor VERSION — e.g. a TMPDIR inside a repo checkout — fails loudly
+    // instead of silently skipping the fallback assertions below (#749).
+    assert!(
+        find_version_file(&nested).is_none(),
+        "precondition: no ancestor VERSION file above {} (is TMPDIR inside a checkout?)",
+        nested.display()
+    );
+
     let mut rerun_called = false;
     let version = resolve_version_from(nested.to_str().unwrap(), "7.7.7-crate", &mut |_p| {
         rerun_called = true;
     });
 
-    // Only valid when the temp subtree has no ancestor VERSION (see note above);
-    // when true, the fallback must be the crate version.
-    if find_version_file(&nested).is_none() {
-        assert_eq!(version, "7.7.7-crate", "falls back to CARGO_PKG_VERSION");
-        assert!(!rerun_called, "no rerun hook when falling back");
-    }
+    assert_eq!(version, "7.7.7-crate", "falls back to CARGO_PKG_VERSION");
+    assert!(!rerun_called, "no rerun hook when falling back");
 }

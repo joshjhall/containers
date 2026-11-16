@@ -104,6 +104,57 @@ test_size_gate_trips_one_byte_over() {
 }
 
 # ---------------------------------------------------------------------------
+# Input guards (#749): missing TARGET, missing built binary
+# ---------------------------------------------------------------------------
+
+# assert_dir_empty <dir> <message>: nothing was packaged into <dir>.
+assert_dir_empty() {
+    local listing
+    listing="$(command ls -A "$1")"
+    assert_equals "" "$listing" "$2"
+}
+
+test_missing_target_fails() {
+    local dist outdir out ec=0
+    dist="$(make_dist 1024)"
+    outdir="$(mktemp -d "$TEST_TEMP_DIR/out-XXXXXX")"
+    out="$(run_pkg TARGET= VERSION=1.0.0 DIST_DIR="$dist" OUT_DIR="$outdir")" || ec=$?
+    assert_exit_code 1 "$ec" "an empty TARGET makes packaging fail"
+    assert_contains "$out" "::error::TARGET (Rust target triple) is required" \
+        "the failure names the missing TARGET input"
+    assert_dir_empty "$outdir" "nothing is packaged when TARGET is missing"
+}
+
+test_missing_binary_fails() {
+    local dist outdir out ec=0
+    dist="$(mktemp -d "$TEST_TEMP_DIR/dist-empty-XXXXXX")"
+    outdir="$(mktemp -d "$TEST_TEMP_DIR/out-XXXXXX")"
+    out="$(run_pkg TARGET=x86_64-unknown-linux-musl VERSION=1.0.0 \
+        DIST_DIR="$dist" OUT_DIR="$outdir")" || ec=$?
+    assert_exit_code 1 "$ec" "a missing built binary makes packaging fail"
+    assert_contains "$out" "::error::built binary not found: $dist/stibbons" \
+        "the failure names the missing binary path"
+    assert_dir_empty "$outdir" "no archive is produced when the binary is missing"
+}
+
+test_windows_missing_binary_fails() {
+    # 7z IS present (stub), so this proves the binary guard fires on the
+    # Windows path after the 7z check — not that 7z masked it.
+    local dist outdir stubdir out ec=0
+    dist="$(mktemp -d "$TEST_TEMP_DIR/dist-empty-XXXXXX")"
+    outdir="$(mktemp -d "$TEST_TEMP_DIR/out-XXXXXX")"
+    stubdir="$(mktemp -d "$TEST_TEMP_DIR/7zstub-XXXXXX")"
+    printf '#!/usr/bin/env bash\nprintf stub-zip >"$2"\n' >"$stubdir/7z"
+    command chmod +x "$stubdir/7z"
+    out="$(run_pkg RUNNER_OS=Windows TARGET=x86_64-pc-windows-msvc VERSION=1.0.0 \
+        DIST_DIR="$dist" OUT_DIR="$outdir" SEVENZIP="$stubdir/7z")" || ec=$?
+    assert_exit_code 1 "$ec" "a missing stibbons.exe makes Windows packaging fail"
+    assert_contains "$out" "::error::built binary not found: $dist/stibbons.exe" \
+        "the failure names the missing .exe path"
+    assert_dir_empty "$outdir" "no .zip is produced when the binary is missing"
+}
+
+# ---------------------------------------------------------------------------
 # AC5: Windows 7z presence guard
 # ---------------------------------------------------------------------------
 
@@ -149,6 +200,9 @@ run_test test_checksum_verifies "generated checksum verifies"
 run_test test_version_defaults_to_version_file "VERSION defaults to VERSION file"
 run_test test_size_gate_passes_at_limit "size gate passes at the limit"
 run_test test_size_gate_trips_one_byte_over "size gate trips one byte over"
+run_test test_missing_target_fails "missing TARGET fails before packaging"
+run_test test_missing_binary_fails "missing binary fails (unix)"
+run_test test_windows_missing_binary_fails "missing binary fails (Windows, 7z present)"
 run_test test_windows_missing_7z_fails_fast "Windows: missing 7z fails fast"
 run_test test_windows_present_7z_packages "Windows: present 7z packages"
 
