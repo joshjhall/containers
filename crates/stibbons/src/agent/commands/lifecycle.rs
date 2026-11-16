@@ -1,31 +1,24 @@
-//! The seven `stibbons agent` subcommands.
-//!
-//! Each `run_*` function ports the matching Go `runAgent*` from
-//! `cmd/igor/internal/cmd/agent_*.go`. They take an already-resolved
-//! [`AgentContext`], an injected `&dyn DockerRunner`, and a `&mut dyn Write`
-//! sink so tests can drive them with a `MockDocker` and a captured buffer — no
-//! real Docker or stdout needed.
+//! `stibbons agent start` / `stop` / `restart`, and the embedded agent scripts
+//! `start` mounts into the container.
 
-use std::io::{IsTerminal, Write};
-use std::time::{Duration, Instant};
+use std::io::Write;
 
-use super::context::{
+use super::super::context::{
     AgentContext, AgentError, agent_suffix, container_exists, container_name, ensure_network,
     image_exists, is_container_running, validate_agent_num,
 };
-use super::db::{per_agent_db_url, provision_per_agent_dbs};
-use super::docker::DockerRunner;
-use super::scripts_dir;
-
-/// Boxed error alias matching the stibbons CLI convention (`main.rs`).
-type CmdResult = Result<(), Box<dyn std::error::Error>>;
+use super::super::db::{per_agent_db_url, provision_per_agent_dbs};
+use super::super::docker::DockerRunner;
+use super::super::scripts_dir;
+use super::build::run_build;
+use super::{CmdResult, to_refs};
 
 /// Embedded agent scripts, written by [`scripts_dir::prepare_scripts_dir`] to a
 /// user-private host directory and mounted read-only into the container at
 /// `/opt/agent-scripts`.
-const AGENT_ENTRYPOINT_SH: &str = include_str!("scripts/agent-entrypoint.sh");
-const AGENT_INIT_SH: &str = include_str!("scripts/agent-init.sh");
-const AGENT_START_SH: &str = include_str!("scripts/agent-start.sh");
+const AGENT_ENTRYPOINT_SH: &str = include_str!("../scripts/agent-entrypoint.sh");
+const AGENT_INIT_SH: &str = include_str!("../scripts/agent-init.sh");
+const AGENT_START_SH: &str = include_str!("../scripts/agent-start.sh");
 
 /// The scripts as `prepare_scripts_dir` wants them: `(file name, contents)`.
 /// `agent-entrypoint.sh` is the container's command; it runs the other two.
@@ -34,69 +27,6 @@ const AGENT_SCRIPTS: [(&str, &str); 3] = [
     ("agent-init.sh", AGENT_INIT_SH),
     ("agent-start.sh", AGENT_START_SH),
 ];
-
-/// `stibbons agent build` — build the agent image from feature/version args.
-///
-/// # Errors
-///
-/// Propagates Docker failures (volume/image creation). `--dry-run` prints the
-/// command and makes zero Docker calls.
-pub fn run_build(
-    ctx: &AgentContext,
-    docker: &dyn DockerRunner,
-    out: &mut dyn Write,
-    dry_run: bool,
-) -> CmdResult {
-    // Ensure shared cache volumes exist (skipped entirely under --dry-run).
-    if !dry_run {
-        for vol in &ctx.shared_volumes {
-            let vol_name = vol.split(':').next().unwrap_or(vol);
-            if docker.run(&["volume", "inspect", vol_name]).is_err() {
-                docker.run(&["volume", "create", vol_name])?;
-                writeln!(out, "Created volume {vol_name}")?;
-            }
-        }
-    }
-
-    let image_ref = format!("{}:{}", ctx.image_name, ctx.image_tag);
-    let dockerfile = format!("{}/Dockerfile", ctx.containers_dir.display());
-    let project_arg = format!("PROJECT_NAME={}", ctx.project);
-    let username_arg = format!("USERNAME={}", ctx.username);
-    let containers_dir = ctx.containers_dir.display().to_string();
-
-    let mut args: Vec<String> = vec![
-        "build".into(),
-        "-t".into(),
-        image_ref,
-        "-f".into(),
-        dockerfile,
-        "--build-arg".into(),
-        "PROJECT_PATH=.".into(),
-        "--build-arg".into(),
-        project_arg,
-        "--build-arg".into(),
-        username_arg,
-    ];
-
-    for f in &ctx.features {
-        args.push("--build-arg".into());
-        args.push(format!("{}=true", f.build_arg));
-    }
-    for (arg_name, version) in &ctx.cfg.versions {
-        args.push("--build-arg".into());
-        args.push(format!("{arg_name}={version}"));
-    }
-    args.push(containers_dir);
-
-    if dry_run {
-        writeln!(out, "docker {}", args.join(" "))?;
-        return Ok(());
-    }
-
-    writeln!(out, "Building {}:{} ...", ctx.image_name, ctx.image_tag)?;
-    docker.passthrough(&to_refs(&args))?;
-    Ok(())
-}
 
 /// Best-effort probe that agent `suffix`'s first worktree exists on the host.
 ///
@@ -314,285 +244,15 @@ pub fn run_restart(
     run_start(ctx, docker, out, n_arg, StartOptions { rebuild: false })
 }
 
-/// `stibbons agent status` — tabular image/network + per-agent status.
-///
-/// # Errors
-///
-/// Propagates write failures on the output sink.
-pub fn run_status(ctx: &AgentContext, docker: &dyn DockerRunner, out: &mut dyn Write) -> CmdResult {
-    let image_status =
-        if image_exists(docker, &ctx.image_name, &ctx.image_tag) { "built" } else { "not built" };
-    writeln!(out, "Image: {}:{} ({image_status})", ctx.image_name, ctx.image_tag)?;
-    writeln!(out, "Network: {}\n", ctx.network)?;
-
-    // Collect rows first so the columns can be width-aligned by hand (no table
-    // crate in the workspace; mirrors the render-plan printer in main.rs).
-    let mut rows: Vec<[String; 4]> =
-        vec![["AGENT".into(), "CONTAINER".into(), "STATUS".into(), "WORKTREES".into()]];
-    for i in 1..=ctx.max_agents {
-        let name = container_name(&ctx.project, i);
-        let suffix = agent_suffix(i);
-
-        let status = if is_container_running(docker, &name) {
-            "running"
-        } else if container_exists(docker, &name) {
-            "stopped"
-        } else {
-            "not created"
-        };
-
-        let exist_count = ctx
-            .repos
-            .iter()
-            .filter(|repo| ctx.base_dir.join(format!("{repo}-{suffix}")).exists())
-            .count();
-        let worktrees = if exist_count == ctx.repos.len() {
-            "ready".to_string()
-        } else if exist_count > 0 {
-            format!("{exist_count}/{}", ctx.repos.len())
-        } else {
-            "none".to_string()
-        };
-
-        rows.push([i.to_string(), name, status.to_string(), worktrees]);
-    }
-
-    let widths = column_widths(&rows);
-    for row in &rows {
-        writeln!(
-            out,
-            "{:<w0$}  {:<w1$}  {:<w2$}  {}",
-            row[0],
-            row[1],
-            row[2],
-            row[3],
-            w0 = widths[0],
-            w1 = widths[1],
-            w2 = widths[2],
-        )?;
-    }
-    Ok(())
-}
-
-/// Options for [`run_logs`].
-#[derive(Debug, Clone, Copy)]
-pub struct LogsOptions {
-    /// Follow log output (`docker logs -f`).
-    pub follow: bool,
-}
-
-/// `stibbons agent logs <N>` — forward to `docker logs`.
-///
-/// # Errors
-///
-/// [`AgentError::ContainerMissing`] if the container doesn't exist, or a Docker
-/// error from the passthrough.
-pub fn run_logs(
-    ctx: &AgentContext,
-    docker: &dyn DockerRunner,
-    _out: &mut dyn Write,
-    n_arg: &str,
-    opts: LogsOptions,
-) -> CmdResult {
-    let n = validate_agent_num(n_arg, ctx.max_agents)?;
-    let name = container_name(&ctx.project, n);
-
-    if !container_exists(docker, &name) {
-        return Err(AgentError::ContainerMissing(name).into());
-    }
-
-    let mut args: Vec<&str> = vec!["logs"];
-    if opts.follow {
-        args.push("-f");
-    }
-    args.push(&name);
-    docker.passthrough(&args)?;
-    Ok(())
-}
-
-/// Options for [`run_connect`].
-#[derive(Debug, Clone, Copy)]
-pub struct ConnectOptions {
-    /// Readiness timeout in seconds.
-    pub timeout: u64,
-}
-
-/// `stibbons agent connect <N>` — wait for readiness, then exec an interactive
-/// shell.
-///
-/// # Errors
-///
-/// [`AgentError::ConnectTimeout`] if the container never starts within the
-/// timeout, or a Docker error from the interactive `exec`.
-pub fn run_connect(
-    ctx: &AgentContext,
-    docker: &dyn DockerRunner,
-    out: &mut dyn Write,
-    n_arg: &str,
-    opts: ConnectOptions,
-) -> CmdResult {
-    let n = validate_agent_num(n_arg, ctx.max_agents)?;
-    let name = container_name(&ctx.project, n);
-    let suffix = agent_suffix(n);
-    let workdir = ctx.base_dir.join(format!("{}-{}", ctx.repos[0], suffix)).display().to_string();
-    let ready_file = format!("/home/{}/.local/state/{}/agent-ready", ctx.username, ctx.project);
-
-    let use_tty = std::io::stdout().is_terminal();
-    let deadline = Instant::now() + Duration::from_secs(opts.timeout);
-
-    // Stage 1: container must be running (hard timeout).
-    if !is_container_running(docker, &name)
-        && wait_with_spinner(out, use_tty, deadline, "Waiting for container to start", || {
-            is_container_running(docker, &name)
-        })
-        .is_err()
-    {
-        return Err(AgentError::ConnectTimeout { name, secs: opts.timeout }.into());
-    }
-
-    // Stage 2: readiness marker (warn-only on timeout, connect anyway).
-    if wait_with_spinner(out, use_tty, deadline, "Waiting for agent initialization", || {
-        docker.run(&["exec", &name, "test", "-f", &ready_file]).is_ok()
-    })
-    .is_err()
-    {
-        writeln!(out, "Warning: readiness marker not found, connecting anyway")?;
-    }
-
-    writeln!(out, "Connecting to agent {n} ...")?;
-    docker.passthrough(&[
-        "exec",
-        "-it",
-        "-u",
-        &ctx.username,
-        "-w",
-        &workdir,
-        &name,
-        "bash",
-        "-l",
-    ])?;
-    Ok(())
-}
-
-// --- helpers ---
-
-/// Borrows a `Vec<String>` as `Vec<&str>` for the [`DockerRunner`] argv API.
-fn to_refs(args: &[String]) -> Vec<&str> {
-    args.iter().map(String::as_str).collect()
-}
-
-/// Per-column max width across all rows, for hand-aligned tables.
-fn column_widths(rows: &[[String; 4]]) -> [usize; 4] {
-    let mut widths = [0usize; 4];
-    for row in rows {
-        for (i, cell) in row.iter().enumerate() {
-            widths[i] = widths[i].max(cell.len());
-        }
-    }
-    widths
-}
-
-/// Polls `check` until it returns true or `deadline` passes, with a braille
-/// spinner on a TTY and a single plain line otherwise. Ports Go's
-/// `waitWithSpinner`: checks immediately and then once per second (~10 ticks).
-fn wait_with_spinner(
-    out: &mut dyn Write,
-    use_tty: bool,
-    deadline: Instant,
-    message: &str,
-    mut check: impl FnMut() -> bool,
-) -> Result<(), ()> {
-    const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-    let start = Instant::now();
-    let mut ticks: usize = 0;
-    loop {
-        let elapsed = start.elapsed().as_secs();
-        if Instant::now() >= deadline {
-            if use_tty {
-                let _ = write!(out, "\r\x1b[K");
-                let _ = out.flush();
-            }
-            return Err(());
-        }
-        if ticks.is_multiple_of(10) && check() {
-            if use_tty {
-                let _ = write!(out, "\r\x1b[K");
-                let _ = out.flush();
-            }
-            return Ok(());
-        }
-        if use_tty {
-            let _ = write!(out, "\r  {} {message}... ({elapsed}s)", SPINNER[ticks % SPINNER.len()]);
-            let _ = out.flush();
-        } else if ticks == 0 {
-            let _ = writeln!(out, "{message}...");
-        }
-        std::thread::sleep(Duration::from_millis(100));
-        ticks += 1;
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use containers_common::config::IgorConfig;
-    use containers_common::config::{AgentConfig, ProjectConfig};
+    use containers_common::config::AgentConfig;
 
-    use super::super::docker::{MockDocker, MockResult};
-    use super::super::test_support::load_ctx;
+    use super::super::super::docker::{MockDocker, MockResult};
+    use super::super::super::test_support::load_ctx;
+
+    use super::super::test_helpers::{capture, cfg};
     use super::*;
-
-    /// A base config for a `myproject` with the given features.
-    fn cfg(features: &[&str]) -> IgorConfig {
-        IgorConfig {
-            schema_version: 1,
-            containers_dir: "containers".into(),
-            project: ProjectConfig { name: "myproject".into(), ..ProjectConfig::default() },
-            features: features.iter().map(ToString::to_string).collect(),
-            ..IgorConfig::default()
-        }
-    }
-
-    /// Runs a closure with the captured output decoded as UTF-8.
-    fn capture(f: impl FnOnce(&mut Vec<u8>) -> CmdResult) -> (String, CmdResult) {
-        let mut buf = Vec::new();
-        let res = f(&mut buf);
-        (String::from_utf8(buf).unwrap(), res)
-    }
-
-    // --- build ---
-
-    #[test]
-    fn build_dry_run_prints_and_makes_no_calls() {
-        let mut c = cfg(&["python", "node"]);
-        c.versions.insert("PYTHON_VERSION".into(), "3.12.0".into());
-        let (ctx, _tmp) = load_ctx(c);
-        let docker = MockDocker::new();
-
-        let (out, res) = capture(|o| run_build(&ctx, &docker, o, true));
-        res.unwrap();
-
-        assert!(out.contains("docker build"));
-        assert!(out.contains("INCLUDE_PYTHON=true"));
-        assert!(out.contains("INCLUDE_NODE=true"));
-        assert!(out.contains("PYTHON_VERSION=3.12.0"));
-        assert!(out.contains("PROJECT_NAME=myproject"));
-        // Default username is used even though no username was configured.
-        assert!(out.contains("USERNAME=agent"));
-        assert_eq!(docker.call_count(), 0, "dry-run must not call docker");
-    }
-
-    #[test]
-    fn build_dry_run_emits_dev_and_docker_args() {
-        let (ctx, _tmp) = load_ctx(cfg(&["python", "python_dev", "docker"]));
-        let docker = MockDocker::new();
-
-        let (out, res) = capture(|o| run_build(&ctx, &docker, o, true));
-        res.unwrap();
-
-        assert!(out.contains("INCLUDE_PYTHON=true"));
-        assert!(out.contains("INCLUDE_PYTHON_DEV=true"));
-        assert!(out.contains("INCLUDE_DOCKER=true"));
-    }
 
     // --- start ---
 
@@ -887,99 +547,6 @@ mod tests {
         assert!(docker.has_call("stop myproject-agent-1"));
         assert!(docker.has_call("rm myproject-agent-1"));
         assert!(docker.has_call("run -d"));
-    }
-
-    // --- status ---
-
-    #[test]
-    fn status_table() {
-        let mut c = cfg(&[]);
-        c.agents = AgentConfig { max: 3, ..AgentConfig::default() };
-        let (ctx, _tmp) = load_ctx(c);
-        let docker = MockDocker::new();
-        docker.on("image inspect", MockResult::ok("ok"));
-        docker.on("inspect -f", MockResult::err());
-
-        let (out, res) = capture(|o| run_status(&ctx, &docker, o));
-        res.unwrap();
-
-        assert!(out.contains("Image: myproject-agent:latest (built)"));
-        assert!(out.contains("myproject-network"));
-        assert!(out.contains("AGENT"));
-        for i in 1..=3 {
-            assert!(out.contains(&container_name("myproject", i)));
-        }
-        assert!(out.contains("not created"));
-    }
-
-    // --- logs ---
-
-    #[test]
-    fn logs_basic() {
-        let (ctx, _tmp) = load_ctx(cfg(&[]));
-        let docker = MockDocker::new();
-        docker.on("inspect -f", MockResult::ok("exited"));
-
-        let (_out, res) =
-            capture(|o| run_logs(&ctx, &docker, o, "1", LogsOptions { follow: false }));
-        res.unwrap();
-        assert!(docker.has_call("logs myproject-agent-1"));
-    }
-
-    #[test]
-    fn logs_follow() {
-        let (ctx, _tmp) = load_ctx(cfg(&[]));
-        let docker = MockDocker::new();
-        docker.on("inspect -f", MockResult::ok("exited"));
-
-        let (_out, res) =
-            capture(|o| run_logs(&ctx, &docker, o, "1", LogsOptions { follow: true }));
-        res.unwrap();
-        assert!(docker.has_call("logs -f myproject-agent-1"));
-    }
-
-    #[test]
-    fn logs_missing_container_errors() {
-        let (ctx, _tmp) = load_ctx(cfg(&[]));
-        let docker = MockDocker::new();
-        docker.on("inspect -f", MockResult::err());
-
-        let (_out, res) =
-            capture(|o| run_logs(&ctx, &docker, o, "1", LogsOptions { follow: false }));
-        let err = res.unwrap_err().to_string();
-        assert!(err.contains("does not exist"), "{err:?}");
-    }
-
-    // --- connect ---
-
-    #[test]
-    fn connect_already_ready() {
-        let (ctx, _tmp) = load_ctx(cfg(&[]));
-        let docker = MockDocker::new();
-        docker.set_run_fn(|args| {
-            let joined = args.join(" ");
-            if joined.contains("inspect") && joined.contains("Running") {
-                return MockResult::ok("true");
-            }
-            MockResult::ok("") // test -f marker present (exit 0)
-        });
-
-        let (_out, res) =
-            capture(|o| run_connect(&ctx, &docker, o, "1", ConnectOptions { timeout: 2 }));
-        res.unwrap();
-        assert!(docker.has_call("test -f"), "expected readiness marker check");
-    }
-
-    #[test]
-    fn connect_timeout() {
-        let (ctx, _tmp) = load_ctx(cfg(&[]));
-        let docker = MockDocker::new();
-        docker.on("inspect -f", MockResult::err());
-
-        let (_out, res) =
-            capture(|o| run_connect(&ctx, &docker, o, "1", ConnectOptions { timeout: 1 }));
-        let err = res.unwrap_err().to_string();
-        assert!(err.contains("timeout"), "{err:?}");
     }
 
     // --- embedded scripts ---
