@@ -705,6 +705,123 @@ impl Drop for KillOnDrop {
     }
 }
 
+/// Re-polls `path` for up to `timeout` for a pid written late, and arms a
+/// [`KillOnDrop`] on it. Returns the guard (if any) and a note naming the
+/// outcome, for the caller's panic message.
+///
+/// The capture-fds test calls this only while failing: a perl slow enough
+/// to outlast the shim's wait has already left the probe's group, so
+/// nothing else will kill it. Arming the guard before panicking lets the
+/// unwind kill it, before or after its exec into `sleep 30` (#1501). A perl
+/// later than `timeout` still leaks; the shell's `$!` is no safer to kill,
+/// as it may already name a dead, reused pid. Split out so the arming is
+/// exercised in-tree rather than only on a failing run (#1509).
+#[cfg(unix)]
+fn arm_late_pid(path: &Path, timeout: Duration) -> (Option<KillOnDrop>, String) {
+    let deadline = Instant::now() + timeout;
+    let raw = loop {
+        if let Ok(raw) = fs::read_to_string(path) {
+            break Some(raw);
+        }
+        if Instant::now() >= deadline {
+            break None;
+        }
+        thread::sleep(Duration::from_millis(20));
+    };
+    let late = raw
+        .as_deref()
+        .and_then(|raw| raw.trim().parse().ok())
+        .and_then(rustix::process::Pid::from_raw);
+    let note = match (late, &raw) {
+        (Some(pid), _) => format!("killed late pid {}", pid.as_raw_nonzero()),
+        (None, Some(raw)) => format!("late pid file held no usable pid: {raw:?}"),
+        (None, None) => format!("no late pid appeared within {timeout:?}"),
+    };
+    (late.map(KillOnDrop), note)
+}
+
+/// Kills and reaps the wrapped child on drop, so a failed assertion in the
+/// `arm_late_pid` tests cannot leak its `sleep 30`.
+#[cfg(unix)]
+struct ReapOnDrop(std::process::Child);
+
+#[cfg(unix)]
+impl Drop for ReapOnDrop {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// A pid that appears only after the first poll is found, and dropping the
+/// returned guard SIGKILLs it (#1509). Without the arming the child outlives
+/// the drop and the signal check fails — no multi-second delay needed.
+#[cfg(unix)]
+#[test]
+#[serial_test::serial]
+fn arm_late_pid_kills_a_pid_written_after_the_first_poll() {
+    use std::os::unix::process::ExitStatusExt as _;
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("late.pid");
+    let mut child = ReapOnDrop(Command::new("sleep").arg("30").spawn().unwrap());
+    let pid = child.0.id();
+
+    let writer = {
+        let path = path.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(100));
+            let tmp = path.with_extension("tmp");
+            fs::write(&tmp, format!("{pid}\n")).unwrap();
+            fs::rename(&tmp, &path).unwrap();
+        })
+    };
+    assert!(!path.exists(), "the pid must be late: absent at the first poll");
+    let (guard, note) = arm_late_pid(&path, Duration::from_secs(2));
+    writer.join().unwrap();
+    assert_eq!(note, format!("killed late pid {pid}"));
+    assert!(guard.is_some());
+
+    drop(guard);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let status = loop {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "dropping the guard must kill pid {pid}");
+        thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(status.signal(), Some(9), "pid {pid} must die by SIGKILL: {status:?}");
+}
+
+/// A pid file that appears but holds no usable pid arms nothing and says so.
+#[cfg(unix)]
+#[test]
+fn arm_late_pid_reports_an_unparsable_pid_file() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("late.pid");
+    fs::write(&path, "garbage\n").unwrap();
+
+    let (guard, note) = arm_late_pid(&path, Duration::from_secs(2));
+    assert!(guard.is_none());
+    assert_eq!(note, "late pid file held no usable pid: \"garbage\\n\"");
+}
+
+/// A pid file that never appears arms nothing, after waiting the full timeout.
+#[cfg(unix)]
+#[test]
+fn arm_late_pid_gives_up_after_the_timeout() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("never.pid");
+    let timeout = Duration::from_millis(100);
+
+    let start = Instant::now();
+    let (guard, note) = arm_late_pid(&path, timeout);
+    assert!(guard.is_none());
+    assert!(start.elapsed() >= timeout, "must poll for the whole timeout ({:?})", start.elapsed());
+    assert_eq!(note, "no late pid appeared within 100ms");
+}
+
 /// A probe that exits while a backgrounded grandchild still holds the
 /// inherited stdout/stderr returns promptly (#1359). With piped stdio and
 /// read-to-EOF the read would block until the grandchild's `sleep 30`
@@ -752,32 +869,8 @@ exit 0
     // perl's `die` text lands in the probe's captured stderr, so show it.
     let gpid_file = dir.path().join("tool.gpid");
     let gpid = fs::read_to_string(&gpid_file).unwrap_or_else(|e| {
-        // A perl slow enough to outlast the shim's wait has already left the
-        // probe's group, so nothing else will kill it. Wait briefly for its
-        // late pid and arm the guard before panicking: the unwind then kills
-        // it, before or after its exec into `sleep 30` (#1501). A perl later
-        // than that still leaks; the shell's `$!` is no safer to kill here, as
-        // it may already name a dead, reused pid.
-        let deadline = Instant::now() + Duration::from_secs(2);
-        let raw = loop {
-            if let Ok(raw) = fs::read_to_string(&gpid_file) {
-                break Some(raw);
-            }
-            if Instant::now() >= deadline {
-                break None;
-            }
-            thread::sleep(Duration::from_millis(20));
-        };
-        let late = raw
-            .as_deref()
-            .and_then(|raw| raw.trim().parse().ok())
-            .and_then(rustix::process::Pid::from_raw);
-        let late_note = match (late, &raw) {
-            (Some(pid), _) => format!("killed late pid {}", pid.as_raw_nonzero()),
-            (None, Some(raw)) => format!("late pid file held no usable pid: {raw:?}"),
-            (None, None) => "no late pid appeared within 2s".to_owned(),
-        };
-        let _late = late.map(KillOnDrop);
+        // Armed before panicking, so the unwind kills a slow perl (#1501).
+        let (_late, late_note) = arm_late_pid(&gpid_file, Duration::from_secs(2));
         let stderr = result.as_ref().map(|out| String::from_utf8_lossy(&out.stderr).into_owned());
         panic!(
             "the shim must record its background pid before exiting ({e}); {late_note}; \
