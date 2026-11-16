@@ -111,7 +111,13 @@ fn the_check_catches_a_reintroduced_build_purpose() {
     std::fs::write(&file, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
 
     let (_, _, failures) = check_util_linux(scratch.path());
-    assert!(!failures.is_empty(), "a build-only util-linux went undetected");
+    // One failure per rhel row: every row was judged, not merely resolved.
+    assert_eq!(
+        failures.len(),
+        RHEL_ROWS.len(),
+        "a build-only util-linux must fail on every rhel row:\n{}",
+        failures.join("\n")
+    );
     assert!(
         failures.iter().all(|f| f.starts_with("1.100.0 ") && f.contains("build-only")),
         "only the patched version should fail, as build-only:\n{}",
