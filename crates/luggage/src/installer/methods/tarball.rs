@@ -41,9 +41,13 @@
 //! not assumed).
 //!
 //! That includes entry *types* and permission bits (issue #862). Only
-//! regular files, directories, symlinks and hard links are written; any
-//! other type — device nodes, fifos, sparse or contiguous files, unknown
-//! typeflags — rejects the whole archive. tar-rs would today write such an
+//! regular files, directories and symlinks are written; any other type —
+//! hard links, device nodes, fifos, sparse or contiguous files, unknown
+//! typeflags — rejects the whole archive. Hard links are refused rather
+//! than validated because tar-rs resolves a hard link's source against the
+//! *process* working directory when unpacking an entry on its own, so a
+//! target that looks prefix-relative to [`validate_link_target`] could
+//! link a file from outside the prefix. tar-rs would today write such an
 //! entry as a plain file and strip setuid/setgid unless
 //! `preserve_permissions` is set, but both are its defaults, not ours: the
 //! allowlist and an explicit special-bit mask make the guarantee hold
@@ -101,7 +105,7 @@ const DEFAULT_PREFIX: &str = "/usr/local";
 ///   carries no compression this build recognises.
 /// - [`LuggageError::UnsafeArchiveEntry`] when any entry path or link target
 ///   would escape the extraction prefix, or an entry's type is not a regular
-///   file, directory, or link.
+///   file, directory, or symlink.
 /// - [`LuggageError::ArchiveExtractionFailed`] when the archive is corrupt or
 ///   truncated, or an entry cannot be written.
 /// - [`LuggageError::Io`] when the staging area, prefix, or bin directories
@@ -357,8 +361,9 @@ fn unpack_entries<R: std::io::Read>(
 
         // A link's *target* escaping the prefix is the subtler half of the
         // traversal problem: the link itself sits safely inside, but a later
-        // entry written through it lands outside. Reject both link kinds.
-        if matches!(entry.header().entry_type(), EntryType::Symlink | EntryType::Link) {
+        // entry written through it lands outside. Hard links never get here —
+        // `allowed_entry_type` refuses them.
+        if entry.header().entry_type() == EntryType::Symlink {
             let link = entry
                 .link_name()
                 .map_err(|e| LuggageError::ArchiveExtractionFailed {
@@ -380,13 +385,7 @@ fn unpack_entries<R: std::io::Read>(
                 .map_err(|e| LuggageError::Io { path: parent.to_owned(), source: e })?;
         }
 
-        // Strip setuid/setgid/sticky ourselves rather than relying on
-        // tar-rs's `preserve_permissions: false` default to do it: the build
-        // runs as root, so a setuid binary landing in the prefix is a
-        // privilege escalation waiting for a caller.
-        entry.set_preserve_permissions(false);
-        entry.set_mask(SPECIAL_MODE_BITS);
-        entry.unpack(&target).map_err(|e| LuggageError::ArchiveExtractionFailed {
+        write_entry(&mut entry, &target).map_err(|e| LuggageError::ArchiveExtractionFailed {
             artifact: artifact_name.to_owned(),
             message: format!("could not write entry `{}`: {e}", raw.display()),
         })?;
@@ -398,27 +397,46 @@ fn unpack_entries<R: std::io::Read>(
 /// setuid, setgid and sticky — cleared from every extracted entry's mode.
 const SPECIAL_MODE_BITS: u32 = 0o7000;
 
+/// Write one validated entry to `target` with setuid/setgid/sticky masked.
+///
+/// This is the only place an entry is written, so the mask cannot be
+/// skipped by a code path that forgets it. tar-rs already drops these bits
+/// while `preserve_permissions` is false, its default — but that is its
+/// default, not ours, and the build runs as root, so a setuid binary
+/// landing in the prefix is a privilege escalation waiting for a caller.
+/// The mask does not depend on the preserve flag, so it holds even if a
+/// later change turns preservation on: the test
+/// `write_entry_masks_special_bits_even_with_preserve_permissions` drives
+/// this function with preservation forced on to pin exactly that.
+fn write_entry<R: std::io::Read>(
+    entry: &mut tar::Entry<'_, R>,
+    target: &Path,
+) -> std::io::Result<()> {
+    entry.set_mask(SPECIAL_MODE_BITS);
+    entry.unpack(target).map(|_| ())
+}
+
 /// Decide what to do with an entry of type `kind`: `Ok(true)` to write it,
 /// `Ok(false)` to skip it, or an [`LuggageError::UnsafeArchiveEntry`] when
 /// the type is outside the allowlist.
 ///
-/// The allowlist is regular files, directories, and both link kinds (whose
-/// targets are validated separately). A pax *global* header (`g`, emitted
-/// by `git archive`) carries only metadata and writes nothing, so it is
-/// skipped rather than rejected. Everything else — `Char`, `Block`, `Fifo`,
-/// `Continuous`, `GNUSparse`, an extension header tar-rs did not consume,
-/// or an unknown typeflag — is refused.
+/// The allowlist is regular files, directories, and symlinks (whose targets
+/// are validated separately). Hard links are refused: see the module doc for
+/// why their source cannot be validated against what tar-rs then opens. A
+/// pax *global* header (`g`, emitted by `git archive`) carries only metadata
+/// and writes nothing, so it is skipped rather than rejected. Everything
+/// else — `Link`, `Char`, `Block`, `Fifo`, `Continuous`, `GNUSparse`, an
+/// extension header tar-rs did not consume, or an unknown typeflag — is
+/// refused.
 fn allowed_entry_type(kind: EntryType, raw: &Path, artifact_name: &str) -> Result<bool> {
     match kind {
-        EntryType::Regular | EntryType::Directory | EntryType::Symlink | EntryType::Link => {
-            Ok(true)
-        }
+        EntryType::Regular | EntryType::Directory | EntryType::Symlink => Ok(true),
         EntryType::XGlobalHeader => Ok(false),
         other => Err(LuggageError::UnsafeArchiveEntry {
             artifact: artifact_name.to_owned(),
             entry: raw.display().to_string(),
             reason: format!(
-                "entry type {other:?} is not allowed (only regular files, directories and links)"
+                "entry type {other:?} is not allowed (only regular files, directories and symlinks)"
             ),
         }),
     }

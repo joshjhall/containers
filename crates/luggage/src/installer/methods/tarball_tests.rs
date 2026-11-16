@@ -43,8 +43,8 @@ enum Entry<'a> {
     Link(&'a str, &'a str, EntryType),
     /// A regular file whose header declares the given mode.
     FileMode(&'a str, &'a [u8], u32),
-    /// A directory entry.
-    Dir(&'a str),
+    /// A directory entry with the given mode.
+    Dir(&'a str, u32),
     /// A header-only entry of an arbitrary type — device nodes, fifos.
     /// `Builder` has no safe API for these, so the typeflag is set directly.
     Special(&'a str, EntryType),
@@ -86,9 +86,9 @@ fn tar_of(entries: &[Entry<'_>]) -> Vec<u8> {
                 header.set_cksum();
                 builder.append(&header, *contents).unwrap();
             }
-            Entry::Dir(path) => {
+            Entry::Dir(path, mode) => {
                 header.set_size(0);
-                header.set_mode(0o755);
+                header.set_mode(*mode);
                 header.set_entry_type(EntryType::Directory);
                 set_raw_name(&mut header, path);
                 header.set_cksum();
@@ -381,10 +381,23 @@ fn rejects_hardlink_escaping_the_prefix() {
     let raw = tar_with_link("pkg/escape", "../../../etc/passwd", EntryType::Link);
     let f = Fixture::new("evil.tar.gz", &gzip(&raw));
 
-    assert!(
-        matches!(f.run_plain(0), Err(LuggageError::UnsafeArchiveEntry { .. })),
-        "an escaping hardlink must be rejected like a symlink"
-    );
+    assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/escape", "Link");
+}
+
+/// Even a hard link whose target *looks* inside the prefix is refused.
+/// tar-rs resolves a lone entry's hard-link source against the process
+/// cwd, not the extraction root, so `Cargo.toml` here would link the
+/// crate's own manifest — a file outside the prefix — into it (issue #862).
+#[test]
+fn rejects_hardlink_even_with_an_in_prefix_looking_target() {
+    let raw = tar_of(&[
+        Entry::File("pkg/real.txt", b"real"),
+        Entry::Link("pkg/stolen", "Cargo.toml", EntryType::Link),
+    ]);
+    let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+    assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/stolen", "Link");
+    assert_prefix_empty(&f);
 }
 
 /// A link that stays inside the prefix is legitimate and must extract —
@@ -447,6 +460,24 @@ fn rejects_char_device_entry() {
     assert_prefix_empty(&f);
 }
 
+/// Contiguous (`7`) entries are refused, as is a typeflag tar-rs does not
+/// recognise. These pin the `other` catch-all arm: a denylist of just the
+/// device and fifo types would let them through. (GNU sparse is not
+/// fixtured: tar-rs parses its extended header before yielding the entry,
+/// so a synthetic one fails in the reader rather than reaching our check.)
+#[test]
+fn rejects_contiguous_and_unknown_entry_types() {
+    for (kind, name) in
+        [(EntryType::Continuous, "Continuous"), (EntryType::new(b'Z'), "__Nonexhaustive(90)")]
+    {
+        let raw = tar_of(&[Entry::Special("pkg/odd", kind)]);
+        let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+        assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/odd", name);
+        assert_prefix_empty(&f);
+    }
+}
+
 /// A block device is refused outright.
 #[test]
 fn rejects_block_device_entry() {
@@ -504,15 +535,60 @@ fn clears_setuid_bit_on_extracted_file() {
     }
 }
 
+/// Special bits on a *directory* entry are cleared too — a sticky or setgid
+/// directory in the prefix would change how later installs behave there.
+#[cfg(unix)]
+#[test]
+fn clears_sticky_and_setgid_bits_on_extracted_directory() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let raw = tar_of(&[Entry::Dir("pkg/tmp/", 0o1777), Entry::Dir("pkg/shared/", 0o2775)]);
+    let f = Fixture::new("ok.tar.gz", &gzip(&raw));
+    f.run_plain(0).unwrap();
+
+    // Only the special bits are asserted: the permission bits a directory
+    // ends up with also depend on the process umask during the merge.
+    for name in ["tmp", "shared"] {
+        let path = f.prefix.path().join("pkg").join(name);
+        assert!(path.is_dir(), "{name} must extract as a directory");
+        let mode = fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o7000, 0, "{name}: special bits must be cleared, got {mode:o}");
+    }
+}
+
+/// The mask is ours, not tar-rs's default: with `preserve_permissions`
+/// forced *on* — the change a future maintainer might make — `write_entry`
+/// still clears setuid, setgid and sticky. Without its mask this test
+/// fails, which the end-to-end setuid test above cannot show (tar-rs's
+/// default strips the bits there either way). `write_entry` is the only
+/// writer in `unpack_entries`, so this covers the production path.
+#[cfg(unix)]
+#[test]
+fn write_entry_masks_special_bits_even_with_preserve_permissions() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let raw = tar_of(&[Entry::FileMode("suid", b"x", 0o7755)]);
+    let dir = tempdir().unwrap();
+    let mut archive = Archive::new(raw.as_slice());
+    let mut entry = archive.entries().unwrap().next().unwrap().unwrap();
+
+    entry.set_preserve_permissions(true);
+    let target = dir.path().join("suid");
+    write_entry(&mut entry, &target).unwrap();
+
+    let mode = fs::metadata(&target).unwrap().permissions().mode();
+    assert_eq!(mode & 0o7777, 0o755, "special bits must be masked, got {mode:o}");
+}
+
 /// go's real shape — explicit directory entries, files and an internal
 /// symlink at strip 0 — still extracts under the allowlist.
 #[test]
 fn extracts_go_shaped_archive_with_dirs_and_symlink() {
     let raw = tar_of(&[
-        Entry::Dir("go/"),
-        Entry::Dir("go/bin/"),
+        Entry::Dir("go/", 0o755),
+        Entry::Dir("go/bin/", 0o755),
         Entry::FileMode("go/bin/go", b"go", 0o755),
-        Entry::Dir("go/pkg/"),
+        Entry::Dir("go/pkg/", 0o755),
         Entry::Link("go/bin/golang", "go", EntryType::Symlink),
     ]);
     let f = Fixture::new("go.tar.gz", &gzip(&raw));
@@ -531,10 +607,10 @@ fn extracts_go_shaped_archive_with_dirs_and_symlink() {
 #[test]
 fn extracts_node_shaped_archive_with_dirs_and_symlink() {
     let raw = tar_of(&[
-        Entry::Dir("node-v22.0.0-linux-x64/"),
-        Entry::Dir("node-v22.0.0-linux-x64/bin/"),
+        Entry::Dir("node-v22.0.0-linux-x64/", 0o755),
+        Entry::Dir("node-v22.0.0-linux-x64/bin/", 0o755),
         Entry::FileMode("node-v22.0.0-linux-x64/bin/node", b"node", 0o755),
-        Entry::Dir("node-v22.0.0-linux-x64/lib/node_modules/npm/bin/"),
+        Entry::Dir("node-v22.0.0-linux-x64/lib/node_modules/npm/bin/", 0o755),
         Entry::FileMode(
             "node-v22.0.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
             b"npm",
