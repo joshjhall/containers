@@ -23,6 +23,7 @@ pub mod post_install;
 pub mod rustup_target;
 mod stages;
 pub mod syspackages;
+pub mod sysremove;
 pub mod template;
 pub mod user;
 pub mod validate;
