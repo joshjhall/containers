@@ -343,13 +343,17 @@ pub enum LuggageError {
         message: String,
     },
 
-    /// An archive entry's path would escape the extraction prefix.
+    /// An archive entry is unsafe to extract: its path or symlink target
+    /// would escape the extraction prefix, or its type is outside the
+    /// regular-file / directory / symlink allowlist.
     ///
     /// Extraction runs as root during the image build, so an entry with a
     /// `..` component, an absolute path, or a link target pointing outside
-    /// the prefix could write anywhere on the filesystem. Such an archive is
-    /// rejected outright — never partially extracted, never skipped
-    /// entry-by-entry.
+    /// the prefix could write anywhere on the filesystem. A device node,
+    /// fifo, or hard link is refused by type even when its path is safe —
+    /// a hard link because its source is resolved outside our control
+    /// (issue #862). Such an archive is rejected outright — never partially
+    /// extracted, never skipped entry-by-entry.
     #[error("unsafe archive entry `{entry}` in `{artifact}`: {reason}")]
     UnsafeArchiveEntry {
         /// Artifact the entry came from.

@@ -374,10 +374,12 @@ fn rejects_absolute_symlink_target() {
     }
 }
 
-/// Hardlinks carry a target just as symlinks do, and are checked the
-/// same way.
+/// A hard link with an escaping target is refused — but by its *type*,
+/// before `validate_link_target` ever runs: every hard link is refused
+/// (issue #862), so this pins the allowlist, not hard-link target
+/// validation. Re-allowing `Link` fails this test whatever the target.
 #[test]
-fn rejects_hardlink_escaping_the_prefix() {
+fn rejects_hardlink_by_type_even_with_an_escaping_target() {
     let raw = tar_with_link("pkg/escape", "../../../etc/passwd", EntryType::Link);
     let f = Fixture::new("evil.tar.gz", &gzip(&raw));
 
