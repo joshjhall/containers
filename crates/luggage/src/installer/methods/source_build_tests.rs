@@ -608,19 +608,6 @@ fn steps_stream_banner_and_output_into_the_feature_log() {
 
 // ---- compiler launcher (#1594) -----------------------------------------
 
-/// What `run()` sets `var` to when the catalog names no compiler: `run()`
-/// reads the real process env and `PATH` (see [`apply_compiler_launcher`]),
-/// so a `CC`/`CXX` exported where the tests run, or a host without `g++`,
-/// must not turn these assertions red. `None` = left unset.
-fn launched(var: &str) -> Option<String> {
-    let probe = if var == "CC" { ["gcc", "cc"] } else { ["g++", "c++"] };
-    let usable = |v: &String| !v.trim().is_empty() && !bare_launcher(v, "ccache");
-    let base = std::env::var(var).ok().filter(usable).or_else(|| {
-        probe.into_iter().find(|p| step_on_path(&BTreeMap::new())(p)).map(str::to_owned)
-    })?;
-    Some(if already_launched(&base, "ccache") { base } else { format!("ccache {base}") })
-}
-
 /// A `PATH` holding exactly `present`, for [`apply_compiler_launcher`].
 fn path_with(present: &'static [&'static str]) -> impl Fn(&str) -> bool {
     move |p: &str| present.contains(&p)
@@ -645,19 +632,23 @@ fn no_launcher_leaves_the_build_env_untouched() {
     }
 }
 
-/// Opted in, every step compiles through the launcher, wrapping the
-/// compiler autoconf would probe when the catalog names none.
+/// Opted in, every step compiles through the launcher. The catalog names
+/// both compilers so the expected values are literals: what `run()` picks
+/// when it names none depends on the host's env and `PATH`, and that
+/// fallback is pinned by the injected `apply_compiler_launcher` tests below.
 #[test]
-fn launcher_wraps_the_default_compilers_for_every_step() {
+fn launcher_wraps_the_compilers_for_every_step() {
     let mut f = Fixture::python();
     f.launcher = Some("ccache");
-    f.run(&python_steps(), 1).unwrap();
+    let env =
+        BTreeMap::from([("CC".to_owned(), "gcc".to_owned()), ("CXX".to_owned(), "g++".to_owned())]);
+    f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
 
     let calls = f.runner.streaming_calls();
     assert_eq!(calls.len(), 3);
     for call in calls {
-        assert_eq!(call.env.get("CC"), launched("CC").as_ref(), "{}", call.program);
-        assert_eq!(call.env.get("CXX"), launched("CXX").as_ref(), "{}", call.program);
+        assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc"), "{}", call.program);
+        assert_eq!(call.env.get("CXX").map(String::as_str), Some("ccache g++"), "{}", call.program);
     }
 }
 
@@ -672,7 +663,6 @@ fn launcher_wraps_a_catalog_compiler_rather_than_replacing_it() {
 
     let call = &f.runner.streaming_calls()[0];
     assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc-13"));
-    assert_eq!(call.env.get("CXX"), launched("CXX").as_ref());
 }
 
 /// The same holds for `CXX`, and for both at once: neither variable falls
@@ -680,7 +670,11 @@ fn launcher_wraps_a_catalog_compiler_rather_than_replacing_it() {
 #[test]
 fn launcher_wraps_a_catalog_cxx_and_both_together() {
     for (env, want_cc, want_cxx) in [
-        (vec![("CXX", "g++-13")], launched("CC"), Some("ccache g++-13".to_owned())),
+        (
+            vec![("CC", "cc"), ("CXX", "g++-13")],
+            Some("ccache cc".to_owned()),
+            Some("ccache g++-13".to_owned()),
+        ),
         (
             vec![("CC", "clang"), ("CXX", "clang++")],
             Some("ccache clang".to_owned()),
