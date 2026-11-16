@@ -47,9 +47,14 @@
 //! compression, a traversal entry, or a truncated archive leaves the prefix
 //! **untouched**. A failure during the merge itself can still leave a
 //! partially-populated prefix; making that atomic would need filesystem
-//! transactions we don't have. The merge cannot rename-into-place because
-//! node strips into an already-populated `/usr/local` — the prefix is shared
-//! with other tools rather than owned by this one.
+//! transactions we don't have. Such a failure is reported as
+//! [`LuggageError::ArchiveMergeFailed`], naming the prefix and how many of
+//! the archive's entries had landed, and the landed paths are logged at
+//! `warn` level (issue #863). It is deliberately *not* rolled back: undoing a
+//! merge into a shared prefix risks deleting files another tool owns. The
+//! merge cannot rename-into-place because node strips into an
+//! already-populated `/usr/local` — the prefix is shared with other tools
+//! rather than owned by this one.
 
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
@@ -89,7 +94,9 @@ const DEFAULT_PREFIX: &str = "/usr/local";
 /// - [`LuggageError::ArchiveExtractionFailed`] when the archive is corrupt or
 ///   truncated, or an entry cannot be written.
 /// - [`LuggageError::Io`] when the staging area, prefix, or bin directories
-///   cannot be created or merged.
+///   cannot be created.
+/// - [`LuggageError::ArchiveMergeFailed`] when moving the extracted files
+///   into the prefix fails partway; it reports how many entries landed.
 /// - [`LuggageError::InstallStageFailed`] when a cache-dir `chown` fails.
 /// - [`LuggageError::Catalog`] when the method lists `binaries` but no
 ///   `bin_source_dir` to link them from.
@@ -121,7 +128,7 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
     // 3. Merge staging into the prefix.
     fs::create_dir_all(&prefix)
         .map_err(|e| LuggageError::Io { path: prefix.clone(), source: e })?;
-    merge_dir(staging.path(), &prefix)?;
+    merge_into_prefix(staging.path(), &prefix, &artifact_name)?;
 
     // 4. Symlink the catalog's binaries. Unlike script-installer, a tarball's
     //    binaries land under the extraction prefix (go: `go/bin`), not the
@@ -364,23 +371,97 @@ fn unpack_entries<R: std::io::Read>(
     Ok(())
 }
 
+/// How many moved paths the merge-failure `warn` log lists before
+/// summarising the rest. node ships thousands of files; the error itself
+/// carries the exact counts.
+const MERGE_FAILURE_LOG_LIMIT: usize = 50;
+
+/// A merge step that failed: the path being acted on and why.
+type MergeFailure = (PathBuf, std::io::Error);
+
+/// Merge staging into `prefix`, reporting progress if the merge fails partway.
+///
+/// The merge cannot be rolled back — the prefix is shared, and undoing it
+/// risks deleting files another tool owns — so a failure instead says how
+/// many of the archive's files and links already landed, and logs which ones
+/// at `warn` level so the build log carries the recovery information.
+fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()> {
+    let mut moved = Vec::new();
+    let Err((path, source)) = merge_dir(staging, prefix, &mut moved) else {
+        return Ok(());
+    };
+
+    // Counted only on failure: the success path pays nothing for diagnostics.
+    // `merge_dir` moves leaves out of staging as they land, so what is still
+    // in staging plus what moved is the archive's full contribution.
+    let total = moved.len() + count_leaves(staging);
+    let shown: Vec<_> =
+        moved.iter().take(MERGE_FAILURE_LOG_LIMIT).map(|p| p.display().to_string()).collect();
+    let more = moved.len().saturating_sub(shown.len());
+    tracing::warn!(
+        prefix = %prefix.display(),
+        merged = moved.len(),
+        total,
+        failed_at = %path.display(),
+        "binary-tarball merge failed partway; these entries already landed in the prefix: \
+         [{}]{}",
+        shown.join(", "),
+        if more > 0 { format!(" ...and {more} more") } else { String::new() },
+    );
+
+    Err(LuggageError::ArchiveMergeFailed {
+        artifact: artifact.to_owned(),
+        prefix: prefix.to_owned(),
+        merged: moved.len(),
+        total,
+        path,
+        source,
+    })
+}
+
+/// Count the files and links under `dir` (directories themselves excluded).
+///
+/// Best-effort: it only feeds an error message, so an unreadable subtree
+/// counts as empty rather than masking the merge failure being reported.
+/// `DirEntry::file_type` does not follow links, so a link to a directory
+/// counts as one leaf rather than being descended into.
+fn count_leaves(dir: &Path) -> usize {
+    let Ok(entries) = fs::read_dir(dir) else { return 0 };
+    entries
+        .flatten()
+        .map(|entry| match entry.file_type() {
+            Ok(t) if t.is_dir() => count_leaves(&entry.path()),
+            _ => 1,
+        })
+        .sum()
+}
+
 /// Recursively move `src`'s contents into `dst`, merging with whatever is
-/// already there.
+/// already there, and push each file or link that lands onto `moved`.
 ///
 /// A plain rename would be cheaper but cannot work: node strips into an
 /// already-populated `/usr/local`, so existing directories must be descended
 /// into rather than replaced. Files (and links) at the same path are
 /// overwritten — the tool being installed owns them.
-fn merge_dir(src: &Path, dst: &Path) -> Result<()> {
-    let entries =
-        fs::read_dir(src).map_err(|e| LuggageError::Io { path: src.to_owned(), source: e })?;
+///
+/// Entries are visited in file-name order so a partial merge's progress
+/// report is deterministic; the order has no effect on a successful merge's
+/// result.
+fn merge_dir(
+    src: &Path,
+    dst: &Path,
+    moved: &mut Vec<PathBuf>,
+) -> std::result::Result<(), MergeFailure> {
+    let mut entries = fs::read_dir(src)
+        .and_then(Iterator::collect::<std::io::Result<Vec<_>>>)
+        .map_err(|e| (src.to_owned(), e))?;
+    entries.sort_by_key(fs::DirEntry::file_name);
+
     for entry in entries {
-        let entry = entry.map_err(|e| LuggageError::Io { path: src.to_owned(), source: e })?;
         let from = entry.path();
         let to = dst.join(entry.file_name());
 
-        let file_type =
-            entry.file_type().map_err(|e| LuggageError::Io { path: from.clone(), source: e })?;
+        let file_type = entry.file_type().map_err(|e| (from.clone(), e))?;
 
         if file_type.is_dir() {
             // Replace a pre-existing *symlink* sitting where this directory
@@ -391,21 +472,20 @@ fn merge_dir(src: &Path, dst: &Path) -> Result<()> {
             // whole subtree's writes to wherever it points. The leaf branch
             // below guards the same way for files.
             if fs::symlink_metadata(&to).is_ok_and(|m| m.file_type().is_symlink()) {
-                fs::remove_file(&to)
-                    .map_err(|e| LuggageError::Io { path: to.clone(), source: e })?;
+                fs::remove_file(&to).map_err(|e| (to.clone(), e))?;
             }
-            fs::create_dir_all(&to)
-                .map_err(|e| LuggageError::Io { path: to.clone(), source: e })?;
-            merge_dir(&from, &to)?;
+            fs::create_dir_all(&to).map_err(|e| (to.clone(), e))?;
+            merge_dir(&from, &to, moved)?;
             continue;
         }
 
         // `symlink_metadata` so an existing *symlink* is removed rather than
         // followed — otherwise the rename would clobber the link's target.
         if fs::symlink_metadata(&to).is_ok() {
-            fs::remove_file(&to).map_err(|e| LuggageError::Io { path: to.clone(), source: e })?;
+            fs::remove_file(&to).map_err(|e| (to.clone(), e))?;
         }
-        fs::rename(&from, &to).map_err(|e| LuggageError::Io { path: to.clone(), source: e })?;
+        fs::rename(&from, &to).map_err(|e| (to.clone(), e))?;
+        moved.push(to);
     }
     Ok(())
 }

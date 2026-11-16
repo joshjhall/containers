@@ -81,6 +81,7 @@ impl From<&LuggageError> for ErrorClass {
             | LuggageError::UnsafeArchiveEntry { .. }
             | LuggageError::ArchiveTooLarge { .. }
             | LuggageError::ArchiveExtractionFailed { .. }
+            | LuggageError::ArchiveMergeFailed { .. }
             | LuggageError::BuildStepFailed { .. } => Self::InstallMethod,
             LuggageError::Io { .. }
             | LuggageError::Parse { .. }
@@ -385,6 +386,33 @@ pub enum LuggageError {
         artifact: String,
         /// Underlying error detail.
         message: String,
+    },
+
+    /// Moving an already-extracted archive from staging into its prefix
+    /// failed partway.
+    ///
+    /// The prefix is shared with other tools, so the merge cannot be rolled
+    /// back safely; instead this reports how far it got, so whoever has to
+    /// repair a half-installed toolchain knows where to look. The paths that
+    /// already landed are also logged at `warn` level when this is raised.
+    #[error(
+        "merging `{artifact}` into {prefix} failed after {merged} of {total} entries landed, \
+         at {path}: {source}"
+    )]
+    ArchiveMergeFailed {
+        /// Artifact being installed.
+        artifact: String,
+        /// Extraction prefix the entries were being merged into.
+        prefix: PathBuf,
+        /// Files and links already moved into the prefix before the failure.
+        merged: usize,
+        /// Files and links the archive contributes in total.
+        total: usize,
+        /// Path the failing operation was acting on.
+        path: PathBuf,
+        /// Underlying I/O error.
+        #[source]
+        source: std::io::Error,
     },
 
     /// A `source-build` step exited non-zero.
@@ -760,6 +788,17 @@ mod tests {
                 LuggageError::ArchiveExtractionFailed {
                     artifact: "broken.tar.gz".into(),
                     message: "x".into(),
+                },
+                ErrorClass::InstallMethod,
+            ),
+            (
+                LuggageError::ArchiveMergeFailed {
+                    artifact: "node.tar.xz".into(),
+                    prefix: PathBuf::from("/usr/local"),
+                    merged: 1,
+                    total: 2,
+                    path: PathBuf::from("/usr/local/bin"),
+                    source: std::io::Error::other("x"),
                 },
                 ErrorClass::InstallMethod,
             ),

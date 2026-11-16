@@ -571,6 +571,42 @@ fn merge_replaces_a_symlink_standing_in_for_a_file() {
     );
 }
 
+// ---- partial-merge diagnostics (#863) --------------------------------
+
+/// A merge that fails partway must say how far it got and where. A regular
+/// file planted where the archive needs a directory makes `create_dir_all`
+/// fail mid-merge — unlike a `chmod`-based unwritable target, this still
+/// fails when the tests run as root. Entries merge in name order, so `a.txt`
+/// and `b.txt` land before `c/` is reached.
+#[test]
+fn merge_failure_reports_how_far_it_got() {
+    let raw = tar_bytes(&[("a.txt", b"a"), ("b.txt", b"b"), ("c/x", b"x")]);
+    let f = Fixture::new("tool.tar.gz", &gzip(&raw));
+    fs::write(f.prefix.path().join("c"), b"in the way").unwrap();
+
+    let err = f.run_plain(0).unwrap_err();
+    let message = err.to_string();
+
+    let LuggageError::ArchiveMergeFailed { artifact, prefix, merged, total, path, .. } = err else {
+        panic!("expected ArchiveMergeFailed, got {message}");
+    };
+    assert_eq!(artifact, "tool.tar.gz");
+    assert_eq!(prefix, f.prefix.path());
+    assert_eq!((merged, total), (2, 3), "two of the three entries landed before `c/` failed");
+    assert_eq!(path, f.prefix.path().join("c"));
+
+    assert!(message.contains("2 of 3"), "progress missing from: {message}");
+    assert!(
+        message.contains(&f.prefix.path().display().to_string()),
+        "prefix missing from: {message}"
+    );
+
+    // The report must be truthful: what it says landed really did.
+    assert_eq!(fs::read(f.prefix.path().join("a.txt")).unwrap(), b"a");
+    assert_eq!(fs::read(f.prefix.path().join("b.txt")).unwrap(), b"b");
+    assert_eq!(fs::read(f.prefix.path().join("c")).unwrap(), b"in the way");
+}
+
 // ---- decompression-bomb ceiling --------------------------------------
 
 /// Build a tar whose single entry carries `size` bytes of zeros — highly
