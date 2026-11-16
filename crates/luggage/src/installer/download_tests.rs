@@ -519,6 +519,15 @@ fn counting_server(
     status: u16,
     body: Vec<u8>,
 ) -> (String, std::sync::Arc<std::sync::atomic::AtomicU32>) {
+    sequenced_server(vec![status], body)
+}
+
+/// Like [`counting_server`], but request `n` gets `statuses[n]`, and the last
+/// status repeats once the list runs out. Each status carries `body`.
+fn sequenced_server(
+    statuses: Vec<u16>,
+    body: Vec<u8>,
+) -> (String, std::sync::Arc<std::sync::atomic::AtomicU32>) {
     use std::io::{BufRead, BufReader};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -536,7 +545,8 @@ fn counting_server(
             while reader.read_line(&mut line).is_ok_and(|n| n > 0) && line != "\r\n" {
                 line.clear();
             }
-            counter.fetch_add(1, Ordering::SeqCst);
+            let n = usize::try_from(counter.fetch_add(1, Ordering::SeqCst)).unwrap();
+            let status = statuses[n.min(statuses.len() - 1)];
             let head = format!(
                 "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                 body.len()
@@ -636,4 +646,21 @@ fn ureq_get_rejects_an_oversized_body_without_retrying() {
     let err = client.get(&url).unwrap_err();
     assert!(matches!(err, LuggageError::ResponseTooLarge { .. }), "got {err:?}");
     assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+/// A transient failure followed by success: each retry gets a fresh
+/// connection and the adapter returns the second attempt's body, with the
+/// sink holding that body and nothing else.
+#[test]
+fn ureq_adapters_recover_from_a_transient_failure() {
+    let (url, hits) = sequenced_server(vec![503, 200], b"payload".to_vec());
+    let client = UreqClient::with_retry(3, Duration::ZERO).without_proxy();
+    let mut sink: Vec<u8> = Vec::new();
+    assert_eq!(client.get_to_writer(&url, &mut sink).unwrap(), 7);
+    assert_eq!(sink, b"payload");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+    let (url, hits) = sequenced_server(vec![503, 200], b"payload".to_vec());
+    assert_eq!(client.get(&url).unwrap(), b"payload");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
