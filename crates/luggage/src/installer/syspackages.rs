@@ -965,6 +965,23 @@ mod tests {
         assert_eq!(none.to_string(), "could not remove build dependencies: nothing to do");
     }
 
+    /// Several refusals aggregate into one error naming each refused package,
+    /// in input order, and never a package that went (#1631). Exact equality:
+    /// a substring check would pass with only the first refusal kept.
+    #[test]
+    fn every_refused_package_is_named_in_the_aggregate() {
+        let err = remove_with(&["a", "b", "c"], |pkgs| {
+            if pkgs.len() == 1 && pkgs[0] == "b" {
+                Ok(())
+            } else {
+                Err(RemovalFault::Refused(format!("{} held", pkgs.join(" "))))
+            }
+        })
+        .unwrap_err();
+        assert!(matches!(err, LuggageError::BuildDepRemovalFailed { .. }), "{err:?}");
+        assert_eq!(err.to_string(), "could not remove build dependencies: a: a held; c: c held");
+    }
+
     /// Every probe failure that is not a clear "not installed" — a launch
     /// failure, a locked DB, an unexpected exit — reads as present, for every
     /// manager. Asserted unconditionally: nothing depends on the test host.
