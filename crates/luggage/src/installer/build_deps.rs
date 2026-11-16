@@ -93,6 +93,17 @@ pub(super) fn remove_build_deps(
     pending: PendingBuildDeps,
     logger: Option<&logging::FeatureLogger>,
 ) -> (Vec<String>, Result<()>) {
+    remove_build_deps_with(pending, logger, remove_packages, is_installed)
+}
+
+/// [`remove_build_deps`] with the removal and the presence re-check
+/// injected, so the gone-list is testable without a package manager (#1631).
+fn remove_build_deps_with(
+    pending: PendingBuildDeps,
+    logger: Option<&logging::FeatureLogger>,
+    remove: impl FnOnce(&[&str], PackageManager) -> Result<()>,
+    is_present: impl Fn(PackageManager, &str) -> bool,
+) -> (Vec<String>, Result<()>) {
     let Some(mgr) = pending.mgr else { return (Vec::new(), Ok(())) };
     if pending.packages.is_empty() {
         return (Vec::new(), Ok(()));
@@ -101,8 +112,8 @@ pub(super) fn remove_build_deps(
         l.step(&format!("remove build dependencies: {}", pending.packages.join(" ")));
     }
     let names: Vec<&str> = pending.packages.iter().map(String::as_str).collect();
-    let result = remove_packages(&names, mgr);
-    let gone = pending.packages.into_iter().filter(|p| !is_installed(mgr, p)).collect();
+    let result = remove(&names, mgr);
+    let gone = pending.packages.into_iter().filter(|p| !is_present(mgr, p)).collect();
     (gone, result)
 }
 
@@ -220,6 +231,56 @@ mod tests {
             remove_build_deps(PendingBuildDeps::new(PackageManager::Apk, vec![]), None);
         assert_eq!(removed, Vec::<String>::new());
         r.unwrap();
+    }
+
+    /// `apk del` keeps a package something else still needs and exits 0.
+    /// The removal's `Ok` must not be taken on trust: only what the host
+    /// re-check says is absent counts as gone (#1631).
+    #[test]
+    fn a_package_kept_despite_exit_0_is_not_reported_gone() {
+        let pending = PendingBuildDeps::new(PackageManager::Apk, vec!["g++".into(), "make".into()]);
+        let mut seen: Vec<String> = Vec::new();
+        let (gone, r) = remove_build_deps_with(
+            pending,
+            None,
+            |names, mgr| {
+                assert_eq!(mgr, PackageManager::Apk);
+                seen.extend(names.iter().map(|n| (*n).to_owned()));
+                Ok(())
+            },
+            |_, p| p == "g++",
+        );
+        r.unwrap();
+        assert_eq!(seen, ["g++", "make"], "every pending package reaches the removal");
+        assert_eq!(gone, ["make"]);
+    }
+
+    /// A removal that fails partway has still changed the host: what did go
+    /// is reported, and the removal's own error is passed through unchanged.
+    #[test]
+    fn a_failed_removal_still_reports_what_did_go() {
+        let pending =
+            PendingBuildDeps::new(PackageManager::Dnf, vec!["util-linux".into(), "make".into()]);
+        let mut seen: Vec<String> = Vec::new();
+        let (gone, r) = remove_build_deps_with(
+            pending,
+            None,
+            |names, _| {
+                seen.extend(names.iter().map(|n| (*n).to_owned()));
+                Err(LuggageError::BuildDepRemovalFailed {
+                    message: "util-linux: needed by systemd".into(),
+                })
+            },
+            |_, p| p == "util-linux",
+        );
+        assert_eq!(seen, ["util-linux", "make"]);
+        assert_eq!(gone, ["make"]);
+        let err = r.unwrap_err();
+        assert!(matches!(err, LuggageError::BuildDepRemovalFailed { .. }), "{err:?}");
+        assert_eq!(
+            err.to_string(),
+            "could not remove build dependencies: util-linux: needed by systemd"
+        );
     }
 
     #[test]
