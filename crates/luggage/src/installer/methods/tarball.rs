@@ -474,7 +474,8 @@ fn merge_dir(
             // planted at that path — by an earlier tool install, or by this
             // archive's own earlier entries — would silently redirect the
             // whole subtree's writes to wherever it points. The leaf branch
-            // below guards the same way for files.
+            // below needs no explicit guard: `rename` replaces a symlink at
+            // `to` rather than following it.
             if fs::symlink_metadata(&to).is_ok_and(|m| m.file_type().is_symlink()) {
                 fs::remove_file(&to).map_err(|e| (to.clone(), e))?;
             }

@@ -641,6 +641,23 @@ fn merge_overwrites_an_existing_file_in_place() {
     assert_eq!(fs::read(f.prefix.path().join("bin/tool")).unwrap(), b"new");
 }
 
+/// `count_leaves` counts files and links at every depth, and treats a
+/// symlink to a directory as one leaf rather than descending into it.
+#[test]
+fn count_leaves_counts_nested_files_and_does_not_follow_dir_links() {
+    let root = tempdir().unwrap();
+    fs::create_dir_all(root.path().join("a/b")).unwrap();
+    fs::write(root.path().join("top"), b"").unwrap();
+    fs::write(root.path().join("a/one"), b"").unwrap();
+    fs::write(root.path().join("a/b/two"), b"").unwrap();
+    std::os::unix::fs::symlink(root.path().join("a"), root.path().join("link-to-a")).unwrap();
+    fs::create_dir(root.path().join("empty")).unwrap();
+
+    // top, a/one, a/b/two, link-to-a (one leaf, not its 2-file target).
+    assert_eq!(count_leaves(root.path()), 4);
+    assert_eq!(count_leaves(&root.path().join("missing")), 0);
+}
+
 #[test]
 fn landed_summary_lists_everything_under_the_limit() {
     let moved = vec![PathBuf::from("/p/a"), PathBuf::from("/p/b")];

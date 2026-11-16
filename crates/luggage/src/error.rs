@@ -408,7 +408,9 @@ pub enum LuggageError {
         merged: usize,
         /// Files and links the archive contributes in total.
         total: usize,
-        /// Path the failing operation was acting on.
+        /// Path the failing operation was acting on. Usually the destination
+        /// inside the prefix; when reading the extracted tree itself failed it
+        /// is the staging path, which is removed once this error returns.
         path: PathBuf,
         /// Underlying I/O error.
         #[source]
