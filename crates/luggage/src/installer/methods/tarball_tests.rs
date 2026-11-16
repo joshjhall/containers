@@ -419,6 +419,85 @@ fn allows_symlink_that_stays_inside_the_prefix() {
     assert_eq!(fs::read(&alias).unwrap(), b"real");
 }
 
+// ---- chained symlinks (issue #1698) ------------------------------------
+
+/// Assert nothing was written beside the staging dir. Staging is created
+/// in the artifact's own directory (`Fixture::_tmp`), so an entry that
+/// escaped staging by one level lands there; after `run` returns, the
+/// staging dir is gone and only the artifact may remain.
+fn assert_nothing_escaped(f: &Fixture) {
+    let stray: Vec<_> = fs::read_dir(f.artifact.parent().unwrap())
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| *p != f.artifact)
+        .collect();
+    assert!(stray.is_empty(), "nothing may land beside staging, found {stray:?}");
+}
+
+/// Run a chained-symlink archive and assert it is refused at `entry_name`
+/// for writing through an earlier link, with nothing reaching the prefix
+/// or staging's parent.
+fn assert_chain_rejected(entries: &[Entry<'_>], entry_name: &str) {
+    let f = Fixture::new("evil.tar.gz", &gzip(&tar_of(entries)));
+
+    match f.run_plain(0).unwrap_err() {
+        LuggageError::UnsafeArchiveEntry { entry, reason, .. } => {
+            assert_eq!(entry, entry_name, "error should name the entry");
+            assert!(
+                reason.contains("passes through symlink"),
+                "reason should name the earlier link: {reason}"
+            );
+        }
+        other => panic!("expected UnsafeArchiveEntry, got {other:?}"),
+    }
+    assert_prefix_empty(&f);
+    assert_nothing_escaped(&f);
+}
+
+/// `a -> .` and `a/b -> ..` each stay inside lexically, but `a/b` is
+/// written through `a` into staging itself, pointing at staging's parent —
+/// so `a/b/evil` would land outside. Refused at `a/b`.
+#[test]
+fn rejects_symlink_chain_through_self_link() {
+    assert_chain_rejected(
+        &[
+            Entry::Link("a", ".", EntryType::Symlink),
+            Entry::Link("a/b", "..", EntryType::Symlink),
+            Entry::File("a/b/evil", b"pwned"),
+        ],
+        "a/b",
+    );
+}
+
+/// The same chain, but the payload is written via the link's resolved
+/// location (`b/evil`) rather than through `a`.
+#[test]
+fn rejects_symlink_chain_writing_beside_the_link() {
+    assert_chain_rejected(
+        &[
+            Entry::Link("a", ".", EntryType::Symlink),
+            Entry::Link("a/b", "..", EntryType::Symlink),
+            Entry::File("b/evil", b"pwned"),
+        ],
+        "a/b",
+    );
+}
+
+/// A longer chain: no link is written through another, but `l2`'s target
+/// `x/l1/..` resolves physically through `x/l1 -> ..`, landing on staging's
+/// parent. Refused at the payload, which is the first write through a link.
+#[test]
+fn rejects_longer_symlink_chain() {
+    assert_chain_rejected(
+        &[
+            Entry::Link("x/l1", "..", EntryType::Symlink),
+            Entry::Link("l2", "x/l1/..", EntryType::Symlink),
+            Entry::File("l2/evil", b"pwned"),
+        ],
+        "l2/evil",
+    );
+}
+
 // ---- entry-type allowlist (issue #862) --------------------------------
 
 /// Assert `err` is an `UnsafeArchiveEntry` naming `entry` and the type.
