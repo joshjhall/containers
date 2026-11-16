@@ -438,9 +438,14 @@ fn assert_nothing_escaped(f: &Fixture) {
 /// for writing through an earlier link, with nothing reaching the prefix
 /// or staging's parent.
 fn assert_chain_rejected(entries: &[Entry<'_>], entry_name: &str) {
+    assert_chain_rejected_at_strip(entries, entry_name, 0);
+}
+
+/// [`assert_chain_rejected`] at a given strip depth.
+fn assert_chain_rejected_at_strip(entries: &[Entry<'_>], entry_name: &str, strip: u32) {
     let f = Fixture::new("evil.tar.gz", &gzip(&tar_of(entries)));
 
-    match f.run_plain(0).unwrap_err() {
+    match f.run_plain(strip).unwrap_err() {
         LuggageError::UnsafeArchiveEntry { entry, reason, .. } => {
             assert_eq!(entry, entry_name, "error should name the entry");
             assert!(
@@ -515,6 +520,57 @@ fn rejects_write_through_benign_in_prefix_dir_alias() {
         ],
         "lib/libfoo.so",
     );
+}
+
+/// A directory entry under an earlier link is refused before
+/// `create_dir_all` can follow the link.
+#[test]
+fn rejects_dir_entry_under_an_earlier_symlink() {
+    assert_chain_rejected(
+        &[Entry::Link("a", ".", EntryType::Symlink), Entry::Dir("a/sub/", 0o755)],
+        "a/sub/",
+    );
+}
+
+/// The check runs on the post-strip path: the issue's first chain nested
+/// under a versioned top-level directory is refused at strip 1 too.
+#[test]
+fn rejects_symlink_chain_after_stripping() {
+    assert_chain_rejected_at_strip(
+        &[
+            Entry::Link("pkg-v1/a", ".", EntryType::Symlink),
+            Entry::Link("pkg-v1/a/b", "..", EntryType::Symlink),
+            Entry::File("pkg-v1/a/b/evil", b"pwned"),
+        ],
+        "pkg-v1/a/b",
+        1,
+    );
+}
+
+/// A directory entry landing *on* an earlier symlink is not treated as
+/// that directory: tar-rs checks the existing path with
+/// `symlink_metadata`, so the link is not followed and the archive fails
+/// — the link's target keeps its own mode. Pinned because
+/// `reject_symlinked_ancestor` skips the final component on the strength
+/// of this behaviour. (`d` points in-prefix so the lexical link check
+/// passes and this behaviour is what decides the outcome.)
+#[test]
+fn dir_entry_on_an_earlier_symlink_is_refused() {
+    let raw = tar_of(&[
+        Entry::Dir("real/", 0o755),
+        Entry::Link("d", "real", EntryType::Symlink),
+        Entry::Dir("d/", 0o700),
+    ]);
+    let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+    let err = f.run_plain(0).unwrap_err();
+    assert!(
+        matches!(err, LuggageError::ArchiveExtractionFailed { ref message, .. }
+            if message.contains("`d/`")),
+        "expected the dir entry to fail, got {err:?}"
+    );
+    assert_prefix_empty(&f);
+    assert_nothing_escaped(&f);
 }
 
 /// A link at the *final* component is not written through: tar-rs
