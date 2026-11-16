@@ -467,13 +467,13 @@ fn rejects_char_device_entry() {
 /// so a synthetic one fails in the reader rather than reaching our check.)
 #[test]
 fn rejects_contiguous_and_unknown_entry_types() {
-    for (kind, name) in
-        [(EntryType::Continuous, "Continuous"), (EntryType::new(b'Z'), "__Nonexhaustive(90)")]
-    {
+    for kind in [EntryType::Continuous, EntryType::new(b'Z')] {
         let raw = tar_of(&[Entry::Special("pkg/odd", kind)]);
         let f = Fixture::new("evil.tar.gz", &gzip(&raw));
 
-        assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/odd", name);
+        // The expected name is derived, not hardcoded: an unknown flag's
+        // Debug form is a tar-rs internal that may change across releases.
+        assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/odd", &format!("{kind:?}"));
         assert_prefix_empty(&f);
     }
 }
@@ -578,6 +578,32 @@ fn write_entry_masks_special_bits_even_with_preserve_permissions() {
 
     let mode = fs::metadata(&target).unwrap().permissions().mode();
     assert_eq!(mode & 0o7777, 0o755, "special bits must be masked, got {mode:o}");
+}
+
+/// The extraction loop itself masks special bits — not just `write_entry`
+/// in isolation. `preserve_permissions` is forced on at the *archive*
+/// level (tar-rs copies it into every entry), so tar-rs's default no longer
+/// strips anything and the only thing standing between a `07755` header
+/// and a setuid file is our mask. If `unpack_entries` ever wrote an entry
+/// without going through `write_entry`, this fails; the end-to-end tests
+/// above cannot catch that, since the default hides it. Covers a file and a
+/// directory, since both are written through the same path.
+#[cfg(unix)]
+#[test]
+fn unpack_entries_masks_special_bits_even_with_preserve_permissions() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let raw = tar_of(&[Entry::Dir("pkg/", 0o3777), Entry::FileMode("pkg/suid", b"x", 0o7755)]);
+    let dest = tempdir().unwrap();
+    let mut archive = Archive::new(raw.as_slice());
+    archive.set_preserve_permissions(true);
+    unpack_entries(&mut archive, "ok.tar", dest.path(), 0).unwrap();
+
+    let mode = |p: &str| fs::metadata(dest.path().join(p)).unwrap().permissions().mode();
+    // A directory's permission bits are also subject to umask on creation,
+    // so only its special bits are compared; the file must match exactly.
+    assert_eq!(mode("pkg") & 0o7000, 0, "dir: special bits must be masked, got {:o}", mode("pkg"));
+    assert_eq!(mode("pkg/suid") & 0o7777, 0o755, "file: special bits must be masked");
 }
 
 /// go's real shape — explicit directory entries, files and an internal
