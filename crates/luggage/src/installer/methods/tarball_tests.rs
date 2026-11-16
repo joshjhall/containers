@@ -658,6 +658,67 @@ fn extracts_node_shaped_archive_with_dirs_and_symlink() {
     assert_eq!(fs::read(&npm).unwrap(), b"npm");
 }
 
+/// Paths over 100 bytes are real in node's `node_modules`, and tar carries
+/// them in extension headers that precede the entry they describe: GNU
+/// `L` (long name) and `K` (long link target), or a per-entry pax `x`
+/// header. The allowlist refuses those typeflags if it ever *sees* them,
+/// so a real node install depends on tar-rs consuming them first. This
+/// pins that assumption: if a tar upgrade leaked one into the entry
+/// stream, every long-path archive would be rejected while the
+/// short-name fixtures above stayed green.
+#[test]
+fn extracts_long_paths_carried_by_gnu_and_pax_extension_headers() {
+    let deep = format!("node-v22/lib/node_modules/{}/index.js", "a".repeat(120));
+    let link = format!("node-v22/lib/node_modules/{}/alias.js", "b".repeat(120));
+    let link_target = format!("../{}/index.js", "a".repeat(120));
+    let pax_name = format!("node-v22/lib/{}/pax.js", "c".repeat(120));
+    assert!(deep.len() > 100 && link_target.len() > 100 && pax_name.len() > 100);
+
+    let mut builder = Builder::new(Vec::new());
+
+    // GNU `L` for the long file name (Builder emits it for a GNU header).
+    let mut header = Header::new_gnu();
+    header.set_size(4);
+    header.set_mode(0o644);
+    builder.append_data(&mut header, &deep, &b"deep"[..]).unwrap();
+
+    // GNU `L` for the name *and* `K` for the long symlink target.
+    let mut header = Header::new_gnu();
+    header.set_entry_type(EntryType::Symlink);
+    header.set_size(0);
+    header.set_mode(0o777);
+    builder.append_link(&mut header, &link, &link_target).unwrap();
+
+    // A per-entry pax `x` header carrying the path, ahead of a ustar entry
+    // whose own name field holds only a placeholder.
+    builder.append_pax_extensions([("path", pax_name.as_bytes())]).unwrap();
+    let mut header = Header::new_ustar();
+    header.set_path("placeholder").unwrap();
+    header.set_size(3);
+    header.set_mode(0o644);
+    header.set_cksum();
+    builder.append(&header, &b"pax"[..]).unwrap();
+
+    let raw = builder.into_inner().unwrap();
+    // Guard against a vacuous fixture: the extension typeflags must really
+    // be in the stream, or this would only re-test short names.
+    let flags: Vec<u8> = raw.chunks(512).filter(|b| b.len() == 512).map(|b| b[156]).collect();
+    for flag in *b"LKx" {
+        assert!(flags.contains(&flag), "fixture must contain a `{}` header", flag as char);
+    }
+
+    let f = Fixture::new("node.tar.xz", &xz(&raw));
+    f.run_plain(1).unwrap();
+
+    let p = f.prefix.path();
+    let strip = |s: &str| s.trim_start_matches("node-v22/").to_owned();
+    assert_eq!(fs::read(p.join(strip(&deep))).unwrap(), b"deep");
+    let alias = p.join(strip(&link));
+    assert!(fs::symlink_metadata(&alias).unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&alias).unwrap(), b"deep");
+    assert_eq!(fs::read(p.join(strip(&pax_name))).unwrap(), b"pax");
+}
+
 /// A pax global header (`git archive` emits one first) carries metadata
 /// only. It is skipped, not rejected, and writes nothing to the prefix.
 #[test]
