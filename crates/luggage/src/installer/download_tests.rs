@@ -595,3 +595,14 @@ fn ureq_get_forwards_max_attempts_and_error_message() {
         other => panic!("expected DownloadFailed, got {other:?}"),
     }
 }
+
+/// The buffered `get` adapter's happy path: a 200 body comes back intact on a
+/// single request.
+#[test]
+fn ureq_get_returns_a_2xx_body() {
+    let (url, hits) = counting_server(200, b"sha256  artifact.tar.gz\n".to_vec());
+    let client = UreqClient::with_retry(3, Duration::ZERO).without_proxy();
+    let bytes = client.get(&url).unwrap();
+    assert_eq!(bytes, b"sha256  artifact.tar.gz\n");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
