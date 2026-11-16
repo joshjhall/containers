@@ -33,6 +33,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # 7z is referenced through an overridable var so a test can point it at a stub
 # or force the not-found path; production uses the real `7z` on PATH.
+#
+# PATH-trust note (#749): `7z` is resolved by a bare PATH lookup rather than an
+# absolute path — a sanctioned exception to the repo's full-path policy, since
+# 7-Zip has no stable canonical location on Windows runners (Program Files,
+# chocolatey shims, etc.). This script runs only on CI runner images, so the
+# residual PATH-trust assumption is the runner image's own PATH; set SEVENZIP
+# to an absolute path to pin it.
 SEVENZIP="${SEVENZIP:-7z}"
 
 fail() {

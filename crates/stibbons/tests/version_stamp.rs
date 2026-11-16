@@ -5,7 +5,8 @@
 //! `--version` output and the startup log line (`main.rs`). If that wiring
 //! regressed to `CARGO_PKG_VERSION`, `--version` would report the crate's
 //! `0.1.0` instead of the product version. These tests assert the binary
-//! reports the `VERSION` file contents, not the crate version.
+//! reports the `VERSION` file contents, not the crate version — both via
+//! `--version` and via the startup log line (asserted directly, #749).
 
 use std::fs;
 use std::path::PathBuf;
@@ -61,6 +62,37 @@ fn version_flag_reports_version_file_not_crate_version() {
              (that would mean the STIBBONS_VERSION stamp regressed to CARGO_PKG_VERSION)"
         );
     }
+}
+
+/// The bare-invocation startup log line (`main.rs`: `tracing::info!("stibbons
+/// v{}", …)`) carries the stamped product version, not the crate version.
+/// Asserted directly rather than inferred from `--version` (#749).
+#[test]
+fn startup_log_line_reports_version_file() {
+    let cwd = tempfile::tempdir().expect("tempdir");
+    let out = Command::new(stibbons_bin())
+        // Default `info` filter must apply; a caller's RUST_LOG could hide it.
+        .env_remove("RUST_LOG")
+        .current_dir(cwd.path())
+        .output()
+        .expect("failed to spawn bare stibbons");
+    assert!(out.status.success(), "bare `stibbons` should exit 0");
+
+    // tracing's fmt subscriber writes to stdout by default; check both
+    // streams so a writer change does not mask the line.
+    let combined =
+        format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    let expected = format!("stibbons v{}", repo_version());
+    assert!(
+        combined.contains(&expected),
+        "startup output {combined:?} should contain the log line {expected:?}"
+    );
+
+    let crate_line = format!("stibbons v{}", cargo_pkg_version());
+    assert!(
+        !combined.contains(&crate_line),
+        "startup log {combined:?} must NOT report the crate version line {crate_line:?}"
+    );
 }
 
 /// Sanity: the stamp discriminator is meaningful — VERSION file and crate
