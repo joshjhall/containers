@@ -262,6 +262,22 @@ jobs:
             echo "ref=${PR_TAG}" >> "$GITHUB_OUTPUT"
           fi
 
+      # Per-tuple CVE suppressions. The root .trivyignore always applies; a
+      # base-images/<distro>/<version>/.trivyignore is ADDED only for that
+      # tuple, so a distro-specific waiver (e.g. a fix not yet in the UBI
+      # repos) never masks the same CVE ID on another distro. Passing
+      # `trivyignores` replaces Trivy's default ./.trivyignore lookup, which is
+      # why the root file is listed explicitly.
+      - name: Compute Trivy ignore files
+        id: trivy_ignores
+        run: |
+          FILES=".trivyignore"
+          TUPLE_IGNORE="base-images/${DISTRO}/${DISTRO_VERSION}/.trivyignore"
+          if [ -f "${TUPLE_IGNORE}" ]; then
+            FILES="${FILES},${TUPLE_IGNORE}"
+          fi
+          echo "files=${FILES}" >> "$GITHUB_OUTPUT"
+
       - name: Trivy scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
@@ -279,6 +295,7 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: os,library
+          trivyignores: ${{ steps.trivy_ignores.outputs.files }}
 
       - name: Install Cosign
         if: steps.gate.outputs.publish == 'true'
