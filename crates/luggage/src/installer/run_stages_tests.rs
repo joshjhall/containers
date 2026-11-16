@@ -375,3 +375,73 @@ fn removed_build_deps_reach_the_failure_report() {
     assert_eq!(sorted(&report.removed_build_dependencies), ["make"]);
     assert!(report.log_path.as_deref().is_some_and(Path::exists), "{report:?}");
 }
+
+/// The method's failure is the cause the operator needs, so a removal that
+/// also fails behind it is logged, never allowed to replace it — exercised
+/// through the real `run_stages` sequencing, not just `merge_cleanup`.
+#[test]
+fn a_method_failure_outranks_a_removal_failure_behind_it() {
+    let host = Host::new();
+    let fake = Arc::new(FakeSystemPackages {
+        remove_error: Some("g++: needed by (installed) libtool".into()),
+        keeps: vec!["g++".into()],
+        ..host.fake()
+    });
+    let installer = installer(&host, fake.clone(), failing_method());
+
+    let StageRun { removed_build_dependencies, result } = run(&installer, &node_like());
+
+    assert_method_failed(result.map(drop));
+    assert_eq!(fake.removals(), ["remove g++ make"], "removal still attempted");
+    assert_eq!(removed_build_dependencies, ["make"]);
+}
+
+/// Same ranking on the partial-install path: the package manager's own
+/// install error survives a failing cleanup behind it.
+#[test]
+fn a_partial_install_error_outranks_a_removal_failure_behind_it() {
+    let host = Host::new();
+    let fake = Arc::new(FakeSystemPackages {
+        lands: Some(vec!["g++".into()]),
+        install_error: Some("E: Unable to locate package make".into()),
+        remove_error: Some("g++: needed by (installed) libtool".into()),
+        keeps: vec!["g++".into()],
+        ..host.fake()
+    });
+    let installer = installer(&host, fake.clone(), Arc::new(RecordingRunner::new()));
+
+    let StageRun { removed_build_dependencies, result } = run(&installer, &node_like());
+
+    match result.unwrap_err() {
+        LuggageError::PackageManagerFailed { message } => {
+            assert!(message.contains("Unable to locate package make"), "{message}");
+        }
+        other => panic!("expected the install's own error, got {other:?}"),
+    }
+    assert_eq!(fake.removals(), ["remove g++"]);
+    assert_eq!(
+        removed_build_dependencies,
+        Vec::<String>::new(),
+        "g++ was kept, so nothing is gone"
+    );
+}
+
+/// With no build-only dependency to clean up, removal never reaches the
+/// package manager (an empty `dpkg --purge` would fail the install), and
+/// validate still runs — here against a host where removal never happened, so
+/// the shim's removal gate is pre-satisfied.
+#[test]
+fn runtime_only_deps_never_reach_removal() {
+    let host = Host::new();
+    fs::write(host.removal_marker(), b"pre-satisfied").unwrap();
+    let fake = Arc::new(FakeSystemPackages { removal_marker: None, ..Default::default() });
+    let installer = installer(&host, fake.clone(), Arc::new(RecordingRunner::new()));
+    let resolved = resolved(&[("ca-certificates", Both), ("libstdc++", Both)]);
+
+    let StageRun { removed_build_dependencies, result } = run(&installer, &resolved);
+
+    result.expect("a runtime-only install succeeds");
+    assert!(host.validate_ran());
+    assert_eq!(fake.events(), ["install"], "no removal call at all");
+    assert_eq!(removed_build_dependencies, Vec::<String>::new());
+}
