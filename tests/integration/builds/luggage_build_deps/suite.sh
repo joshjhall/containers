@@ -53,6 +53,12 @@ bd_present_cmd() {
     printf '%s' "$query; c=\$(q bash); if [ \"\$c\" != present ]; then echo \"pkg-inconclusive-$pkg control-bash=\$c\"; else v=\$(q $pkg); case \"\$v\" in present|absent) echo pkg-\$v-$pkg ;; *) echo \"pkg-inconclusive-$pkg \$v\" ;; esac; fi"
 }
 
+# Reads the report for a removal claim, splitting grep's exit three ways:
+# 1 (read the report, no key) is the only "no-removal-claimed"; 2 (missing
+# or unreadable report) must not read as "nothing claimed".
+# shellcheck disable=SC2016  # expanded by the container's bash, not here
+BD_REPORT_PROBE='command grep -q removed_build_dependencies /var/log/luggage/node-report.json; case $? in 0) echo claims-removal ;; 1) echo no-removal-claimed ;; *) echo report-unreadable ;; esac'
+
 bd_build() {
     local mode="$1" image="$2"
     # Built once per mode per run: every test re-calls this. The marker
@@ -143,12 +149,43 @@ test_bd_refusal_does_not_cascade() {
     # and so is the build dep the manager refused to take from under it.
     assert_command_in_container "$BD_REFUSE_IMAGE" "$(bd_present_cmd "$BD_DEPENDENT")" "pkg-present-$BD_DEPENDENT"
     assert_command_in_container "$BD_REFUSE_IMAGE" "$(bd_present_cmd "$BD_REFUSED")" "pkg-present-$BD_REFUSED"
-    # And the report does not claim a removal that did not happen. grep's
-    # exit is split three ways: 1 (read the report, no key) is the only pass;
-    # 2 (missing/unreadable report) must not read as "nothing claimed".
+    # And the report does not claim a removal that did not happen.
     assert_command_in_container "$BD_REFUSE_IMAGE" \
-        "command grep -q removed_build_dependencies /var/log/luggage/node-report.json; case \$? in 0) echo claims-removal ;; 1) echo no-removal-claimed ;; *) echo report-unreadable ;; esac" \
+        "$BD_REPORT_PROBE" \
         "no-removal-claimed"
+}
+
+# ─── the probes themselves fail closed ───
+#
+# Every absence assertion above leans on bd_present_cmd refusing to say
+# "absent" when it cannot tell. Run against images where the expected answer
+# is already true, those assertions would keep passing if a later edit made
+# the probe fail open again, so pin it here: break the package database and
+# require `inconclusive`, never `absent`. `make` is genuinely gone from the
+# happy image, so a probe that trusted the broken database would print
+# pkg-absent-make and match the wrong token.
+test_bd_probes_fail_closed() {
+    bd_build happy "$BD_HAPPY_IMAGE" || return
+    local break_db
+    case "$BD_DISTRO" in
+        # dpkg-query reads a missing status file as an empty database.
+        debian) break_db="command mv /var/lib/dpkg/status /tmp/dpkg-status.moved" ;;
+        # rpm -q on an emptied rpmdb answers "package X is not installed".
+        rhel) break_db="command rm -rf /var/lib/rpm/*" ;;
+    esac
+    # Root: the image's default user cannot touch the package database.
+    capture_result docker run --rm --user root "$BD_HAPPY_IMAGE" \
+        bash -c "$break_db && $(bd_present_cmd make)"
+    if [[ "$TEST_OUTPUT" != *"pkg-inconclusive-make"* ]]; then
+        tf_fail_assertion "probe must be inconclusive on a broken package database" \
+            "Expected output to contain: pkg-inconclusive-make" \
+            "Actual output: $TEST_OUTPUT"
+        return 1
+    fi
+    # A missing report must not read as "no removal claimed".
+    assert_command_in_container "$BD_HAPPY_IMAGE" \
+        "command rm -f /var/log/luggage/node-report.json; $BD_REPORT_PROBE" \
+        "report-unreadable"
 }
 
 bd_run_suite() {
@@ -161,5 +198,6 @@ bd_run_suite() {
     run_test test_bd_report_records_removed "InstallReport records the removed build deps"
     run_test test_bd_refusal_fails_loudly "a refused build dep fails the install loudly"
     run_test test_bd_refusal_does_not_cascade "a refused build dep cascades nothing"
+    run_test test_bd_probes_fail_closed "presence and report probes fail closed"
     bd_cleanup
 }
