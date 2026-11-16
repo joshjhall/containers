@@ -41,6 +41,15 @@ enum Entry<'a> {
     File(&'a str, &'a [u8]),
     /// A link of the given kind pointing at the given target.
     Link(&'a str, &'a str, EntryType),
+    /// A regular file whose header declares the given mode.
+    FileMode(&'a str, &'a [u8], u32),
+    /// A directory entry with the given mode.
+    Dir(&'a str, u32),
+    /// A header-only entry of an arbitrary type — device nodes, fifos.
+    /// `Builder` has no safe API for these, so the typeflag is set directly.
+    Special(&'a str, EntryType),
+    /// An entry of an arbitrary type carrying `contents` (pax global header).
+    Typed(&'a str, EntryType, &'a [u8]),
 }
 
 /// Build an uncompressed tar in memory from a list of entries.
@@ -69,6 +78,37 @@ fn tar_of(entries: &[Entry<'_>]) -> Vec<u8> {
                 set_raw_linkname(&mut header, target);
                 header.set_cksum();
                 builder.append(&header, std::io::empty()).unwrap();
+            }
+            Entry::FileMode(path, contents, mode) => {
+                header.set_size(contents.len() as u64);
+                header.set_mode(*mode);
+                set_raw_name(&mut header, path);
+                header.set_cksum();
+                builder.append(&header, *contents).unwrap();
+            }
+            Entry::Dir(path, mode) => {
+                header.set_size(0);
+                header.set_mode(*mode);
+                header.set_entry_type(EntryType::Directory);
+                set_raw_name(&mut header, path);
+                header.set_cksum();
+                builder.append(&header, std::io::empty()).unwrap();
+            }
+            Entry::Special(path, kind) => {
+                header.set_size(0);
+                header.set_mode(0o644);
+                header.set_entry_type(*kind);
+                set_raw_name(&mut header, path);
+                header.set_cksum();
+                builder.append(&header, std::io::empty()).unwrap();
+            }
+            Entry::Typed(path, kind, contents) => {
+                header.set_size(contents.len() as u64);
+                header.set_mode(0o644);
+                header.set_entry_type(*kind);
+                set_raw_name(&mut header, path);
+                header.set_cksum();
+                builder.append(&header, *contents).unwrap();
             }
         }
     }
@@ -334,17 +374,32 @@ fn rejects_absolute_symlink_target() {
     }
 }
 
-/// Hardlinks carry a target just as symlinks do, and are checked the
-/// same way.
+/// A hard link with an escaping target is refused — but by its *type*,
+/// before `validate_link_target` ever runs: every hard link is refused
+/// (issue #862), so this pins the allowlist, not hard-link target
+/// validation. Re-allowing `Link` fails this test whatever the target.
 #[test]
-fn rejects_hardlink_escaping_the_prefix() {
+fn rejects_hardlink_by_type_even_with_an_escaping_target() {
     let raw = tar_with_link("pkg/escape", "../../../etc/passwd", EntryType::Link);
     let f = Fixture::new("evil.tar.gz", &gzip(&raw));
 
-    assert!(
-        matches!(f.run_plain(0), Err(LuggageError::UnsafeArchiveEntry { .. })),
-        "an escaping hardlink must be rejected like a symlink"
-    );
+    assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/escape", "Link");
+}
+
+/// Even a hard link whose target *looks* inside the prefix is refused.
+/// tar-rs resolves a lone entry's hard-link source against the process
+/// cwd, not the extraction root, so `Cargo.toml` here would link the
+/// crate's own manifest — a file outside the prefix — into it (issue #862).
+#[test]
+fn rejects_hardlink_even_with_an_in_prefix_looking_target() {
+    let raw = tar_of(&[
+        Entry::File("pkg/real.txt", b"real"),
+        Entry::Link("pkg/stolen", "Cargo.toml", EntryType::Link),
+    ]);
+    let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+    assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/stolen", "Link");
+    assert_prefix_empty(&f);
 }
 
 /// A link that stays inside the prefix is legitimate and must extract —
@@ -362,6 +417,327 @@ fn allows_symlink_that_stays_inside_the_prefix() {
     let alias = f.prefix.path().join("pkg/alias.txt");
     assert!(fs::symlink_metadata(&alias).unwrap().file_type().is_symlink());
     assert_eq!(fs::read(&alias).unwrap(), b"real");
+}
+
+// ---- entry-type allowlist (issue #862) --------------------------------
+
+/// Assert `err` is an `UnsafeArchiveEntry` naming `entry` and the type.
+///
+/// Matching the type name in the reason is what makes these tests
+/// discriminate: an archive that ended early (a fixture swallowed by a
+/// zero-block end marker) would extract successfully, not produce this.
+fn assert_type_rejected(err: LuggageError, entry_name: &str, type_name: &str) {
+    match err {
+        LuggageError::UnsafeArchiveEntry { entry, reason, .. } => {
+            assert_eq!(entry, entry_name, "error should name the entry");
+            assert!(
+                reason.contains(&format!("entry type {type_name} ")),
+                "reason should name the type {type_name}: {reason}"
+            );
+        }
+        other => panic!("expected UnsafeArchiveEntry, got {other:?}"),
+    }
+}
+
+/// Assert nothing reached the prefix.
+fn assert_prefix_empty(f: &Fixture) {
+    assert_eq!(
+        fs::read_dir(f.prefix.path()).unwrap().count(),
+        0,
+        "prefix must be empty after a rejected archive"
+    );
+}
+
+/// A character device is refused outright. tar-rs would today write it as
+/// an empty regular file; the allowlist makes the refusal ours.
+#[test]
+fn rejects_char_device_entry() {
+    let raw = tar_of(&[
+        Entry::File("pkg/bin/tool", b"ok"),
+        Entry::Special("pkg/dev/kmem", EntryType::Char),
+    ]);
+    let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+    assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/dev/kmem", "Char");
+    assert_prefix_empty(&f);
+}
+
+/// Contiguous (`7`) entries are refused, as is a typeflag tar-rs does not
+/// recognise. These pin the `other` catch-all arm: a denylist of just the
+/// device and fifo types would let them through. (GNU sparse is not
+/// fixtured: tar-rs parses its extended header before yielding the entry,
+/// so a synthetic one fails in the reader rather than reaching our check.)
+#[test]
+fn rejects_contiguous_and_unknown_entry_types() {
+    for kind in [EntryType::Continuous, EntryType::new(b'Z')] {
+        let raw = tar_of(&[Entry::Special("pkg/odd", kind)]);
+        let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+        // The expected name is derived, not hardcoded: an unknown flag's
+        // Debug form is a tar-rs internal that may change across releases.
+        assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/odd", &format!("{kind:?}"));
+        assert_prefix_empty(&f);
+    }
+}
+
+/// A block device is refused outright.
+#[test]
+fn rejects_block_device_entry() {
+    let raw = tar_of(&[Entry::Special("pkg/dev/sda", EntryType::Block)]);
+    let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+    assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/dev/sda", "Block");
+    assert_prefix_empty(&f);
+}
+
+/// A fifo is refused outright.
+#[test]
+fn rejects_fifo_entry() {
+    let raw = tar_of(&[
+        Entry::File("pkg/bin/tool", b"ok"),
+        Entry::Special("pkg/run/pipe", EntryType::Fifo),
+    ]);
+    let f = Fixture::new("evil.tar.xz", &xz(&raw));
+
+    assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/run/pipe", "Fifo");
+    assert_prefix_empty(&f);
+}
+
+/// The type check runs before stripping: a device node shallow enough to
+/// be flattened away by `strip 1` still rejects the archive, so whether an
+/// archive is accepted never depends on the catalog's strip depth.
+#[test]
+fn rejects_disallowed_type_even_when_stripped_away() {
+    let raw =
+        tar_of(&[Entry::Special("kmem", EntryType::Char), Entry::File("node-v1/bin/node", b"ok")]);
+    let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+    assert_type_rejected(f.run_plain(1).unwrap_err(), "kmem", "Char");
+    assert_prefix_empty(&f);
+}
+
+/// A header declaring `04755` lands as `0755`: setuid is cleared by our
+/// explicit mask, not left to tar-rs's `preserve_permissions` default.
+#[cfg(unix)]
+#[test]
+fn clears_setuid_bit_on_extracted_file() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let raw = tar_of(&[
+        Entry::FileMode("pkg/bin/suid", b"#!/bin/sh\n", 0o4755),
+        Entry::FileMode("pkg/bin/sgid", b"#!/bin/sh\n", 0o2755),
+    ]);
+    let f = Fixture::new("ok.tar.gz", &gzip(&raw));
+    f.run_plain(0).unwrap();
+
+    for name in ["suid", "sgid"] {
+        let mode =
+            fs::metadata(f.prefix.path().join("pkg/bin").join(name)).unwrap().permissions().mode();
+        assert_eq!(mode & 0o7777, 0o755, "{name}: special bits must be cleared, got {mode:o}");
+    }
+}
+
+/// Special bits on a *directory* entry are cleared too — a sticky or setgid
+/// directory in the prefix would change how later installs behave there.
+#[cfg(unix)]
+#[test]
+fn clears_sticky_and_setgid_bits_on_extracted_directory() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let raw = tar_of(&[Entry::Dir("pkg/tmp/", 0o1777), Entry::Dir("pkg/shared/", 0o2775)]);
+    let f = Fixture::new("ok.tar.gz", &gzip(&raw));
+    f.run_plain(0).unwrap();
+
+    // Only the special bits are asserted: the permission bits a directory
+    // ends up with also depend on the process umask during the merge.
+    for name in ["tmp", "shared"] {
+        let path = f.prefix.path().join("pkg").join(name);
+        assert!(path.is_dir(), "{name} must extract as a directory");
+        let mode = fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o7000, 0, "{name}: special bits must be cleared, got {mode:o}");
+    }
+}
+
+/// The mask is ours, not tar-rs's default: with `preserve_permissions`
+/// forced *on* — the change a future maintainer might make — `write_entry`
+/// still clears setuid, setgid and sticky. Without its mask this test
+/// fails, which the end-to-end setuid test above cannot show (tar-rs's
+/// default strips the bits there either way). `write_entry` is the only
+/// writer in `unpack_entries`, so this covers the production path.
+#[cfg(unix)]
+#[test]
+fn write_entry_masks_special_bits_even_with_preserve_permissions() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let raw = tar_of(&[Entry::FileMode("suid", b"x", 0o7755)]);
+    let dir = tempdir().unwrap();
+    let mut archive = Archive::new(raw.as_slice());
+    let mut entry = archive.entries().unwrap().next().unwrap().unwrap();
+
+    entry.set_preserve_permissions(true);
+    let target = dir.path().join("suid");
+    write_entry(&mut entry, &target).unwrap();
+
+    let mode = fs::metadata(&target).unwrap().permissions().mode();
+    assert_eq!(mode & 0o7777, 0o755, "special bits must be masked, got {mode:o}");
+}
+
+/// The extraction loop itself masks special bits — not just `write_entry`
+/// in isolation. `preserve_permissions` is forced on at the *archive*
+/// level (tar-rs copies it into every entry), so tar-rs's default no longer
+/// strips anything and the only thing standing between a `07755` header
+/// and a setuid file is our mask. If `unpack_entries` ever wrote an entry
+/// without going through `write_entry`, this fails; the end-to-end tests
+/// above cannot catch that, since the default hides it. Covers a file and a
+/// directory, since both are written through the same path.
+#[cfg(unix)]
+#[test]
+fn unpack_entries_masks_special_bits_even_with_preserve_permissions() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let raw = tar_of(&[Entry::Dir("pkg/", 0o3777), Entry::FileMode("pkg/suid", b"x", 0o7755)]);
+    let dest = tempdir().unwrap();
+    let mut archive = Archive::new(raw.as_slice());
+    archive.set_preserve_permissions(true);
+    unpack_entries(&mut archive, "ok.tar", dest.path(), 0).unwrap();
+
+    let mode = |p: &str| fs::metadata(dest.path().join(p)).unwrap().permissions().mode();
+    // A directory's permission bits are also subject to umask on creation,
+    // so only its special bits are compared; the file must match exactly.
+    assert_eq!(mode("pkg") & 0o7000, 0, "dir: special bits must be masked, got {:o}", mode("pkg"));
+    assert_eq!(mode("pkg/suid") & 0o7777, 0o755, "file: special bits must be masked");
+}
+
+/// go's real shape — explicit directory entries, files and an internal
+/// symlink at strip 0 — still extracts under the allowlist.
+#[test]
+fn extracts_go_shaped_archive_with_dirs_and_symlink() {
+    let raw = tar_of(&[
+        Entry::Dir("go/", 0o755),
+        Entry::Dir("go/bin/", 0o755),
+        Entry::FileMode("go/bin/go", b"go", 0o755),
+        Entry::Dir("go/pkg/", 0o755),
+        Entry::Link("go/bin/golang", "go", EntryType::Symlink),
+    ]);
+    let f = Fixture::new("go.tar.gz", &gzip(&raw));
+    f.run_plain(0).unwrap();
+
+    let p = f.prefix.path();
+    assert!(p.join("go/pkg").is_dir());
+    assert_eq!(fs::read(p.join("go/bin/go")).unwrap(), b"go");
+    let link = p.join("go/bin/golang");
+    assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&link).unwrap(), b"go");
+}
+
+/// node's real shape — versioned root flattened by strip 1, xz — still
+/// extracts under the allowlist, including the `bin/npm` symlink.
+#[test]
+fn extracts_node_shaped_archive_with_dirs_and_symlink() {
+    let raw = tar_of(&[
+        Entry::Dir("node-v22.0.0-linux-x64/", 0o755),
+        Entry::Dir("node-v22.0.0-linux-x64/bin/", 0o755),
+        Entry::FileMode("node-v22.0.0-linux-x64/bin/node", b"node", 0o755),
+        Entry::Dir("node-v22.0.0-linux-x64/lib/node_modules/npm/bin/", 0o755),
+        Entry::FileMode(
+            "node-v22.0.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+            b"npm",
+            0o755,
+        ),
+        Entry::Link(
+            "node-v22.0.0-linux-x64/bin/npm",
+            "../lib/node_modules/npm/bin/npm-cli.js",
+            EntryType::Symlink,
+        ),
+    ]);
+    let f = Fixture::new("node.tar.xz", &xz(&raw));
+    f.run_plain(1).unwrap();
+
+    let p = f.prefix.path();
+    assert_eq!(fs::read(p.join("bin/node")).unwrap(), b"node");
+    let npm = p.join("bin/npm");
+    assert!(fs::symlink_metadata(&npm).unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&npm).unwrap(), b"npm");
+}
+
+/// Paths over 100 bytes are real in node's `node_modules`, and tar carries
+/// them in extension headers that precede the entry they describe: GNU
+/// `L` (long name) and `K` (long link target), or a per-entry pax `x`
+/// header. The allowlist refuses those typeflags if it ever *sees* them,
+/// so a real node install depends on tar-rs consuming them first. This
+/// pins that assumption: if a tar upgrade leaked one into the entry
+/// stream, every long-path archive would be rejected while the
+/// short-name fixtures above stayed green.
+#[test]
+fn extracts_long_paths_carried_by_gnu_and_pax_extension_headers() {
+    let deep = format!("node-v22/lib/node_modules/{}/index.js", "a".repeat(120));
+    let link = format!("node-v22/lib/node_modules/{}/alias.js", "b".repeat(120));
+    let link_target = format!("../{}/index.js", "a".repeat(120));
+    let pax_name = format!("node-v22/lib/{}/pax.js", "c".repeat(120));
+    assert!(deep.len() > 100 && link_target.len() > 100 && pax_name.len() > 100);
+
+    let mut builder = Builder::new(Vec::new());
+
+    // GNU `L` for the long file name (Builder emits it for a GNU header).
+    let mut header = Header::new_gnu();
+    header.set_size(4);
+    header.set_mode(0o644);
+    builder.append_data(&mut header, &deep, &b"deep"[..]).unwrap();
+
+    // GNU `L` for the name *and* `K` for the long symlink target.
+    let mut header = Header::new_gnu();
+    header.set_entry_type(EntryType::Symlink);
+    header.set_size(0);
+    header.set_mode(0o777);
+    builder.append_link(&mut header, &link, &link_target).unwrap();
+
+    // A per-entry pax `x` header carrying the path, ahead of a ustar entry
+    // whose own name field holds only a placeholder.
+    builder.append_pax_extensions([("path", pax_name.as_bytes())]).unwrap();
+    let mut header = Header::new_ustar();
+    header.set_path("placeholder").unwrap();
+    header.set_size(3);
+    header.set_mode(0o644);
+    header.set_cksum();
+    builder.append(&header, &b"pax"[..]).unwrap();
+
+    let raw = builder.into_inner().unwrap();
+    // Guard against a vacuous fixture: the extension typeflags must really
+    // be in the stream, or this would only re-test short names.
+    let flags: Vec<u8> = raw.chunks(512).filter(|b| b.len() == 512).map(|b| b[156]).collect();
+    for flag in *b"LKx" {
+        assert!(flags.contains(&flag), "fixture must contain a `{}` header", flag as char);
+    }
+
+    let f = Fixture::new("node.tar.xz", &xz(&raw));
+    f.run_plain(1).unwrap();
+
+    let p = f.prefix.path();
+    let strip = |s: &str| s.trim_start_matches("node-v22/").to_owned();
+    assert_eq!(fs::read(p.join(strip(&deep))).unwrap(), b"deep");
+    let alias = p.join(strip(&link));
+    assert!(fs::symlink_metadata(&alias).unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&alias).unwrap(), b"deep");
+    assert_eq!(fs::read(p.join(strip(&pax_name))).unwrap(), b"pax");
+}
+
+/// A pax global header (`git archive` emits one first) carries metadata
+/// only. It is skipped, not rejected, and writes nothing to the prefix.
+#[test]
+fn skips_pax_global_header() {
+    // A pax record's length prefix counts the whole record, newline included.
+    let record: &[u8] = b"19 comment=abcdefg\n";
+    assert_eq!(record.len(), 19);
+    let raw = tar_of(&[
+        Entry::Typed("pax_global_header", EntryType::XGlobalHeader, record),
+        Entry::File("pkg/bin/tool", b"ok"),
+    ]);
+    let f = Fixture::new("ok.tar.gz", &gzip(&raw));
+    f.run_plain(0).unwrap();
+
+    let p = f.prefix.path();
+    assert_eq!(fs::read(p.join("pkg/bin/tool")).unwrap(), b"ok");
+    assert!(!p.join("pax_global_header").exists(), "the global header must not be written");
 }
 
 /// Rejection must happen before anything reaches the prefix — a refused

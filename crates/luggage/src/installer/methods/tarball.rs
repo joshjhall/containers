@@ -40,6 +40,20 @@
 //! `tar` crate's own defaults (issue #808 requires this be proven by test,
 //! not assumed).
 //!
+//! That includes entry *types* and permission bits (issue #862). Only
+//! regular files, directories and symlinks are written; any other type —
+//! hard links, device nodes, fifos, sparse or contiguous files, unknown
+//! typeflags — rejects the whole archive. Hard links are refused rather
+//! than validated because tar-rs resolves a hard link's source against the
+//! *process* working directory when unpacking an entry on its own, so a
+//! target that looks prefix-relative to [`validate_link_target`] could
+//! link a file from outside the prefix. tar-rs would today write such an
+//! entry as a plain file and strip setuid/setgid unless
+//! `preserve_permissions` is set, but both are its defaults, not ours: the
+//! allowlist and an explicit special-bit mask make the guarantee hold
+//! regardless of what a future tar release or a later change to the
+//! unpack options does.
+//!
 //! # Partial-install behaviour
 //!
 //! The archive unpacks into a staging directory first and is merged into the
@@ -90,7 +104,8 @@ const DEFAULT_PREFIX: &str = "/usr/local";
 /// - [`LuggageError::UnsupportedArchiveFormat`] when the artifact filename
 ///   carries no compression this build recognises.
 /// - [`LuggageError::UnsafeArchiveEntry`] when any entry path or link target
-///   would escape the extraction prefix.
+///   would escape the extraction prefix, or an entry's type is not a regular
+///   file, directory, or symlink.
 /// - [`LuggageError::ArchiveExtractionFailed`] when the archive is corrupt or
 ///   truncated, or an entry cannot be written.
 /// - [`LuggageError::Io`] when the staging area, prefix, or bin directories
@@ -320,6 +335,13 @@ fn unpack_entries<R: std::io::Read>(
         })?;
         let raw = raw.into_owned();
 
+        // Type before path or strip: a device node is rejected even when it
+        // sits shallow enough to be stripped away, so the verdict on an
+        // archive never depends on the catalog's strip depth.
+        if !allowed_entry_type(entry.header().entry_type(), &raw, artifact_name)? {
+            continue;
+        }
+
         // Validate the full recorded path first, so a traversal attempt is
         // rejected even when stripping would have removed the offending
         // component.
@@ -339,8 +361,9 @@ fn unpack_entries<R: std::io::Read>(
 
         // A link's *target* escaping the prefix is the subtler half of the
         // traversal problem: the link itself sits safely inside, but a later
-        // entry written through it lands outside. Reject both link kinds.
-        if matches!(entry.header().entry_type(), EntryType::Symlink | EntryType::Link) {
+        // entry written through it lands outside. Hard links never get here —
+        // `allowed_entry_type` refuses them.
+        if entry.header().entry_type() == EntryType::Symlink {
             let link = entry
                 .link_name()
                 .map_err(|e| LuggageError::ArchiveExtractionFailed {
@@ -362,13 +385,61 @@ fn unpack_entries<R: std::io::Read>(
                 .map_err(|e| LuggageError::Io { path: parent.to_owned(), source: e })?;
         }
 
-        entry.unpack(&target).map_err(|e| LuggageError::ArchiveExtractionFailed {
+        write_entry(&mut entry, &target).map_err(|e| LuggageError::ArchiveExtractionFailed {
             artifact: artifact_name.to_owned(),
             message: format!("could not write entry `{}`: {e}", raw.display()),
         })?;
     }
 
     Ok(())
+}
+
+/// setuid, setgid and sticky — cleared from every extracted entry's mode.
+const SPECIAL_MODE_BITS: u32 = 0o7000;
+
+/// Write one validated entry to `target` with setuid/setgid/sticky masked.
+///
+/// This is the only place an entry is written, so the mask cannot be
+/// skipped by a code path that forgets it. tar-rs already drops these bits
+/// while `preserve_permissions` is false, its default — but that is its
+/// default, not ours, and the build runs as root, so a setuid binary
+/// landing in the prefix is a privilege escalation waiting for a caller.
+/// The mask does not depend on the preserve flag, so it holds even if a
+/// later change turns preservation on: the test
+/// `write_entry_masks_special_bits_even_with_preserve_permissions` drives
+/// this function with preservation forced on to pin exactly that.
+fn write_entry<R: std::io::Read>(
+    entry: &mut tar::Entry<'_, R>,
+    target: &Path,
+) -> std::io::Result<()> {
+    entry.set_mask(SPECIAL_MODE_BITS);
+    entry.unpack(target).map(|_| ())
+}
+
+/// Decide what to do with an entry of type `kind`: `Ok(true)` to write it,
+/// `Ok(false)` to skip it, or an [`LuggageError::UnsafeArchiveEntry`] when
+/// the type is outside the allowlist.
+///
+/// The allowlist is regular files, directories, and symlinks (whose targets
+/// are validated separately). Hard links are refused: see the module doc for
+/// why their source cannot be validated against what tar-rs then opens. A
+/// pax *global* header (`g`, emitted by `git archive`) carries only metadata
+/// and writes nothing, so it is skipped rather than rejected. Everything
+/// else — `Link`, `Char`, `Block`, `Fifo`, `Continuous`, `GNUSparse`, an
+/// extension header tar-rs did not consume, or an unknown typeflag — is
+/// refused.
+fn allowed_entry_type(kind: EntryType, raw: &Path, artifact_name: &str) -> Result<bool> {
+    match kind {
+        EntryType::Regular | EntryType::Directory | EntryType::Symlink => Ok(true),
+        EntryType::XGlobalHeader => Ok(false),
+        other => Err(LuggageError::UnsafeArchiveEntry {
+            artifact: artifact_name.to_owned(),
+            entry: raw.display().to_string(),
+            reason: format!(
+                "entry type {other:?} is not allowed (only regular files, directories and symlinks)"
+            ),
+        }),
+    }
 }
 
 /// How many moved paths the merge-failure `warn` log lists before
