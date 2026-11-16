@@ -326,8 +326,12 @@ fn remove_with<'a>(
         Err(RemovalFault::Launch(message)) => {
             return Err(LuggageError::PackageManagerFailed { message });
         }
-        // A lone package has nothing to retry.
-        Err(RemovalFault::Refused(e)) if packages.len() <= 1 => vec![e],
+        // A lone package has nothing to retry. Name it the way the per-package
+        // retry does, so both paths report the same `"{pkg}: {err}"` shape.
+        Err(RemovalFault::Refused(e)) if packages.len() <= 1 => match packages.first() {
+            Some(p) => vec![format!("{p}: {e}")],
+            None => vec![e],
+        },
         // Retry each package on its own; a launch failure mid-retry still
         // wins over any refusal, since the host is what broke.
         Err(RemovalFault::Refused(_)) => {
@@ -927,6 +931,38 @@ mod tests {
         assert!(err.to_string().contains("util-linux: util-linux is needed by systemd"), "{err}");
         assert!(!err.to_string().contains("make"), "{err}");
         assert_eq!(ErrorClass::from(&err), ErrorClass::PostInstall);
+    }
+
+    /// A lone refused package is named exactly as the per-package retry names
+    /// it (#1629). Exact equality, not a substring: the manager's own message
+    /// already mentions the package, so `contains` would pass unprefixed.
+    #[test]
+    fn a_refused_lone_package_is_named_like_a_batch() {
+        use crate::error::ErrorClass;
+        let refuse = |pkgs: &[&str]| {
+            if pkgs.contains(&"util-linux") {
+                Err(RemovalFault::Refused("util-linux is needed by systemd".into()))
+            } else {
+                Ok(())
+            }
+        };
+
+        let lone = remove_with(&["util-linux"], refuse).unwrap_err();
+        assert!(matches!(lone, LuggageError::BuildDepRemovalFailed { .. }), "{lone:?}");
+        assert_eq!(ErrorClass::from(&lone), ErrorClass::PostInstall);
+        assert_eq!(
+            lone.to_string(),
+            "could not remove build dependencies: util-linux: util-linux is needed by systemd"
+        );
+
+        let batch = remove_with(&["util-linux", "make"], refuse).unwrap_err();
+        assert_eq!(lone.to_string(), batch.to_string());
+
+        // No package to name: the refusal is reported as-is rather than
+        // panicking on a missing first element.
+        let none =
+            remove_with(&[], |_| Err(RemovalFault::Refused("nothing to do".into()))).unwrap_err();
+        assert_eq!(none.to_string(), "could not remove build dependencies: nothing to do");
     }
 
     /// Every probe failure that is not a clear "not installed" — a launch
