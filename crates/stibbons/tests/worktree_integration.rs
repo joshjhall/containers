@@ -315,11 +315,14 @@ fn worktree_sync_refuses_dirty_worktree() {
 
     let out = run_worktree(&project, &["list"]);
     assert!(out.status.success(), "list failed: {}", stderr(&out));
-    assert!(
-        stdout(&out).contains("dirty"),
-        "list should flag the dirty worktree:\n{}",
-        stdout(&out)
-    );
+    // Match the agent01 row's trailing state column, not a bare substring that a
+    // path or branch name could satisfy.
+    let listing = stdout(&out);
+    let row = listing
+        .lines()
+        .find(|l| l.contains(&worktree_dir.display().to_string()))
+        .unwrap_or_else(|| panic!("list should show the worktree, got:\n{listing}"));
+    assert!(row.ends_with("  dirty"), "the agent01 row should be dirty, got: {row:?}");
 
     let out = run_worktree(&project, &["sync", "1"]);
     assert!(!out.status.success(), "sync must fail on a dirty worktree:\n{}", stdout(&out));
