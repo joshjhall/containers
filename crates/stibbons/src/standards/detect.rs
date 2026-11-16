@@ -788,6 +788,48 @@ mod tests {
         assert_eq!(detect_slices(&root, &set(&["shell", "python"])), set(&["shell"]));
     }
 
+    /// Each `is_toplevel` outcome, pinned directly. Through `git_files` a
+    /// nested dir and a failing command both give `None`, so the controls
+    /// here prove each `false` comes from its own branch: the nested command
+    /// succeeds and prints `../` (only the empty-output check rejects it),
+    /// and the failing command prints nothing (only the status check rejects
+    /// it).
+    #[test]
+    fn is_toplevel_distinguishes_toplevel_nested_and_failing() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(git(tmp.path(), &["--version"]), "git is not runnable");
+        let root = tmp.path().join("root");
+        let sub = root.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        assert!(git(&root, &["init", "-q"]), "git init failed");
+        let cdup = |dir: &Path| {
+            let mut cmd = git_command(dir, &["rev-parse", "--show-cdup"]);
+            hermetic(&mut cmd);
+            cmd
+        };
+
+        // Toplevel: succeeds and prints nothing.
+        assert!(is_toplevel(cdup(&root)));
+
+        // Nested: with no ceiling git ascends to `root` and prints `../`.
+        let nested = || {
+            let mut cmd = cdup(&sub);
+            cmd.env_remove("GIT_CEILING_DIRECTORIES");
+            cmd
+        };
+        let out = nested().output().unwrap();
+        assert!(out.status.success(), "control: nested rev-parse failed");
+        assert_eq!(out.stdout.trim_ascii(), b"../", "control: nested dir did not print ../");
+        assert!(!is_toplevel(nested()));
+
+        // Failing: `-C` to a missing dir exits non-zero with empty stdout.
+        let missing = tmp.path().join("missing");
+        let out = cdup(&missing).output().unwrap();
+        assert!(!out.status.success(), "control: rev-parse on a missing dir succeeded");
+        assert!(out.stdout.is_empty(), "control: failing command printed to stdout");
+        assert!(!is_toplevel(cdup(&missing)));
+    }
+
     #[cfg(unix)]
     #[test]
     fn ceiling_for_rejects_unexpressible_parents() {
