@@ -11,8 +11,9 @@
 
 mod common;
 
+use std::fmt::Write as _;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output};
 
 use common::run_worktree;
 
@@ -51,23 +52,9 @@ fn worktree_create_rewrites_pointers_and_updates_compose() {
     std::fs::create_dir_all(&project).unwrap();
 
     // A real repo with one commit (so `git branch agent01` has a HEAD).
-    git(&project, &["init", "-b", "main"]);
-    std::fs::write(project.join("README.md"), "hi\n").unwrap();
-    git(&project, &["add", "."]);
-    git(&project, &["commit", "-m", "init"]);
-
+    init_repo(&project);
     // Minimal `.igor.yml` with working_dir set so base_dir == <base>.
-    let cfg = format!(
-        "schema_version: 1\n\
-         containers_dir: containers\n\
-         project:\n\
-         \x20 name: myapp\n\
-         \x20 working_dir: {}\n\
-         features:\n\
-         \x20 - python\n",
-        project.display()
-    );
-    std::fs::write(project.join(".igor.yml"), cfg).unwrap();
+    write_igor_yml(&project, &[], None);
 
     // Create the worktree for agent 1.
     let out = run_worktree(&project, &["create", "1"]);
@@ -165,22 +152,8 @@ fn worktree_list_and_sync() {
     std::fs::create_dir_all(&project).unwrap();
 
     // A real repo with one commit on `main`.
-    git(&project, &["init", "-b", "main"]);
-    std::fs::write(project.join("README.md"), "hi\n").unwrap();
-    git(&project, &["add", "."]);
-    git(&project, &["commit", "-m", "init"]);
-
-    let cfg = format!(
-        "schema_version: 1\n\
-         containers_dir: containers\n\
-         project:\n\
-         \x20 name: myapp\n\
-         \x20 working_dir: {}\n\
-         features:\n\
-         \x20 - python\n",
-        project.display()
-    );
-    std::fs::write(project.join(".igor.yml"), cfg).unwrap();
+    init_repo(&project);
+    write_igor_yml(&project, &[], None);
 
     // Create the worktree for agent 1 (branch agent01, checked out at HEAD).
     let out = run_worktree(&project, &["create", "1"]);
@@ -239,4 +212,246 @@ fn rev_parse_head(dir: &Path) -> String {
         .expect("failed to spawn git");
     assert!(out.status.success(), "rev-parse failed: {}", String::from_utf8_lossy(&out.stderr));
     String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// Inits a real repo at `dir` on `main` with one commit (`README.md` = `hi`).
+fn init_repo(dir: &Path) {
+    std::fs::create_dir_all(dir).unwrap();
+    git(dir, &["init", "-b", "main"]);
+    std::fs::write(dir.join("README.md"), "hi\n").unwrap();
+    git(dir, &["add", "."]);
+    git(dir, &["commit", "-m", "init"]);
+}
+
+/// Writes `file` = `content` in `dir` and commits it on the current branch.
+fn commit_file(dir: &Path, file: &str, content: &str, msg: &str) {
+    std::fs::write(dir.join(file), content).unwrap();
+    git(dir, &["add", "."]);
+    git(dir, &["commit", "-m", msg]);
+}
+
+/// Writes a minimal `.igor.yml` for project `myapp` rooted at `project` (so
+/// `base_dir` is its parent). A non-empty `repos` and/or a `max` add an
+/// `agents:` block; with neither, the agent defaults apply (repos `[myapp]`,
+/// max 5).
+fn write_igor_yml(project: &Path, repos: &[&str], max: Option<u32>) {
+    let mut cfg = format!(
+        "schema_version: 1\n\
+         containers_dir: containers\n\
+         project:\n\
+         \x20 name: myapp\n\
+         \x20 working_dir: {}\n\
+         features:\n\
+         \x20 - python\n",
+        project.display()
+    );
+    if !repos.is_empty() || max.is_some() {
+        cfg.push_str("agents:\n");
+        if let Some(m) = max {
+            writeln!(cfg, "  max: {m}").unwrap();
+        }
+        if !repos.is_empty() {
+            cfg.push_str("  repos:\n");
+            for r in repos {
+                writeln!(cfg, "    - {r}").unwrap();
+            }
+        }
+    }
+    std::fs::write(project.join(".igor.yml"), cfg).unwrap();
+}
+
+fn stdout(out: &Output) -> String {
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+fn stderr(out: &Output) -> String {
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
+/// Runs `worktree create <n>` in `project`, asserting success.
+fn create_agent(project: &Path, n: &str) {
+    let out = run_worktree(project, &["create", n]);
+    assert!(
+        out.status.success(),
+        "create {n} failed\nstdout: {}\nstderr: {}",
+        stdout(&out),
+        stderr(&out)
+    );
+}
+
+/// True when the worktree at `dir` is stopped mid-rebase: git's own
+/// `rebase-merge` state dir (resolved per-worktree via `--git-path`) exists.
+fn is_mid_rebase(dir: &Path) -> bool {
+    let out = Command::new("git")
+        .current_dir(dir)
+        .args(["rev-parse", "--git-path", "rebase-merge"])
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .output()
+        .expect("failed to spawn git");
+    assert!(out.status.success(), "rev-parse --git-path failed: {}", stderr(&out));
+    let rel = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    // `--git-path` may answer relative to `dir`; `join` keeps an absolute one as-is.
+    dir.join(rel).is_dir()
+}
+
+/// `sync` through the real binary refuses a dirty worktree: non-zero exit, the
+/// refusal surfaced on stderr, a failed per-repo summary, and the branch tip and
+/// the uncommitted file both left untouched.
+#[test]
+fn worktree_sync_refuses_dirty_worktree() {
+    let tmp = tempfile::tempdir().unwrap();
+    let project = tmp.path().join("myapp");
+    init_repo(&project);
+    write_igor_yml(&project, &[], None);
+    create_agent(&project, "1");
+
+    // Advance main so a (wrongly) permitted rebase would visibly move the tip.
+    commit_file(&project, "CHANGELOG.md", "v1\n", "advance main");
+
+    let worktree_dir = tmp.path().join("myapp-agent01");
+    std::fs::write(worktree_dir.join("scratch.txt"), "wip\n").unwrap();
+    let tip_before = rev_parse_head(&worktree_dir);
+
+    let out = run_worktree(&project, &["list"]);
+    assert!(out.status.success(), "list failed: {}", stderr(&out));
+    assert!(
+        stdout(&out).contains("dirty"),
+        "list should flag the dirty worktree:\n{}",
+        stdout(&out)
+    );
+
+    let out = run_worktree(&project, &["sync", "1"]);
+    assert!(!out.status.success(), "sync must fail on a dirty worktree:\n{}", stdout(&out));
+    assert!(
+        stderr(&out).contains("has uncommitted changes"),
+        "expected the dirty refusal, got stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stdout(&out).contains("Sync summary: 0 rebased, 0 skipped, 1 failed"),
+        "expected a failed summary, got:\n{}",
+        stdout(&out)
+    );
+    assert_eq!(rev_parse_head(&worktree_dir), tip_before, "a refused sync must not move the tip");
+    assert!(!is_mid_rebase(&worktree_dir), "a refused sync must not start a rebase");
+    assert_eq!(
+        std::fs::read_to_string(worktree_dir.join("scratch.txt")).unwrap(),
+        "wip\n",
+        "uncommitted work must survive the refusal"
+    );
+}
+
+/// A real rebase conflict (both branches edit the same line) exits non-zero and
+/// leaves the worktree **mid-rebase** with conflict markers — sync deliberately
+/// does not auto-abort, so the conflict stays visible for resolution.
+#[test]
+fn worktree_sync_conflict_leaves_worktree_mid_rebase() {
+    let tmp = tempfile::tempdir().unwrap();
+    let project = tmp.path().join("myapp");
+    init_repo(&project);
+    write_igor_yml(&project, &[], None);
+    create_agent(&project, "1");
+
+    let worktree_dir = tmp.path().join("myapp-agent01");
+    commit_file(&worktree_dir, "README.md", "agent edit\n", "agent change");
+    commit_file(&project, "README.md", "main edit\n", "main change");
+
+    let out = run_worktree(&project, &["sync", "1"]);
+    assert!(!out.status.success(), "a conflicting sync must fail:\n{}", stdout(&out));
+    let err = stderr(&out);
+    assert!(err.contains("sync failed for 1 repo(s): myapp:"), "got stderr: {err}");
+    assert!(
+        stdout(&out).contains("Sync summary: 0 rebased, 0 skipped, 1 failed"),
+        "got:\n{}",
+        stdout(&out)
+    );
+    assert!(is_mid_rebase(&worktree_dir), "the worktree must be left mid-rebase (no auto-abort)");
+    let readme = std::fs::read_to_string(worktree_dir.join("README.md")).unwrap();
+    assert!(readme.contains("<<<<<<<"), "expected conflict markers, got:\n{readme}");
+}
+
+/// With two configured repos, `list` shows both worktrees and `sync` attempts
+/// every repo: the first (`myapp`) conflicts, yet the loop still rebases the
+/// second (`lib`) and reports a mixed summary with a non-zero exit.
+#[test]
+fn worktree_list_and_sync_span_multiple_repos() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = tmp.path();
+    let project = base.join("myapp");
+    let lib = base.join("lib");
+    init_repo(&project);
+    init_repo(&lib);
+    write_igor_yml(&project, &["myapp", "lib"], None);
+    create_agent(&project, "1");
+
+    let app_wt = base.join("myapp-agent01");
+    let lib_wt = base.join("lib-agent01");
+    assert!(app_wt.is_dir() && lib_wt.is_dir(), "create must make a worktree per repo");
+
+    let out = run_worktree(&project, &["list"]);
+    assert!(out.status.success(), "list failed: {}", stderr(&out));
+    let listing = stdout(&out);
+    for wt in [&app_wt, &lib_wt] {
+        assert!(
+            listing.contains(&wt.display().to_string()),
+            "list should show {}, got:\n{listing}",
+            wt.display()
+        );
+    }
+    assert!(listing.contains("  myapp  ") && listing.contains("  lib  "), "got:\n{listing}");
+
+    // myapp (first in the loop) conflicts; lib advances cleanly.
+    commit_file(&app_wt, "README.md", "agent edit\n", "agent change");
+    commit_file(&project, "README.md", "main edit\n", "main change");
+    commit_file(&lib, "CHANGELOG.md", "v1\n", "advance lib main");
+
+    let out = run_worktree(&project, &["sync", "1"]);
+    assert!(!out.status.success(), "one failed repo must fail the run:\n{}", stdout(&out));
+    assert!(
+        stdout(&out).contains("Sync summary: 1 rebased, 0 skipped, 1 failed"),
+        "expected a mixed summary, got:\n{}",
+        stdout(&out)
+    );
+    assert!(stderr(&out).contains("sync failed for 1 repo(s): myapp:"), "got: {}", stderr(&out));
+    assert!(is_mid_rebase(&app_wt), "myapp's worktree should be left mid-rebase");
+    assert_eq!(
+        rev_parse_head(&lib_wt),
+        rev_parse_head(&lib),
+        "the loop must continue past myapp's conflict and rebase lib onto its main"
+    );
+}
+
+/// Out-of-range and non-integer agent numbers are rejected by the real binary
+/// before any sync work starts, and leave existing worktrees untouched.
+#[test]
+fn worktree_sync_rejects_invalid_agent_number() {
+    let tmp = tempfile::tempdir().unwrap();
+    let project = tmp.path().join("myapp");
+    init_repo(&project);
+    write_igor_yml(&project, &[], Some(2));
+    create_agent(&project, "1");
+    commit_file(&project, "CHANGELOG.md", "v1\n", "advance main");
+    let worktree_dir = tmp.path().join("myapp-agent01");
+    let tip_before = rev_parse_head(&worktree_dir);
+
+    for (arg, want) in [
+        ("0", "agent number must be between 1 and 2"),
+        ("3", "agent number must be between 1 and 2"),
+        ("abc", "invalid agent number \"abc\": must be an integer"),
+    ] {
+        let out = run_worktree(&project, &["sync", arg]);
+        assert!(!out.status.success(), "sync {arg} must fail");
+        assert!(
+            stderr(&out).contains(want),
+            "sync {arg}: expected {want:?}, got: {}",
+            stderr(&out)
+        );
+        assert!(
+            !stdout(&out).contains("Syncing worktrees"),
+            "sync {arg} must be rejected before any work:\n{}",
+            stdout(&out)
+        );
+    }
+    assert_eq!(rev_parse_head(&worktree_dir), tip_before, "rejected syncs must not move the tip");
 }
