@@ -215,17 +215,26 @@ pub trait HttpClient: Send + Sync {
 /// Every attempt runs on a fresh, use-once [`ureq::Agent`] — exactly what the
 /// free `ureq::get` does — so each retry opens a new connection and re-reads
 /// `HTTP(S)_PROXY` / `ALL_PROXY` / `NO_PROXY` at request time. The only knob
-/// is the test-only [`Self::without_proxy`], which lets the loopback adapter
-/// tests bypass the proxy env without touching the process environment
-/// (#856).
+/// is the test-only proxy source ([`ProxySource`]), which lets the loopback
+/// adapter tests pin or bypass the proxy without touching the process
+/// environment (#856).
 #[derive(Debug, Clone)]
 pub struct UreqClient {
     max_attempts: u32,
     retry_delay: Duration,
-    /// Build each attempt's agent with proxy detection off. Only ever set by
-    /// the `#[cfg(test)]` [`Self::without_proxy`]; production is always
-    /// `false`.
-    bypass_proxy: bool,
+    proxy: ProxySource,
+}
+
+/// Where each attempt's agent gets its proxy from.
+#[derive(Debug, Clone)]
+enum ProxySource {
+    /// Read the proxy env at request time, exactly as `ureq::get` does.
+    /// The only variant production can construct.
+    Env,
+    /// A fixed proxy (or none), so tests can drive [`UreqClient::agent`]
+    /// with a known value instead of whatever this process has exported.
+    #[cfg(test)]
+    Fixed(Option<ureq::Proxy>),
 }
 
 impl Default for UreqClient {
@@ -238,7 +247,7 @@ impl UreqClient {
     /// Build a client with custom retry tuning. Mostly useful in tests.
     #[must_use]
     pub const fn with_retry(max_attempts: u32, retry_delay: Duration) -> Self {
-        Self { max_attempts, retry_delay, bypass_proxy: false }
+        Self { max_attempts, retry_delay, proxy: ProxySource::Env }
     }
 
     /// Ignore proxy environment variables, so a loopback test server is
@@ -246,18 +255,28 @@ impl UreqClient {
     /// production must honour the proxy env.
     #[cfg(test)]
     #[must_use]
-    const fn without_proxy(mut self) -> Self {
-        self.bypass_proxy = true;
+    fn without_proxy(self) -> Self {
+        self.with_fixed_proxy(None)
+    }
+
+    /// Use `proxy` for every attempt instead of reading the env. Test-only.
+    #[cfg(test)]
+    #[must_use]
+    fn with_fixed_proxy(mut self, proxy: Option<ureq::Proxy>) -> Self {
+        self.proxy = ProxySource::Fixed(proxy);
         self
     }
 
-    /// A use-once agent for one attempt — the same agent `ureq::get` builds,
-    /// unless the test-only proxy bypass is set.
+    /// A use-once agent for one attempt. With [`ProxySource::Env`] this is
+    /// `Agent::new_with_defaults()` — the agent `ureq::get` builds, whose
+    /// default config reads the proxy env at construction.
     fn agent(&self) -> ureq::Agent {
-        if self.bypass_proxy {
-            ureq::Agent::config_builder().proxy(None).build().new_agent()
-        } else {
-            ureq::Agent::new_with_defaults()
+        match &self.proxy {
+            ProxySource::Env => ureq::Agent::new_with_defaults(),
+            #[cfg(test)]
+            ProxySource::Fixed(proxy) => {
+                ureq::Agent::config_builder().proxy(proxy.clone()).build().new_agent()
+            }
         }
     }
 

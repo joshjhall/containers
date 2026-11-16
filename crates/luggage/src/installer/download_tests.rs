@@ -109,25 +109,77 @@ fn ureq_default_uses_published_constants() {
     let c = UreqClient::default();
     assert_eq!(c.max_attempts, DEFAULT_MAX_ATTEMPTS);
     assert_eq!(c.retry_delay, DEFAULT_RETRY_DELAY);
-    assert!(!c.bypass_proxy, "production must honour the proxy env");
+    assert!(matches!(c.proxy, ProxySource::Env), "production must read the proxy env");
 }
 
-/// The production agent keeps ureq's env-driven proxy detection (it is the
-/// same `Agent::new_with_defaults` the free `ureq::get` uses), and only the
-/// test-only constructor turns it off. Compared against ureq's own env read so
-/// the check holds whether or not this process has a proxy exported.
+/// `agent()` wires the configured proxy source into the agent it builds. The
+/// fixed-proxy cases discriminate without touching the process env: a known
+/// proxy must reach the agent's config, and the bypass must drop it. (An
+/// env-only comparison would be `false == false` on any host with no proxy
+/// exported, so it could not catch an `agent()` that always drops the proxy.)
 #[test]
-fn ureq_agent_proxy_detection_is_production_default_and_test_bypass() {
+fn ureq_agent_carries_the_configured_proxy_source() {
+    let proxy = ureq::Proxy::new("http://proxy.invalid:3128").unwrap();
+    let pinned = UreqClient::with_retry(1, Duration::ZERO).with_fixed_proxy(Some(proxy.clone()));
+    assert_eq!(pinned.agent().config().proxy(), Some(&proxy), "a fixed proxy must reach the agent");
+
+    let bypassed = UreqClient::with_retry(1, Duration::ZERO).without_proxy();
+    assert!(bypassed.agent().config().proxy().is_none(), "bypass must drop the proxy");
+
+    // The production branch is ureq's own default agent, so its proxy is
+    // whatever ureq reads from the env — same as `ureq::get`.
     let prod = UreqClient::with_retry(1, Duration::ZERO);
-    assert!(!prod.bypass_proxy);
     assert_eq!(
-        prod.agent().config().proxy().is_some(),
-        ureq::Proxy::try_from_env().is_some(),
-        "production agent must read the proxy env exactly as ureq::get does"
+        prod.agent().config().proxy(),
+        ureq::Agent::new_with_defaults().config().proxy(),
+        "production agent must match ureq::get's default agent"
     );
-    let test = prod.without_proxy();
-    assert!(test.bypass_proxy);
-    assert!(test.agent().config().proxy().is_none(), "bypass must drop the proxy");
+}
+
+/// Name of the child-side probe below; the parent re-runs it by exact name.
+const PROXY_PROBE: &str = "installer::download::tests::ureq_production_agent_proxy_probe";
+
+/// Child half of [`ureq_production_agent_honours_the_proxy_env`]. Inert
+/// unless `LUGGAGE_PROXY_PROBE` is set — which only the parent's child
+/// process environment does — so a normal run passes it trivially.
+#[test]
+fn ureq_production_agent_proxy_probe() {
+    let Some(expected) = std::env::var_os("LUGGAGE_PROXY_PROBE") else { return };
+    let prod = UreqClient::default();
+    let proxy = prod.agent().config().proxy().cloned();
+    let got = proxy.map(|p| format!("{}:{}", p.host(), p.port()));
+    assert_eq!(got.as_deref(), expected.to_str(), "production agent ignored HTTP(S)_PROXY");
+}
+
+/// The production branch of `agent()` honours the proxy env. This is checked
+/// for real, not as `false == false` on a proxy-less host: re-run this test
+/// binary's probe with a proxy exported on the *child* process only (no
+/// `set_var`, no env mutation in this process) and require the default
+/// client's agent to pick it up.
+#[test]
+fn ureq_production_agent_honours_the_proxy_env() {
+    let proxy = "http://proxy.invalid:3128";
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([PROXY_PROBE, "--exact", "--nocapture", "--test-threads=1"])
+        .env_remove("NO_PROXY")
+        .env_remove("no_proxy")
+        .env("HTTP_PROXY", proxy)
+        .env("HTTPS_PROXY", proxy)
+        .env("ALL_PROXY", proxy)
+        .env("http_proxy", proxy)
+        .env("https_proxy", proxy)
+        .env("all_proxy", proxy)
+        .env("LUGGAGE_PROXY_PROBE", "proxy.invalid:3128")
+        .output()
+        .expect("re-run test binary");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "probe failed:\n{stdout}\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Guard against a filter that matched nothing and "passed" vacuously.
+    assert!(stdout.contains("1 passed"), "probe did not run exactly once:\n{stdout}");
 }
 
 #[test]
@@ -648,9 +700,10 @@ fn ureq_get_rejects_an_oversized_body_without_retrying() {
     assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
 }
 
-/// A transient failure followed by success: each retry gets a fresh
-/// connection and the adapter returns the second attempt's body, with the
-/// sink holding that body and nothing else.
+/// A transient failure followed by success: the 503 is retried and the
+/// adapter returns the second attempt's body, with the sink holding that body
+/// and nothing else. (The stub closes every connection, so this does not by
+/// itself prove a fresh agent per attempt.)
 #[test]
 fn ureq_adapters_recover_from_a_transient_failure() {
     let (url, hits) = sequenced_server(vec![503, 200], b"payload".to_vec());
