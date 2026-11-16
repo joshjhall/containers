@@ -19,19 +19,38 @@ BD_NODE_VERSION="26.13.0"
 # binary never lands in the normal fixtures' target dir.
 BD_TARGET_CACHE="${LUGGAGE_TARGET_CACHE:-luggage-build-deps-target}"
 
-# bd_present_cmd PKG — a container command printing `pkg-present-PKG` or
-# `pkg-absent-PKG`. dpkg-query must report the `installed` state itself; a
-# purged package exits 1, a config-files leftover is not installed either.
+# bd_present_cmd PKG — a container command printing `pkg-present-PKG`,
+# `pkg-absent-PKG`, or `pkg-inconclusive-PKG ...`. The inconclusive token
+# matches neither expectation, so every assertion fails on it.
+#
+# Absent must mean "removed", not "could not tell", or a happy-path absence
+# assertion passes for the wrong reason. Two guards, because neither manager
+# can be trusted to fail on a broken database on its own (verified
+# 2026-11-16): dpkg-query reads a MISSING /var/lib/dpkg/status as an empty
+# database and answers "no packages found"; rpm -q against a WIPED
+# /var/lib/rpm answers the exact "package X is not installed".
+#   1. Control: the same query must first see `bash` installed. bash is in
+#      both base images and is never a declared dep, so a database that
+#      cannot see it cannot be trusted to say anything is absent.
+#   2. Only the manager's own unambiguous answer counts (mirroring luggage's
+#      fail-closed presence_from_output, sysremove.rs):
+#        dpkg-query: rc 0 + `installed` = present; rc 0 + `not-installed` /
+#                    `config-files`, or rc 1 + "no packages found matching"
+#                    = absent.
+#        rpm -q:     rc 0 = present; rc 1 + "package PKG is not installed"
+#                    = absent.
 bd_present_cmd() {
-    local pkg="$1"
+    local pkg="$1" query
     case "$BD_DISTRO" in
         debian)
-            printf '%s' "s=\$(dpkg-query -W -f='\${db:Status-Status}' $pkg 2>/dev/null); [ \"\$s\" = installed ] && echo pkg-present-$pkg || echo pkg-absent-$pkg"
+            # q P — prints P's verdict word: present | absent | inconclusive.
+            query="q() { local out rc; out=\$(dpkg-query -W -f='\${db:Status-Status}' \"\$1\" 2>&1); rc=\$?; if [ \$rc -eq 0 ] && [ \"\$out\" = installed ]; then echo present; elif { [ \$rc -eq 0 ] && { [ \"\$out\" = not-installed ] || [ \"\$out\" = config-files ]; }; } || { [ \$rc -eq 1 ] && [[ \$out == *'no packages found matching'* ]]; }; then echo absent; else echo \"inconclusive rc=\$rc \$out\"; fi; }"
             ;;
         rhel)
-            printf '%s' "rpm -q $pkg >/dev/null 2>&1 && echo pkg-present-$pkg || echo pkg-absent-$pkg"
+            query="q() { local out rc; out=\$(rpm -q \"\$1\" 2>&1); rc=\$?; if [ \$rc -eq 0 ]; then echo present; elif [ \$rc -eq 1 ] && [ \"\$out\" = \"package \$1 is not installed\" ]; then echo absent; else echo \"inconclusive rc=\$rc \$out\"; fi; }"
             ;;
     esac
+    printf '%s' "$query; c=\$(q bash); if [ \"\$c\" != present ]; then echo \"pkg-inconclusive-$pkg control-bash=\$c\"; else v=\$(q $pkg); case \"\$v\" in present|absent) echo pkg-\$v-$pkg ;; *) echo \"pkg-inconclusive-$pkg \$v\" ;; esac; fi"
 }
 
 bd_build() {
@@ -124,9 +143,11 @@ test_bd_refusal_does_not_cascade() {
     # and so is the build dep the manager refused to take from under it.
     assert_command_in_container "$BD_REFUSE_IMAGE" "$(bd_present_cmd "$BD_DEPENDENT")" "pkg-present-$BD_DEPENDENT"
     assert_command_in_container "$BD_REFUSE_IMAGE" "$(bd_present_cmd "$BD_REFUSED")" "pkg-present-$BD_REFUSED"
-    # And the report does not claim a removal that did not happen.
+    # And the report does not claim a removal that did not happen. grep's
+    # exit is split three ways: 1 (read the report, no key) is the only pass;
+    # 2 (missing/unreadable report) must not read as "nothing claimed".
     assert_command_in_container "$BD_REFUSE_IMAGE" \
-        "command grep -q removed_build_dependencies /var/log/luggage/node-report.json && echo claims-removal || echo no-removal-claimed" \
+        "command grep -q removed_build_dependencies /var/log/luggage/node-report.json; case \$? in 0) echo claims-removal ;; 1) echo no-removal-claimed ;; *) echo report-unreadable ;; esac" \
         "no-removal-claimed"
 }
 
