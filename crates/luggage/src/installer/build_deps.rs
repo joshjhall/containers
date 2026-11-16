@@ -26,7 +26,8 @@ use containers_common::tooldb::DependencyPurpose;
 use tracing::warn;
 
 use super::logging;
-use super::syspackages::{PackageManager, is_installed, remove_packages};
+use super::sysops::SystemPackages;
+use super::syspackages::PackageManager;
 
 /// Build-only packages the system-package stage newly installed, awaiting
 /// removal. Empty when there is nothing to remove.
@@ -92,8 +93,14 @@ pub(super) fn removal_candidates(
 pub(super) fn remove_build_deps(
     pending: PendingBuildDeps,
     logger: Option<&logging::FeatureLogger>,
+    sys: &dyn SystemPackages,
 ) -> (Vec<String>, Result<()>) {
-    remove_build_deps_with(pending, logger, remove_packages, is_installed)
+    remove_build_deps_with(
+        pending,
+        logger,
+        |names, mgr| sys.remove(names, mgr),
+        |mgr, p| sys.is_installed(mgr, p),
+    )
 }
 
 /// [`remove_build_deps`] with the removal and the presence re-check
@@ -221,14 +228,31 @@ mod tests {
         );
     }
 
+    /// Fails the test if the package manager is consulted at all.
+    struct Untouchable;
+    impl SystemPackages for Untouchable {
+        fn is_installed(&self, _: PackageManager, p: &str) -> bool {
+            panic!("presence probed for {p} with nothing to remove")
+        }
+        fn install(&self, _: &ResolvedSystemDeps, _: PackageManager, _: bool) -> Result<()> {
+            panic!("install called from removal")
+        }
+        fn remove(&self, p: &[&str], _: PackageManager) -> Result<()> {
+            panic!("removal ran for {p:?} with nothing to remove")
+        }
+    }
+
     #[test]
     fn empty_pending_set_removes_nothing() {
-        // Neither shape may shell out: no package manager exists here.
-        let (removed, r) = remove_build_deps(PendingBuildDeps::default(), None);
+        // Neither shape may touch the package manager.
+        let (removed, r) = remove_build_deps(PendingBuildDeps::default(), None, &Untouchable);
         assert_eq!(removed, Vec::<String>::new());
         r.unwrap();
-        let (removed, r) =
-            remove_build_deps(PendingBuildDeps::new(PackageManager::Apk, vec![]), None);
+        let (removed, r) = remove_build_deps(
+            PendingBuildDeps::new(PackageManager::Apk, vec![]),
+            None,
+            &Untouchable,
+        );
         assert_eq!(removed, Vec::<String>::new());
         r.unwrap();
     }

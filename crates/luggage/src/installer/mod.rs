@@ -22,6 +22,7 @@ mod options;
 pub mod post_install;
 pub mod rustup_target;
 mod stages;
+mod sysops;
 pub mod syspackages;
 pub mod sysremove;
 pub mod template;
@@ -221,6 +222,9 @@ pub struct Installer {
     options: InstallerOptions,
     http: Arc<dyn HttpClient>,
     runner: Arc<dyn CommandRunner>,
+    /// Host package-manager seam (#1630); [`sysops::HostSystemPackages`]
+    /// outside tests.
+    sys: Arc<dyn sysops::SystemPackages>,
 }
 
 impl std::fmt::Debug for Installer {
@@ -252,7 +256,15 @@ impl Installer {
         runner: Arc<dyn CommandRunner>,
     ) -> Result<Self> {
         options.validate()?;
-        Ok(Self { options, http, runner })
+        Ok(Self { options, http, runner, sys: Arc::new(sysops::HostSystemPackages) })
+    }
+
+    /// Swap in an in-memory host package manager, so the orchestration in
+    /// [`Self::run_stages`] is unit-testable (#1630).
+    #[cfg(test)]
+    pub(crate) fn with_system_packages(mut self, sys: Arc<dyn sysops::SystemPackages>) -> Self {
+        self.sys = sys;
+        self
     }
 
     /// Borrow the underlying options.
@@ -564,7 +576,7 @@ impl Installer {
         if let Err(e) = installed {
             // Still remove whatever build deps a partial install left behind.
             let (removed_build_dependencies, cleanup) =
-                build_deps::remove_build_deps(pending, logger);
+                build_deps::remove_build_deps(pending, logger, self.sys.as_ref());
             return StageRun {
                 removed_build_dependencies,
                 result: build_deps::merge_cleanup(Err(e), cleanup, logger),
@@ -576,7 +588,8 @@ impl Installer {
         let built = self.run_method_stages(resolved, plan, logger);
         // Removed before validate, on success and failure alike: a passing
         // validate then proves the tool runs without its build deps.
-        let (removed_build_dependencies, cleanup) = build_deps::remove_build_deps(pending, logger);
+        let (removed_build_dependencies, cleanup) =
+            build_deps::remove_build_deps(pending, logger, self.sys.as_ref());
         let result =
             build_deps::merge_cleanup(built, cleanup, logger).and_then(|(env_map, warnings)| {
                 let version_output = self.stage_validate(resolved, &env_map, logger)?;
@@ -664,3 +677,7 @@ fn install_basename(url: &str) -> String {
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "run_stages_tests.rs"]
+mod run_stages_tests;
