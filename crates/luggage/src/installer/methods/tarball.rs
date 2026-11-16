@@ -391,22 +391,17 @@ fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()
         return Ok(());
     };
 
-    // Counted only on failure: the success path pays nothing for diagnostics.
-    // `merge_dir` moves leaves out of staging as they land, so what is still
-    // in staging plus what moved is the archive's full contribution.
+    // The total is only walked on failure. `merge_dir` moves leaves out of
+    // staging as they land, so what is still in staging plus what moved is
+    // the archive's full contribution.
     let total = moved.len() + count_leaves(staging);
-    let shown: Vec<_> =
-        moved.iter().take(MERGE_FAILURE_LOG_LIMIT).map(|p| p.display().to_string()).collect();
-    let more = moved.len().saturating_sub(shown.len());
     tracing::warn!(
         prefix = %prefix.display(),
         merged = moved.len(),
         total,
         failed_at = %path.display(),
-        "binary-tarball merge failed partway; these entries already landed in the prefix: \
-         [{}]{}",
-        shown.join(", "),
-        if more > 0 { format!(" ...and {more} more") } else { String::new() },
+        "binary-tarball merge failed partway; these entries already landed in the prefix: {}",
+        landed_summary(&moved, MERGE_FAILURE_LOG_LIMIT),
     );
 
     Err(LuggageError::ArchiveMergeFailed {
@@ -417,6 +412,15 @@ fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()
         path,
         source,
     })
+}
+
+/// Render the landed paths for the merge-failure log: the first `limit`
+/// paths, then an `...and N more` tail for the rest.
+fn landed_summary(moved: &[PathBuf], limit: usize) -> String {
+    let shown: Vec<_> = moved.iter().take(limit).map(|p| p.display().to_string()).collect();
+    let more = moved.len() - shown.len();
+    let tail = if more > 0 { format!(" ...and {more} more") } else { String::new() };
+    format!("[{}]{tail}", shown.join(", "))
 }
 
 /// Count the files and links under `dir` (directories themselves excluded).
@@ -479,11 +483,11 @@ fn merge_dir(
             continue;
         }
 
-        // `symlink_metadata` so an existing *symlink* is removed rather than
-        // followed — otherwise the rename would clobber the link's target.
-        if fs::symlink_metadata(&to).is_ok() {
-            fs::remove_file(&to).map_err(|e| (to.clone(), e))?;
-        }
+        // No `remove_file` first: `rename` atomically replaces an existing
+        // file or symlink at `to` (a symlink is replaced, never followed, so
+        // its target is not clobbered). Removing first would mean a failed
+        // rename leaves the prefix *missing* the file it used to have —
+        // unrecorded in `moved` and invisible in the merge report.
         fs::rename(&from, &to).map_err(|e| (to.clone(), e))?;
         moved.push(to);
     }

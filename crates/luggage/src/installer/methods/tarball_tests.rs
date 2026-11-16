@@ -607,6 +607,54 @@ fn merge_failure_reports_how_far_it_got() {
     assert_eq!(fs::read(f.prefix.path().join("c")).unwrap(), b"in the way");
 }
 
+/// Progress must accumulate across recursion: a failure inside a nested
+/// directory counts what landed in its parent and siblings, and the total
+/// includes the leaves of the subtree that never merged.
+#[test]
+fn nested_merge_failure_counts_across_recursion() {
+    let raw = tar_bytes(&[("a/1", b"1"), ("a/2", b"2"), ("a/sub/x", b"x"), ("a/sub/y", b"y")]);
+    let f = Fixture::new("tool.tar.gz", &gzip(&raw));
+    fs::create_dir_all(f.prefix.path().join("a")).unwrap();
+    fs::write(f.prefix.path().join("a/sub"), b"in the way").unwrap();
+
+    let err = f.run_plain(0).unwrap_err();
+    let LuggageError::ArchiveMergeFailed { merged, total, path, .. } = err else {
+        panic!("expected ArchiveMergeFailed, got {err}");
+    };
+    assert_eq!((merged, total), (2, 4));
+    assert_eq!(path, f.prefix.path().join("a/sub"));
+}
+
+/// An existing prefix file is overwritten by the archive's copy. The merge
+/// now relies on `rename` replacing it atomically (no `remove_file` first,
+/// so a failed rename can't leave the prefix missing the file); this guards
+/// that the success-path result is unchanged by that.
+#[test]
+fn merge_overwrites_an_existing_file_in_place() {
+    let raw = tar_bytes(&[("bin/tool", b"new")]);
+    let f = Fixture::new("tool.tar.gz", &gzip(&raw));
+    fs::create_dir_all(f.prefix.path().join("bin")).unwrap();
+    fs::write(f.prefix.path().join("bin/tool"), b"old").unwrap();
+
+    f.run_plain(0).unwrap();
+
+    assert_eq!(fs::read(f.prefix.path().join("bin/tool")).unwrap(), b"new");
+}
+
+#[test]
+fn landed_summary_lists_everything_under_the_limit() {
+    let moved = vec![PathBuf::from("/p/a"), PathBuf::from("/p/b")];
+    assert_eq!(landed_summary(&moved, 50), "[/p/a, /p/b]");
+    assert_eq!(landed_summary(&[], 50), "[]");
+}
+
+#[test]
+fn landed_summary_truncates_over_the_limit() {
+    let moved: Vec<_> = (0..5).map(|i| PathBuf::from(format!("/p/{i}"))).collect();
+    assert_eq!(landed_summary(&moved, 2), "[/p/0, /p/1] ...and 3 more");
+    assert_eq!(landed_summary(&moved, 5), "[/p/0, /p/1, /p/2, /p/3, /p/4]");
+}
+
 // ---- decompression-bomb ceiling --------------------------------------
 
 /// Build a tar whose single entry carries `size` bytes of zeros — highly
