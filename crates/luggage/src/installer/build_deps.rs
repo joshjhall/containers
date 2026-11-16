@@ -332,8 +332,10 @@ mod tests {
         assert_eq!(ErrorClass::from(&e), ErrorClass::Verify);
     }
 
-    /// The field rides the evidence report: present when something was
-    /// removed, and a pre-#1524 report (no key) still deserializes.
+    /// Serde shape only: the field is serialized when something was removed,
+    /// and a pre-#1524 report (no key) still deserializes. That `install()`
+    /// actually copies the removed list into the report is covered by the
+    /// `report_from_stages_carries_removed_build_deps_*` tests in `mod.rs`.
     #[test]
     fn report_records_removed_build_dependencies() {
         let mut report = crate::installer::Installer::report_failure(
