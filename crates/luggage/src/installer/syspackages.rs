@@ -957,6 +957,12 @@ mod tests {
 
         let batch = remove_with(&["util-linux", "make"], refuse).unwrap_err();
         assert_eq!(lone.to_string(), batch.to_string());
+
+        // No package to name: the refusal is reported as-is rather than
+        // panicking on a missing first element.
+        let none =
+            remove_with(&[], |_| Err(RemovalFault::Refused("nothing to do".into()))).unwrap_err();
+        assert_eq!(none.to_string(), "could not remove build dependencies: nothing to do");
     }
 
     /// Every probe failure that is not a clear "not installed" — a launch
