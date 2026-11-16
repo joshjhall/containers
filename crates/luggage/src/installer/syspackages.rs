@@ -279,18 +279,19 @@ pub fn is_installed(mgr: PackageManager, package: &str) -> bool {
 ///
 /// # Errors
 ///
-/// [`LuggageError::PackageManagerFailed`] when a name is empty or starts with
-/// `-` (nothing is run), or naming each package that could not be removed, with the manager's stderr. A package refused because an
+/// [`LuggageError::BuildDepRemovalFailed`] when a name is empty or starts
+/// with `-` (nothing is run), or naming each package that could not be
+/// removed, with the manager's stderr. A package refused because an
 /// installed package depends on it means the catalog declared a runtime need
 /// as `purpose: build`. That fails loudly rather than shipping a silently
-/// broken image.
+/// broken image, and is classified as a cleanup failure, not infra (#1668).
 pub fn remove_packages(packages: &[&str], mgr: PackageManager) -> Result<()> {
     // Names come from the catalog and land in argv after the manager's own
     // flags. One starting with `-` would be parsed as an option, e.g.
     // `--nodeps` or `--force-depends`, defeating the refuse-don't-cascade
     // removal. Refuse the whole removal before anything runs.
     if let Some(bad) = packages.iter().find(|p| p.is_empty() || p.starts_with('-')) {
-        return Err(LuggageError::PackageManagerFailed {
+        return Err(LuggageError::BuildDepRemovalFailed {
             message: format!("refusing to remove package with option-like name {bad:?}"),
         });
     }
@@ -300,12 +301,20 @@ pub fn remove_packages(packages: &[&str], mgr: PackageManager) -> Result<()> {
         Err(e) if packages.len() <= 1 => vec![e],
         Err(_) => remove_individually(mgr, packages),
     };
+    refusals_to_result(&refused)
+}
+
+/// Turn the per-package refusals into the removal's result: `Ok` when none,
+/// else one [`LuggageError::BuildDepRemovalFailed`] naming every refusal.
+/// Split out so the error shape and its class are testable without a
+/// package manager (#1668).
+fn refusals_to_result(refused: &[String]) -> Result<()> {
     if refused.is_empty() {
         return Ok(());
     }
-    Err(LuggageError::PackageManagerFailed {
-        message: format!("could not remove build dependencies: {}", refused.join("; ")),
-    })
+    // The variant's Display already says "could not remove build
+    // dependencies", so the message carries only the refusals.
+    Err(LuggageError::BuildDepRemovalFailed { message: refused.join("; ") })
 }
 
 /// Remove each package in its own transaction, returning a description of
@@ -790,6 +799,38 @@ mod tests {
         // Pass 1: libfoo-dev refused, foo-build removed. Pass 2: libfoo-dev
         // still refused, no progress -> stop (no third attempt).
         assert_eq!(*calls.borrow(), ["libfoo-dev", "foo-build", "libfoo-dev"]);
+    }
+
+    /// #1668 end to end, minus the host: on UBI 9, gcc pulls in systemd,
+    /// which needs util-linux, so `rpm -e util-linux` is refused with rpm's
+    /// own text. The refusal must survive the fixed-point loop, still name
+    /// the package and rpm's reason, and classify as a cleanup failure —
+    /// not `infra`, which made evidence read it as a CI fault.
+    #[test]
+    fn a_dependency_refused_build_dep_fails_as_cleanup_not_infra() {
+        use crate::error::ErrorClass;
+        const RPM: &str = "rpm -e util-linux exited exit status: 1: error: Failed dependencies:\n\
+                           \tutil-linux is needed by (installed) systemd-252-79.el9_9.x86_64";
+        let mut calls = Vec::new();
+        let refused = remove_until_fixed_point(&["util-linux", "make"], |p| {
+            calls.push(p);
+            if p == "util-linux" { Err(RPM.to_owned()) } else { Ok(()) }
+        });
+        // make went; util-linux was retried once more and still refused.
+        assert_eq!(calls, ["util-linux", "make", "util-linux"]);
+
+        let err = refusals_to_result(&refused).unwrap_err();
+        assert!(matches!(err, LuggageError::BuildDepRemovalFailed { .. }), "{err:?}");
+        let shown = err.to_string();
+        assert!(shown.starts_with("could not remove build dependencies: util-linux: "), "{shown}");
+        assert!(shown.contains("needed by (installed) systemd"), "{shown}");
+        assert!(!shown.contains("make"), "only the refused package is named: {shown}");
+        assert_eq!(ErrorClass::from(&err), ErrorClass::PostInstall);
+    }
+
+    #[test]
+    fn no_refusals_is_ok() {
+        refusals_to_result(&[]).unwrap();
     }
 
     /// Every probe failure that is not a clear "not installed" — a launch

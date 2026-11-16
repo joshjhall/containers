@@ -194,8 +194,7 @@
           "tool": "util_linux",
           "platforms": [
             "rhel"
-          ],
-          "purpose": "build"
+          ]
         }
       ]
     },

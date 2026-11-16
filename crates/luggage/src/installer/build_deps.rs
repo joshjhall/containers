@@ -247,6 +247,20 @@ mod tests {
         assert!(e.to_string().contains("build"), "{e}");
     }
 
+    /// A refused removal still fails a good install (#1524), but the error
+    /// that reaches the report keeps its own class: post-install cleanup,
+    /// not the `infra` a host package-manager fault gets (#1668).
+    #[test]
+    fn a_refused_removal_fails_the_install_with_its_own_class() {
+        use crate::error::ErrorClass;
+        let refused = LuggageError::BuildDepRemovalFailed {
+            message: "util-linux: needed by (installed) systemd".into(),
+        };
+        let e = merge_cleanup(Ok(1), Err(refused), None).unwrap_err();
+        assert!(matches!(e, LuggageError::BuildDepRemovalFailed { .. }), "{e:?}");
+        assert_eq!(ErrorClass::from(&e), ErrorClass::PostInstall);
+    }
+
     /// The field rides the evidence report: present when something was
     /// removed, and a pre-#1524 report (no key) still deserializes.
     #[test]

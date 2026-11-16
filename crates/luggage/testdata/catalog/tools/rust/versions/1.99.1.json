@@ -29,7 +29,6 @@
           "platforms": [
             "rhel"
           ],
-          "purpose": "build",
           "tool": "util_linux"
         }
       ],
