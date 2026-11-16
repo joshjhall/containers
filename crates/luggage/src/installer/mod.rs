@@ -405,6 +405,29 @@ impl Installer {
         // report can carry any non-strict skips through to evidence-run.
         let skipped_dependencies = plan.skipped_dependencies.clone();
         let (removed_build_dependencies, result) = self.run_stages(resolved, plan, logger.as_ref());
+        Self::report_from_stages(
+            resolved,
+            removed_build_dependencies,
+            result,
+            skipped_dependencies,
+            logger,
+            started.elapsed().as_secs_f64(),
+        )
+    }
+
+    /// Turn the outcome of [`Self::run_stages`] into the install report.
+    ///
+    /// Split out of [`Self::run_with_report`] so the wiring — notably that
+    /// the removed build-dependency list reaches the report on success and on
+    /// failure alike — is unit-testable without running any stage (#1635).
+    fn report_from_stages(
+        resolved: &ResolvedInstall,
+        removed_build_dependencies: Vec<String>,
+        result: Result<StageOutcome>,
+        skipped_dependencies: Vec<String>,
+        logger: Option<logging::FeatureLogger>,
+        duration_seconds: f64,
+    ) -> (InstallReport, Result<()>) {
         match result {
             Ok(StageOutcome { version_output, warnings, dependencies }) => {
                 if let Some(l) = &logger {
@@ -415,7 +438,7 @@ impl Installer {
                     version: resolved.version.clone(),
                     already_installed: false,
                     log_path: logger.map(|l| l.path().to_owned()),
-                    duration_seconds: started.elapsed().as_secs_f64(),
+                    duration_seconds,
                     version_output: Some(version_output),
                     error_class: None,
                     dependencies,
@@ -427,8 +450,7 @@ impl Installer {
                 (report, Ok(()))
             }
             Err(e) => {
-                let mut report =
-                    Self::report_failure(resolved, &e, logger, started.elapsed().as_secs_f64());
+                let mut report = Self::report_failure(resolved, &e, logger, duration_seconds);
                 report.removed_build_dependencies = removed_build_dependencies;
                 (report, Err(e))
             }
@@ -722,6 +744,69 @@ mod tests {
             },
             warnings: Vec::new(),
         }
+    }
+
+    /// The build deps `run_stages` removed reach a successful report, along
+    /// with every other stage output the success arm passes through (#1635).
+    #[test]
+    fn report_from_stages_carries_removed_build_deps_on_success() {
+        let resolved = sample_resolved_with_deps();
+        let warning = verify::VerificationWarning {
+            tier: 4,
+            tool: "rust".into(),
+            version: "1.96.0".into(),
+            algorithm: Some("sha256".into()),
+            digest: "deadbeef".into(),
+            message: "TIER 4 TOFU".into(),
+        };
+        let deps = vec![InstalledDependency {
+            tool: "gcc".into(),
+            package: "gcc".into(),
+            version: Some("12.2.0".into()),
+        }];
+        let outcome = StageOutcome {
+            version_output: "rustc 1.96.0".into(),
+            warnings: vec![warning.clone()],
+            dependencies: Some(deps.clone()),
+        };
+        let (report, result) = Installer::report_from_stages(
+            &resolved,
+            vec!["g++".into(), "make".into()],
+            Ok(outcome),
+            vec!["libfoo".into()],
+            None,
+            2.5,
+        );
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(report.error_class, None);
+        assert_eq!(report.version_output.as_deref(), Some("rustc 1.96.0"));
+        assert_eq!(report.removed_build_dependencies, vec!["g++".to_string(), "make".into()]);
+        assert_eq!(report.skipped_dependencies, vec!["libfoo".to_string()]);
+        assert_eq!(report.warnings, vec![warning]);
+        assert_eq!(report.dependencies, Some(deps));
+        assert_eq!(report.verification_tier, Some(resolved.verification_tier));
+        assert!((report.duration_seconds - 2.5).abs() < f64::EPSILON);
+    }
+
+    /// A stage failing after the package stage (here the method) still
+    /// records the build deps that were removed behind it (#1635).
+    #[test]
+    fn report_from_stages_carries_removed_build_deps_on_method_failure() {
+        let resolved = sample_resolved_with_deps();
+        let err =
+            LuggageError::InstallStageFailed { stage: "spawn", message: "method failed".into() };
+        let (report, result) = Installer::report_from_stages(
+            &resolved,
+            vec!["g++".into(), "make".into()],
+            Err(err),
+            Vec::new(),
+            None,
+            0.0,
+        );
+        assert!(matches!(result, Err(LuggageError::InstallStageFailed { .. })), "{result:?}");
+        assert_eq!(report.error_class, Some(ErrorClass::InstallMethod));
+        assert_eq!(report.version_output, None);
+        assert_eq!(report.removed_build_dependencies, vec!["g++".to_string(), "make".into()]);
     }
 
     /// A plan with no `source_url` must return a typed `Catalog` error rather
