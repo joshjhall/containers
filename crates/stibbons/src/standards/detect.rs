@@ -788,6 +788,70 @@ mod tests {
         assert_eq!(detect_slices(&root, &set(&["shell", "python"])), set(&["shell"]));
     }
 
+    /// A linked worktree (what `git worktree add` makes, and the layout this
+    /// repo works from) has a gitfile `.git` pointing into the outer repo's
+    /// `.git/worktrees/`. Its root is still a work tree top and must keep the
+    /// git path, both with the ceiling set and under a `:` parent where only
+    /// the toplevel check decides. The exact listing discriminates: the walk
+    /// would also return the `.git` file (`SKIP_DIRS` prunes only dirs) and
+    /// the ignored `vendor/x.py`.
+    #[cfg(unix)]
+    #[test]
+    fn git_files_keeps_linked_worktree_root() {
+        let outer = tempfile::tempdir().unwrap();
+        let outer = outer.path();
+        assert!(git(outer, &["init", "-q"]), "git init failed");
+        std::fs::write(outer.join(".gitignore"), "vendor/\n").unwrap();
+        std::fs::write(outer.join("a.sh"), "").unwrap();
+        assert!(git(outer, &["add", "."]));
+        // Explicit identity: `hermetic` blanks global config, and the test
+        // must not depend on it anyway.
+        let commit = ["-c", "user.email=t@example.com", "-c", "user.name=t"];
+        assert!(
+            git(outer, &[&commit[..], &["commit", "-q", "-m", "init"]].concat()),
+            "commit failed"
+        );
+
+        let expected = files(&[".gitignore", "a.sh"]);
+        let check = |wt: &Path| {
+            assert!(wt.join(".git").is_file(), "control: {wt:?} has no gitfile");
+            std::fs::create_dir_all(wt.join("vendor")).unwrap();
+            std::fs::write(wt.join("vendor/x.py"), "").unwrap();
+            let mut listed = git_files(wt).expect("linked worktree lost the git path");
+            listed.sort();
+            assert_eq!(listed, expected);
+            // Control: the walk over the same tree votes python.
+            assert!(classify(wt, &walk_files(wt)).contains("python"));
+            assert_eq!(detect_slices(wt, &set(&["shell", "python"])), set(&["shell"]));
+        };
+
+        let add = |wt: &Path| {
+            let args = ["worktree", "add", "-q", "--detach", wt.to_str().unwrap()];
+            assert!(git(outer, &args), "worktree add failed: {wt:?}");
+        };
+
+        // Ceiling set: the outer repo is the worktree's parent.
+        let wt = outer.join("wt");
+        add(&wt);
+        assert_eq!(ceiling_for(&wt), Some(outer.canonicalize().unwrap()));
+        check(&wt);
+
+        // `:` parent: no ceiling can be expressed, so the toplevel check alone
+        // decides.
+        let colon_wt = outer.join("x:y/wt");
+        add(&colon_wt);
+        assert_eq!(ceiling_for(&colon_wt), None);
+        check(&colon_wt);
+
+        // Negative controls: plain dirs in the same layouts are not work tree
+        // tops, so `None` stays reachable and the `Some`s above are not vacuous.
+        for plain in [outer.join("plain"), outer.join("x:y/plain")] {
+            std::fs::create_dir_all(&plain).unwrap();
+            std::fs::write(plain.join("a.sh"), "").unwrap();
+            assert_eq!(git_files(&plain), None, "{plain:?}");
+        }
+    }
+
     /// Each `is_toplevel` outcome, pinned directly. Through `git_files` a
     /// nested dir and a failing command both give `None`, so the controls
     /// here prove each `false` comes from its own branch: the nested command
