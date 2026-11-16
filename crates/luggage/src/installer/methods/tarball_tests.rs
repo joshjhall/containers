@@ -456,7 +456,8 @@ fn assert_chain_rejected(entries: &[Entry<'_>], entry_name: &str) {
 
 /// `a -> .` and `a/b -> ..` each stay inside lexically, but `a/b` is
 /// written through `a` into staging itself, pointing at staging's parent —
-/// so `a/b/evil` would land outside. Refused at `a/b`.
+/// so `a/b/evil` would land outside. Refused at `a/b`, the first entry
+/// written through a link, so the payload is never reached.
 #[test]
 fn rejects_symlink_chain_through_self_link() {
     assert_chain_rejected(
@@ -469,8 +470,10 @@ fn rejects_symlink_chain_through_self_link() {
     );
 }
 
-/// The same chain, but the payload is written via the link's resolved
-/// location (`b/evil`) rather than through `a`.
+/// The issue's second shape: the payload would be written via the link's
+/// resolved location (`b/evil`) rather than through `a`. It trips at the
+/// same `a/b` entry as the shape above — pinned separately because, before
+/// the fix, each shape escaped by its own path.
 #[test]
 fn rejects_symlink_chain_writing_beside_the_link() {
     assert_chain_rejected(
@@ -496,6 +499,42 @@ fn rejects_longer_symlink_chain() {
         ],
         "l2/evil",
     );
+}
+
+/// Deliberate behaviour change: writing through *any* earlier symlink is
+/// refused, even a directory alias that stays inside the prefix. Resolving
+/// it physically and re-checking would be more permissive and racier, so
+/// an archive that needs this is refused rather than half-trusted.
+#[test]
+fn rejects_write_through_benign_in_prefix_dir_alias() {
+    assert_chain_rejected(
+        &[
+            Entry::Dir("real/", 0o755),
+            Entry::Link("lib", "real", EntryType::Symlink),
+            Entry::File("lib/libfoo.so", b"elf"),
+        ],
+        "lib/libfoo.so",
+    );
+}
+
+/// A link at the *final* component is not written through: tar-rs
+/// replaces it with the file entry (`create_new` after unlink), so the
+/// link's target is untouched. This is why `reject_symlinked_ancestor`
+/// checks only the parent chain.
+#[test]
+fn file_entry_replaces_a_symlink_at_its_own_path() {
+    let raw = tar_of(&[
+        Entry::File("pkg/real.txt", b"real"),
+        Entry::Link("pkg/x", "real.txt", EntryType::Symlink),
+        Entry::File("pkg/x", b"replaced"),
+    ]);
+    let f = Fixture::new("ok.tar.gz", &gzip(&raw));
+    f.run_plain(0).unwrap();
+
+    let x = f.prefix.path().join("pkg/x");
+    assert!(fs::symlink_metadata(&x).unwrap().file_type().is_file(), "link must be replaced");
+    assert_eq!(fs::read(&x).unwrap(), b"replaced");
+    assert_eq!(fs::read(f.prefix.path().join("pkg/real.txt")).unwrap(), b"real");
 }
 
 // ---- entry-type allowlist (issue #862) --------------------------------
