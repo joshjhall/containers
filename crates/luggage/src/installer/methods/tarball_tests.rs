@@ -435,22 +435,22 @@ fn assert_nothing_escaped(f: &Fixture) {
 }
 
 /// Run a chained-symlink archive and assert it is refused at `entry_name`
-/// for writing through an earlier link, with nothing reaching the prefix
-/// or staging's parent.
-fn assert_chain_rejected(entries: &[Entry<'_>], entry_name: &str) {
-    assert_chain_rejected_at_strip(entries, entry_name, 0);
+/// for writing through the earlier link `link` (named by its post-strip
+/// path), with nothing reaching the prefix or staging's parent.
+fn assert_chain_rejected(entries: &[Entry<'_>], entry_name: &str, link: &str) {
+    assert_chain_rejected_at_strip(entries, entry_name, link, 0);
 }
 
 /// [`assert_chain_rejected`] at a given strip depth.
-fn assert_chain_rejected_at_strip(entries: &[Entry<'_>], entry_name: &str, strip: u32) {
+fn assert_chain_rejected_at_strip(entries: &[Entry<'_>], entry_name: &str, link: &str, strip: u32) {
     let f = Fixture::new("evil.tar.gz", &gzip(&tar_of(entries)));
 
     match f.run_plain(strip).unwrap_err() {
         LuggageError::UnsafeArchiveEntry { entry, reason, .. } => {
             assert_eq!(entry, entry_name, "error should name the entry");
             assert!(
-                reason.contains("passes through symlink"),
-                "reason should name the earlier link: {reason}"
+                reason.contains(&format!("passes through symlink `{link}` ")),
+                "reason should name the earlier link `{link}`: {reason}"
             );
         }
         other => panic!("expected UnsafeArchiveEntry, got {other:?}"),
@@ -472,6 +472,7 @@ fn rejects_symlink_chain_through_self_link() {
             Entry::File("a/b/evil", b"pwned"),
         ],
         "a/b",
+        "a",
     );
 }
 
@@ -488,6 +489,7 @@ fn rejects_symlink_chain_writing_beside_the_link() {
             Entry::File("b/evil", b"pwned"),
         ],
         "a/b",
+        "a",
     );
 }
 
@@ -503,6 +505,7 @@ fn rejects_longer_symlink_chain() {
             Entry::File("l2/evil", b"pwned"),
         ],
         "l2/evil",
+        "l2",
     );
 }
 
@@ -519,6 +522,7 @@ fn rejects_write_through_benign_in_prefix_dir_alias() {
             Entry::File("lib/libfoo.so", b"elf"),
         ],
         "lib/libfoo.so",
+        "lib",
     );
 }
 
@@ -529,6 +533,7 @@ fn rejects_dir_entry_under_an_earlier_symlink() {
     assert_chain_rejected(
         &[Entry::Link("a", ".", EntryType::Symlink), Entry::Dir("a/sub/", 0o755)],
         "a/sub/",
+        "a",
     );
 }
 
@@ -543,8 +548,26 @@ fn rejects_symlink_chain_after_stripping() {
             Entry::File("pkg-v1/a/b/evil", b"pwned"),
         ],
         "pkg-v1/a/b",
+        "a",
         1,
     );
+}
+
+/// An existing *file* as an ancestor is not a link, so the walk lets it
+/// through — and the write still fails (a file cannot hold children),
+/// leaving the prefix untouched and nothing outside staging.
+#[test]
+fn file_as_ancestor_is_still_refused_without_touching_the_prefix() {
+    let raw = tar_of(&[Entry::File("a", b"file"), Entry::File("a/b", b"child")]);
+    let f = Fixture::new("bad.tar.gz", &gzip(&raw));
+
+    let err = f.run_plain(0).unwrap_err();
+    assert!(
+        !matches!(err, LuggageError::UnsafeArchiveEntry { .. }),
+        "a file ancestor is not a symlink and must not be reported as one: {err:?}"
+    );
+    assert_prefix_empty(&f);
+    assert_nothing_escaped(&f);
 }
 
 /// A directory entry landing *on* an earlier symlink is not treated as
