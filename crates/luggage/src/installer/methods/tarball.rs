@@ -40,6 +40,16 @@
 //! `tar` crate's own defaults (issue #808 requires this be proven by test,
 //! not assumed).
 //!
+//! That includes entry *types* and permission bits (issue #862). Only
+//! regular files, directories, symlinks and hard links are written; any
+//! other type — device nodes, fifos, sparse or contiguous files, unknown
+//! typeflags — rejects the whole archive. tar-rs would today write such an
+//! entry as a plain file and strip setuid/setgid unless
+//! `preserve_permissions` is set, but both are its defaults, not ours: the
+//! allowlist and an explicit special-bit mask make the guarantee hold
+//! regardless of what a future tar release or a later change to the
+//! unpack options does.
+//!
 //! # Partial-install behaviour
 //!
 //! The archive unpacks into a staging directory first and is merged into the
@@ -90,7 +100,8 @@ const DEFAULT_PREFIX: &str = "/usr/local";
 /// - [`LuggageError::UnsupportedArchiveFormat`] when the artifact filename
 ///   carries no compression this build recognises.
 /// - [`LuggageError::UnsafeArchiveEntry`] when any entry path or link target
-///   would escape the extraction prefix.
+///   would escape the extraction prefix, or an entry's type is not a regular
+///   file, directory, or link.
 /// - [`LuggageError::ArchiveExtractionFailed`] when the archive is corrupt or
 ///   truncated, or an entry cannot be written.
 /// - [`LuggageError::Io`] when the staging area, prefix, or bin directories
@@ -320,6 +331,13 @@ fn unpack_entries<R: std::io::Read>(
         })?;
         let raw = raw.into_owned();
 
+        // Type before path or strip: a device node is rejected even when it
+        // sits shallow enough to be stripped away, so the verdict on an
+        // archive never depends on the catalog's strip depth.
+        if !allowed_entry_type(entry.header().entry_type(), &raw, artifact_name)? {
+            continue;
+        }
+
         // Validate the full recorded path first, so a traversal attempt is
         // rejected even when stripping would have removed the offending
         // component.
@@ -362,6 +380,12 @@ fn unpack_entries<R: std::io::Read>(
                 .map_err(|e| LuggageError::Io { path: parent.to_owned(), source: e })?;
         }
 
+        // Strip setuid/setgid/sticky ourselves rather than relying on
+        // tar-rs's `preserve_permissions: false` default to do it: the build
+        // runs as root, so a setuid binary landing in the prefix is a
+        // privilege escalation waiting for a caller.
+        entry.set_preserve_permissions(false);
+        entry.set_mask(SPECIAL_MODE_BITS);
         entry.unpack(&target).map_err(|e| LuggageError::ArchiveExtractionFailed {
             artifact: artifact_name.to_owned(),
             message: format!("could not write entry `{}`: {e}", raw.display()),
@@ -369,6 +393,35 @@ fn unpack_entries<R: std::io::Read>(
     }
 
     Ok(())
+}
+
+/// setuid, setgid and sticky — cleared from every extracted entry's mode.
+const SPECIAL_MODE_BITS: u32 = 0o7000;
+
+/// Decide what to do with an entry of type `kind`: `Ok(true)` to write it,
+/// `Ok(false)` to skip it, or an [`LuggageError::UnsafeArchiveEntry`] when
+/// the type is outside the allowlist.
+///
+/// The allowlist is regular files, directories, and both link kinds (whose
+/// targets are validated separately). A pax *global* header (`g`, emitted
+/// by `git archive`) carries only metadata and writes nothing, so it is
+/// skipped rather than rejected. Everything else — `Char`, `Block`, `Fifo`,
+/// `Continuous`, `GNUSparse`, an extension header tar-rs did not consume,
+/// or an unknown typeflag — is refused.
+fn allowed_entry_type(kind: EntryType, raw: &Path, artifact_name: &str) -> Result<bool> {
+    match kind {
+        EntryType::Regular | EntryType::Directory | EntryType::Symlink | EntryType::Link => {
+            Ok(true)
+        }
+        EntryType::XGlobalHeader => Ok(false),
+        other => Err(LuggageError::UnsafeArchiveEntry {
+            artifact: artifact_name.to_owned(),
+            entry: raw.display().to_string(),
+            reason: format!(
+                "entry type {other:?} is not allowed (only regular files, directories and links)"
+            ),
+        }),
+    }
 }
 
 /// How many moved paths the merge-failure `warn` log lists before

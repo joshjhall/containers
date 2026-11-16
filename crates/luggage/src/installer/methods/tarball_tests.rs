@@ -41,6 +41,15 @@ enum Entry<'a> {
     File(&'a str, &'a [u8]),
     /// A link of the given kind pointing at the given target.
     Link(&'a str, &'a str, EntryType),
+    /// A regular file whose header declares the given mode.
+    FileMode(&'a str, &'a [u8], u32),
+    /// A directory entry.
+    Dir(&'a str),
+    /// A header-only entry of an arbitrary type — device nodes, fifos.
+    /// `Builder` has no safe API for these, so the typeflag is set directly.
+    Special(&'a str, EntryType),
+    /// An entry of an arbitrary type carrying `contents` (pax global header).
+    Typed(&'a str, EntryType, &'a [u8]),
 }
 
 /// Build an uncompressed tar in memory from a list of entries.
@@ -69,6 +78,37 @@ fn tar_of(entries: &[Entry<'_>]) -> Vec<u8> {
                 set_raw_linkname(&mut header, target);
                 header.set_cksum();
                 builder.append(&header, std::io::empty()).unwrap();
+            }
+            Entry::FileMode(path, contents, mode) => {
+                header.set_size(contents.len() as u64);
+                header.set_mode(*mode);
+                set_raw_name(&mut header, path);
+                header.set_cksum();
+                builder.append(&header, *contents).unwrap();
+            }
+            Entry::Dir(path) => {
+                header.set_size(0);
+                header.set_mode(0o755);
+                header.set_entry_type(EntryType::Directory);
+                set_raw_name(&mut header, path);
+                header.set_cksum();
+                builder.append(&header, std::io::empty()).unwrap();
+            }
+            Entry::Special(path, kind) => {
+                header.set_size(0);
+                header.set_mode(0o644);
+                header.set_entry_type(*kind);
+                set_raw_name(&mut header, path);
+                header.set_cksum();
+                builder.append(&header, std::io::empty()).unwrap();
+            }
+            Entry::Typed(path, kind, contents) => {
+                header.set_size(contents.len() as u64);
+                header.set_mode(0o644);
+                header.set_entry_type(*kind);
+                set_raw_name(&mut header, path);
+                header.set_cksum();
+                builder.append(&header, *contents).unwrap();
             }
         }
     }
@@ -362,6 +402,177 @@ fn allows_symlink_that_stays_inside_the_prefix() {
     let alias = f.prefix.path().join("pkg/alias.txt");
     assert!(fs::symlink_metadata(&alias).unwrap().file_type().is_symlink());
     assert_eq!(fs::read(&alias).unwrap(), b"real");
+}
+
+// ---- entry-type allowlist (issue #862) --------------------------------
+
+/// Assert `err` is an `UnsafeArchiveEntry` naming `entry` and the type.
+///
+/// Matching the type name in the reason is what makes these tests
+/// discriminate: an archive that ended early (a fixture swallowed by a
+/// zero-block end marker) would extract successfully, not produce this.
+fn assert_type_rejected(err: LuggageError, entry_name: &str, type_name: &str) {
+    match err {
+        LuggageError::UnsafeArchiveEntry { entry, reason, .. } => {
+            assert_eq!(entry, entry_name, "error should name the entry");
+            assert!(
+                reason.contains(&format!("entry type {type_name} ")),
+                "reason should name the type {type_name}: {reason}"
+            );
+        }
+        other => panic!("expected UnsafeArchiveEntry, got {other:?}"),
+    }
+}
+
+/// Assert nothing reached the prefix.
+fn assert_prefix_empty(f: &Fixture) {
+    assert_eq!(
+        fs::read_dir(f.prefix.path()).unwrap().count(),
+        0,
+        "prefix must be empty after a rejected archive"
+    );
+}
+
+/// A character device is refused outright. tar-rs would today write it as
+/// an empty regular file; the allowlist makes the refusal ours.
+#[test]
+fn rejects_char_device_entry() {
+    let raw = tar_of(&[
+        Entry::File("pkg/bin/tool", b"ok"),
+        Entry::Special("pkg/dev/kmem", EntryType::Char),
+    ]);
+    let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+    assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/dev/kmem", "Char");
+    assert_prefix_empty(&f);
+}
+
+/// A block device is refused outright.
+#[test]
+fn rejects_block_device_entry() {
+    let raw = tar_of(&[Entry::Special("pkg/dev/sda", EntryType::Block)]);
+    let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+    assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/dev/sda", "Block");
+    assert_prefix_empty(&f);
+}
+
+/// A fifo is refused outright.
+#[test]
+fn rejects_fifo_entry() {
+    let raw = tar_of(&[
+        Entry::File("pkg/bin/tool", b"ok"),
+        Entry::Special("pkg/run/pipe", EntryType::Fifo),
+    ]);
+    let f = Fixture::new("evil.tar.xz", &xz(&raw));
+
+    assert_type_rejected(f.run_plain(0).unwrap_err(), "pkg/run/pipe", "Fifo");
+    assert_prefix_empty(&f);
+}
+
+/// The type check runs before stripping: a device node shallow enough to
+/// be flattened away by `strip 1` still rejects the archive, so whether an
+/// archive is accepted never depends on the catalog's strip depth.
+#[test]
+fn rejects_disallowed_type_even_when_stripped_away() {
+    let raw =
+        tar_of(&[Entry::Special("kmem", EntryType::Char), Entry::File("node-v1/bin/node", b"ok")]);
+    let f = Fixture::new("evil.tar.gz", &gzip(&raw));
+
+    assert_type_rejected(f.run_plain(1).unwrap_err(), "kmem", "Char");
+    assert_prefix_empty(&f);
+}
+
+/// A header declaring `04755` lands as `0755`: setuid is cleared by our
+/// explicit mask, not left to tar-rs's `preserve_permissions` default.
+#[cfg(unix)]
+#[test]
+fn clears_setuid_bit_on_extracted_file() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let raw = tar_of(&[
+        Entry::FileMode("pkg/bin/suid", b"#!/bin/sh\n", 0o4755),
+        Entry::FileMode("pkg/bin/sgid", b"#!/bin/sh\n", 0o2755),
+    ]);
+    let f = Fixture::new("ok.tar.gz", &gzip(&raw));
+    f.run_plain(0).unwrap();
+
+    for name in ["suid", "sgid"] {
+        let mode =
+            fs::metadata(f.prefix.path().join("pkg/bin").join(name)).unwrap().permissions().mode();
+        assert_eq!(mode & 0o7777, 0o755, "{name}: special bits must be cleared, got {mode:o}");
+    }
+}
+
+/// go's real shape — explicit directory entries, files and an internal
+/// symlink at strip 0 — still extracts under the allowlist.
+#[test]
+fn extracts_go_shaped_archive_with_dirs_and_symlink() {
+    let raw = tar_of(&[
+        Entry::Dir("go/"),
+        Entry::Dir("go/bin/"),
+        Entry::FileMode("go/bin/go", b"go", 0o755),
+        Entry::Dir("go/pkg/"),
+        Entry::Link("go/bin/golang", "go", EntryType::Symlink),
+    ]);
+    let f = Fixture::new("go.tar.gz", &gzip(&raw));
+    f.run_plain(0).unwrap();
+
+    let p = f.prefix.path();
+    assert!(p.join("go/pkg").is_dir());
+    assert_eq!(fs::read(p.join("go/bin/go")).unwrap(), b"go");
+    let link = p.join("go/bin/golang");
+    assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&link).unwrap(), b"go");
+}
+
+/// node's real shape — versioned root flattened by strip 1, xz — still
+/// extracts under the allowlist, including the `bin/npm` symlink.
+#[test]
+fn extracts_node_shaped_archive_with_dirs_and_symlink() {
+    let raw = tar_of(&[
+        Entry::Dir("node-v22.0.0-linux-x64/"),
+        Entry::Dir("node-v22.0.0-linux-x64/bin/"),
+        Entry::FileMode("node-v22.0.0-linux-x64/bin/node", b"node", 0o755),
+        Entry::Dir("node-v22.0.0-linux-x64/lib/node_modules/npm/bin/"),
+        Entry::FileMode(
+            "node-v22.0.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+            b"npm",
+            0o755,
+        ),
+        Entry::Link(
+            "node-v22.0.0-linux-x64/bin/npm",
+            "../lib/node_modules/npm/bin/npm-cli.js",
+            EntryType::Symlink,
+        ),
+    ]);
+    let f = Fixture::new("node.tar.xz", &xz(&raw));
+    f.run_plain(1).unwrap();
+
+    let p = f.prefix.path();
+    assert_eq!(fs::read(p.join("bin/node")).unwrap(), b"node");
+    let npm = p.join("bin/npm");
+    assert!(fs::symlink_metadata(&npm).unwrap().file_type().is_symlink());
+    assert_eq!(fs::read(&npm).unwrap(), b"npm");
+}
+
+/// A pax global header (`git archive` emits one first) carries metadata
+/// only. It is skipped, not rejected, and writes nothing to the prefix.
+#[test]
+fn skips_pax_global_header() {
+    // A pax record's length prefix counts the whole record, newline included.
+    let record: &[u8] = b"19 comment=abcdefg\n";
+    assert_eq!(record.len(), 19);
+    let raw = tar_of(&[
+        Entry::Typed("pax_global_header", EntryType::XGlobalHeader, record),
+        Entry::File("pkg/bin/tool", b"ok"),
+    ]);
+    let f = Fixture::new("ok.tar.gz", &gzip(&raw));
+    f.run_plain(0).unwrap();
+
+    let p = f.prefix.path();
+    assert_eq!(fs::read(p.join("pkg/bin/tool")).unwrap(), b"ok");
+    assert!(!p.join("pax_global_header").exists(), "the global header must not be written");
 }
 
 /// Rejection must happen before anything reaches the prefix — a refused

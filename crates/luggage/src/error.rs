@@ -356,7 +356,8 @@ pub enum LuggageError {
         artifact: String,
         /// The offending entry path, as recorded in the archive.
         entry: String,
-        /// Why it was rejected (traversal, absolute path, escaping link).
+        /// Why it was rejected (traversal, absolute path, escaping link,
+        /// disallowed entry type).
         reason: String,
     },
 
