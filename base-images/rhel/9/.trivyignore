@@ -1,0 +1,44 @@
+# Trivy ignore file — rhel-9 base-image tuples ONLY
+#
+# Applied by .github/workflows/build-base-images.yml (step "Compute Trivy
+# ignore files") on top of the root .trivyignore, and only for
+# distro=rhel distro_version=9. It never masks these CVE IDs on another distro.
+#
+# ---------------------------------------------------------------------------
+# krb5-libs 1.21.1-10.el9_8.1 — 14 HIGH CVEs, fix not yet in the UBI repos
+# ---------------------------------------------------------------------------
+# EXPIRES: 2026-12-15 (each line's exp: makes Trivy re-flag it automatically)
+#
+# Why suppress a CVE Trivy marks `fixed`: the fix (1.21.1-10.el9_9.2) is not
+# reachable from a UBI build. As of 2026-11-15 the public UBI9 BaseOS repo
+# (cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os) carries
+# only krb5-libs-1.21.1-10.el9_8.1, so `microdnf upgrade -y` on
+# ubi-minimal:9.9 reports "Nothing to do" (PR #1671 CI). `ignore-unfixed`
+# cannot help because Trivy reads the RHEL advisory, which does list a fix.
+#
+# Exposure: these are KDC (krb5kdc) and kadmind *server* flaws: DoS, memory
+# leaks, request alteration, CAMMAC auth-indicator alteration. The image ships
+# only the client library krb5-libs, which comes preinstalled in ubi-minimal
+# (the Dockerfile adds just ca-certificates, shadow-utils, and sudo). It
+# installs neither krb5-server nor krb5-workstation, and it runs no KDC or
+# kadmind.
+#
+# Remove when: the UBI9 BaseOS repo publishes krb5-libs >= 1.21.1-10.el9_9.2.
+# Verify with:
+#   curl -s <repo>/repodata/repomd.xml -> primary.xml.gz | grep krb5-libs-
+# then delete this block and confirm the rhel-9 Trivy gate is green without it.
+# Tracking: #1669.
+CVE-2026-107364 exp:2026-12-15
+CVE-2026-112315 exp:2026-12-15
+CVE-2026-112316 exp:2026-12-15
+CVE-2026-112317 exp:2026-12-15
+CVE-2026-112318 exp:2026-12-15
+CVE-2026-112319 exp:2026-12-15
+CVE-2026-112320 exp:2026-12-15
+CVE-2026-112321 exp:2026-12-15
+CVE-2026-112322 exp:2026-12-15
+CVE-2026-112323 exp:2026-12-15
+CVE-2026-118380 exp:2026-12-15
+CVE-2026-119079 exp:2026-12-15
+CVE-2026-71199 exp:2026-12-15
+CVE-2026-71200 exp:2026-12-15

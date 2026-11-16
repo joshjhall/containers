@@ -58,7 +58,7 @@ jobs:
           - [ ] Update pinned dependency versions (container features,
                 pre-commit hooks, GitHub Actions)
           - [ ] Rotate long-lived secrets if the age policy says so
-          - [ ] Prune \`.trivyignore\` / \`.osv-scanner.toml\` / \`deny.toml\`
+          - [ ] Prune \`.trivyignore\` (+ \`base-images/*/*/.trivyignore\`) / \`.osv-scanner.toml\` / \`deny.toml\`
                 allowlists — remove entries whose upstream fix has landed
 
           See \`docs/operations/review-cadence.md\` for guidance.
