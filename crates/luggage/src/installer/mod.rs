@@ -260,8 +260,9 @@ impl Installer {
     }
 
     /// Swap in an in-memory host package manager, so the orchestration in
-    /// [`Self::run_stages`] is unit-testable (#1630).
-    #[cfg(test)]
+    /// [`Self::run_stages`] is unit-testable (#1630). Gated like its only
+    /// caller, `run_stages_tests`, so non-unix test builds see no dead code.
+    #[cfg(all(test, unix))]
     pub(crate) fn with_system_packages(mut self, sys: Arc<dyn sysops::SystemPackages>) -> Self {
         self.sys = sys;
         self
@@ -678,6 +679,7 @@ fn install_basename(url: &str) -> String {
 #[path = "mod_tests.rs"]
 mod tests;
 
-#[cfg(test)]
+// Unix-only: the validate probe is a `/bin/sh` shim with an exec bit.
+#[cfg(all(test, unix))]
 #[path = "run_stages_tests.rs"]
 mod run_stages_tests;
