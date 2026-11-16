@@ -888,6 +888,12 @@ fn launcher_ignores_a_bare_launcher_compiler() {
         assert_eq!(env["CC"], "ccache gcc", "catalog CC={bare:?}");
     }
 
+    // CXX takes the same path, independently of CC.
+    let mut env = BTreeMap::from([("CXX".to_owned(), "ccache".to_owned())]);
+    apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&["g++"]));
+    assert_eq!(env.get("CXX").map(String::as_str), Some("ccache g++"));
+    assert!(!env.contains_key("CC"), "{env:?}");
+
     // Inherited bare launcher, launcher named by path → the probe.
     let mut env = BTreeMap::new();
     let inherited = |var: &str| (var == "CC").then(|| "ccache".to_owned());
