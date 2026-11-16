@@ -1486,26 +1486,40 @@ mod tests {
         assert_eq!(leftovers(tmp.path()), vec![aside_name], "only the reported aside leaks");
     }
 
-    /// #1646: when the install itself fails, its error wins over an aside
-    /// cleanup failure (the first error is returned), and the aside that
-    /// could not be removed is left on disk.
+    /// Drives a prepare that moves the old tree aside and then fails: at
+    /// `MovedAside` an open-mode occupant is planted at the target, so the
+    /// retried rename hits it and the loop refuses it with `UnsafePath`. With
+    /// `lock`, the aside is also made undeletable first. Returns the error,
+    /// the aside path, and the lock guard (if any).
     #[cfg(unix)]
-    #[test]
-    fn aside_cleanup_failure_after_failed_install_reports_install_error() {
+    fn failed_install_with_aside(
+        state_root: &Path,
+        lock: bool,
+    ) -> (ScriptsDirError, PathBuf, Option<RestoreMode>) {
         use std::os::unix::fs::PermissionsExt;
-        let tmp = tempfile::tempdir().unwrap();
-        if !mode_bits_are_enforced(tmp.path()) {
-            return;
-        }
-        let dir = prepare_scripts_dir(Some(tmp.path()), "myproject-agent-1", &scripts()).unwrap();
-        let mut locked = None;
+        let dir = prepare_scripts_dir(Some(state_root), "myproject-agent-1", &scripts()).unwrap();
+        let parent = dir.parent().unwrap().to_owned();
+        let mut seen = None;
 
         let err =
-            prepare_with_hook(Some(tmp.path()), "myproject-agent-1", &other_scripts(), &mut |s| {
+            prepare_with_hook(Some(state_root), "myproject-agent-1", &other_scripts(), &mut |s| {
                 if s == Stage::MovedAside {
-                    locked = Some(lock_aside(tmp.path()));
-                    // An open-mode occupant: the retried rename hits it and
-                    // the loop refuses it with `UnsafePath`.
+                    seen = Some(if lock {
+                        let (aside, guard) = lock_aside(state_root);
+                        (aside, Some(guard))
+                    } else {
+                        let aside = std::fs::read_dir(&parent)
+                            .unwrap()
+                            .map(|e| e.unwrap().path())
+                            .find(|p| {
+                                p.file_name()
+                                    .unwrap()
+                                    .to_string_lossy()
+                                    .starts_with(".myproject-agent-1.old-")
+                            })
+                            .expect("an aside exists at MovedAside");
+                        (aside, None)
+                    });
                     std::fs::create_dir(&dir).unwrap();
                     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
                     std::fs::write(dir.join("rival.sh"), "x").unwrap();
@@ -1513,12 +1527,35 @@ mod tests {
             })
             .expect_err("an open-mode occupant must be refused");
 
-        let (aside, _guard) = locked.expect("the hook locked an aside");
+        let (aside, guard) = seen.expect("the hook saw the aside");
+        (err, aside, guard)
+    }
+
+    /// #1646: when the install itself fails, its error wins over an aside
+    /// cleanup failure (the first error is returned). The unlocked control run
+    /// goes through the same failed install and must leave no aside, which
+    /// shows the cleanup is attempted on this error path. The locked run's
+    /// surviving aside therefore comes from a removal that failed and was
+    /// dropped, not from a removal that was skipped.
+    #[cfg(unix)]
+    #[test]
+    fn aside_cleanup_failure_after_failed_install_reports_install_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        if !mode_bits_are_enforced(tmp.path()) {
+            return;
+        }
+
+        // Control: same failure, removable aside, so it must be gone.
+        let control = tempfile::tempdir().unwrap();
+        let (err, aside, _) = failed_install_with_aside(control.path(), false);
+        assert!(matches!(err, ScriptsDirError::UnsafePath { .. }), "control: {err:?}");
+        assert!(!aside.exists(), "cleanup skipped on the error path: {}", aside.display());
+        assert_eq!(leftovers(control.path()), Vec::<String>::new(), "control leaked siblings");
+
+        // Locked: the removal fails, and the install error still wins.
+        let (err, aside, _guard) = failed_install_with_aside(tmp.path(), true);
         assert!(matches!(err, ScriptsDirError::UnsafePath { .. }), "{err:?}");
-        // The cleanup failure really happened and was swallowed, not avoided:
-        // the locked aside is still on disk. (`remove_dir_all` stops at its
-        // first error in readdir order, so how much of the aside survives is
-        // not asserted.)
-        assert!(aside.join("locked").join("pin").exists(), "{}", aside.display());
+        let aside_name = aside.file_name().unwrap().to_string_lossy().into_owned();
+        assert_eq!(leftovers(tmp.path()), vec![aside_name], "only the locked aside survives");
     }
 }
