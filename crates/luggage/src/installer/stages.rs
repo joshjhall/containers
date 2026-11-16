@@ -25,9 +25,7 @@ use super::build_deps::{PendingBuildDeps, removal_candidates};
 use super::download::DigestingFileSink;
 use super::methods::MethodContext;
 use super::rustup_target::rustup_target_for;
-use super::syspackages::{
-    PackageManager, install_dependencies, is_installed, resolve_installed_versions,
-};
+use super::syspackages::{PackageManager, resolve_installed_versions};
 use super::template::Substitutions;
 use super::{Installer, logging, methods, post_install, validate, verify};
 
@@ -57,13 +55,13 @@ impl Installer {
             return (PendingBuildDeps::default(), Ok(()));
         }
         let pending =
-            PendingBuildDeps::new(mgr, removal_candidates(deps, |p| is_installed(mgr, p)));
+            PendingBuildDeps::new(mgr, removal_candidates(deps, |p| self.sys.is_installed(mgr, p)));
         if let Some(l) = logger {
             l.step("install system packages");
         }
-        match install_dependencies(deps, mgr, self.options.fail_on_unknown_deps) {
+        match self.sys.install(deps, mgr, self.options.fail_on_unknown_deps) {
             Ok(()) => (pending, Ok(())),
-            Err(e) => (pending.retain_installed(|p| is_installed(mgr, p)), Err(e)),
+            Err(e) => (pending.retain_installed(|p| self.sys.is_installed(mgr, p)), Err(e)),
         }
     }
 
