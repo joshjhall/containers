@@ -211,36 +211,61 @@ pub trait HttpClient: Send + Sync {
 /// Retries up to [`DEFAULT_MAX_ATTEMPTS`] times with [`DEFAULT_RETRY_DELAY`]
 /// between attempts. Sleep delay is configurable so tests can avoid
 /// real-time waits.
+///
+/// Requests go through a held [`ureq::Agent`] built with ureq's defaults —
+/// the same configuration the free `ureq::get` uses, including proxy
+/// detection from `HTTP(S)_PROXY` / `ALL_PROXY` / `NO_PROXY`. Holding it
+/// (rather than calling `ureq::get`) lets the loopback adapter tests swap in
+/// a proxy-free agent without touching the process environment (#856).
 #[derive(Debug, Clone)]
 pub struct UreqClient {
     max_attempts: u32,
     retry_delay: Duration,
+    agent: ureq::Agent,
 }
 
 impl Default for UreqClient {
     fn default() -> Self {
-        Self { max_attempts: DEFAULT_MAX_ATTEMPTS, retry_delay: DEFAULT_RETRY_DELAY }
+        Self::with_retry(DEFAULT_MAX_ATTEMPTS, DEFAULT_RETRY_DELAY)
     }
 }
 
 impl UreqClient {
     /// Build a client with custom retry tuning. Mostly useful in tests.
     #[must_use]
-    pub const fn with_retry(max_attempts: u32, retry_delay: Duration) -> Self {
-        Self { max_attempts, retry_delay }
+    pub fn with_retry(max_attempts: u32, retry_delay: Duration) -> Self {
+        Self { max_attempts, retry_delay, agent: ureq::Agent::new_with_defaults() }
+    }
+
+    /// Replace the agent with one that ignores proxy environment variables,
+    /// so a loopback test server is reached directly even when CI exports
+    /// `HTTP(S)_PROXY`. Test-only: production must honour the proxy env.
+    #[cfg(test)]
+    #[must_use]
+    fn without_proxy(mut self) -> Self {
+        self.agent = ureq::Agent::config_builder().proxy(None).build().new_agent();
+        self
     }
 }
 
 impl HttpClient for UreqClient {
     fn get(&self, url: &str) -> Result<Vec<u8>> {
         buffer_with_retry(url, self.max_attempts, self.retry_delay, || {
-            ureq::get(url).call().map(|r| r.into_body().into_reader()).map_err(|e| format!("{e}"))
+            self.agent
+                .get(url)
+                .call()
+                .map(|r| r.into_body().into_reader())
+                .map_err(|e| format!("{e}"))
         })
     }
 
     fn get_to_writer(&self, url: &str, sink: &mut dyn RestartableSink) -> Result<u64> {
         stream_with_retry(url, sink, self.max_attempts, self.retry_delay, || {
-            ureq::get(url).call().map(|r| r.into_body().into_reader()).map_err(|e| format!("{e}"))
+            self.agent
+                .get(url)
+                .call()
+                .map(|r| r.into_body().into_reader())
+                .map_err(|e| format!("{e}"))
         })
     }
 }
