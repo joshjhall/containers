@@ -36,17 +36,27 @@ bd_present_cmd() {
 
 bd_build() {
     local mode="$1" image="$2"
-    # Built once per mode per run: every test re-calls this, and docker's
-    # layer cache makes the repeat a no-op, but an explicit marker keeps the
-    # failure from being reported once per test.
+    # Built once per mode per run: every test re-calls this. The marker
+    # records the OUTCOME, failure included, so a broken build is attempted
+    # and its full output reported once — by the first test of that mode.
+    # Later tests of the mode return 1 without re-building; run_test (same
+    # shell, framework.sh) still fails each of them as "returned 1 without
+    # recording a verdict" (#1002), so none can pass on a missing image.
     local marker="BD_BUILT_$mode"
-    [ -n "${!marker:-}" ] && return 0
-    assert_build_succeeds "$BD_FIXTURE" \
+    case "${!marker:-}" in
+        ok) return 0 ;;
+        failed) return 1 ;;
+    esac
+    if assert_build_succeeds "$BD_FIXTURE" \
         --build-arg NODE_VERSION="$BD_NODE_VERSION" \
         --build-arg MODE="$mode" \
         --build-arg LUGGAGE_TARGET_CACHE="$BD_TARGET_CACHE" \
-        -t "$image" || return 1
-    printf -v "$marker" '%s' 1
+        -t "$image"; then
+        printf -v "$marker" '%s' ok
+        return 0
+    fi
+    printf -v "$marker" '%s' failed
+    return 1
 }
 
 bd_cleanup() {
