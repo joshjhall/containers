@@ -6,7 +6,9 @@
 //!
 //! The retry, reset, and response-ceiling control flow is exercised through
 //! the `stream_with_retry` and `buffer_with_retry` helpers with injected
-//! readers, so none of it needs a live network or a listening port.
+//! readers, so none of it needs a live network or a listening port. Only the
+//! `ureq_*` tests at the end bind a loopback stub, to pin the thin
+//! `UreqClient` adapters themselves (#856); none touches an external network.
 
 use super::*;
 
@@ -107,6 +109,77 @@ fn ureq_default_uses_published_constants() {
     let c = UreqClient::default();
     assert_eq!(c.max_attempts, DEFAULT_MAX_ATTEMPTS);
     assert_eq!(c.retry_delay, DEFAULT_RETRY_DELAY);
+    assert!(matches!(c.proxy, ProxySource::Env), "production must read the proxy env");
+}
+
+/// `agent()` wires the configured proxy source into the agent it builds. The
+/// fixed-proxy cases discriminate without touching the process env: a known
+/// proxy must reach the agent's config, and the bypass must drop it. (An
+/// env-only comparison would be `false == false` on any host with no proxy
+/// exported, so it could not catch an `agent()` that always drops the proxy.)
+#[test]
+fn ureq_agent_carries_the_configured_proxy_source() {
+    let proxy = ureq::Proxy::new("http://proxy.invalid:3128").unwrap();
+    let pinned = UreqClient::with_retry(1, Duration::ZERO).with_fixed_proxy(Some(proxy.clone()));
+    assert_eq!(pinned.agent().config().proxy(), Some(&proxy), "a fixed proxy must reach the agent");
+
+    let bypassed = UreqClient::with_retry(1, Duration::ZERO).without_proxy();
+    assert!(bypassed.agent().config().proxy().is_none(), "bypass must drop the proxy");
+
+    // The production branch is ureq's own default agent, so its proxy is
+    // whatever ureq reads from the env — same as `ureq::get`.
+    let prod = UreqClient::with_retry(1, Duration::ZERO);
+    assert_eq!(
+        prod.agent().config().proxy(),
+        ureq::Agent::new_with_defaults().config().proxy(),
+        "production agent must match ureq::get's default agent"
+    );
+}
+
+/// Name of the child-side probe below; the parent re-runs it by exact name.
+const PROXY_PROBE: &str = "installer::download::tests::ureq_production_agent_proxy_probe";
+
+/// Child half of [`ureq_production_agent_honours_the_proxy_env`]. Inert
+/// unless `LUGGAGE_PROXY_PROBE` is set — which only the parent's child
+/// process environment does — so a normal run passes it trivially.
+#[test]
+fn ureq_production_agent_proxy_probe() {
+    let Some(expected) = std::env::var_os("LUGGAGE_PROXY_PROBE") else { return };
+    let prod = UreqClient::default();
+    let proxy = prod.agent().config().proxy().cloned();
+    let got = proxy.map(|p| format!("{}:{}", p.host(), p.port()));
+    assert_eq!(got.as_deref(), expected.to_str(), "production agent ignored HTTP(S)_PROXY");
+}
+
+/// The production branch of `agent()` honours the proxy env. This is checked
+/// for real, not as `false == false` on a proxy-less host: re-run this test
+/// binary's probe with a proxy exported on the *child* process only (no
+/// `set_var`, no env mutation in this process) and require the default
+/// client's agent to pick it up.
+#[test]
+fn ureq_production_agent_honours_the_proxy_env() {
+    let proxy = "http://proxy.invalid:3128";
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([PROXY_PROBE, "--exact", "--nocapture", "--test-threads=1"])
+        .env_remove("NO_PROXY")
+        .env_remove("no_proxy")
+        .env("HTTP_PROXY", proxy)
+        .env("HTTPS_PROXY", proxy)
+        .env("ALL_PROXY", proxy)
+        .env("http_proxy", proxy)
+        .env("https_proxy", proxy)
+        .env("all_proxy", proxy)
+        .env("LUGGAGE_PROXY_PROBE", "proxy.invalid:3128")
+        .output()
+        .expect("re-run test binary");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "probe failed:\n{stdout}\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Guard against a filter that matched nothing and "passed" vacuously.
+    assert!(stdout.contains("1 passed"), "probe did not run exactly once:\n{stdout}");
 }
 
 #[test]
@@ -477,4 +550,170 @@ fn buffer_with_retry_exhausts_attempt_budget_with_last_message() {
         }
         other => panic!("expected DownloadFailed, got {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// `UreqClient` adapter wiring (#856)
+//
+// Everything above drives the retry helpers directly or goes through
+// `MockHttpClient`'s default trait impl. These tests drive `UreqClient`'s own
+// overrides against a loopback stub, so they pin what the adapters add on
+// top of the helpers: that `max_attempts` / `retry_delay` reach the loop
+// unchanged and that a ureq call error surfaces in its documented form.
+// Every client is built `.without_proxy()` so a CI `HTTP(S)_PROXY` cannot
+// route the loopback requests elsewhere (no `set_var` needed).
+// ---------------------------------------------------------------------------
+
+/// A one-thread loopback HTTP stub that answers every request with `status`
+/// and `body`, counting requests. Same shape as `tests/cli.rs`'s
+/// `evidence_server`; serves until the test process exits.
+fn counting_server(
+    status: u16,
+    body: Vec<u8>,
+) -> (String, std::sync::Arc<std::sync::atomic::AtomicU32>) {
+    sequenced_server(vec![status], body)
+}
+
+/// Like [`counting_server`], but request `n` gets `statuses[n]`, and the last
+/// status repeats once the list runs out. Each status carries `body`.
+fn sequenced_server(
+    statuses: Vec<u16>,
+    body: Vec<u8>,
+) -> (String, std::sync::Arc<std::sync::atomic::AtomicU32>) {
+    use std::io::{BufRead, BufReader};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind stub");
+    let url = format!("http://{}/artifact", listener.local_addr().unwrap());
+    let hits = Arc::new(AtomicU32::new(0));
+    let counter = Arc::clone(&hits);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            // Drain the request head so ureq never sees a reset mid-send.
+            let mut reader = BufReader::new(&stream);
+            let mut line = String::new();
+            while reader.read_line(&mut line).is_ok_and(|n| n > 0) && line != "\r\n" {
+                line.clear();
+            }
+            let n = usize::try_from(counter.fetch_add(1, Ordering::SeqCst)).unwrap();
+            let status = statuses[n.min(statuses.len() - 1)];
+            let head = format!(
+                "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(&body);
+        }
+    });
+    (url, hits)
+}
+
+/// `get_to_writer` spends exactly `max_attempts` requests, and a ureq call
+/// error (here a 500) surfaces as `DownloadFailed` carrying ureq's message.
+#[test]
+fn ureq_get_to_writer_forwards_max_attempts_and_error_message() {
+    let (url, hits) = counting_server(500, b"boom".to_vec());
+    let client = UreqClient::with_retry(3, Duration::ZERO).without_proxy();
+    let mut sink: Vec<u8> = Vec::new();
+    let err = client.get_to_writer(&url, &mut sink).unwrap_err();
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 3);
+    match err {
+        LuggageError::DownloadFailed { url: got_url, attempts, message } => {
+            assert_eq!(got_url, url);
+            assert_eq!(attempts, 3);
+            assert_eq!(message, "http status: 500");
+        }
+        other => panic!("expected DownloadFailed, got {other:?}"),
+    }
+    assert!(sink.is_empty(), "a failed download must leave the sink empty");
+}
+
+/// `retry_delay` reaches the loop: two attempts means one sleep, so the call
+/// cannot finish faster than the configured delay.
+#[test]
+fn ureq_get_to_writer_forwards_retry_delay() {
+    let (url, hits) = counting_server(500, Vec::new());
+    let delay = Duration::from_millis(150);
+    let client = UreqClient::with_retry(2, delay).without_proxy();
+    let mut sink: Vec<u8> = Vec::new();
+    let started = std::time::Instant::now();
+    client.get_to_writer(&url, &mut sink).unwrap_err();
+    let elapsed = started.elapsed();
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert!(elapsed >= delay, "expected >= {delay:?} between attempts, took {elapsed:?}");
+}
+
+/// The happy path through the real adapter: a multi-chunk 200 body lands in
+/// the sink byte-for-byte on a single request.
+#[test]
+fn ureq_get_to_writer_streams_a_2xx_body() {
+    let body: Vec<u8> =
+        (0..STREAM_CHUNK_BYTES * 2 + 17).map(|i| u8::try_from(i % 251).unwrap()).collect();
+    let (url, hits) = counting_server(200, body.clone());
+    let client = UreqClient::with_retry(3, Duration::ZERO).without_proxy();
+    let mut sink: Vec<u8> = Vec::new();
+    let n = client.get_to_writer(&url, &mut sink).unwrap();
+    assert_eq!(n, body.len() as u64);
+    assert_eq!(sink, body);
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+/// The buffered `get` adapter forwards `max_attempts` and the error form the
+/// same way.
+#[test]
+fn ureq_get_forwards_max_attempts_and_error_message() {
+    let (url, hits) = counting_server(500, Vec::new());
+    let client = UreqClient::with_retry(2, Duration::ZERO).without_proxy();
+    let err = client.get(&url).unwrap_err();
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 2);
+    match err {
+        LuggageError::DownloadFailed { attempts, message, .. } => {
+            assert_eq!(attempts, 2);
+            assert_eq!(message, "http status: 500");
+        }
+        other => panic!("expected DownloadFailed, got {other:?}"),
+    }
+}
+
+/// The buffered `get` adapter's happy path: a 200 body comes back intact on a
+/// single request.
+#[test]
+fn ureq_get_returns_a_2xx_body() {
+    let (url, hits) = counting_server(200, b"sha256  artifact.tar.gz\n".to_vec());
+    let client = UreqClient::with_retry(3, Duration::ZERO).without_proxy();
+    let bytes = client.get(&url).unwrap();
+    assert_eq!(bytes, b"sha256  artifact.tar.gz\n");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+/// The response ceiling holds through the real `get` adapter, and an
+/// oversized body is not retried.
+#[test]
+fn ureq_get_rejects_an_oversized_body_without_retrying() {
+    let limit = usize::try_from(MAX_BUFFERED_RESPONSE_BYTES).unwrap();
+    let (url, hits) = counting_server(200, vec![b'x'; limit + 1]);
+    let client = UreqClient::with_retry(3, Duration::ZERO).without_proxy();
+    let err = client.get(&url).unwrap_err();
+    assert!(matches!(err, LuggageError::ResponseTooLarge { .. }), "got {err:?}");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+/// A transient failure followed by success: the 503 is retried and the
+/// adapter returns the second attempt's body, with the sink holding that body
+/// and nothing else. (The stub closes every connection, so this does not by
+/// itself prove a fresh agent per attempt.)
+#[test]
+fn ureq_adapters_recover_from_a_transient_failure() {
+    let (url, hits) = sequenced_server(vec![503, 200], b"payload".to_vec());
+    let client = UreqClient::with_retry(3, Duration::ZERO).without_proxy();
+    let mut sink: Vec<u8> = Vec::new();
+    assert_eq!(client.get_to_writer(&url, &mut sink).unwrap(), 7);
+    assert_eq!(sink, b"payload");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+    let (url, hits) = sequenced_server(vec![503, 200], b"payload".to_vec());
+    assert_eq!(client.get(&url).unwrap(), b"payload");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
