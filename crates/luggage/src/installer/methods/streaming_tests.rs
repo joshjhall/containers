@@ -8,6 +8,7 @@
 use super::*;
 
 use std::fs;
+use std::process::{Command, Stdio};
 
 use tempfile::tempdir;
 
@@ -77,15 +78,42 @@ fn process_runner_streams_with_cwd_env_and_bounded_tail() {
 }
 
 /// `env_remove` strips an inherited variable before the child starts (#1678):
-/// the same `sh` sees `CARGO_MANIFEST_DIR` (cargo sets it for every test
-/// process) without the removal and not at all with it — so the assertion
-/// discriminates rather than passing on a variable that was never set.
+/// the same `sh` sees the marker without the removal and not at all with it —
+/// so the assertion discriminates rather than passing on a variable that was
+/// never set.
+///
+/// The marker is inherited by construction: the test re-execs its own binary
+/// with the marker set on that `Command` (no `std::env::set_var`), and the
+/// checks run in that child. Relying on a runner-provided variable such as
+/// `CARGO_MANIFEST_DIR` would fail the control when the test binary is run
+/// directly, without cargo (#1715).
 #[test]
 fn process_runner_removes_inherited_variables() {
+    const MARKER: &str = "LUGGAGE_ENV_REMOVE_MARKER";
+    const SENTINEL: &str = "env_remove checks ran";
+
+    let Some(inherited) = std::env::var_os(MARKER) else {
+        let module = module_path!();
+        let module = module.split_once("::").map_or(module, |(_, rest)| rest);
+        let name = format!("{module}::process_runner_removes_inherited_variables");
+        let out = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &name, "--test-threads=1", "--nocapture"])
+            .env(MARKER, "inherited")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        let (stdout, stderr) =
+            (String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        assert!(out.status.success(), "child run failed ({}):\n{stdout}\n{stderr}", out.status);
+        assert!(stdout.contains(SENTINEL), "child never ran the checks:\n{stdout}\n{stderr}");
+        return;
+    };
+    let inherited = inherited.into_string().unwrap();
+
     let dir = tempdir().unwrap();
     let env = BTreeMap::new();
-    let args = vec!["-c".to_owned(), "echo \"[${CARGO_MANIFEST_DIR-unset}]\"".to_owned()];
-    let remove = vec!["CARGO_MANIFEST_DIR".to_owned()];
+    let args = vec!["-c".to_owned(), format!("echo \"[${{{MARKER}-unset}}]\"")];
+    let remove = vec![MARKER.to_owned()];
     let run = |env_remove: &[String], env: &BTreeMap<String, String>| {
         let cmd = StreamingCommand { program: "sh", args: &args, cwd: dir.path(), env, env_remove };
         let mut seen = Vec::new();
@@ -94,14 +122,14 @@ fn process_runner_removes_inherited_variables() {
         seen
     };
 
-    let kept = run(&[], &env);
-    assert_eq!(kept, [format!("[{}]", env!("CARGO_MANIFEST_DIR"))], "control: inherited");
+    assert_eq!(run(&[], &env), [format!("[{inherited}]")], "control: inherited");
     assert_eq!(run(&remove, &env), ["[unset]"], "removed variable must not reach the child");
 
     // Removal happens before `env` is applied, as `StreamingCommand` documents:
     // a variable both removed and set reaches the child with the set value.
-    let set = BTreeMap::from([("CARGO_MANIFEST_DIR".to_owned(), "x".to_owned())]);
+    let set = BTreeMap::from([(MARKER.to_owned(), "x".to_owned())]);
     assert_eq!(run(&remove, &set), ["[x]"], "env must win over env_remove");
+    println!("{SENTINEL}");
 }
 
 /// A program that cannot be spawned is a spawn failure naming the program,
