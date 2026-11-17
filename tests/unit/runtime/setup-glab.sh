@@ -736,4 +736,42 @@ run_test_with_setup test_glab_stored_token_still_exported "#1711: glab-stored to
 run_test_with_setup test_glab_force_export_without_stored_token "#1711: FORGE_TOKEN_EXPORT=true forces the glab export"
 run_test_with_setup test_glab_legacy_snippet_migrated "#1711: pre-#1711 glab bashrc block migrated"
 
+_write_glab_legacy_rc() {
+    command cat >"$TEST_HOME/.bashrc" <<'RC'
+before
+# setup-glab: GITLAB_TOKEN
+if [ -z "${GITLAB_TOKEN:-}" ] && command -v glab >/dev/null 2>&1 && glab auth status >/dev/null 2>&1; then
+    export GITLAB_TOKEN=$(glab config get token --host "${GITLAB_HOST:-gitlab.com}" 2>/dev/null | tr -d '[:space:]')
+fi
+after
+RC
+}
+
+# #1721: an older image without the shared helper must not fail setup-glab.
+test_glab_legacy_snippet_helper_absent_is_noop() {
+    _write_glab_legacy_rc
+    local rc=0 output
+    output=$(_run_setup_glab_authed RC_SNIPPET_LIB="$TEST_TEMP_DIR/missing-rc-snippet.sh") || rc=$?
+    assert_equals "0" "$rc" "setup-glab succeeds when the rc-snippet helper is absent"
+    assert_not_contains "$output" "removed pre-#1711" "Nothing is reported removed without the helper"
+    assert_file_contains "$TEST_HOME/.bashrc" '^# setup-glab: GITLAB_TOKEN$' \
+        "Without the helper the legacy block is left untouched"
+    assert_file_contains "$TEST_HOME/.bashrc" "# setup-glab: GITLAB_TOKEN (v2" \
+        "The v2 block is still appended without the helper"
+}
+
+# #1721: RC_SNIPPET_LIB is honoured — the migration goes through the helper.
+test_glab_legacy_snippet_uses_shared_helper() {
+    _write_glab_legacy_rc
+    local output
+    output=$(_run_setup_glab_authed RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || true
+    assert_contains "$output" "removed pre-#1711 token snippet" \
+        "The shared helper reports the removal through setup-glab's logger"
+    assert_file_not_contains "$TEST_HOME/.bashrc" '^# setup-glab: GITLAB_TOKEN$' \
+        "The shared helper removes the legacy block"
+}
+
+run_test_with_setup test_glab_legacy_snippet_helper_absent_is_noop "#1721: rc-snippet helper absent degrades to a no-op"
+run_test_with_setup test_glab_legacy_snippet_uses_shared_helper "#1721: glab migration runs through the shared rc-snippet helper"
+
 generate_report
