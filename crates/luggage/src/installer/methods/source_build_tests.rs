@@ -643,9 +643,10 @@ fn no_launcher_leaves_the_build_env_untouched() {
 
 /// Opted in, every step compiles through the launcher. The catalog names
 /// both compilers so the expected values are literals. The fallback when it
-/// names none is pinned at the `run()` level by
-/// `launcher_falls_back_to_a_compiler_on_the_catalog_path` and
-/// `launcher_wraps_a_compiler_inherited_by_the_production_run`.
+/// names none is pinned through the whole flow: the `PATH` probe by
+/// `launcher_falls_back_to_a_compiler_on_the_catalog_path` (via `run_with`,
+/// which `run()` delegates to) and the inherited reader by
+/// `launcher_wraps_a_compiler_inherited_by_the_production_run` (via `run()`).
 #[test]
 fn launcher_wraps_the_compilers_for_every_step() {
     let mut f = Fixture::python();
@@ -850,9 +851,10 @@ fn path_dir_with(names: &[&str]) -> tempfile::TempDir {
     dir
 }
 
-/// With no compiler named, `run()` probes the steps' `PATH` for one (#1706).
-/// Nothing is inherited, so `ccache gcc` can only come from the `on_path`
-/// probe `run()` wires in: a probe that finds nothing leaves both compilers
+/// With no compiler named, the steps' `PATH` is probed for one (#1706). This
+/// drives `run_with` — where `run()` delegates and the probe is wired — with
+/// nothing inherited, so `ccache gcc` can only come from that `on_path`
+/// probe: a probe that finds nothing leaves both compilers
 /// unset. The control — the same run over an empty catalog `PATH` — must
 /// resolve nothing. Between them the two halves pin the probe to the catalog
 /// `PATH` rather than luggage's own on any host: with a host `gcc` a probe of
