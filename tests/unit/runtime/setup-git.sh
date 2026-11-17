@@ -1160,6 +1160,77 @@ test_root_repo_subdirs_not_scanned() {
     assert_not_contains "$out" "remove the [user] entries" "Not misrouted to the include remedy"
 }
 
+test_shared_include_reports_each_repo() {
+    # Two unrelated repos include the same identity file: dedupe must not
+    # collapse them, since each has its global identity shadowed.
+    printf '[user]\n\temail = t@t.t\n' >"$TEST_TEMP_DIR/shared-identity.inc"
+    _ws_repo one
+    _ws_repo two
+    git -C "$TEST_TEMP_DIR/ws/one" config include.path "$TEST_TEMP_DIR/shared-identity.inc"
+    git -C "$TEST_TEMP_DIR/ws/two" config include.path "$TEST_TEMP_DIR/shared-identity.inc"
+    local out
+    out=$(_run_identity)
+    assert_contains "$out" "ws/one: local user.email <t@t.t>" "First repo sharing the include is reported"
+    assert_contains "$out" "ws/two: local user.email <t@t.t>" "Second repo sharing the include is reported"
+}
+
+test_bare_repo_reported_with_local_remedy() {
+    git init -q --bare "$TEST_TEMP_DIR/ws/bare.git"
+    git -C "$TEST_TEMP_DIR/ws/bare.git" config user.email "t@t.t"
+    local out q
+    out=$(_run_identity)
+    printf -v q '%q' "$TEST_TEMP_DIR/ws/bare.git"
+    assert_equals "1" "$(printf '%s\n' "$out" | command grep -c 'local user.email <t@t.t>')" \
+        "Bare repo reported once"
+    assert_contains "$out" "set in $TEST_TEMP_DIR/ws/bare.git/config " "Bare repo's config named"
+    assert_contains "$out" "git -C $q config --local --unset user.email" "Bare repo gets --local remedy"
+}
+
+test_submodule_gets_local_remedy() {
+    # A submodule's config lives in <super>/.git/modules/<m>/config; it is
+    # still that repo's own local config, not an include.
+    git -C "$TEST_TEMP_DIR" init -q subsrc
+    git -C "$TEST_TEMP_DIR/subsrc" -c user.name=a -c user.email=a@b.co commit -q --allow-empty -m i
+    _ws_repo super
+    git -C "$TEST_TEMP_DIR/ws/super" -c user.name=a -c user.email=a@b.co commit -q --allow-empty -m i
+    git -C "$TEST_TEMP_DIR/ws/super" -c protocol.file.allow=always \
+        submodule add -q "$TEST_TEMP_DIR/subsrc" mod 2>/dev/null
+    assert_dir_exists "$TEST_TEMP_DIR/ws/super/.git/modules/mod" "Submodule was created"
+    git -C "$TEST_TEMP_DIR/ws/super/mod" config user.email "t@t.t"
+    local out q
+    # The submodule is a grandchild of WORKSPACE_ROOT; point the root at the
+    # superproject so the submodule is a direct child candidate.
+    out=$(_run_identity WORKSPACE_ROOT="$TEST_TEMP_DIR/ws/super")
+    printf -v q '%q' "$TEST_TEMP_DIR/ws/super/mod"
+    assert_contains "$out" "set in $TEST_TEMP_DIR/ws/super/.git/modules/mod/config " \
+        "Submodule's real config path named"
+    assert_contains "$out" "git -C $q config --local --unset user.email" "Submodule gets --local remedy"
+    assert_not_contains "$out" "remove the [user] entries" "Not misrouted to the include remedy"
+}
+
+test_broken_worktree_skipped() {
+    _ws_repo proj
+    command mkdir -p "$TEST_TEMP_DIR/ws/proj/.worktrees/gone"
+    printf 'gitdir: %s\n' "$TEST_TEMP_DIR/nonexistent" >"$TEST_TEMP_DIR/ws/proj/.worktrees/gone/.git"
+    local out rc=0
+    out=$(_run_identity) || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0 with a broken worktree in the workspace"
+    assert_not_contains "$out" ".worktrees/gone" "Broken worktree produces no output"
+}
+
+test_ownership_rejected_repo_says_so() {
+    # A host-owned bind mount without safe.directory: git refuses the repo.
+    # Say so once instead of skipping silently (and never override the check).
+    # GIT_TEST_ASSUME_DIFFERENT_OWNER is git's own hook for simulating this.
+    _ws_repo hostowned "t@t.t"
+    local out rc=0
+    out=$(_run_identity GIT_TEST_ASSUME_DIFFERENT_OWNER=1) || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0 when a repo is ownership-rejected"
+    assert_contains "$out" "ws/hostowned: cannot check repo-local identity" \
+        "Ownership-rejected repo is reported, not skipped silently"
+    assert_not_contains "$out" "user.email <t@t.t>" "safe.directory is not overridden to read it"
+}
+
 test_real_global_no_global_warning() {
     local out
     out=$(_run_identity)
@@ -1197,6 +1268,11 @@ run_test_with_setup test_symlinked_root_dedupes "#1533: symlinked WORKSPACE_ROOT
 run_test_with_setup test_reason_control_chars_stripped "#1533: placeholder reason sanitized (no ESC from domain)"
 run_test_with_setup test_non_ascii_path_dedupes_with_local_remedy "#1533: non-ASCII path — -z parse dedupes, --local remedy"
 run_test_with_setup test_root_repo_subdirs_not_scanned "#1533: root repo's plain subdirs not re-reported"
+run_test_with_setup test_shared_include_reports_each_repo "#1533: unrelated repos sharing an include are each reported"
+run_test_with_setup test_bare_repo_reported_with_local_remedy "#1533: bare repo reported once with --local remedy"
+run_test_with_setup test_submodule_gets_local_remedy "#1533: submodule config path + --local remedy"
+run_test_with_setup test_broken_worktree_skipped "#1533: broken worktree skipped, exit 0"
+run_test_with_setup test_ownership_rejected_repo_says_so "#1533: ownership-rejected repo → one skip line, exit 0"
 run_test_with_setup test_real_global_no_global_warning "#1533: real global email → no global warning"
 run_test_with_setup test_placeholder_rules_shared_not_duplicated "#1533: placeholder rules shared, not duplicated"
 

@@ -193,13 +193,24 @@ check_identity_shadowing() {
         _warn "  until GIT_USER_EMAIL resolves (check OP_GIT_USER_EMAIL_REF)."
     fi
 
-    local dir scope file email common_cfg seen=$'\n'
+    local dir scope file email common_dir common_cfg key err seen=$'\n'
     while IFS= read -r dir; do
         # Only work-tree top levels: a plain subdir of a repo (e.g. when
         # WORKSPACE_ROOT is itself a repo) also passes rev-parse, but git
         # reports its origin relative to the top level, not to $dir.
         local prefix
-        prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || continue
+        if ! prefix=$(git -C "$dir" rev-parse --show-prefix 2>&1); then
+            # Not a repo → silent. Rejected by git's ownership check (a
+            # host-owned bind mount without safe.directory) → say so once,
+            # rather than overriding the check on an untrusted repo.
+            err="$prefix"
+            case "$err" in
+                *"dubious ownership"*)
+                    _skip "$(_printable "$dir"): cannot check repo-local identity — git rejects the repo's ownership (see safe.directory)"
+                    ;;
+            esac
+            continue
+        fi
         [ -z "$prefix" ] || continue
         # Resolve user.email the way `git commit` does: every scope, includes
         # followed (a scope flag like --local would skip config.worktree and
@@ -220,8 +231,14 @@ check_identity_shadowing() {
         # The file exists, so plain realpath (no GNU -m) is enough.
         case "$file" in /*) ;; *) file="${dir}/${file}" ;; esac
         file=$(_abs_path "$file")
-        case "$seen" in *$'\n'"$file"$'\n'*) continue ;; esac
-        seen+="${file}"$'\n'
+        # Dedupe per (repo, file): a repo's .worktrees/* share its common git
+        # dir and fold into one report, while unrelated repos that include the
+        # same identity file are each still reported.
+        common_dir=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+        common_dir=$(_abs_path "$common_dir")
+        key="${common_dir}"$'\t'"${file}"
+        case "$seen" in *$'\n'"$key"$'\n'*) continue ;; esac
+        seen+="${key}"$'\n'
         if [ -z "$email" ] || [ "$email" = "$global_email" ]; then
             continue
         fi
@@ -244,8 +261,7 @@ check_identity_shadowing() {
             _warn "${shown_dir}: ${scope} user.email <${shown_email}> differs from global <${shown_global}>,"
         fi
         _warn "  set in ${shown_file} — it overrides the global identity for commits here."
-        common_cfg=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
-        common_cfg=$(_abs_path "${common_cfg}/config")
+        common_cfg="${common_dir}/config"
         if [ "$scope" = worktree ]; then
             _warn "  If unintended: git -C ${qdir} config --worktree --unset user.name;" \
                 "git -C ${qdir} config --worktree --unset user.email"
