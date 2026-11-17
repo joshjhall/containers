@@ -265,4 +265,84 @@ run_test test_auth_watcher_skips_when_pid_running "auth-watcher: skips when PID 
 run_test test_auth_watcher_launches_watcher "auth-watcher: launches watcher process"
 
 # Generate test report
+# ============================================================================
+# claude-auth-watcher / claude-setup — externally authenticated op (#1711)
+# ============================================================================
+CLAUDE_AUTH_WATCHER_BIN="$PROJECT_ROOT/lib/features/lib/claude/claude-auth-watcher"
+CLAUDE_SETUP_BIN="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
+
+# Extract the watcher's helper functions (everything before is_authenticated)
+# into a scratch file with the token file redirected to scratch — the real
+# /dev/shm/anthropic-auth-token is this container's live token and must never
+# be read or written by a test. The early "marker exists → exit" guard is
+# neutralised by pointing HOME at an empty scratch dir.
+_watcher_helpers() {
+    local out="$TEST_TEMP_DIR/watcher-helpers.sh"
+    command sed -n '1,/^is_authenticated() {$/p' "$CLAUDE_AUTH_WATCHER_BIN" |
+        command sed '$d' |
+        command sed "s|/dev/shm/anthropic-auth-token|$TEST_TEMP_DIR/anthropic-auth-token|" >"$out"
+    printf '%s' "$out"
+}
+
+# Stub op: whoami exits $1; read prints a fixed token.
+_stub_claude_op() {
+    printf '#!/bin/bash\necho "$*" >>"%s/op.calls"\ncase "$1" in whoami) exit %s ;; read) printf fake-anthropic-token-1711 ;; esac\n' \
+        "$TEST_TEMP_DIR" "$1" >"$TEST_TEMP_DIR/bin/op"
+    chmod +x "$TEST_TEMP_DIR/bin/op"
+}
+
+_resolve_via_watcher() {
+    local helpers
+    helpers=$(_watcher_helpers)
+    command env -i BASH_ENV= HOME="$TEST_TEMP_DIR/home" \
+        PATH="$TEST_TEMP_DIR/bin:/usr/bin:/bin" \
+        OP_USABLE_LIB="$PROJECT_ROOT/lib/runtime/lib/op-usable.sh" \
+        OP_WHOAMI_CACHE_DIR="$TEST_TEMP_DIR" \
+        CONTAINER_CREDENTIAL_ENV_FILE="$TEST_TEMP_DIR/no-credential-env" \
+        OP_ANTHROPIC_AUTH_TOKEN_REF="op://vault/anthropic/token" \
+        "$@" \
+        bash -c '. "$1" >/dev/null; if _try_resolve_op_secrets >/dev/null; then echo resolved; else echo skipped; fi' _ "$helpers"
+}
+
+test_watcher_resolves_with_external_op() {
+    _stub_claude_op 0
+    assert_equals "resolved" "$(_resolve_via_watcher)" \
+        "No token in env, op whoami ok: OP_ANTHROPIC_AUTH_TOKEN_REF resolves"
+    assert_file_contains "$TEST_TEMP_DIR/anthropic-auth-token" "fake-anthropic-token-1711" \
+        "Resolved token is stored (scratch path, never the live one)"
+}
+
+test_watcher_skips_without_auth() {
+    _stub_claude_op 1
+    assert_equals "skipped" "$(_resolve_via_watcher)" \
+        "No token and op whoami fails: skip, as today"
+    assert_file_not_contains "$TEST_TEMP_DIR/op.calls" "read" "No op read attempted"
+}
+
+test_watcher_token_path_unchanged() {
+    _stub_claude_op 1
+    assert_equals "resolved" "$(_resolve_via_watcher OP_SERVICE_ACCOUNT_TOKEN=tok)" \
+        "Service account token: resolves as before"
+    assert_file_not_contains "$TEST_TEMP_DIR/op.calls" "whoami" "Token path: no whoami probe"
+}
+
+test_claude_setup_gates_on_op_usable() {
+    # claude-setup runs its whole setup when executed, so its gate is pinned
+    # statically; the shared helper's behaviour is covered by op-usable tests.
+    assert_file_contains "$CLAUDE_SETUP_BIN" 'command -v op &>/dev/null && _op_ready' \
+        "claude-setup resolves OP_ANTHROPIC_AUTH_TOKEN_REF whenever op is usable"
+    # Fixed-string match: assert_file_not_contains takes a regex, and the
+    # brackets in this line would turn it into a character class.
+    if command grep -qF '[ -n "${OP_ANTHROPIC_AUTH_TOKEN_REF:-}" ] && [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]' "$CLAUDE_SETUP_BIN"; then
+        fail_test "claude-setup still requires OP_SERVICE_ACCOUNT_TOKEN to resolve the Anthropic ref"
+    else
+        pass_test "claude-setup no longer requires OP_SERVICE_ACCOUNT_TOKEN"
+    fi
+}
+
+run_test test_watcher_resolves_with_external_op "#1711: auth-watcher resolves Anthropic ref via externally authenticated op"
+run_test test_watcher_skips_without_auth "#1711: auth-watcher skips cleanly with no auth"
+run_test test_watcher_token_path_unchanged "#1711: auth-watcher token path unchanged (no whoami)"
+run_test test_claude_setup_gates_on_op_usable "#1711: claude-setup gates on op usability, not the token"
+
 generate_report

@@ -30,8 +30,9 @@ if [ -f "$_OP_CACHE" ] && [ -O "$_OP_CACHE" ]; then
 fi
 
 # Load .env.secrets ourselves rather than trusting the caller to have done it.
-# The precondition check below needs OP_SERVICE_ACCOUNT_TOKEN, which lives in
-# .env.secrets — if it is missing we decide not to wait, skip straight past an
+# The precondition check below needs OP_SERVICE_ACCOUNT_TOKEN (from
+# .env.secrets) or the credential-provider hand-off (loaded by the same
+# helper) — if neither is loaded we decide not to wait, skip straight past an
 # unresolved secret, and the caller silently no-ops. _source-env-secrets is
 # idempotent (_ENV_SECRETS_LOADED), so a caller that already sourced it pays
 # nothing.
@@ -43,11 +44,14 @@ unset _woc_self_dir
 # Check preconditions before waiting:
 #   1. op CLI is installed
 #   2. At least one OP_*_REF variable exists in the environment
-#   3. OP_SERVICE_ACCOUNT_TOKEN is set (needed for op read)
+#   3. op can read: OP_SERVICE_ACCOUNT_TOKEN, Connect, or an externally
+#      authenticated op (op_is_usable, loaded by _source-env-secrets; #1711)
 _woc_should_wait=false
 if command -v op >/dev/null 2>&1; then
     if compgen -v | command grep -q '^OP_.\+_REF$'; then
-        if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+        if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:+set}" ]; then
+            _woc_should_wait=true
+        elif declare -f op_is_usable >/dev/null 2>&1 && op_is_usable; then
             _woc_should_wait=true
         fi
     fi

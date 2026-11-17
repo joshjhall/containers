@@ -136,8 +136,9 @@ test_gitlab_host_in_auth_login() {
 
 # Test: GITLAB_HOST used in config get token
 test_gitlab_host_in_config_get() {
-    assert_file_contains "$SETUP_GLAB_SCRIPT" 'glab config get token --host "$host"' \
-        "glab config get should use --host with host variable"
+    # The token read now lives only in the persisted bashrc snippet (#1711).
+    assert_file_contains "$SETUP_GLAB_SCRIPT" 'glab config get token --host "${GITLAB_HOST:-gitlab.com}"' \
+        "glab config get should use --host with GITLAB_HOST"
 }
 
 # ---------------------------------------------------------------------------
@@ -364,8 +365,9 @@ test_xtrace_no_stored_token_leak() {
     touch "$TEST_TEMP_DIR/glab.loggedin"
     local output
     output=$(_run_setup_glab_traced -u GITLAB_TOKEN) || true
-    assert_file_contains "$TEST_TEMP_DIR/glab.calls" "config get token" \
-        "Stub glab config get token must have been called (already-authenticated path)"
+    # #1711: the already-authenticated path no longer reads the token at all.
+    assert_file_not_contains "$TEST_TEMP_DIR/glab.calls" "config get token" \
+        "Already-authenticated path must not read the token (#1711)"
     assert_contains "$output" "glab already authenticated" "Should take the already-authenticated path"
     assert_contains "$output" "+ _persist_token" "xtrace should be restored before _persist_token"
     assert_not_contains "$output" "fake-gitlab-stored-token-5555" \
@@ -668,4 +670,70 @@ run_test_with_setup test_xtrace_stays_off_when_untraced "Restores leave an untra
 run_test_with_setup test_verification_after_auth "Verification step after authentication"
 
 # Generate test report
+# ---------------------------------------------------------------------------
+# #1711: forge token export (see setup-gh tests for rationale)
+# ---------------------------------------------------------------------------
+_shell_glab_token() {
+    command env -i BASH_ENV= HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:/usr/bin:/bin" "$@" \
+        bash -c '. "$HOME/.bashrc" >/dev/null 2>&1; printf "%s" "${GITLAB_TOKEN:-<unset>}"'
+}
+
+_run_setup_glab_authed() {
+    _install_stub_glab
+    touch "$TEST_TEMP_DIR/glab.loggedin"
+    command env -u BASH_ENV -u GITLAB_TOKEN -u GITLAB_HOST \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 "$@" \
+        bash "$SETUP_GLAB_SCRIPT" 2>&1
+}
+
+test_glab_provider_auth_does_not_export_token() {
+    local output
+    output=$(_run_setup_glab_authed) || true
+    assert_contains "$output" "not exporting GITLAB_TOKEN" \
+        "Provider-authenticated glab should log why the token is not exported"
+    assert_equals "<unset>" "$(_shell_glab_token)" \
+        "A shell must not get GITLAB_TOKEN when glab has no stored token"
+}
+
+test_glab_stored_token_still_exported() {
+    _run_setup_glab_authed >/dev/null || true
+    mkdir -p "$TEST_HOME/.config/glab-cli"
+    printf 'hosts:\n    gitlab.com:\n        token: glpat-x\n' >"$TEST_HOME/.config/glab-cli/config.yml"
+    assert_equals "fake-gitlab-stored-token-5555" "$(_shell_glab_token)" \
+        "A glab-stored token (today's login flow) is still exported to shells"
+    assert_equals "<unset>" "$(_shell_glab_token FORGE_TOKEN_EXPORT=false)" \
+        "FORGE_TOKEN_EXPORT=false suppresses the export"
+}
+
+test_glab_force_export_without_stored_token() {
+    local output
+    output=$(_run_setup_glab_authed FORGE_TOKEN_EXPORT=true) || true
+    assert_not_contains "$output" "not exporting GITLAB_TOKEN" \
+        "FORGE_TOKEN_EXPORT=true should not log the skip"
+    assert_equals "fake-gitlab-stored-token-5555" "$(_shell_glab_token FORGE_TOKEN_EXPORT=true)" \
+        "FORGE_TOKEN_EXPORT=true exports even without a stored token"
+}
+
+test_glab_legacy_snippet_migrated() {
+    command cat >"$TEST_HOME/.bashrc" <<'RC'
+before
+# setup-glab: GITLAB_TOKEN
+if [ -z "${GITLAB_TOKEN:-}" ] && command -v glab >/dev/null 2>&1 && glab auth status >/dev/null 2>&1; then
+    export GITLAB_TOKEN=$(glab config get token --host "${GITLAB_HOST:-gitlab.com}" 2>/dev/null | tr -d '[:space:]')
+fi
+after
+RC
+    _run_setup_glab_authed >/dev/null || true
+    assert_equals "1" "$(command grep -c '^# setup-glab: GITLAB_TOKEN' "$TEST_HOME/.bashrc")" \
+        "The pre-#1711 block is replaced, leaving exactly one setup-glab block"
+    assert_file_contains "$TEST_HOME/.bashrc" "(v2" "The v2 block is present"
+    assert_file_contains "$TEST_HOME/.bashrc" "after" "Surrounding bashrc content is preserved"
+}
+
+run_test_with_setup test_glab_provider_auth_does_not_export_token "#1711: provider-authenticated glab leaves GITLAB_TOKEN out of shells"
+run_test_with_setup test_glab_stored_token_still_exported "#1711: glab-stored token still exported; FORGE_TOKEN_EXPORT=false suppresses"
+run_test_with_setup test_glab_force_export_without_stored_token "#1711: FORGE_TOKEN_EXPORT=true forces the glab export"
+run_test_with_setup test_glab_legacy_snippet_migrated "#1711: pre-#1711 glab bashrc block migrated"
+
 generate_report

@@ -20,7 +20,8 @@ export OP_BIOMETRIC_UNLOCK_ENABLED=true
 # Scans the environment for variables matching OP_<NAME>_REF and populates
 # <NAME> from 1Password. Also handles OP_<NAME>_FILE_REF for file-based
 # secrets (content written to /dev/shm, env var set to the file path).
-# Requires OP_SERVICE_ACCOUNT_TOKEN to be set.
+# Requires an authenticated op: OP_SERVICE_ACCOUNT_TOKEN, Connect, or an
+# external credential provider (#1711; see op-usable.sh).
 #
 # Convention:
 #   OP_<NAME>_REF=op://vault/item/field       →  exports <NAME>=<secret_value>
@@ -38,20 +39,40 @@ export OP_BIOMETRIC_UNLOCK_ENABLED=true
 # ----------------------------------------------------------------------------
 _OP_SECRETS_CACHE="/dev/shm/op-secrets-cache"
 
+# Shared op detection + pre-secrets hook hand-off (#1711). The hand-off carries
+# an external credential provider's PATH/env into interactive shells too.
+if [ -f /opt/container-runtime/lib/op-usable.sh ]; then
+    . /opt/container-runtime/lib/op-usable.sh
+    credential_env_load
+fi
+
+# True when op can read secrets: service account token (fast path), Connect,
+# or an externally authenticated op (bounded `op whoami`, see op-usable.sh).
+_op_cli_ready() {
+    command -v op >/dev/null 2>&1 || return 1
+    [ -n "${OP_SERVICE_ACCOUNT_TOKEN:+set}" ] && return 0
+    declare -f op_is_usable >/dev/null 2>&1 && op_is_usable
+}
+
 _op_load_secrets() {
-    # Skip if op not available or no service account token
-    if ! command -v op >/dev/null 2>&1 || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
-        return 0
-    fi
+    command -v op >/dev/null 2>&1 || return 0
 
     # Disable xtrace to prevent token exposure in logs
     local _old_xtrace
     _old_xtrace=$(set +o | command grep xtrace)
     set +x
 
-    # Cache hit → source and return
+    # Cache hit → source and return. Checked before the auth gate so a shell
+    # never pays an `op whoami` probe when 45-op-secrets already resolved
+    # everything; the cache only exists if an authenticated op wrote it.
     if [ -f "$_OP_SECRETS_CACHE" ] && [ -O "$_OP_SECRETS_CACHE" ]; then
         . "$_OP_SECRETS_CACHE"
+        eval "$_old_xtrace"
+        return 0
+    fi
+
+    # Cache miss: only proceed when op can actually read.
+    if ! _op_cli_ready; then
         eval "$_old_xtrace"
         return 0
     fi
@@ -137,14 +158,12 @@ _op_load_secrets() {
 # a single "full name" field), try combining first name + last name.
 # Falls back to "Devcontainer" if nothing resolves.
 _op_resolve_git_identity() {
-    if ! command -v op >/dev/null 2>&1 || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
-        return 0
-    fi
-
-    # Skip entirely if both are already set (e.g. from cache)
+    # Skip entirely if both are already set (e.g. from cache) — checked first
+    # so the common cached case never probes op.
     if [ -n "${GIT_USER_NAME:-}" ] && [ -n "${GIT_USER_EMAIL:-}" ]; then
         return 0
     fi
+    _op_cli_ready || return 0
 
     local _old_xtrace
     _old_xtrace=$(set +o | command grep xtrace)
@@ -182,7 +201,7 @@ _op_resolve_git_identity() {
 
 # Write cache only if it doesn't exist yet (cache miss path)
 _op_write_cache() {
-    [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && return 0
+    _op_cli_ready || return 0
     local _cache_tmp="${_OP_SECRETS_CACHE}.tmp.$$"
     local _old_xtrace
     _old_xtrace=$(set +o | command grep xtrace)

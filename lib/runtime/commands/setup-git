@@ -8,6 +8,17 @@ set -euo pipefail
 #   GIT_USER_EMAIL       - Git user.email
 #   GIT_AUTH_SSH_KEY     - SSH auth private key (raw PEM text)
 #   GIT_SIGNING_SSH_KEY  - SSH signing private key (raw PEM text)
+#
+# External credential providers (#1711) — when git ssh/signing is already
+# supplied from outside, the conflicting steps are skipped (one skip line
+# each) instead of overriding the provider:
+#   ssh     — SKIP_GIT_SSH_SETUP=true, GIT_SSH_COMMAND set, or core.sshCommand
+#             in GIT_CONFIG_COUNT/GIT_CONFIG_KEY_n: no ssh-agent is started and
+#             no auth key / core.sshCommand is written.
+#   signing — SKIP_GIT_SIGNING_SETUP=true, or gpg.format / gpg.ssh.program /
+#             user.signingkey in GIT_CONFIG_KEY_n: signing config is neither
+#             written nor cleared.
+# Identity (GIT_USER_NAME / GIT_USER_EMAIL) and SSH keep-alive always run.
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -124,6 +135,62 @@ setup_identity() {
     else
         _skip "git identity already configured"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# External-provider detection (#1711)
+# ---------------------------------------------------------------------------
+# Print the first of the given keys (case-insensitive, as git treats them)
+# that the GIT_CONFIG_COUNT / GIT_CONFIG_KEY_n env config defines. Returns 1
+# when none is defined or the env config is absent/malformed.
+_external_git_config() {
+    local count="${GIT_CONFIG_COUNT:-0}"
+    case "$count" in '' | *[!0-9]*) return 1 ;; esac
+    local i key want var
+    for ((i = 0; i < count; i++)); do
+        var="GIT_CONFIG_KEY_${i}"
+        key="${!var:-}"
+        key="${key,,}"
+        for want in "$@"; do
+            if [ "$key" = "${want,,}" ]; then
+                printf '%s' "$want"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+# Why ssh is externally provided (printed), or return 1 if it is not.
+_external_ssh_reason() {
+    local k
+    if [ "${SKIP_GIT_SSH_SETUP:-false}" = "true" ]; then
+        printf 'SKIP_GIT_SSH_SETUP=true'
+        return 0
+    fi
+    if [ -n "${GIT_SSH_COMMAND:-}" ]; then
+        printf 'GIT_SSH_COMMAND set'
+        return 0
+    fi
+    if k=$(_external_git_config core.sshCommand); then
+        printf 'GIT_CONFIG_* defines %s' "$k"
+        return 0
+    fi
+    return 1
+}
+
+# Why signing is externally provided (printed), or return 1 if it is not.
+_external_signing_reason() {
+    local k
+    if [ "${SKIP_GIT_SIGNING_SETUP:-false}" = "true" ]; then
+        printf 'SKIP_GIT_SIGNING_SETUP=true'
+        return 0
+    fi
+    if k=$(_external_git_config gpg.ssh.program user.signingkey gpg.format); then
+        printf 'GIT_CONFIG_* defines %s' "$k"
+        return 0
+    fi
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -328,10 +395,22 @@ setup_signing_key() {
 main() {
     _info "configuring git environment"
     setup_identity
-    ensure_ssh_agent
-    setup_ssh_keepalive
-    setup_auth_key
-    setup_signing_key
+
+    local reason
+    if reason=$(_external_ssh_reason); then
+        _skip "ssh agent + auth key: provided externally (${reason})"
+        setup_ssh_keepalive
+    else
+        ensure_ssh_agent
+        setup_ssh_keepalive
+        setup_auth_key
+    fi
+
+    if reason=$(_external_signing_reason); then
+        _skip "signing: provided externally (${reason})"
+    else
+        setup_signing_key
+    fi
     _ok "done"
 }
 

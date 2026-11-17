@@ -721,4 +721,137 @@ run_test_with_setup test_agent_env_is_first_priority "ensure_ssh_agent checks ag
 run_test_with_setup test_ignore_external_agent_comment "ensure_ssh_agent documents intent to ignore external agents"
 
 # Generate test report
+# ---------------------------------------------------------------------------
+# #1711: externally provided ssh / signing is left alone
+# ---------------------------------------------------------------------------
+# Behavioural: run the real script in a scratch HOME (gitconfig lives there,
+# GIT_CONFIG_GLOBAL pins it) with ssh-agent / ssh-add / ssh-keygen stubbed to
+# record calls. BASH_ENV is unset so the stubs win on PATH.
+
+# A real ed25519 key so the default (non-provider) path has something to sign
+# with and so a regression would visibly write signing config.
+_make_signing_key() {
+    ssh-keygen -q -t ed25519 -N '' -C t -f "$TEST_TEMP_DIR/sigkey" >/dev/null 2>&1
+}
+
+_stub_ssh_tools() {
+    mkdir -p "$TEST_TEMP_DIR/bin"
+    printf '#!/bin/bash\necho "ssh-agent $*" >>"%s/ssh.calls"\necho "SSH_AUTH_SOCK=/tmp/fake.sock; export SSH_AUTH_SOCK;"\necho "SSH_AGENT_PID=1; export SSH_AGENT_PID;"\n' \
+        "$TEST_TEMP_DIR" >"$TEST_TEMP_DIR/bin/ssh-agent"
+    printf '#!/bin/bash\necho "ssh-add $*" >>"%s/ssh.calls"\ncase "$1" in -l|-L) exit 1 ;; esac\nexit 0\n' \
+        "$TEST_TEMP_DIR" >"$TEST_TEMP_DIR/bin/ssh-add"
+    chmod +x "$TEST_TEMP_DIR/bin/ssh-agent" "$TEST_TEMP_DIR/bin/ssh-add"
+    : >"$TEST_TEMP_DIR/ssh.calls"
+}
+
+# Run setup-git sandboxed; extra NAME=value args go into its env.
+_run_setup_git() {
+    _stub_ssh_tools
+    command env -i BASH_ENV= HOME="$TEST_HOME" \
+        PATH="$TEST_TEMP_DIR/bin:/usr/bin:/bin" \
+        GIT_CONFIG_GLOBAL="$TEST_HOME/.gitconfig" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        GIT_USER_NAME="Test User" GIT_USER_EMAIL="test@example.com" \
+        "$@" bash "$SETUP_GIT_SCRIPT" 2>&1
+}
+
+_gitcfg() {
+    command env -i BASH_ENV= HOME="$TEST_HOME" PATH="/usr/bin:/bin" \
+        GIT_CONFIG_GLOBAL="$TEST_HOME/.gitconfig" git config --global --get "$1" 2>/dev/null || true
+}
+
+# Seed a provider-style signing config, as if a provider had written it.
+_seed_signing() {
+    command env -i BASH_ENV= HOME="$TEST_HOME" PATH="/usr/bin:/bin" \
+        GIT_CONFIG_GLOBAL="$TEST_HOME/.gitconfig" sh -c '
+        git config --global gpg.format ssh
+        git config --global user.signingkey /provider/key.pub
+        git config --global commit.gpgsign true'
+}
+
+test_baseline_starts_agent_and_writes_ssh_command() {
+    # Guards the guards: without a provider, today's behaviour still happens,
+    # so the provider tests below cannot pass merely because nothing ran.
+    _make_signing_key
+    local out
+    out=$(_run_setup_git GIT_AUTH_SSH_KEY="$(command cat "$TEST_TEMP_DIR/sigkey")")
+    assert_file_contains "$TEST_TEMP_DIR/ssh.calls" "ssh-agent -s" \
+        "Baseline: setup-git starts its own ssh-agent"
+    assert_contains "$(_gitcfg core.sshCommand)" "git_auth_key" \
+        "Baseline: setup-git writes core.sshCommand"
+    assert_not_contains "$out" "provided externally" "Baseline: no provider skip lines"
+}
+
+test_git_ssh_command_skips_agent_and_ssh_command() {
+    _make_signing_key
+    local out
+    out=$(_run_setup_git GIT_SSH_COMMAND="provider-ssh" \
+        GIT_AUTH_SSH_KEY="$(command cat "$TEST_TEMP_DIR/sigkey")")
+    assert_file_not_contains "$TEST_TEMP_DIR/ssh.calls" "ssh-agent" \
+        "GIT_SSH_COMMAND set: no second ssh-agent"
+    assert_equals "" "$(_gitcfg core.sshCommand)" \
+        "GIT_SSH_COMMAND set: core.sshCommand is not written"
+    assert_contains "$out" "ssh agent + auth key: provided externally (GIT_SSH_COMMAND set)" \
+        "One skip line names the reason"
+    assert_equals "1" "$(printf '%s\n' "$out" | command grep -c 'provided externally (GIT_SSH')" \
+        "Exactly one ssh skip line"
+    assert_equals "Test User" "$(_gitcfg user.name)" "Identity still configured"
+}
+
+test_git_config_env_ssh_command_detected() {
+    local out
+    out=$(_run_setup_git GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshcommand GIT_CONFIG_VALUE_0=x)
+    assert_file_not_contains "$TEST_TEMP_DIR/ssh.calls" "ssh-agent" \
+        "core.sshCommand via GIT_CONFIG_* (any case): no second agent"
+    assert_contains "$out" "GIT_CONFIG_* defines core.sshCommand" "Skip reason names the key"
+}
+
+test_external_signing_left_alone() {
+    _seed_signing
+    local out
+    out=$(_run_setup_git GIT_CONFIG_COUNT=2 \
+        GIT_CONFIG_KEY_0=gpg.format GIT_CONFIG_VALUE_0=ssh \
+        GIT_CONFIG_KEY_1=gpg.ssh.program GIT_CONFIG_VALUE_1=/provider/sign)
+    assert_equals "/provider/key.pub" "$(_gitcfg user.signingkey)" \
+        "Provider signing: user.signingkey is not unset (no _clear_signing_config)"
+    assert_equals "true" "$(_gitcfg commit.gpgsign)" "Provider signing: commit.gpgsign untouched"
+    assert_contains "$out" "signing: provided externally (GIT_CONFIG_* defines gpg.format)" \
+        "One skip line names the reason"
+}
+
+test_baseline_clears_stale_signing() {
+    # Guards the guard: with no provider and no key, stale signing config IS
+    # cleared — so the test above proves the skip, not a no-op.
+    _seed_signing
+    _run_setup_git >/dev/null
+    assert_equals "" "$(_gitcfg user.signingkey)" "Baseline: stale signing config is cleared"
+}
+
+test_skip_flags() {
+    _seed_signing
+    local out
+    out=$(_run_setup_git SKIP_GIT_SSH_SETUP=true SKIP_GIT_SIGNING_SETUP=true)
+    assert_file_not_contains "$TEST_TEMP_DIR/ssh.calls" "ssh-agent" "SKIP_GIT_SSH_SETUP=true: no agent"
+    assert_equals "/provider/key.pub" "$(_gitcfg user.signingkey)" "SKIP_GIT_SIGNING_SETUP=true: signing untouched"
+    assert_contains "$out" "(SKIP_GIT_SSH_SETUP=true)" "ssh skip reason"
+    assert_contains "$out" "(SKIP_GIT_SIGNING_SETUP=true)" "signing skip reason"
+}
+
+test_ssh_provider_does_not_skip_signing() {
+    # Only the conflicting part is skipped: an ssh provider alone must not
+    # suppress signing setup (signing stays independent).
+    _seed_signing
+    local out
+    out=$(_run_setup_git GIT_SSH_COMMAND="provider-ssh")
+    assert_not_contains "$out" "signing: provided externally" "ssh provider alone does not skip signing"
+}
+
+run_test_with_setup test_baseline_starts_agent_and_writes_ssh_command "#1711 baseline: no provider → own agent + core.sshCommand"
+run_test_with_setup test_git_ssh_command_skips_agent_and_ssh_command "#1711: GIT_SSH_COMMAND → no agent, no core.sshCommand, one skip line"
+run_test_with_setup test_git_config_env_ssh_command_detected "#1711: core.sshCommand via GIT_CONFIG_* detected"
+run_test_with_setup test_external_signing_left_alone "#1711: GIT_CONFIG_* signing → no signing writes or unsets"
+run_test_with_setup test_baseline_clears_stale_signing "#1711 baseline: no provider → stale signing cleared"
+run_test_with_setup test_skip_flags "#1711: SKIP_GIT_SSH_SETUP / SKIP_GIT_SIGNING_SETUP"
+run_test_with_setup test_ssh_provider_does_not_skip_signing "#1711: ssh provider alone does not skip signing"
+
 generate_report

@@ -483,8 +483,10 @@ test_xtrace_no_stored_token_leak() {
         HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
         _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
         bash -x "$SETUP_GH_SCRIPT" 2>&1) || true
-    assert_file_contains "$TEST_TEMP_DIR/gh.calls" "auth token" \
-        "Stub gh auth token must have been called (already-authenticated path)"
+    # #1711: the already-authenticated path no longer reads the token at all —
+    # export happens (if ever) in the persisted bashrc snippet, not here.
+    assert_file_not_contains "$TEST_TEMP_DIR/gh.calls" "auth token" \
+        "Already-authenticated path must not read the token (#1711)"
     assert_contains "$output" "gh already authenticated" "Should take the already-authenticated path"
     assert_contains "$output" "+ _persist_token" "xtrace should be restored before _persist_token"
     assert_not_contains "$output" "gho_fake_stored_token_5555555555" \
@@ -588,4 +590,79 @@ run_test_with_setup test_auth_no_token_leak "Auth block does not leak token in x
 run_test_with_setup test_verification_after_auth "Verification step after authentication"
 
 # Generate test report
+# ---------------------------------------------------------------------------
+# #1711: forge token export — the persisted bashrc snippet only copies the
+# token into shells when gh holds its own stored token (or the operator forces
+# it), so an external credential provider's token never lands in every env.
+# ---------------------------------------------------------------------------
+
+# Source the persisted ~/.bashrc in a clean shell and print GITHUB_TOKEN.
+_shell_token() {
+    command env -i BASH_ENV= HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:/usr/bin:/bin" "$@" \
+        bash -c '. "$HOME/.bashrc" >/dev/null 2>&1; printf "%s" "${GITHUB_TOKEN:-<unset>}"'
+}
+
+_run_setup_gh_authed() {
+    _install_stub_gh ok
+    touch "$TEST_TEMP_DIR/gh.loggedin"
+    command env -u BASH_ENV -u GITHUB_TOKEN -u GH_TOKEN \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 "$@" \
+        bash "$SETUP_GH_SCRIPT" 2>&1
+}
+
+test_provider_auth_does_not_export_token() {
+    local output
+    output=$(_run_setup_gh_authed) || true
+    assert_contains "$output" "not exporting GITHUB_TOKEN" \
+        "Provider-authenticated gh should log why the token is not exported"
+    assert_equals "<unset>" "$(_shell_token)" \
+        "A shell must not get GITHUB_TOKEN when gh has no stored token"
+}
+
+test_stored_token_still_exported() {
+    _run_setup_gh_authed >/dev/null || true
+    mkdir -p "$TEST_HOME/.config/gh"
+    printf 'github.com:\n    oauth_token: gho_x\n' >"$TEST_HOME/.config/gh/hosts.yml"
+    assert_equals "gho_fake_stored_token_5555555555" "$(_shell_token)" \
+        "A gh-stored token (today's login flow) is still exported to shells"
+    assert_equals "<unset>" "$(_shell_token FORGE_TOKEN_EXPORT=false)" \
+        "FORGE_TOKEN_EXPORT=false suppresses the export even with a stored token"
+}
+
+test_force_export_without_stored_token() {
+    local output
+    output=$(_run_setup_gh_authed FORGE_TOKEN_EXPORT=true) || true
+    assert_not_contains "$output" "not exporting GITHUB_TOKEN" \
+        "FORGE_TOKEN_EXPORT=true should not log the skip"
+    assert_equals "gho_fake_stored_token_5555555555" "$(_shell_token FORGE_TOKEN_EXPORT=true)" \
+        "FORGE_TOKEN_EXPORT=true exports even without a stored token"
+}
+
+test_legacy_snippet_migrated() {
+    command cat >"$TEST_HOME/.bashrc" <<'RC'
+before
+# setup-gh: GITHUB_TOKEN
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    export GITHUB_TOKEN=$(gh auth token 2>/dev/null | tr -d '[:space:]')
+fi
+after
+RC
+    _run_setup_gh_authed >/dev/null || true
+    assert_file_not_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>&1 && gh auth status' \
+        "The pre-#1711 unconditional export block should be removed"
+    assert_file_contains "$TEST_HOME/.bashrc" "before" "Surrounding bashrc content is preserved (before)"
+    assert_file_contains "$TEST_HOME/.bashrc" "after" "Surrounding bashrc content is preserved (after)"
+    assert_equals "1" "$(command grep -c '^# setup-gh: GITHUB_TOKEN' "$TEST_HOME/.bashrc")" \
+        "Exactly one setup-gh block remains"
+    _run_setup_gh_authed >/dev/null || true
+    assert_equals "1" "$(command grep -c '^# setup-gh: GITHUB_TOKEN' "$TEST_HOME/.bashrc")" \
+        "Re-running is idempotent"
+}
+
+run_test_with_setup test_provider_auth_does_not_export_token "#1711: provider-authenticated gh leaves GITHUB_TOKEN out of shells"
+run_test_with_setup test_stored_token_still_exported "#1711: gh-stored token still exported; FORGE_TOKEN_EXPORT=false suppresses"
+run_test_with_setup test_force_export_without_stored_token "#1711: FORGE_TOKEN_EXPORT=true forces the export"
+run_test_with_setup test_legacy_snippet_migrated "#1711: pre-#1711 bashrc export block migrated, idempotently"
+
 generate_report

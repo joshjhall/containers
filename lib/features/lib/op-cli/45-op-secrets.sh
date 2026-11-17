@@ -9,7 +9,11 @@
 #   OP_<NAME>_FILE_REF=op://vault/item/file   →  writes to /dev/shm, exports <NAME>=<path>
 #
 # Environment Variables:
-#   OP_SERVICE_ACCOUNT_TOKEN  - 1Password service account token (required)
+#   OP_SERVICE_ACCOUNT_TOKEN  - 1Password service account token. Optional since
+#                               #1711: any authenticated op works (Connect, or an
+#                               external credential provider whose `op whoami`
+#                               succeeds) — see op_is_usable in
+#                               /opt/container-runtime/lib/op-usable.sh
 #   OP_<NAME>_REF             - 1Password ref for any string secret
 #   OP_<NAME>_FILE_REF        - 1Password ref for file secrets (written to /dev/shm)
 #
@@ -21,6 +25,17 @@
 #       → GOOGLE_APPLICATION_CREDENTIALS=/dev/shm/google-application-credentials.json
 #
 set +e # Don't exit on errors
+
+# Shared op detection + pre-secrets hook hand-off (#1711). Loaded before the op
+# check: an external credential provider's `op` shim may only reach PATH via
+# the hand-off file written by 30-credential-setup.sh.
+_op_usable_lib="${OP_USABLE_LIB:-/opt/container-runtime/lib/op-usable.sh}"
+if [ -f "$_op_usable_lib" ]; then
+    # shellcheck source=/dev/null
+    . "$_op_usable_lib"
+    credential_env_load
+fi
+unset _op_usable_lib
 
 # Skip if op not available
 command -v op >/dev/null 2>&1 || exit 0
@@ -51,8 +66,14 @@ if [ -n "$_secrets_file" ]; then
 fi
 unset _secrets_file
 
-# Skip if no service account token configured
-[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && exit 0
+# Skip unless op can actually read: a service account token, Connect, or an
+# externally authenticated op (bounded `op whoami`). Older installs without the
+# shared helper keep the original token-only gate.
+if declare -f op_is_usable >/dev/null 2>&1; then
+    op_is_usable || exit 0
+else
+    [ -z "${OP_SERVICE_ACCOUNT_TOKEN:+set}" ] && exit 0
+fi
 
 # Disable xtrace to prevent secret exposure in logs
 _xtrace_was_on=false

@@ -6,6 +6,12 @@ set -euo pipefail
 # Environment variables (set directly or via OP_*_REF convention):
 #   GITLAB_TOKEN  - GitLab personal access token
 #   GITLAB_HOST   - GitLab hostname (default: gitlab.com)
+#   FORGE_TOKEN_EXPORT - true|false|auto (default auto). Whether shells get
+#                   GITLAB_TOKEN copied from glab's config (#1711). auto: only
+#                   when glab holds its own stored token (config.yml, i.e. this
+#                   script's login flow). A glab authenticated some other way
+#                   (e.g. an external credential provider's shim) is left
+#                   alone so its token is never copied into every process's env.
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -79,15 +85,13 @@ main() {
     # Already authenticated — export token and exit
     if glab auth status --hostname "$host" >/dev/null 2>&1; then
         _skip "glab already authenticated (host: ${host})"
-        # Ensure GITLAB_TOKEN is available for child processes
-        if [ -z "${GITLAB_TOKEN:-}" ]; then
-            local token
-            token=$(glab config get token --host "$host" 2>/dev/null | tr -d '[:space:]') || true
-            if [ -n "$token" ]; then
-                export GITLAB_TOKEN="$token"
-            fi
-        fi
+        # Test the token while xtrace is still off (#1468).
+        local _have_token=false
+        [ -n "${GITLAB_TOKEN:-}" ] && _have_token=true
         eval "$_xt"
+        if [ "$_have_token" = false ] && ! _should_export_token; then
+            _skip "not exporting GITLAB_TOKEN: glab authenticates without a stored token (set FORGE_TOKEN_EXPORT=true to force)"
+        fi
         _persist_token
         return 0
     fi
@@ -128,18 +132,67 @@ main() {
     fi
 }
 
-_persist_token() {
-    local host="${GITLAB_HOST:-gitlab.com}"
-    local marker="# setup-glab: GITLAB_TOKEN"
-    if ! command grep -qF "$marker" "${HOME}/.bashrc" 2>/dev/null; then
-        command cat >> "${HOME}/.bashrc" <<'BASHRC'
+# Whether shells should get GITLAB_TOKEN copied out of glab (#1711).
+# Mirrors the condition in the persisted bashrc snippet below.
+_glab_config_file() {
+    printf '%s/config.yml' "${GLAB_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/glab-cli}"
+}
+_should_export_token() {
+    case "${FORGE_TOKEN_EXPORT:-auto}" in
+        true) return 0 ;;
+        false) return 1 ;;
+    esac
+    command grep -qsE '^[[:space:]]*token:[[:space:]]*[^[:space:]]' "$(_glab_config_file)"
+}
 
-# setup-glab: GITLAB_TOKEN
+# The pre-#1711 snippet, removed verbatim on upgrade (see setup-gh).
+_LEGACY_SNIPPET='# setup-glab: GITLAB_TOKEN
 if [ -z "${GITLAB_TOKEN:-}" ] && command -v glab >/dev/null 2>&1 && glab auth status >/dev/null 2>&1; then
-    export GITLAB_TOKEN=$(glab config get token --host "${GITLAB_HOST:-gitlab.com}" 2>/dev/null | tr -d '[:space:]')
+    export GITLAB_TOKEN=$(glab config get token --host "${GITLAB_HOST:-gitlab.com}" 2>/dev/null | tr -d '"'"'[:space:]'"'"')
+fi'
+
+_persist_token() {
+    local rc="${HOME}/.bashrc"
+    local marker="# setup-glab: GITLAB_TOKEN (v2"
+    _remove_legacy_snippet "$rc"
+    if ! command grep -qF "$marker" "$rc" 2>/dev/null; then
+        command cat >> "$rc" <<'BASHRC'
+
+# setup-glab: GITLAB_TOKEN (v2, #1711; FORGE_TOKEN_EXPORT=true|false|auto)
+if [ -z "${GITLAB_TOKEN:-}" ] && [ "${FORGE_TOKEN_EXPORT:-auto}" != "false" ] && command -v glab >/dev/null 2>&1; then
+    if [ "${FORGE_TOKEN_EXPORT:-auto}" = "true" ] || command grep -qsE '^[[:space:]]*token:[[:space:]]*[^[:space:]]' "${GLAB_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/glab-cli}/config.yml"; then
+        glab auth status >/dev/null 2>&1 && export GITLAB_TOKEN=$(glab config get token --host "${GITLAB_HOST:-gitlab.com}" 2>/dev/null | tr -d '[:space:]')
+    fi
 fi
 BASHRC
     fi
+}
+
+# Remove the exact legacy block (and one blank line before it) from $1.
+# Pure awk: setup-* runs on minimal images. Only an exact 4-line match is
+# removed; anything else (a hand-edited block) is left untouched.
+_remove_legacy_snippet() {
+    local rc="$1"
+    [ -f "$rc" ] && command grep -qxF "${_LEGACY_SNIPPET%%$'\n'*}" "$rc" 2>/dev/null || return 0
+    local tmp
+    tmp=$(mktemp "${rc}.XXXXXX") || return 0
+    if LEGACY="$_LEGACY_SNIPPET" command awk '
+        BEGIN { n = split(ENVIRON["LEGACY"], want, "\n") }
+        { line[NR] = $0 }
+        END {
+            for (i = 1; i <= NR; i++) {
+                hit = 1
+                for (j = 1; j <= n; j++) if (line[i + j - 1] != want[j]) { hit = 0; break }
+                if (hit) { start = i; break }
+            }
+            if (!start) exit 1
+            skip_from = start; if (start > 1 && line[start - 1] == "") skip_from = start - 1
+            for (i = 1; i <= NR; i++) if (i < skip_from || i >= start + n) print line[i]
+        }' "$rc" >"$tmp" 2>/dev/null; then
+        command cat "$tmp" >"$rc"
+        _info "removed pre-#1711 token snippet from ${rc}"
+    fi
+    command rm -f "$tmp"
 }
 
 main "$@"
