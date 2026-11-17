@@ -171,32 +171,43 @@ test_dropped_fragment_does_not_linger() {
 
 # _escape <manifest-source> — commit a fixture whose manifest names <source>
 # (with committed file and directory symlinks available); prints
-# "<exit code> <written|none>".
+# "<exit code> <written|none> | <stderr>" so callers can pin WHICH guard fired
+# (the script exits 2 for many unrelated reasons).
 _escape() {
-    local repo dest rc=0 t
+    local repo dest rc=0 t err
     repo="$(command mktemp -d)"
     dest="$(command mktemp -d)/out"
     _fixture "$repo"
     t="$repo/baseline/templates"
     command printf 'x\tcore\talways\t%s\n' "$1" >>"$t/manifest.tsv"
     command printf 'secret\n' >"$repo/outside.txt"
-    command ln -s ../../../outside.txt "$t/core/link.txt"
+    # Absolute targets, so the links still resolve to real host files after
+    # extraction into scratch — a relative link would dangle there and be
+    # refused as a missing source instead, i.e. by the wrong guard.
+    command ln -s "$repo/outside.txt" "$t/core/link.txt"
     command mkdir -p "$repo/elsewhere"
     command printf 'secret\n' >"$repo/elsewhere/f.txt"
-    command ln -s ../../elsewhere "$t/dirlink"
+    command ln -s "$repo/elsewhere" "$t/dirlink"
     _git -C "$repo" add -A
     _git -C "$repo" commit -q -m escape
-    REPO_BASELINE_DEST="$dest" "$SYNC" "$(_head "$repo")" "$repo" >/dev/null 2>&1 || rc=$?
-    command echo "$rc $([ -e "$dest" ] && command echo written || command echo none)"
+    err="$(REPO_BASELINE_DEST="$dest" "$SYNC" "$(_head "$repo")" "$repo" 2>&1 >/dev/null)" || rc=$?
+    command echo "$rc $([ -e "$dest" ] && command echo written || command echo none) | $err"
     command rm -rf "$repo" "$(command dirname "$dest")"
 }
 
 test_rejects_escaping_sources() {
-    assert_equals "2 none" "$(_escape '../../outside.txt')" "a .. source is refused"
-    assert_equals "2 none" "$(_escape "$(command mktemp -u)")" "an absolute source is refused"
-    assert_equals "2 none" "$(_escape 'core/link.txt')" "a symlinked source is refused"
-    assert_equals "2 none" "$(_escape 'dirlink/f.txt')" "a source under a symlinked directory is refused"
-    assert_equals "2 none" "$(_escape 'core/nonexistent.txt')" "a manifest row naming a missing source is refused"
+    local abs
+    abs="$(command mktemp -u)"
+    assert_equals "2 none | sync-repo-baseline: manifest source escapes the templates dir: ../../outside.txt" \
+        "$(_escape '../../outside.txt')" "a .. source is refused by the escape guard"
+    assert_equals "2 none | sync-repo-baseline: manifest source escapes the templates dir: $abs" \
+        "$(_escape "$abs")" "an absolute source is refused by the escape guard"
+    assert_equals "2 none | sync-repo-baseline: manifest source is a symlink: core/link.txt" \
+        "$(_escape 'core/link.txt')" "a symlinked source is refused by the symlink guard"
+    assert_equals "2 none | sync-repo-baseline: manifest source is a symlink: dirlink/f.txt" \
+        "$(_escape 'dirlink/f.txt')" "a source under a symlinked directory is refused by the symlink guard"
+    assert_equals "2 none | sync-repo-baseline: manifest names a missing source: core/nonexistent.txt" \
+        "$(_escape 'core/nonexistent.txt')" "a missing source is refused by the missing-source guard"
 }
 
 test_rejects_symlinked_manifest() {
@@ -256,8 +267,9 @@ test_repo_default_resolution() {
     # The sibling may or may not exist (it does in the dev container, not on
     # a CI runner), so the error is either "not a git checkout of containers-db:
     # <sibling>" or "commit ... not found in <sibling> (...)" — both name it.
-    assert_true "command grep -qE ': $SIBLING\$| in $SIBLING \\(' <<<'$err'" \
-        "the sibling of the main checkout is tried instead"
+    local named=1
+    [[ "$err" == *": $SIBLING" || "$err" == *" in $SIBLING ("* ]] && named=0
+    assert_true "$named" "the sibling of the main checkout is tried instead (got: $err)"
     assert_equals "2" "$(_sync "$dest" "$sha" "$notgit")" "a non-git repo argument is refused"
     assert_equals "2" "$(_sync "$dest" "$sha" "$other")" "a repo lacking the SHA is refused"
     command rm -rf "$repo" "$other" "$notgit" "$(command dirname "$dest")"
