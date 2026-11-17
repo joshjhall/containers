@@ -738,8 +738,9 @@ _stub_ssh_tools() {
     mkdir -p "$TEST_TEMP_DIR/bin"
     printf '#!/bin/bash\necho "ssh-agent $*" >>"%s/ssh.calls"\necho "SSH_AUTH_SOCK=/tmp/fake.sock; export SSH_AUTH_SOCK;"\necho "SSH_AGENT_PID=1; export SSH_AGENT_PID;"\n' \
         "$TEST_TEMP_DIR" >"$TEST_TEMP_DIR/bin/ssh-agent"
-    printf '#!/bin/bash\necho "ssh-add $*" >>"%s/ssh.calls"\ncase "$1" in -l|-L) exit 1 ;; esac\nexit 0\n' \
-        "$TEST_TEMP_DIR" >"$TEST_TEMP_DIR/bin/ssh-add"
+    # Key adds succeed unless $TEST_TEMP_DIR/ssh-add.fail exists (#1723).
+    printf '#!/bin/bash\necho "ssh-add $*" >>"%s/ssh.calls"\ncase "$1" in -l|-L) exit 1 ;; esac\n[ -e "%s/ssh-add.fail" ] && exit 1\nexit 0\n' \
+        "$TEST_TEMP_DIR" "$TEST_TEMP_DIR" >"$TEST_TEMP_DIR/bin/ssh-add"
     chmod +x "$TEST_TEMP_DIR/bin/ssh-agent" "$TEST_TEMP_DIR/bin/ssh-add"
     : >"$TEST_TEMP_DIR/ssh.calls"
 }
@@ -846,6 +847,40 @@ test_ssh_provider_does_not_skip_signing() {
     assert_not_contains "$out" "signing: provided externally" "ssh provider alone does not skip signing"
 }
 
+# ---------------------------------------------------------------------------
+# #1723: a failing ssh-add key add is a WARN, not an abort
+# ---------------------------------------------------------------------------
+test_auth_key_add_failure_continues() {
+    _make_signing_key
+    : >"$TEST_TEMP_DIR/ssh-add.fail"
+    local out rc=0
+    out=$(_run_setup_git GIT_AUTH_SSH_KEY="$(command cat "$TEST_TEMP_DIR/sigkey")") || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0 when the auth-key agent add fails"
+    assert_file_contains "$TEST_TEMP_DIR/ssh.calls" "ssh-add $TEST_HOME/.ssh/git_auth_key" \
+        "The auth-key add was attempted (stub reached)"
+    assert_contains "$out" "WARN: could not add auth key to ssh-agent" "Failed add logs a WARN"
+    assert_not_contains "$out" "OK: auth key added to ssh-agent" "No false OK for the add"
+    assert_contains "$(_gitcfg core.sshCommand)" "git_auth_key" \
+        "core.sshCommand still written after a failed add"
+    assert_contains "$out" "[setup-git] OK: done" "setup-git runs to completion"
+}
+
+test_signing_key_add_failure_continues() {
+    _make_signing_key
+    : >"$TEST_TEMP_DIR/ssh-add.fail"
+    local out rc=0
+    out=$(_run_setup_git GIT_SIGNING_SSH_KEY="$(command cat "$TEST_TEMP_DIR/sigkey")") || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0 when the signing-key agent add fails"
+    assert_file_contains "$TEST_TEMP_DIR/ssh.calls" "ssh-add $TEST_HOME/.ssh/git_signing_key" \
+        "The signing-key add was attempted (stub reached)"
+    assert_contains "$out" "WARN: could not add signing key to ssh-agent" "Failed add logs a WARN"
+    assert_not_contains "$out" "OK: signing key added to ssh-agent" "No false OK for the add"
+    assert_equals "$TEST_HOME/.ssh/git_signing_key.pub" "$(_gitcfg user.signingkey)" \
+        "Signing config still written after a failed add"
+    assert_equals "ssh" "$(_gitcfg gpg.format)" "gpg.format=ssh still written"
+    assert_contains "$out" "[setup-git] OK: done" "setup-git runs to completion"
+}
+
 run_test_with_setup test_baseline_starts_agent_and_writes_ssh_command "#1711 baseline: no provider → own agent + core.sshCommand"
 run_test_with_setup test_git_ssh_command_skips_agent_and_ssh_command "#1711: GIT_SSH_COMMAND → no agent, no core.sshCommand, one skip line"
 run_test_with_setup test_git_config_env_ssh_command_detected "#1711: core.sshCommand via GIT_CONFIG_* detected"
@@ -853,5 +888,7 @@ run_test_with_setup test_external_signing_left_alone "#1711: GIT_CONFIG_* signin
 run_test_with_setup test_baseline_clears_stale_signing "#1711 baseline: no provider → stale signing cleared"
 run_test_with_setup test_skip_flags "#1711: SKIP_GIT_SSH_SETUP / SKIP_GIT_SIGNING_SETUP"
 run_test_with_setup test_ssh_provider_does_not_skip_signing "#1711: ssh provider alone does not skip signing"
+run_test_with_setup test_auth_key_add_failure_continues "#1723: failed auth-key ssh-add warns, still writes core.sshCommand"
+run_test_with_setup test_signing_key_add_failure_continues "#1723: failed signing-key ssh-add warns, still configures signing"
 
 generate_report
