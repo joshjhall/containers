@@ -339,6 +339,9 @@ test_watcher_helper_absent_token_only() {
         "$(_resolve_via_watcher OP_USABLE_LIB="$TEST_TEMP_DIR/absent-op-usable.sh" OP_SERVICE_ACCOUNT_TOKEN=tok)" \
         "Helper absent, token set: resolves via the token-only fallback"
     assert_file_not_contains "$TEST_TEMP_DIR/op.calls" "whoami" "Fallback: no whoami probe"
+    assert_file_contains "$TEST_TEMP_DIR/op.calls" "read" "Fallback: resolved through op read"
+    assert_file_contains "$TEST_TEMP_DIR/anthropic-auth-token" "fake-anthropic-token-1711" \
+        "Fallback: token stored at the scratch path"
 }
 
 # claude-setup is sourced, not executed: its source guard (#1722) returns right
@@ -389,6 +392,9 @@ test_claude_setup_helper_absent_token_only() {
         "$(_resolve_via_setup OP_USABLE_LIB="$TEST_TEMP_DIR/absent-op-usable.sh" OP_SERVICE_ACCOUNT_TOKEN=tok)" \
         "Helper absent, token set: resolves via the token-only fallback"
     assert_file_not_contains "$TEST_TEMP_DIR/op.calls" "whoami" "Fallback: no whoami probe"
+    assert_file_contains "$TEST_TEMP_DIR/op.calls" "read" "Fallback: resolved through op read"
+    assert_file_contains "$TEST_TEMP_DIR/anthropic-auth-token" "fake-anthropic-token-1711" \
+        "Fallback: token stored at the scratch path"
 }
 
 # The guard must NOT fire when claude-setup is executed — directly or via a

@@ -86,15 +86,6 @@ _has_anthropic_token() {
 }
 
 # ============================================================================
-# Load Build-Time Configuration
-# ============================================================================
-ENABLED_FEATURES_FILE="/etc/container/config/enabled-features.conf"
-if [ -f "$ENABLED_FEATURES_FILE" ]; then
-    # shellcheck source=/dev/null
-    source "$ENABLED_FEATURES_FILE"
-fi
-
-# ============================================================================
 # Authentication Check (Token-based or OAuth)
 # ============================================================================
 is_claude_authenticated() {
@@ -165,10 +156,11 @@ fi
 # were MOVED there, not copied (#777): `claude-plugins-repair` sources the same
 # file, so the every-boot path and the on-demand repair path cannot drift.
 #
-# Sourced before anything with a side effect runs (only the pure auth-helper
-# definitions above precede it), because the mutual-exclusion lock (#784) is
-# one of the things it defines and that lock must be held for the whole run —
-# including the token-file and settings.json writes further down.
+# Sourced before any setup step runs — only the op-usable/credential-env load
+# (variable-only) and the auth-helper definitions precede it — because the
+# mutual-exclusion lock (#784) is one of the things it defines and that lock
+# must be held for the whole run, including the token-file and settings.json
+# writes further down.
 #
 # Sourced with an explicit existence check rather than a bare `source`, because
 # under `set -e` a missing file aborts with only bash's own terse message —
@@ -195,6 +187,15 @@ source "$CLAUDE_PLUGIN_LIB"
 # entry points cannot drift onto different lock files.
 _acquire_setup_lock "$CLAUDE_SETUP_LOCK"
 
+# ============================================================================
+# Load Build-Time Configuration
+# ============================================================================
+ENABLED_FEATURES_FILE="/etc/container/config/enabled-features.conf"
+if [ -f "$ENABLED_FEATURES_FILE" ]; then
+    # shellcheck source=/dev/null
+    source "$ENABLED_FEATURES_FILE"
+fi
+
 # Exit early if Claude Code not available
 if ! command -v claude &> /dev/null; then
     echo "Claude Code CLI not installed. Skipping setup."
@@ -203,20 +204,6 @@ fi
 
 echo "=== Claude Code Setup ==="
 echo ""
-# ============================================================================
-# Shared Plugin Primitives
-# ============================================================================
-# The override/deny-list resolution, the `claude plugin list` parsers, the
-# enablement-aware status + enable primitives, and the whole librarian (local,
-# offline) install path live in claude-plugin-lib.sh. They were MOVED there,
-# not copied (#777): `claude-plugins-repair` sources the same file, so the
-# every-boot path and the on-demand repair path cannot drift.
-#
-# Sourced with an explicit existence check rather than a bare `source`, because
-# under `set -e` a missing file aborts with only bash's own terse message —
-# unhelpful for the one operator who will ever hit it (a hand-copied
-# claude-setup without its library).
-
 # ============================================================================
 # Plugin Installation Logic
 # ============================================================================
