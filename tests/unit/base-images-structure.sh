@@ -293,6 +293,12 @@ _step_line() {
         'index($0, want) == 1 { print NR; exit }' "$1"
 }
 
+# Lines of the step starting at line $2, up to (not including) the next step.
+_step_body() {
+    /usr/bin/awk -v s="$2" \
+        'NR > s && /^      - name:/ { exit } NR >= s { print }' "$1"
+}
+
 # #1670: on publish runs the floating tags (latest, vX*) must move only after
 # the Trivy gate and signing pass. build-push may push the immutable sha tag
 # alone; a later `imagetools create` step promotes the floating ones.
@@ -318,14 +324,29 @@ _check_floating_tags_gated() {
         /usr/bin/echo "order must be push < trivy < sign < promote ($push_line $trivy_line $sign_line $promote_line)"
         return
     }
-    # Body of the promote step only (up to the next step).
-    local promote_body
-    promote_body="$(/usr/bin/awk -v s="$promote_line" \
-        'NR > s && /^      - name:/ { exit } NR >= s { print }' "$wf")"
+    local promote_body trivy_body
+    promote_body="$(_step_body "$wf" "$promote_line")"
+    trivy_body="$(_step_body "$wf" "$trivy_line")"
     /usr/bin/grep -q 'imagetools create' <<<"$promote_body" || {
         /usr/bin/echo "promote step does not use imagetools create"
         return
     }
+    # Promotion must copy the scanned digest, never a mutable tag.
+    /usr/bin/grep -q 'steps\.build_push\.outputs\.digest' <<<"$promote_body" || {
+        /usr/bin/echo "promote source is not the build_push digest"
+        return
+    }
+    # The gate rests on the implicit success() guard: an `if:` that can run
+    # after a failure, or a Trivy step that swallows its own failure, would
+    # promote a vulnerable digest.
+    if /usr/bin/grep -qE '^        if:.*(always|failure|cancelled)\(' <<<"$promote_body"; then
+        /usr/bin/echo "promote step if: overrides the implicit success() guard"
+        return
+    fi
+    if /usr/bin/grep -q 'continue-on-error' <<<"$trivy_body"; then
+        /usr/bin/echo "Trivy step must not set continue-on-error"
+        return
+    fi
     /usr/bin/echo ok
 }
 
