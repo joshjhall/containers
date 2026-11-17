@@ -38,7 +38,7 @@ pub mod sysdeps;
 
 pub use catalog::{Catalog, CatalogSource};
 pub use catalog_gen::{AddOutcome, add_version};
-pub use error::{ErrorClass, LuggageError, Result};
+pub use error::{EntryTotal, ErrorClass, LuggageError, Result};
 pub use evidence::{EvidenceOrigin, EvidenceSource, HttpEvidenceSource, refresh_evidence};
 pub use installer::verify::VerificationWarning;
 pub use installer::{InstallPlan, InstallReport, Installer, InstallerOptions};

@@ -88,7 +88,7 @@ use super::MethodContext;
 use super::archive_limit::{LimitedReader, LimitedWriter};
 use super::archive_path::{safe_relative_path, strip_prefix_components, validate_link_target};
 use super::layout::{install_binaries, prepare_cache_dirs};
-use crate::error::{LuggageError, Result};
+use crate::error::{EntryTotal, LuggageError, Result};
 
 /// Compression wrapping the tar stream, inferred from the artifact filename.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -519,12 +519,16 @@ fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()
 
     // The total is only walked on failure. `merge_dir` moves leaves out of
     // staging as they land, so what is still in staging plus what moved is
-    // the archive's full contribution.
-    let total = moved.len() + count_leaves(staging);
+    // the archive's full contribution — or a lower bound on it, when part of
+    // staging could not be read.
+    let total = match count_leaves(staging) {
+        EntryTotal::Exact(n) => EntryTotal::Exact(moved.len() + n),
+        EntryTotal::AtLeast(n) => EntryTotal::AtLeast(moved.len() + n),
+    };
     tracing::warn!(
         prefix = %prefix.display(),
         merged = moved.len(),
-        total,
+        total = %total,
         failed_at = %path.display(),
         "binary-tarball merge failed partway; these entries already landed in the prefix: {}",
         landed_summary(&moved, MERGE_FAILURE_LOG_LIMIT),
@@ -551,19 +555,57 @@ fn landed_summary(moved: &[PathBuf], limit: usize) -> String {
 
 /// Count the files and links under `dir` (directories themselves excluded).
 ///
-/// Best-effort: it only feeds an error message, so an unreadable subtree
-/// counts as empty rather than masking the merge failure being reported.
-/// `DirEntry::file_type` does not follow links, so a link to a directory
-/// counts as one leaf rather than being descended into.
-fn count_leaves(dir: &Path) -> usize {
-    let Ok(entries) = fs::read_dir(dir) else { return 0 };
-    entries
-        .flatten()
-        .map(|entry| match entry.file_type() {
-            Ok(t) if t.is_dir() => count_leaves(&entry.path()),
-            _ => 1,
-        })
-        .sum()
+/// Best-effort: it only feeds an error message, so it never fails — an
+/// unreadable directory, entry, or file type cannot mask the merge failure
+/// being reported. Anything it could not read makes the result
+/// [`EntryTotal::AtLeast`] instead of silently counting as empty, since the
+/// failures that trigger this report are often the same permission or I/O
+/// problems that hide part of staging. `DirEntry::file_type` does not follow
+/// links, so a link to a directory counts as one leaf rather than being
+/// descended into.
+fn count_leaves(dir: &Path) -> EntryTotal {
+    count_leaves_with(dir, &|d| fs::read_dir(d))
+}
+
+/// [`count_leaves`] with the directory reader injected. Tests may run as
+/// root, where `chmod` cannot make a directory unreadable, so the seam is the
+/// only hermetic way to force a `read_dir` failure partway down the tree.
+fn count_leaves_with(
+    dir: &Path,
+    read_dir: &dyn Fn(&Path) -> std::io::Result<fs::ReadDir>,
+) -> EntryTotal {
+    let (count, exact) = walk_leaves(dir, read_dir);
+    if exact { EntryTotal::Exact(count) } else { EntryTotal::AtLeast(count) }
+}
+
+/// Recursive body of [`count_leaves_with`]: `(leaves seen, nothing skipped)`.
+fn walk_leaves(
+    dir: &Path,
+    read_dir: &dyn Fn(&Path) -> std::io::Result<fs::ReadDir>,
+) -> (usize, bool) {
+    let Ok(entries) = read_dir(dir) else { return (0, false) };
+    let (mut count, mut exact) = (0, true);
+    for entry in entries {
+        let Ok(entry) = entry else {
+            exact = false;
+            continue;
+        };
+        match entry.file_type() {
+            Ok(t) if t.is_dir() => {
+                let (n, sub_exact) = walk_leaves(&entry.path(), read_dir);
+                count += n;
+                exact &= sub_exact;
+            }
+            Ok(_) => count += 1,
+            // The entry exists, so it is at least one leaf; but if it is
+            // really a directory, its contents went uncounted.
+            Err(_) => {
+                count += 1;
+                exact = false;
+            }
+        }
+    }
+    (count, exact)
 }
 
 /// Recursively move `src`'s contents into `dst`, merging with whatever is

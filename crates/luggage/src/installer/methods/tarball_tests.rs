@@ -1181,10 +1181,15 @@ fn merge_failure_reports_how_far_it_got() {
     };
     assert_eq!(artifact, "tool.tar.gz");
     assert_eq!(prefix, f.prefix.path());
-    assert_eq!((merged, total), (2, 3), "two of the three entries landed before `c/` failed");
+    assert_eq!(
+        (merged, total),
+        (2, EntryTotal::Exact(3)),
+        "two of the three entries landed before `c/` failed"
+    );
     assert_eq!(path, f.prefix.path().join("c"));
 
     assert!(message.contains("2 of 3"), "progress missing from: {message}");
+    assert!(!message.contains("at least"), "a complete count must read as exact: {message}");
     assert!(
         message.contains(&f.prefix.path().display().to_string()),
         "prefix missing from: {message}"
@@ -1210,7 +1215,7 @@ fn nested_merge_failure_counts_across_recursion() {
     let LuggageError::ArchiveMergeFailed { merged, total, path, .. } = err else {
         panic!("expected ArchiveMergeFailed, got {err}");
     };
-    assert_eq!((merged, total), (2, 4));
+    assert_eq!((merged, total), (2, EntryTotal::Exact(4)));
     assert_eq!(path, f.prefix.path().join("a/sub"));
 }
 
@@ -1243,8 +1248,38 @@ fn count_leaves_counts_nested_files_and_does_not_follow_dir_links() {
     fs::create_dir(root.path().join("empty")).unwrap();
 
     // top, a/one, a/b/two, link-to-a (one leaf, not its 2-file target).
-    assert_eq!(count_leaves(root.path()), 4);
-    assert_eq!(count_leaves(&root.path().join("missing")), 0);
+    assert_eq!(count_leaves(root.path()), EntryTotal::Exact(4));
+    // An unreadable root is "unknown", not "empty".
+    assert_eq!(count_leaves(&root.path().join("missing")), EntryTotal::AtLeast(0));
+}
+
+/// A subtree that cannot be read must turn the count into a lower bound
+/// rather than silently counting as empty (#1688). Injected through the
+/// `read_dir` seam because tests may run as root, where `chmod 000` would
+/// not stop the walk.
+#[test]
+fn count_leaves_marks_an_unreadable_subtree_as_a_lower_bound() {
+    let root = tempdir().unwrap();
+    fs::create_dir_all(root.path().join("ok")).unwrap();
+    fs::create_dir_all(root.path().join("locked/deep")).unwrap();
+    fs::write(root.path().join("top"), b"").unwrap();
+    fs::write(root.path().join("ok/one"), b"").unwrap();
+    fs::write(root.path().join("locked/hidden"), b"").unwrap();
+    fs::write(root.path().join("locked/deep/hidden"), b"").unwrap();
+
+    let locked = root.path().join("locked");
+    let reader = |d: &Path| {
+        if d == locked {
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        } else {
+            fs::read_dir(d)
+        }
+    };
+
+    // top + ok/one are readable; locked/'s two files are not.
+    assert_eq!(count_leaves_with(root.path(), &reader), EntryTotal::AtLeast(2));
+    // The same tree with nothing blocked is exact — the seam alone changes it.
+    assert_eq!(count_leaves_with(root.path(), &|d| fs::read_dir(d)), EntryTotal::Exact(4));
 }
 
 #[test]
