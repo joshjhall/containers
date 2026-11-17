@@ -9,8 +9,8 @@ mod standards_common;
 use std::fs;
 
 use standards_common::{
-    ModeGuard, assert_ok, copy_dir, refuses_writes, shell_python_repo, standards, stdout_of,
-    vendored_templates,
+    ModeGuard, assert_ok, baseline_templates, copy_dir, refuses_writes, shell_python_repo,
+    standards, stdout_of,
 };
 
 /// A write failure partway through `init` must still record the files it
@@ -22,7 +22,7 @@ fn partial_init_failure_records_written_files() {
     let tmp = shell_python_repo();
     let root = tmp.path();
     let tpl = tempfile::tempdir().unwrap();
-    copy_dir(&vendored_templates(), tpl.path());
+    copy_dir(&baseline_templates(), tpl.path());
     let tpl_arg = tpl.path().to_str().unwrap();
 
     // `tests/run.sh` follows lefthook.yml and justfile in manifest order; a

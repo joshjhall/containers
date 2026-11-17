@@ -170,19 +170,6 @@ jobs:
           sudo install -m 0755 /tmp/yq /usr/local/bin/yq
           yq --version
 
-      # tests/unit/sync-repo-baseline.sh re-vendors stibbons' repo-baseline at
-      # the SHA pinned in crates/stibbons/assets/repo-baseline/SOURCE and diffs
-      # it against the tracked copy (#1748). The shallow checkout above is the
-      # default branch's tip, so fetch the pinned commit into it explicitly;
-      # the test fails (not skips) under CI when the commit is absent.
-      - name: Fetch pinned repo-baseline commit into containers-db checkout
-        run: |
-          set -euo pipefail
-          # Fails unless SOURCE is exactly `containers-db <full sha>`: no
-          # branch/tag (a moving ref) and nothing git could parse as an option.
-          sha=$(bin/read-repo-baseline-pin.sh)
-          git -C _containers-db fetch --depth 1 origin "$sha"
-
       - name: Run unit tests
         env:
           # Points tests/unit/vendored-catalog.sh at the checkout above. Named
@@ -190,9 +177,6 @@ jobs:
           # image sets to its own COPY of the vendored snapshot, so reusing it
           # would compare the catalog against itself and pass vacuously.
           CONTAINERS_DB_SRC: ${{ github.workspace }}/_containers-db
-          # The checkout tests/unit/sync-repo-baseline.sh re-vendors from (it
-          # holds the pinned commit fetched above).
-          CONTAINERS_DB_REPO: ${{ github.workspace }}/_containers-db
           # The pinned scanner tests/unit/okf-memory-bundle.sh drives (above).
           OKF_SCANNER: ${{ github.workspace }}/_librarian/plugins/review-audit/skills/check-okf-conformance/patterns.sh
         run: |
@@ -581,31 +565,11 @@ jobs:
       - name: Force HTTPS for git dependencies
         run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 
-      # stibbons' matches_baseline_render_sh compares `setup standards` output
-      # byte-for-byte with containers-db's baseline/templates/render.sh at the
-      # commit the vendored templates come from (assets/repo-baseline/SOURCE,
-      # #1754). Without that commit it skips, and a skip renders as a pass
-      # (#768, #1541), so on Linux check containers-db out at the pinned SHA and
-      # set REQUIRE_BASELINE_PARITY=1 below.
-      - name: Read repo-baseline pin (for render.sh parity)
-        id: baseline
-        if: runner.os == 'Linux'
-        run: |
-          set -euo pipefail
-          sha=$(bin/read-repo-baseline-pin.sh)
-          echo "sha=$sha" >>"$GITHUB_OUTPUT"
-
-      - name: Checkout containers-db at the pin (for render.sh parity)
-        if: runner.os == 'Linux'
-        uses: actions/checkout@v4
-        with:
-          repository: joshjhall/containers-db
-          ref: ${{ steps.baseline.outputs.sha }}
-          path: _containers-db
-          fetch-depth: 1
-          # Public repo, read-only use: keep the job token out of its .git/config.
-          persist-credentials: false
-
+      # stibbons embeds containers-db's repo-baseline templates through the
+      # `repo-baseline` git dependency, pinned by full SHA in Cargo.toml
+      # (#1649). cargo fetches that exact commit, and matches_baseline_render_sh
+      # runs render.sh from the same checkout, so there is no separate
+      # containers-db checkout to pin or fetch here, and no skip path.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable branch
         with:
@@ -633,11 +597,7 @@ jobs:
         run: cargo test --workspace
         env:
           # Fail, rather than skip, tests that need a gate CI is meant to run.
-          REQUIRE_BASELINE_PARITY: ${{ runner.os == 'Linux' && '1' || '' }}
           REQUIRE_UNPRIVILEGED_TESTS: "1"
-          # The checkout matches_baseline_render_sh reads render.sh from (at
-          # the SOURCE SHA, never its working tree).
-          CONTAINERS_DB_REPO: ${{ github.workspace }}/_containers-db
 
       - name: Verify build
         run: cargo build --workspace

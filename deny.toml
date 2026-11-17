@@ -107,4 +107,5 @@ skip-tree = []
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []
+# containers-db: the pinned repo-baseline templates crate (#1649).
+allow-git = ["https://github.com/joshjhall/containers-db"]

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use containers_common::generate::hash_bytes;
 
 use super::fsutil::set_executable;
-use super::manifest::RenderedFile;
+use super::manifest::{Mode, RenderedFile};
 use super::state::{STATE_FILE, StandardsState};
 use super::{InitAction, touches};
 
@@ -121,16 +121,41 @@ pub(super) fn write_targets(
                 std::fs::create_dir_all(parent)
                     .map_err(|e| (i, InitWriteError::new("create", parent, e)))?;
             }
-            std::fs::write(&path, &file.content)
-                .map_err(|e| (i, InitWriteError::new("write", &path, e)))?;
-            new.files.insert(file.target.clone(), hash_bytes(&file.content));
-            new.accepted.remove(&file.target);
+            match file.mode {
+                Mode::Link => write_link(&file.content, &path)
+                    .map_err(|e| (i, InitWriteError::new("link", &path, e)))?,
+                Mode::Tracked | Mode::Once => std::fs::write(&path, &file.content)
+                    .map_err(|e| (i, InitWriteError::new("write", &path, e)))?,
+            }
+            // Create-only targets are the user's once written: no provenance.
+            if file.mode == Mode::Tracked {
+                new.files.insert(file.target.clone(), hash_bytes(&file.content));
+                new.accepted.remove(&file.target);
+            }
         }
         if file.executable && touches(file, *action) {
             set_executable(&path).map_err(|e| (i, InitWriteError::new("chmod", &path, e)))?;
         }
     }
     Ok(())
+}
+
+/// Create the symlink `path` -> `text` (a manifest link's text, relative to
+/// the link's directory, written as-is).
+#[cfg(unix)]
+fn write_link(text: &[u8], path: &Path) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    std::os::unix::fs::symlink(std::ffi::OsStr::from_bytes(text), path)
+}
+
+/// Symlinks need privileges on Windows; refuse rather than write a copy that
+/// `render.sh` would not.
+#[cfg(not(unix))]
+fn write_link(_text: &[u8], path: &Path) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        format!("cannot create symlink {}: unsupported on this platform", path.display()),
+    ))
 }
 
 /// Print one line per target (plus the dropped ones). With `stopped_at`, the
@@ -174,7 +199,7 @@ const fn action_mark(a: InitAction) -> &'static str {
         InitAction::Updated => "update",
         InitAction::Unchanged => "ok",
         InitAction::Skipped => "skip",
-        InitAction::Accepted => "keep",
+        InitAction::Accepted | InitAction::Kept => "keep",
         InitAction::Forced => "overwrite",
     }
 }
@@ -185,7 +210,12 @@ mod tests {
     use super::*;
 
     fn file(target: &str) -> RenderedFile {
-        RenderedFile { target: target.to_string(), content: b"x\n".to_vec(), executable: false }
+        RenderedFile {
+            target: target.to_string(),
+            content: b"x\n".to_vec(),
+            executable: false,
+            mode: Mode::Tracked,
+        }
     }
 
     #[test]

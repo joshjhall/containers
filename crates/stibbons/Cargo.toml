@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 containers-common = { workspace = true }
+repo-baseline = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

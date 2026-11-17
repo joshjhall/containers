@@ -59,8 +59,9 @@ fn accept_into(
                 }
                 // An acceptance still matching disk is live, even when the render
                 // has caught up to it: `init` then sees the file as unchanged and
-                // drops the acceptance itself (see `seed_state`).
-                FileState::Accepted => {}
+                // drops the acceptance itself (see `seed_state`). Create-only
+                // targets (kept/absent) are the user's; there is nothing to accept.
+                FileState::Accepted | FileState::Kept | FileState::Absent => {}
             }
         }
     } else {
@@ -93,6 +94,12 @@ fn accept_into(
                 }
                 FileState::Accepted | FileState::Missing | FileState::Modified => {
                     targets.push(t.to_string());
+                }
+                FileState::Kept | FileState::Absent => {
+                    writeln!(
+                        out,
+                        "  skipped {t} (create-only: never checked for drift; nothing to accept)"
+                    )?;
                 }
             }
         }
@@ -155,6 +162,10 @@ fn classify_check(
     file: &RenderedFile,
     state: &StandardsState,
 ) -> Result<FileState, Box<dyn std::error::Error>> {
+    if file.mode.create_only() {
+        let present = std::fs::symlink_metadata(root.join(&file.target)).is_ok();
+        return Ok(if present { FileState::Kept } else { FileState::Absent });
+    }
     let Some(disk) = read_if_exists(&root.join(&file.target))? else {
         return Ok(FileState::Missing);
     };
