@@ -130,6 +130,22 @@ test_ci_uses_shared_script() {
     assert_equals "0" "$inline" "render.sh parity no longer reads librarian"
 }
 
+# matches_baseline_render_sh skips without the pinned commit, and a skip
+# renders as a pass (#768). The rust-test step must therefore point it at the
+# pinned checkout AND set REQUIRE_BASELINE_PARITY, or parity goes green unrun.
+test_ci_requires_parity() {
+    local step
+    # The `Run tests` step of rust-test: from its name to the next step.
+    step=$(command awk '/- name: Run tests$/ {on=1} on && /- name: Verify build/ {exit} on' "$CI_WORKFLOW")
+    assert_contains "$step" "cargo test --workspace" "found the rust-test Run tests step"
+    assert_contains "$step" "REQUIRE_BASELINE_PARITY: \${{ runner.os == 'Linux' && '1' || '' }}" \
+        "Run tests requires parity on Linux"
+    assert_contains "$step" "CONTAINERS_DB_REPO: \${{ github.workspace }}/_containers-db" \
+        "Run tests points parity at the containers-db checkout"
+    assert_true "command grep -q 'ref: \${{ steps.baseline.outputs.sha }}' '$CI_WORKFLOW'" \
+        "containers-db is checked out at the pinned SHA"
+}
+
 run_test test_valid_source_prints_sha "valid SOURCE prints the SHA"
 run_test test_unterminated_line_accepted "SOURCE without a trailing newline is accepted"
 run_test test_moving_or_short_refs_rejected "branches, tags, short/long/uppercase SHAs and options are rejected"
@@ -139,5 +155,6 @@ run_test test_line_count_enforced "SOURCE must be exactly one line"
 run_test test_missing_file_rejected "missing or non-file SOURCE is rejected"
 run_test test_repo_source_passes "tracked SOURCE carries a valid pin"
 run_test test_ci_uses_shared_script "ci.yml reads the pin via the shared script (#1754)"
+run_test test_ci_requires_parity "ci.yml rust-test requires render.sh parity at the pin (#1754)"
 
 generate_report

@@ -107,17 +107,45 @@ fn containers_db_repo() -> PathBuf {
     main.join("../containers-db")
 }
 
-/// The containers-db commit the vendored templates come from: `SOURCE` must be
-/// exactly `containers-db <40-hex sha>` (the shape bin/sync-repo-baseline.sh
-/// writes), so the renderer is never read from a branch.
+/// Parse `SOURCE`: exactly one line `containers-db <40-hex sha>` (the shape
+/// bin/sync-repo-baseline.sh writes), with or without a final newline — the
+/// same inputs bin/read-repo-baseline-pin.sh accepts, so the renderer is never
+/// read from a branch, tag or short SHA.
+fn parse_source(source: &str) -> Option<&str> {
+    source
+        .strip_suffix('\n')
+        .unwrap_or(source)
+        .strip_prefix("containers-db ")
+        .filter(|s| s.len() == 40 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
+}
+
+/// The containers-db commit the vendored templates come from.
 fn pinned_sha() -> String {
     let source = fs::read_to_string(vendored_templates().join("SOURCE")).unwrap();
-    let sha = source
-        .strip_suffix('\n')
-        .and_then(|l| l.strip_prefix("containers-db "))
-        .filter(|s| s.len() == 40 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
-        .unwrap_or_else(|| panic!("SOURCE is not 'containers-db <full sha>': {source:?}"));
-    sha.to_owned()
+    parse_source(&source)
+        .unwrap_or_else(|| panic!("SOURCE is not 'containers-db <full sha>': {source:?}"))
+        .to_owned()
+}
+
+#[test]
+fn parse_source_accepts_only_a_full_sha_pin() {
+    let sha = "f4a49d653d9df4b1284b55d4d8750a0e393fe6f7";
+    assert_eq!(parse_source(&format!("containers-db {sha}\n")), Some(sha));
+    assert_eq!(parse_source(&format!("containers-db {sha}")), Some(sha), "unterminated line");
+    for bad in [
+        format!("containers-db {}\n", &sha[..12]),
+        format!("containers-db {sha}0\n"),
+        format!("containers-db {}\n", sha.to_uppercase()),
+        format!("containers-db {sha} +patch\n"),
+        format!("containers-db {sha}\r\n"),
+        format!("containers-db {sha}\n\n"),
+        format!("containers-db {sha}\ncontainers-db {sha}\n"),
+        format!("librarian {sha}\n"),
+        "containers-db main\n".to_owned(),
+        String::new(),
+    ] {
+        assert_eq!(parse_source(&bad), None, "{bad:?} must be rejected");
+    }
 }
 
 /// `render.sh` as committed at `sha`, or `None` when that commit (or the
