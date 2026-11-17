@@ -177,11 +177,10 @@ jobs:
       # the test fails (not skips) under CI when the commit is absent.
       - name: Fetch pinned repo-baseline commit into containers-db checkout
         run: |
-          read -r origin sha _ < crates/stibbons/assets/repo-baseline/SOURCE
-          [ "$origin" = containers-db ] || { echo "SOURCE does not name containers-db: $origin" >&2; exit 1; }
-          # A full SHA only: no branch/tag (a moving ref) and nothing git could
-          # parse as an option.
-          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "SOURCE pin is not a full commit SHA: $sha" >&2; exit 1; }
+          set -euo pipefail
+          # Fails unless SOURCE is exactly `containers-db <full sha>`: no
+          # branch/tag (a moving ref) and nothing git could parse as an option.
+          sha=$(bin/read-repo-baseline-pin.sh)
           git -C _containers-db fetch --depth 1 origin "$sha"
 
       - name: Run unit tests
@@ -582,26 +581,29 @@ jobs:
       - name: Force HTTPS for git dependencies
         run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 
-      # stibbons' matches_librarian_render_sh compares `setup standards` output
-      # byte-for-byte with librarian's render.sh. Without librarian it skips,
-      # and a skip renders as a pass (#768, #1541), so on Linux check it out at
-      # the Dockerfile's LIBRARIAN_REF and set REQUIRE_LIBRARIAN_PARITY=1 below.
-      - name: Read librarian pin (for render.sh parity)
-        id: librarian
+      # stibbons' matches_baseline_render_sh compares `setup standards` output
+      # byte-for-byte with containers-db's baseline/templates/render.sh at the
+      # commit the vendored templates come from (assets/repo-baseline/SOURCE,
+      # #1754). Without that commit it skips, and a skip renders as a pass
+      # (#768, #1541), so on Linux check containers-db out at the pinned SHA and
+      # set REQUIRE_BASELINE_PARITY=1 below.
+      - name: Read repo-baseline pin (for render.sh parity)
+        id: baseline
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
-          ref=$(bin/read-librarian-pin.sh Dockerfile)
-          echo "ref=$ref" >>"$GITHUB_OUTPUT"
+          sha=$(bin/read-repo-baseline-pin.sh)
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
 
-      - name: Checkout librarian (for render.sh parity)
+      - name: Checkout containers-db at the pin (for render.sh parity)
         if: runner.os == 'Linux'
         uses: actions/checkout@v4
         with:
-          repository: joshjhall/librarian
-          ref: ${{ steps.librarian.outputs.ref }}
-          path: _librarian
+          repository: joshjhall/containers-db
+          ref: ${{ steps.baseline.outputs.sha }}
+          path: _containers-db
           fetch-depth: 1
+          # Public repo, read-only use: keep the job token out of its .git/config.
           persist-credentials: false
 
       - name: Install Rust toolchain
@@ -631,9 +633,11 @@ jobs:
         run: cargo test --workspace
         env:
           # Fail, rather than skip, tests that need a gate CI is meant to run.
-          REQUIRE_LIBRARIAN_PARITY: ${{ runner.os == 'Linux' && '1' || '' }}
+          REQUIRE_BASELINE_PARITY: ${{ runner.os == 'Linux' && '1' || '' }}
           REQUIRE_UNPRIVILEGED_TESTS: "1"
-          LIBRARIAN_RENDER_SH: ${{ github.workspace }}/_librarian/plugins/dev-core/skills/repo-baseline/templates/render.sh
+          # The checkout matches_baseline_render_sh reads render.sh from (at
+          # the SOURCE SHA, never its working tree).
+          CONTAINERS_DB_REPO: ${{ github.workspace }}/_containers-db
 
       - name: Verify build
         run: cargo build --workspace

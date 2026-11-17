@@ -5,7 +5,7 @@ configs, justfile, test runner, tool installer, and GitHub or GitLab CI) to any
 repository and reports when it drifts. The baseline is containers-db's
 repo-baseline scaffold (`baseline/templates/`). This command is its
 deterministic, non-LLM renderer: for the same selection it writes the same
-bytes as librarian's reference `render.sh`.
+bytes as containers-db's reference `render.sh`.
 
 No devcontainer or `.igor.yml` is required.
 
@@ -83,6 +83,11 @@ The checkout defaults to `$CONTAINERS_DB` when that is a git repo, else the
 
 The manifest format is containers-db's contract (`baseline/templates/README.md`):
 rows filtered by slice and CI, concatenated per target in manifest order, and
-`*.sh` targets made executable. `crates/stibbons/tests/standards_integration.rs`
-checks byte parity with librarian's `render.sh` whenever `/opt/librarian` is
-present.
+`*.sh` targets made executable. `matches_baseline_render_sh` in
+`crates/stibbons/tests/standards_templates.rs` checks byte parity with
+containers-db's `baseline/templates/render.sh` **at the SHA in `SOURCE`** — read
+from that commit with `git show`, never a branch or working tree. It uses the
+same checkout resolution as the sync (`CONTAINERS_DB_REPO` overrides it) and
+skips when the checkout or the pinned commit is absent, unless
+`REQUIRE_BASELINE_PARITY=1`, which CI sets on Linux after checking containers-db
+out at that SHA.

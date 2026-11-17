@@ -4,8 +4,8 @@
 # Usage: bin/read-librarian-pin.sh [DOCKERFILE]   (default: ./Dockerfile)
 #
 # CI checks librarian out at the Dockerfile's `ARG LIBRARIAN_REF=` so its gates
-# run the SAME librarian the dev image ships. Two ci.yml steps read that pin;
-# both call this script so the rule lives in one place (#1555).
+# run the SAME librarian the dev image ships. ci.yml reads that pin through
+# this script so the rule lives in one place (#1555).
 #
 # Exactly one `ARG LIBRARIAN_REF=` line must exist. A bare `sed -n … | grep -q`
 # accepted a Dockerfile with two such lines — `grep -q` passes if ANY line

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Unit tests for bin/read-librarian-pin.sh (#1555).
 #
-# Both ci.yml "Read librarian pin" steps call this script. It must print the
+# ci.yml's "Read librarian pin" step calls this script. It must print the
 # Dockerfile's LIBRARIAN_REF only when exactly ONE `ARG LIBRARIAN_REF=` line
 # exists and its value is a vX.Y.Z tag. The old inline `sed | grep -q` passed
 # on a Dockerfile with two such lines (grep -q matches any line), so the
@@ -378,12 +378,13 @@ count_inline_pin_reads() {
     command grep -v '^[[:space:]]*#' "$1" | command grep -ci 'LIBRARIAN_REF' || true
 }
 
-# Both ci.yml steps must go through the script, and no inline read may creep
-# back in (it would silently drop the count guard).
+# ci.yml's pin step must go through the script, and no inline read may creep
+# back in (it would silently drop the count guard). One step since #1754: the
+# rust-test render.sh parity check reads containers-db, not librarian.
 test_ci_steps_use_shared_script() {
     local calls inline
     calls=$(command grep -c 'ref=$(bin/read-librarian-pin.sh Dockerfile)' "$CI_WORKFLOW" || true)
-    assert_equals "2" "$calls" "both Read librarian pin steps call bin/read-librarian-pin.sh"
+    assert_equals "1" "$calls" "the Read librarian pin step calls bin/read-librarian-pin.sh"
     inline=$(count_inline_pin_reads "$CI_WORKFLOW")
     assert_equals "0" "$inline" "no inline read of LIBRARIAN_REF remains in ci.yml"
 }
@@ -429,7 +430,7 @@ run_test test_escape_directive_rejected "non-default # escape= directive is reje
 run_test test_continued_pin_rejected "backslash-continued ARG pin is rejected (#1580)"
 run_test test_other_instruction_mention_ignored "LIBRARIAN_REF outside an ARG key is not a pin"
 run_test test_trailing_inline_comment_rejected "pin followed by an inline '# note' is rejected"
-run_test test_ci_steps_use_shared_script "ci.yml pin steps share bin/read-librarian-pin.sh"
+run_test test_ci_steps_use_shared_script "ci.yml pin step uses bin/read-librarian-pin.sh"
 run_test test_inline_read_guard_discriminates "ci.yml inline-read guard catches any spelling (#1580)"
 
 generate_report
