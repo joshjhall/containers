@@ -22,6 +22,9 @@ build system. These docs complement the summary in
   codebase audit system, scanner details, inline suppression
 - **[Secrets & Setup](secrets-and-setup.md)** — 1Password `OP_*_REF` /
   `OP_*_FILE_REF` conventions, container setup commands, authentication methods
+- **[External Credential Providers](external-credential-providers.md)** —
+  host-side providers for `op`, `gh`, `glab`, and git ssh/signing; the
+  pre-secrets hook and `BASH_ENV` hand-off
 
 ## Quick Links
 
