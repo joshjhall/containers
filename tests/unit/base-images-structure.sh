@@ -439,6 +439,164 @@ MUTANTS
     assert_equals "0" "$failures" "every gate mutation is rejected"
 }
 
+# #1672: per-tuple Trivy ignore selection (PR #1671). The root .trivyignore
+# always applies; base-images/<distro>/<version>/.trivyignore is appended only
+# when it exists. The test executes the step's real `run:` block rather than a
+# mirror of it, so it tracks the workflow without moving logic into a script.
+
+# Print the `run: |` block of the "Compute Trivy ignore files" step with its
+# 10-space indent stripped; empty when the step or block is absent.
+_trivy_ignore_script() {
+    local wf="$1" line
+    line="$(_step_line "$wf" 'Compute Trivy ignore files')"
+    [ -n "$line" ] || return 0
+    _step_body "$wf" "$line" | /usr/bin/awk '
+        in_run && /^          / { print substr($0, 11); next }
+        in_run && NF > 0        { exit }
+        /^        run: \|$/     { in_run = 1 }
+    '
+}
+
+# Run the extracted step in scratch dir $2 for tuple rhel/9 and print the
+# `files=` output line it wrote to GITHUB_OUTPUT.
+_run_trivy_ignore_step() {
+    local script="$1" dir="$2"
+    : >"$dir/out"
+    (cd "$dir" && DISTRO=rhel DISTRO_VERSION=9 GITHUB_OUTPUT="$dir/out" BASH_ENV='' \
+        /bin/bash -e -c "$script") >/dev/null 2>&1 || /usr/bin/echo "step exited non-zero"
+    /usr/bin/cat "$dir/out"
+}
+
+# Echo `ok`, or the first reason the step's selection logic is wrong.
+_check_trivy_ignore_selection() {
+    local wf="$1" script a b got
+    script="$(_trivy_ignore_script "$wf")"
+    [ -n "$script" ] || {
+        /usr/bin/echo "step missing"
+        return 0
+    }
+
+    a="$TEST_TEMP_DIR/trivy-no-tuple"
+    /usr/bin/rm -rf "$a" && /usr/bin/mkdir -p "$a"
+    got="$(_run_trivy_ignore_step "$script" "$a")"
+    [ "$got" = "files=.trivyignore" ] || {
+        /usr/bin/echo "no-tuple branch: got '$got'"
+        return 0
+    }
+
+    # Decoys: a sibling version and a swapped distro/version path. A step that
+    # picks the wrong tuple's file lands on one of them.
+    b="$TEST_TEMP_DIR/trivy-tuple"
+    /usr/bin/rm -rf "$b"
+    /usr/bin/mkdir -p "$b/base-images/rhel/9" "$b/base-images/rhel/10" "$b/base-images/9/rhel"
+    : >"$b/base-images/rhel/9/.trivyignore"
+    : >"$b/base-images/rhel/10/.trivyignore"
+    : >"$b/base-images/9/rhel/.trivyignore"
+    got="$(_run_trivy_ignore_step "$script" "$b")"
+    [ "$got" = "files=.trivyignore,base-images/rhel/9/.trivyignore" ] || {
+        /usr/bin/echo "tuple branch: got '$got'"
+        return 0
+    }
+    /usr/bin/echo ok
+}
+
+test_trivy_ignore_selection_both_branches() {
+    assert_equals "ok" "$(_check_trivy_ignore_selection "$WORKFLOW_FILE")" \
+        "Trivy ignore step selects root alone, or root + this tuple's file"
+}
+
+# Each mutation breaks the selection one way on a scratch copy of the workflow;
+# the checker must reject every one with its specific reason.
+test_trivy_ignore_selection_rejects_mutations() {
+    local copy="$TEST_TEMP_DIR/build-base-images.yml" failures=0 name want prog got
+    while IFS='|' read -r name want prog; do
+        /usr/bin/awk "$prog" "$WORKFLOW_FILE" >"$copy"
+        if /usr/bin/cmp -s "$copy" "$WORKFLOW_FILE"; then
+            /usr/bin/echo "  mutation '$name' did not change the workflow (stale pattern)"
+            failures=$((failures + 1))
+            continue
+        fi
+        got="$(_check_trivy_ignore_selection "$copy")"
+        case "$got" in
+            *"$want"*) ;;
+            *)
+                /usr/bin/echo "  mutation '$name' not caught (got: $got)"
+                failures=$((failures + 1))
+                ;;
+        esac
+    done <<'MUTANTS'
+drop-root|no-tuple branch|{sub(/FILES="\.trivyignore"/, "FILES=\"\"")} 1
+always-append|no-tuple branch|{sub(/if \[ -f "\$\{TUPLE_IGNORE\}" \]/, "if true")} 1
+never-append|tuple branch|{sub(/if \[ -f "\$\{TUPLE_IGNORE\}" \]/, "if false")} 1
+wrong-tuple|tuple branch|{sub(/\$\{DISTRO\}\/\$\{DISTRO_VERSION\}/, "${DISTRO_VERSION}/${DISTRO}")} 1
+rename-step|step missing|{sub(/- name: Compute Trivy ignore files/, "- name: Compute ignores")} 1
+MUTANTS
+    assert_equals "0" "$failures" "every Trivy ignore selection mutation is rejected"
+}
+
+# Echo `ok`, or the first per-distro waiver line under $1 (a base-images dir)
+# that is not `CVE-<n>-<n> exp:YYYY-MM-DD`. A waiver without exp: never
+# expires, defeating the time-box. Zero waiver files is ok: they are meant to be
+# deleted once the upstream fix ships.
+_check_waivers_have_exp() {
+    local dir="$1" f bad
+    for f in "$dir"/*/*/.trivyignore; do
+        [ -f "$f" ] || continue
+        bad="$(/usr/bin/grep -nvE '^[[:space:]]*(#.*)?$' "$f" |
+            /usr/bin/grep -vE '^[0-9]+:CVE-[0-9]+-[0-9]+ exp:[0-9]{4}-[0-9]{2}-[0-9]{2}$' |
+            /usr/bin/head -n 1 || true)"
+        if [ -n "$bad" ]; then
+            /usr/bin/echo "${f#"$dir"/}:${bad%%:*}: '${bad#*:}' lacks exp:"
+            return 0
+        fi
+    done
+    /usr/bin/echo ok
+}
+
+test_per_distro_waivers_have_exp() {
+    assert_equals "ok" "$(_check_waivers_have_exp "$BASE_IMAGES_DIR")" \
+        "every per-distro .trivyignore waiver carries exp:YYYY-MM-DD"
+}
+
+# The format check must accept a valid fixture (not vacuous) and reject each
+# malformed waiver line. Uses its own fixture, so it never depends on rhel/9.
+test_waiver_exp_check_rejects_mutations() {
+    local root="$TEST_TEMP_DIR/waivers" f failures=0 name line got
+    f="$root/x/1/.trivyignore"
+    /usr/bin/mkdir -p "$root/x/1"
+    _write_waivers() {
+        /usr/bin/printf '%s\n' '# header comment' '' '  # indented comment' \
+            'CVE-2026-1 exp:2026-12-15' "$@" >"$f"
+    }
+
+    _write_waivers 'CVE-2026-107364 exp:2027-01-31'
+    got="$(_check_waivers_have_exp "$root")"
+    [ "$got" = "ok" ] || {
+        /usr/bin/echo "  valid fixture rejected (got: $got)"
+        failures=$((failures + 1))
+    }
+
+    while IFS='|' read -r name line; do
+        _write_waivers "$line"
+        got="$(_check_waivers_have_exp "$root")"
+        case "$got" in
+            *"lacks exp:"*) ;;
+            *)
+                /usr/bin/echo "  mutation '$name' not caught (got: $got)"
+                failures=$((failures + 1))
+                ;;
+        esac
+    done <<'MUTANTS'
+no-exp|CVE-2026-107364
+bad-date|CVE-2026-107364 exp:2026-1-15
+trailing-comment|CVE-2026-107364 exp:2026-12-15  # why
+no-date|CVE-2026-107364 exp:
+not-a-cve|GHSA-xxxx-yyyy-zzzz exp:2026-12-15
+MUTANTS
+    unset -f _write_waivers
+    assert_equals "0" "$failures" "waiver exp: check accepts valid lines and rejects each mutation"
+}
+
 run_test test_base_images_dir_exists "base-images directory exists"
 run_test test_readme_exists "base-images/README.md spec exists"
 run_test test_version_file_is_semver "base-images/VERSION is clean semver"
@@ -454,5 +612,9 @@ run_test test_ubuntu_images_drop_stock_extras "Ubuntu images drop the stock user
 run_test test_workflow_references_pilot_tuple "workflow matrix references pilot tuple"
 run_test test_publish_gates_floating_tags_behind_trivy "floating tags promoted only after Trivy gate"
 run_test test_floating_tag_gate_rejects_mutations "floating-tag gate check rejects each mutation"
+run_test test_trivy_ignore_selection_both_branches "Trivy ignore step covers no-tuple and tuple branches"
+run_test test_trivy_ignore_selection_rejects_mutations "Trivy ignore selection check rejects each mutation"
+run_test test_per_distro_waivers_have_exp "per-distro Trivy waivers all carry exp:"
+run_test test_waiver_exp_check_rejects_mutations "waiver exp: check rejects each malformed line"
 
 generate_report
