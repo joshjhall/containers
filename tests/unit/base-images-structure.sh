@@ -286,6 +286,54 @@ test_workflow_references_pilot_tuple() {
     fi
 }
 
+# Line number of the first `- name: <prefix>...` step in a workflow file, or
+# empty when absent.
+_step_line() {
+    /usr/bin/awk -v want="      - name: $2" \
+        'index($0, want) == 1 { print NR; exit }' "$1"
+}
+
+# #1670: on publish runs the floating tags (latest, vX*) must move only after
+# the Trivy gate and signing pass. build-push may push the immutable sha tag
+# alone; a later `imagetools create` step promotes the floating ones.
+_check_floating_tags_gated() {
+    local wf="$1" push_line trivy_line sign_line promote_line push_tags
+    push_line="$(_step_line "$wf" 'Build & push (main / tag')"
+    trivy_line="$(_step_line "$wf" 'Trivy scan')"
+    sign_line="$(_step_line "$wf" 'Sign image and attest SBOM')"
+    promote_line="$(_step_line "$wf" 'Promote floating tags')"
+    [ -n "$push_line" ] && [ -n "$trivy_line" ] && [ -n "$sign_line" ] && [ -n "$promote_line" ] || {
+        /usr/bin/echo "missing step (push=$push_line trivy=$trivy_line sign=$sign_line promote=$promote_line)"
+        return
+    }
+    # The `tags:` line inside the build-push step (before the next step).
+    push_tags="$(/usr/bin/awk -v s="$push_line" \
+        'NR > s && /^      - name:/ { exit } NR > s && /^          tags:/ { sub(/^ +tags: */, ""); print }' "$wf")"
+    [ "$push_tags" = '${{ steps.tags.outputs.immutable }}' ] || {
+        /usr/bin/echo "build-push tags must be only the immutable tag, got: $push_tags"
+        return
+    }
+    [ "$push_line" -lt "$trivy_line" ] && [ "$trivy_line" -lt "$sign_line" ] &&
+        [ "$sign_line" -lt "$promote_line" ] || {
+        /usr/bin/echo "order must be push < trivy < sign < promote ($push_line $trivy_line $sign_line $promote_line)"
+        return
+    }
+    # Body of the promote step only (up to the next step).
+    local promote_body
+    promote_body="$(/usr/bin/awk -v s="$promote_line" \
+        'NR > s && /^      - name:/ { exit } NR >= s { print }' "$wf")"
+    /usr/bin/grep -q 'imagetools create' <<<"$promote_body" || {
+        /usr/bin/echo "promote step does not use imagetools create"
+        return
+    }
+    /usr/bin/echo ok
+}
+
+test_publish_gates_floating_tags_behind_trivy() {
+    assert_equals "ok" "$(_check_floating_tags_gated "$WORKFLOW_FILE")" \
+        "floating tags are promoted only after Trivy + signing"
+}
+
 run_test test_base_images_dir_exists "base-images directory exists"
 run_test test_readme_exists "base-images/README.md spec exists"
 run_test test_version_file_is_semver "base-images/VERSION is clean semver"
@@ -299,5 +347,6 @@ run_test test_workflow_matrix_matches_dockerfiles "workflow matrix, Dockerfiles,
 run_test test_evidence_dispatch_offers_every_tuple "evidence dispatch offers every supported tuple"
 run_test test_ubuntu_images_drop_stock_extras "Ubuntu images drop the stock user and 26.04's pebble"
 run_test test_workflow_references_pilot_tuple "workflow matrix references pilot tuple"
+run_test test_publish_gates_floating_tags_behind_trivy "floating tags promoted only after Trivy gate"
 
 generate_report

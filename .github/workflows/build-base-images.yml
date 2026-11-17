@@ -6,6 +6,11 @@ name: Build Base Images
 # - PRs: build + lint + scan only (no publish)
 # - main + tags v*: full pipeline including cosign signing + SBOM attestation
 # - workflow_dispatch: manual trigger (publishes when run on main or a tag)
+#
+# Publish order (#1670): push ONLY the immutable sha-<short> tag → Trivy gate
+# on that digest → cosign sign + SBOM attest → promote the floating tags
+# (vX.Y.Z, vX.Y, vX, latest) onto the same digest. A failed scan stops the job
+# before promotion, so floating tags keep pointing at the previous good digest.
 
 on:
   push:
@@ -193,16 +198,15 @@ jobs:
           MINOR_REST="${VERSION_TAG#*.}"
           MINOR="${MINOR_REST%.*}"
           SHORT_SHA="${SHA:0:12}"
+          # immutable: the only tag build-push publishes (pre-scan).
+          # floating: promoted onto the scanned digest only after Trivy passes.
           {
+            echo "immutable=${IMAGE}:sha-${SHORT_SHA}"
+            echo "floating<<TAGS_EOF"
             echo "${IMAGE}:v${VERSION_TAG}"
             echo "${IMAGE}:v${MAJOR}.${MINOR}"
             echo "${IMAGE}:v${MAJOR}"
             echo "${IMAGE}:latest"
-            echo "${IMAGE}:sha-${SHORT_SHA}"
-          } > tags.txt
-          {
-            echo "tags<<TAGS_EOF"
-            cat tags.txt
             echo "TAGS_EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -235,6 +239,8 @@ jobs:
           cache-from: type=gha,scope=${{ steps.ref.outputs.image_name }}
           cache-to: type=gha,mode=max,scope=${{ steps.ref.outputs.image_name }}
 
+      # Pushes only the immutable sha-<short> tag. Floating tags move in
+      # "Promote floating tags" below, after the Trivy gate (#1670).
       - name: Build & push (main / tag — publish)
         if: steps.gate.outputs.publish == 'true'
         id: build_push
@@ -244,7 +250,7 @@ jobs:
           file: ${{ steps.ref.outputs.dockerfile }}
           platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.tags.outputs.immutable }}
           cache-from: type=gha,scope=${{ steps.ref.outputs.image_name }}
           cache-to: type=gha,mode=max,scope=${{ steps.ref.outputs.image_name }}
 
@@ -353,6 +359,47 @@ jobs:
           path: sbom-${{ steps.ref.outputs.image_name }}.json
           if-no-files-found: warn
 
+      # Move the floating tags only now that the digest has passed Trivy and is
+      # signed (#1670). A single-source `imagetools create` copies the manifest
+      # verbatim, so every floating tag resolves to the scanned + signed digest
+      # and the digest-keyed cosign signature / SBOM attestation cover them.
+      # The implicit success() guard means a failed scan or signing step never
+      # reaches here, leaving the previous good digest on the floating tags.
+      - name: Promote floating tags
+        id: promote
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          IMAGE_WITH_DIGEST: ${{ steps.ref.outputs.image }}@${{ steps.build_push.outputs.digest }}
+          FLOATING_TAGS: ${{ steps.tags.outputs.floating }}
+        run: |
+          retry() {
+            local max_attempts=5 delay=15 attempt=1
+            while [ $attempt -le $max_attempts ]; do
+              echo "Attempt $attempt/$max_attempts: $*"
+              if "$@"; then return 0; fi
+              echo "Attempt $attempt failed; sleeping ${delay}s"
+              sleep $delay
+              delay=$((delay * 2))
+              attempt=$((attempt + 1))
+            done
+            echo "All $max_attempts attempts failed for: $*" >&2
+            return 1
+          }
+
+          tag_args=()
+          while IFS= read -r tag; do
+            [ -n "${tag}" ] && tag_args+=(-t "${tag}")
+          done <<< "${FLOATING_TAGS}"
+          if [ "${#tag_args[@]}" -eq 0 ]; then
+            echo "::error::no floating tags computed — refusing to promote" >&2
+            exit 1
+          fi
+
+          echo "Promoting ${IMAGE_WITH_DIGEST} to:"
+          echo "${FLOATING_TAGS}"
+          retry docker buildx imagetools create "${tag_args[@]}" "${IMAGE_WITH_DIGEST}"
+          echo "promoted=true" >> "$GITHUB_OUTPUT"
+
       # Close the freshness loop (#640): a rebuild to a new digest must
       # regenerate evidence, but evidence-run.yml's triggers are path-scoped and
       # a CVE-patch rebuild (new digest, identical Dockerfile) touches none of
@@ -385,6 +432,7 @@ jobs:
           IMAGE_NAME: ${{ steps.ref.outputs.image_name }}
           DIGEST: ${{ steps.build_push.outputs.digest }}
           PUBLISH: ${{ steps.gate.outputs.publish }}
+          PROMOTED: ${{ steps.promote.outputs.promoted }}
         run: |
           {
             echo "## ${IMAGE_NAME}"
@@ -393,7 +441,11 @@ jobs:
             echo "- **version_tag**: \`v${VERSION_TAG}\`"
             if [ "${PUBLISH}" = "true" ] && [ -n "${DIGEST:-}" ]; then
               echo "- **image_digest**: \`${DIGEST}\`"
-              echo "- **published**: yes (signed, SBOM attested)"
+              if [ "${PROMOTED}" = "true" ]; then
+                echo "- **published**: yes (signed, SBOM attested, floating tags promoted)"
+              else
+                echo "- **published**: sha tag only — floating tags NOT promoted (scan or signing failed)"
+              fi
             else
               echo "- **published**: no (PR build)"
             fi
