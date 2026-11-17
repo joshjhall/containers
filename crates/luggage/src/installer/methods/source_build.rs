@@ -238,9 +238,18 @@ fn step_on_path(env: &BTreeMap<String, String>) -> impl Fn(&str) -> bool + use<>
 }
 
 /// The log line naming the launcher and the `CC`/`CXX` it produced. Either
-/// may be absent (a C-only image has no `CXX`), shown as `unset`.
-fn launcher_note(launcher: &str, env: &BTreeMap<String, String>) -> String {
-    let shown = |var: &str| env.get(var).map_or("unset", String::as_str);
+/// may be absent (a C-only image has no `CXX`), shown as `unset`. One the
+/// steps will not inherit (`removed`, see [`apply_compiler_launcher`]) is
+/// named as such, so a later "no C compiler" does not hide that luggage
+/// stripped the operator's bare-launcher `CC`/`CXX` (#1678).
+fn launcher_note(launcher: &str, env: &BTreeMap<String, String>, removed: &[String]) -> String {
+    let shown = |var: &str| match env.get(var) {
+        Some(v) => v.clone(),
+        None if removed.iter().any(|r| r == var) => {
+            format!("unset (inherited bare `{launcher}` removed)")
+        }
+        None => "unset".to_owned(),
+    };
     format!("compiler launcher: {launcher} (CC=`{}`, CXX=`{}`)", shown("CC"), shown("CXX"))
 }
 
@@ -336,7 +345,7 @@ fn run_with(ctx: &MethodContext<'_>, inherited: &dyn Fn(&str) -> Option<String>)
     if let Some(launcher) = ctx.compiler_launcher {
         let on_path = step_on_path(&env);
         env_remove = apply_compiler_launcher(&mut env, launcher, inherited, on_path);
-        let note = launcher_note(launcher, &env);
+        let note = launcher_note(launcher, &env, &env_remove);
         if let Some(l) = ctx.log {
             l.message(&note);
         } else {

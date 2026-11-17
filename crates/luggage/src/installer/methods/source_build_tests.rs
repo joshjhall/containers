@@ -840,12 +840,17 @@ fn launcher_note_shows_an_unset_compiler() {
     let mut env = BTreeMap::new();
     apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&["gcc"]));
     assert_eq!(
-        launcher_note("ccache", &env),
+        launcher_note("ccache", &env, &[]),
         "compiler launcher: ccache (CC=`ccache gcc`, CXX=`unset`)"
     );
     assert_eq!(
-        launcher_note("ccache", &BTreeMap::new()),
+        launcher_note("ccache", &BTreeMap::new(), &[]),
         "compiler launcher: ccache (CC=`unset`, CXX=`unset`)",
+    );
+    // A stripped inherited bare launcher is named, not shown as plain unset.
+    assert_eq!(
+        launcher_note("ccache", &env, &["CXX".to_owned()]),
+        "compiler launcher: ccache (CC=`ccache gcc`, CXX=`unset (inherited bare `ccache` removed)`)",
     );
 }
 
@@ -961,7 +966,9 @@ fn run_strips_an_unreplaced_inherited_bare_launcher_from_every_step() {
     f.launcher = Some("ccache");
     f.inherited = Some(bare);
     f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
-    for call in f.runner.streaming_calls() {
+    let calls = f.runner.streaming_calls();
+    assert_eq!(calls.len(), 3, "the control must actually run every step");
+    for call in calls {
         assert_eq!(call.env_remove, ["CXX"], "only the unresolved CXX: {}", call.program);
         assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc"));
     }

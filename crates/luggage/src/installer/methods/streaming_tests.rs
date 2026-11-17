@@ -86,18 +86,22 @@ fn process_runner_removes_inherited_variables() {
     let env = BTreeMap::new();
     let args = vec!["-c".to_owned(), "echo \"[${CARGO_MANIFEST_DIR-unset}]\"".to_owned()];
     let remove = vec!["CARGO_MANIFEST_DIR".to_owned()];
-    let run = |env_remove: &[String]| {
-        let cmd =
-            StreamingCommand { program: "sh", args: &args, cwd: dir.path(), env: &env, env_remove };
+    let run = |env_remove: &[String], env: &BTreeMap<String, String>| {
+        let cmd = StreamingCommand { program: "sh", args: &args, cwd: dir.path(), env, env_remove };
         let mut seen = Vec::new();
         let outcome = ProcessRunner.run_streaming(&cmd, &mut |l| seen.push(l.to_owned())).unwrap();
         assert!(outcome.success());
         seen
     };
 
-    let kept = run(&[]);
+    let kept = run(&[], &env);
     assert_eq!(kept, [format!("[{}]", env!("CARGO_MANIFEST_DIR"))], "control: inherited");
-    assert_eq!(run(&remove), ["[unset]"], "removed variable must not reach the child");
+    assert_eq!(run(&remove, &env), ["[unset]"], "removed variable must not reach the child");
+
+    // Removal happens before `env` is applied, as `StreamingCommand` documents:
+    // a variable both removed and set reaches the child with the set value.
+    let set = BTreeMap::from([("CARGO_MANIFEST_DIR".to_owned(), "x".to_owned())]);
+    assert_eq!(run(&remove, &set), ["[x]"], "env must win over env_remove");
 }
 
 /// A program that cannot be spawned is a spawn failure naming the program,
