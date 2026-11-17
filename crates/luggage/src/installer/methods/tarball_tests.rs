@@ -1272,6 +1272,27 @@ fn merge_failure_with_an_unreadable_staging_subtree_reports_a_lower_bound() {
     assert_eq!((failure.merged, failure.total), (2, EntryTotal::Exact(4)));
 }
 
+/// The staging walk only feeds the failure report, so a merge that succeeds
+/// must never call the lister — walking staging on every install would cost
+/// real time on node-sized archives and no failure-path test would notice.
+#[test]
+fn successful_merge_never_walks_staging() {
+    let staging = tempdir().unwrap();
+    let prefix = tempdir().unwrap();
+    fs::create_dir_all(staging.path().join("bin")).unwrap();
+    fs::write(staging.path().join("bin/tool"), b"t").unwrap();
+
+    let called = std::cell::Cell::new(false);
+    let lister = |d: &Path| {
+        called.set(true);
+        list_dir(d)
+    };
+    merge_into_prefix_with(staging.path(), prefix.path(), "tool.tar.gz", &lister).unwrap();
+
+    assert!(!called.get(), "a successful merge consulted the staging lister");
+    assert_eq!(fs::read(prefix.path().join("bin/tool")).unwrap(), b"t");
+}
+
 /// An existing prefix file is overwritten by the archive's copy. The merge
 /// now relies on `rename` replacing it atomically (no `remove_file` first,
 /// so a failed rename can't leave the prefix missing the file); this guards
