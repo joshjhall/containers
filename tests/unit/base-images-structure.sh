@@ -324,27 +324,37 @@ _check_floating_tags_gated() {
         /usr/bin/echo "order must be push < trivy < sign < promote ($push_line $trivy_line $sign_line $promote_line)"
         return
     }
-    local promote_body trivy_body
+    local promote_body trivy_body sign_body
     promote_body="$(_step_body "$wf" "$promote_line")"
     trivy_body="$(_step_body "$wf" "$trivy_line")"
+    sign_body="$(_step_body "$wf" "$sign_line")"
     /usr/bin/grep -q 'imagetools create' <<<"$promote_body" || {
         /usr/bin/echo "promote step does not use imagetools create"
         return
     }
-    # Promotion must copy the scanned digest, never a mutable tag.
+    # Promotion must copy the scanned digest onto the floating tag set, and
+    # only on publish runs (never PRs).
     /usr/bin/grep -q 'steps\.build_push\.outputs\.digest' <<<"$promote_body" || {
         /usr/bin/echo "promote source is not the build_push digest"
         return
     }
-    # The gate rests on the implicit success() guard: an `if:` that can run
-    # after a failure, or a Trivy step that swallows its own failure, would
-    # promote a vulnerable digest.
-    if /usr/bin/grep -qE '^        if:.*(always|failure|cancelled)\(' <<<"$promote_body"; then
-        /usr/bin/echo "promote step if: overrides the implicit success() guard"
+    /usr/bin/grep -q 'steps\.tags\.outputs\.floating' <<<"$promote_body" || {
+        /usr/bin/echo "promote step does not read steps.tags.outputs.floating"
         return
-    fi
-    if /usr/bin/grep -q 'continue-on-error' <<<"$trivy_body"; then
-        /usr/bin/echo "Trivy step must not set continue-on-error"
+    }
+    /usr/bin/grep -qE "^        if: steps\.gate\.outputs\.publish == 'true'\$" <<<"$promote_body" || {
+        /usr/bin/echo "promote step if: must be exactly the publish gate"
+        return
+    }
+    # The gate rests on the implicit success() guard and a hard-failing scan:
+    # Trivy must exit non-zero on findings, and neither Trivy nor signing may
+    # swallow its own failure, or a vulnerable/unsigned digest gets promoted.
+    /usr/bin/grep -qE '^          exit-code: "1"$' <<<"$trivy_body" || {
+        /usr/bin/echo 'Trivy step must set exit-code: "1"'
+        return
+    }
+    if /usr/bin/grep -q 'continue-on-error' <<<"$trivy_body$sign_body"; then
+        /usr/bin/echo "Trivy/sign steps must not set continue-on-error"
         return
     fi
     /usr/bin/echo ok

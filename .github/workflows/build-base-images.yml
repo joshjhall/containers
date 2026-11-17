@@ -433,6 +433,7 @@ jobs:
           DIGEST: ${{ steps.build_push.outputs.digest }}
           PUBLISH: ${{ steps.gate.outputs.publish }}
           PROMOTED: ${{ steps.promote.outputs.promoted }}
+          JOB_STATUS: ${{ job.status }}
         run: |
           {
             echo "## ${IMAGE_NAME}"
@@ -444,7 +445,7 @@ jobs:
               if [ "${PROMOTED}" = "true" ]; then
                 echo "- **published**: yes (signed, SBOM attested, floating tags promoted)"
               else
-                echo "- **published**: sha tag only — floating tags NOT promoted (scan or signing failed)"
+                echo "- **published**: sha tag only — floating tags NOT promoted (job status: ${JOB_STATUS}; see the first failed step)"
               fi
             else
               echo "- **published**: no (PR build)"
