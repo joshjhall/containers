@@ -570,39 +570,51 @@ fn landed_summary(moved: &[PathBuf], limit: usize) -> String {
 /// links, so a link to a directory counts as one leaf rather than being
 /// descended into.
 fn count_leaves(dir: &Path) -> EntryTotal {
-    count_leaves_with(dir, &|d| fs::read_dir(d))
+    count_leaves_with(dir, &list_dir)
 }
 
-/// [`count_leaves`] with the directory reader injected. Tests may run as
+/// One directory entry as [`count_leaves_with`] sees it: its path, and
+/// whether it is a directory (`Err` when its file type could not be read).
+type Listed = (PathBuf, std::io::Result<bool>);
+
+/// The directory listing [`count_leaves_with`] walks: `Err` when the
+/// directory itself is unreadable, and a per-entry `Err` for an entry that
+/// could not be read.
+type Listing = std::io::Result<Vec<std::io::Result<Listed>>>;
+
+/// The real lister: `fs::read_dir`, with each entry's non-following
+/// `file_type` resolved to "is a directory".
+fn list_dir(dir: &Path) -> Listing {
+    Ok(fs::read_dir(dir)?
+        .map(|entry| entry.map(|e| (e.path(), e.file_type().map(|t| t.is_dir()))))
+        .collect())
+}
+
+/// [`count_leaves`] with the directory lister injected. Tests may run as
 /// root, where `chmod` cannot make a directory unreadable, so the seam is the
-/// only hermetic way to force a `read_dir` failure partway down the tree.
-fn count_leaves_with(
-    dir: &Path,
-    read_dir: &dyn Fn(&Path) -> std::io::Result<fs::ReadDir>,
-) -> EntryTotal {
-    let (count, exact) = walk_leaves(dir, read_dir);
+/// only hermetic way to force each of the walk's failure modes — an
+/// unreadable directory, entry, or file type.
+fn count_leaves_with(dir: &Path, list: &dyn Fn(&Path) -> Listing) -> EntryTotal {
+    let (count, exact) = walk_leaves(dir, list);
     if exact { EntryTotal::Exact(count) } else { EntryTotal::AtLeast(count) }
 }
 
 /// Recursive body of [`count_leaves_with`]: `(leaves seen, nothing skipped)`.
-fn walk_leaves(
-    dir: &Path,
-    read_dir: &dyn Fn(&Path) -> std::io::Result<fs::ReadDir>,
-) -> (usize, bool) {
-    let Ok(entries) = read_dir(dir) else { return (0, false) };
+fn walk_leaves(dir: &Path, list: &dyn Fn(&Path) -> Listing) -> (usize, bool) {
+    let Ok(entries) = list(dir) else { return (0, false) };
     let (mut count, mut exact) = (0, true);
     for entry in entries {
-        let Ok(entry) = entry else {
+        let Ok((path, is_dir)) = entry else {
             exact = false;
             continue;
         };
-        match entry.file_type() {
-            Ok(t) if t.is_dir() => {
-                let (n, sub_exact) = walk_leaves(&entry.path(), read_dir);
+        match is_dir {
+            Ok(true) => {
+                let (n, sub_exact) = walk_leaves(&path, list);
                 count += n;
                 exact &= sub_exact;
             }
-            Ok(_) => count += 1,
+            Ok(false) => count += 1,
             // The entry exists, so it is at least one leaf; but if it is
             // really a directory, its contents went uncounted.
             Err(_) => {

@@ -1268,18 +1268,36 @@ fn count_leaves_marks_an_unreadable_subtree_as_a_lower_bound() {
     fs::write(root.path().join("locked/deep/hidden"), b"").unwrap();
 
     let locked = root.path().join("locked");
-    let reader = |d: &Path| {
+    let lister = |d: &Path| {
         if d == locked {
             Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
         } else {
-            fs::read_dir(d)
+            list_dir(d)
         }
     };
 
     // top + ok/one are readable; locked/'s two files are not.
-    assert_eq!(count_leaves_with(root.path(), &reader), EntryTotal::AtLeast(2));
+    assert_eq!(count_leaves_with(root.path(), &lister), EntryTotal::AtLeast(2));
     // The same tree with nothing blocked is exact — the seam alone changes it.
-    assert_eq!(count_leaves_with(root.path(), &|d| fs::read_dir(d)), EntryTotal::Exact(4));
+    assert_eq!(count_leaves_with(root.path(), &list_dir), EntryTotal::Exact(4));
+}
+
+/// An entry the listing could not read is skipped, and an entry whose file
+/// type could not be read counts as one leaf — either way the walk may have
+/// missed entries, so the total becomes a lower bound.
+#[test]
+fn count_leaves_marks_unreadable_entries_and_file_types_as_a_lower_bound() {
+    let denied = || std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+    let file = |name: &str| Ok((PathBuf::from(name), Ok(false)));
+
+    let bad_entry = |_: &Path| Ok(vec![file("a"), Err(denied()), file("b")]);
+    assert_eq!(count_leaves_with(Path::new("/x"), &bad_entry), EntryTotal::AtLeast(2));
+
+    let bad_type = |_: &Path| Ok(vec![file("a"), Ok((PathBuf::from("b"), Err(denied())))]);
+    assert_eq!(count_leaves_with(Path::new("/x"), &bad_type), EntryTotal::AtLeast(2));
+
+    let all_good = |_: &Path| Ok(vec![file("a"), file("b")]);
+    assert_eq!(count_leaves_with(Path::new("/x"), &all_good), EntryTotal::Exact(2));
 }
 
 /// The merge-failure total adds what already landed to what is still in
