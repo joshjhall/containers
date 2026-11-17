@@ -326,11 +326,72 @@ test_watcher_token_path_unchanged() {
     assert_file_not_contains "$TEST_TEMP_DIR/op.calls" "whoami" "Token path: no whoami probe"
 }
 
-test_claude_setup_gates_on_op_usable() {
-    # claude-setup runs its whole setup when executed, so its gate is pinned
-    # statically; the shared helper's behaviour is covered by op-usable tests.
-    assert_file_contains "$CLAUDE_SETUP_BIN" 'command -v op &>/dev/null && _op_ready' \
-        "claude-setup resolves OP_ANTHROPIC_AUTH_TOKEN_REF whenever op is usable"
+# Helper absent (older image without op-usable.sh): the watcher falls back to
+# the original token-only gate — no whoami probe, so an otherwise-usable op is
+# not consulted without OP_SERVICE_ACCOUNT_TOKEN.
+test_watcher_helper_absent_token_only() {
+    _stub_claude_op 0
+    assert_equals "skipped" \
+        "$(_resolve_via_watcher OP_USABLE_LIB="$TEST_TEMP_DIR/absent-op-usable.sh")" \
+        "Helper absent, no token: skip even though op whoami would succeed"
+    assert_file_not_exists "$TEST_TEMP_DIR/op.calls" "Helper absent: op never invoked"
+    assert_equals "resolved" \
+        "$(_resolve_via_watcher OP_USABLE_LIB="$TEST_TEMP_DIR/absent-op-usable.sh" OP_SERVICE_ACCOUNT_TOKEN=tok)" \
+        "Helper absent, token set: resolves via the token-only fallback"
+    assert_file_not_contains "$TEST_TEMP_DIR/op.calls" "whoami" "Fallback: no whoami probe"
+}
+
+# claude-setup is sourced, not executed: its source guard (#1722) returns right
+# after is_claude_authenticated, before the plugin library, the setup lock, or
+# any setup step. CLAUDE_PLUGIN_LIB points nowhere so a broken guard fails loud
+# (exit 1, "required library not found") instead of running a real setup. The
+# token file is re-pointed at scratch AFTER sourcing — the real
+# /dev/shm/anthropic-auth-token is this container's live token.
+_resolve_via_setup() {
+    command env -i BASH_ENV= HOME="$TEST_TEMP_DIR/home" \
+        PATH="$TEST_TEMP_DIR/bin:/usr/bin:/bin" \
+        OP_USABLE_LIB="$PROJECT_ROOT/lib/runtime/lib/op-usable.sh" \
+        OP_WHOAMI_CACHE_DIR="$TEST_TEMP_DIR" \
+        CONTAINER_CREDENTIAL_ENV_FILE="$TEST_TEMP_DIR/no-credential-env" \
+        CLAUDE_PLUGIN_LIB="$TEST_TEMP_DIR/no-plugin-lib.sh" \
+        OP_ANTHROPIC_AUTH_TOKEN_REF="op://vault/anthropic/token" \
+        "$@" \
+        bash -c '. "$1"
+                 ANTHROPIC_TOKEN_FILE="$2/anthropic-auth-token"
+                 if is_claude_authenticated; then echo resolved; else echo skipped; fi' \
+        _ "$CLAUDE_SETUP_BIN" "$TEST_TEMP_DIR" 2>&1
+}
+
+test_claude_setup_resolves_with_external_op() {
+    _stub_claude_op 0
+    assert_equals "resolved" "$(_resolve_via_setup)" \
+        "No token in env, op whoami ok: OP_ANTHROPIC_AUTH_TOKEN_REF resolves"
+    assert_file_contains "$TEST_TEMP_DIR/anthropic-auth-token" "fake-anthropic-token-1711" \
+        "Resolved token is stored (scratch path, never the live one)"
+}
+
+test_claude_setup_skips_without_auth() {
+    _stub_claude_op 1
+    assert_equals "skipped" "$(_resolve_via_setup)" \
+        "No token and op whoami fails: skip"
+    assert_file_contains "$TEST_TEMP_DIR/op.calls" "whoami" "Gate probed op whoami"
+    assert_file_not_contains "$TEST_TEMP_DIR/op.calls" "read" "No op read attempted"
+    assert_file_not_exists "$TEST_TEMP_DIR/anthropic-auth-token" "No token stored"
+}
+
+test_claude_setup_helper_absent_token_only() {
+    _stub_claude_op 0
+    assert_equals "skipped" \
+        "$(_resolve_via_setup OP_USABLE_LIB="$TEST_TEMP_DIR/absent-op-usable.sh")" \
+        "Helper absent, no token: skip even though op whoami would succeed"
+    assert_file_not_exists "$TEST_TEMP_DIR/op.calls" "Helper absent: op never invoked"
+    assert_equals "resolved" \
+        "$(_resolve_via_setup OP_USABLE_LIB="$TEST_TEMP_DIR/absent-op-usable.sh" OP_SERVICE_ACCOUNT_TOKEN=tok)" \
+        "Helper absent, token set: resolves via the token-only fallback"
+    assert_file_not_contains "$TEST_TEMP_DIR/op.calls" "whoami" "Fallback: no whoami probe"
+}
+
+test_claude_setup_no_legacy_token_gate() {
     # Fixed-string match: assert_file_not_contains takes a regex, and the
     # brackets in this line would turn it into a character class.
     if command grep -qF '[ -n "${OP_ANTHROPIC_AUTH_TOKEN_REF:-}" ] && [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]' "$CLAUDE_SETUP_BIN"; then
@@ -343,6 +404,10 @@ test_claude_setup_gates_on_op_usable() {
 run_test test_watcher_resolves_with_external_op "#1711: auth-watcher resolves Anthropic ref via externally authenticated op"
 run_test test_watcher_skips_without_auth "#1711: auth-watcher skips cleanly with no auth"
 run_test test_watcher_token_path_unchanged "#1711: auth-watcher token path unchanged (no whoami)"
-run_test test_claude_setup_gates_on_op_usable "#1711: claude-setup gates on op usability, not the token"
+run_test test_watcher_helper_absent_token_only "#1722: auth-watcher falls back to token-only gate without op-usable.sh"
+run_test test_claude_setup_resolves_with_external_op "#1722: claude-setup resolves Anthropic ref via externally authenticated op"
+run_test test_claude_setup_skips_without_auth "#1722: claude-setup skips cleanly with no auth"
+run_test test_claude_setup_helper_absent_token_only "#1722: claude-setup falls back to token-only gate without op-usable.sh"
+run_test test_claude_setup_no_legacy_token_gate "#1711: claude-setup no longer requires OP_SERVICE_ACCOUNT_TOKEN"
 
 generate_report
