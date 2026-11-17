@@ -512,6 +512,19 @@ type MergeFailure = (PathBuf, std::io::Error);
 /// many of the archive's files and links already landed, and logs which ones
 /// at `warn` level so the build log carries the recovery information.
 fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()> {
+    merge_into_prefix_with(staging, prefix, artifact, &list_dir)
+}
+
+/// [`merge_into_prefix`] with the staging lister injected. The lister only
+/// feeds the failure report's total, so it is the one seam that lets a test
+/// drive a real merge failure to an [`EntryTotal::AtLeast`] total — `chmod`
+/// cannot hide part of staging when the tests run as root.
+fn merge_into_prefix_with(
+    staging: &Path,
+    prefix: &Path,
+    artifact: &str,
+    list: &dyn Fn(&Path) -> Listing,
+) -> Result<()> {
     let mut moved = Vec::new();
     let Err((path, source)) = merge_dir(staging, prefix, &mut moved) else {
         return Ok(());
@@ -521,7 +534,7 @@ fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()
     // staging as they land, so what is still in staging plus what moved is
     // the archive's full contribution — or a lower bound on it, when part of
     // staging could not be read.
-    let total = add_moved(moved.len(), count_leaves(staging));
+    let total = add_moved(moved.len(), count_leaves_with(staging, list));
     tracing::warn!(
         prefix = %prefix.display(),
         merged = moved.len(),
@@ -569,6 +582,10 @@ fn landed_summary(moved: &[PathBuf], limit: usize) -> String {
 /// problems that hide part of staging. `DirEntry::file_type` does not follow
 /// links, so a link to a directory counts as one leaf rather than being
 /// descended into.
+///
+/// Production reaches this walk through [`merge_into_prefix_with`]'s
+/// injected lister; this real-lister wrapper is kept for the tests.
+#[cfg(test)]
 fn count_leaves(dir: &Path) -> EntryTotal {
     count_leaves_with(dir, &list_dir)
 }
