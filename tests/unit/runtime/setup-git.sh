@@ -911,9 +911,10 @@ _ws_repo() {
 }
 
 # Run setup-git with ssh/signing out of the way and a real global identity.
+# Extra NAME=value args override (env takes the last assignment).
 _run_identity() {
     _run_setup_git SKIP_GIT_SSH_SETUP=true SKIP_GIT_SIGNING_SETUP=true \
-        GIT_USER_EMAIL="$REAL_EMAIL"
+        GIT_USER_EMAIL="$REAL_EMAIL" "$@"
 }
 
 test_local_placeholder_warns() {
@@ -1018,6 +1019,46 @@ test_missing_helper_falls_back() {
     assert_not_contains "$out" "placeholder" "Without the helper nothing is called a placeholder"
 }
 
+test_root_worktrees_and_non_repos() {
+    # WORKSPACE_ROOT is itself a repo; its own .worktrees/* holds the only
+    # local identity, and a plain non-git dir sits beside it.
+    git -C "$TEST_TEMP_DIR" init -q ws
+    command mkdir -p "$TEST_TEMP_DIR/ws/not-a-repo"
+    _ws_repo .worktrees/wt "t@t.t"
+    local out rc=0
+    out=$(_run_identity) || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0 with a non-repo dir in the workspace"
+    assert_contains "$out" "ws/.worktrees/wt: local user.email <t@t.t>" \
+        "WORKSPACE_ROOT/.worktrees/* repos are scanned"
+    assert_not_contains "$out" "not-a-repo" "Non-repo dirs are skipped silently"
+}
+
+test_missing_workspace_root_is_silent() {
+    local out rc=0
+    out=$(_run_identity WORKSPACE_ROOT="$TEST_TEMP_DIR/does-not-exist") || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0 when WORKSPACE_ROOT is absent"
+    assert_not_contains "$out" "WARN" "Absent WORKSPACE_ROOT → no new output"
+}
+
+test_empty_global_email() {
+    # setup_identity always writes a fallback, so drive check_identity_shadowing
+    # directly: source a scratch copy without its trailing `main "$@"` call.
+    command sed '$d' "$SETUP_GIT_SCRIPT" >"$TEST_TEMP_DIR/setup-git-fns"
+    command cp "$PROJECT_ROOT/lib/runtime/commands/_git-email-placeholder" "$TEST_TEMP_DIR/"
+    _ws_repo work "me@work-corp.io"
+    : >"$TEST_HOME/.gitconfig"
+    local out rc=0
+    out=$(command env -i BASH_ENV= HOME="$TEST_HOME" PATH="/usr/bin:/bin" \
+        GIT_CONFIG_GLOBAL="$TEST_HOME/.gitconfig" WORKSPACE_ROOT="$TEST_TEMP_DIR/ws" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash -c '. "$1"; check_identity_shadowing' _ "$TEST_TEMP_DIR/setup-git-fns" 2>&1) || rc=$?
+    assert_equals "0" "$rc" "check_identity_shadowing returns 0 with no global email"
+    assert_not_contains "$out" "global git email <>" "Empty global email is not called a placeholder"
+    assert_not_contains "$out" "differs from global <>" "No 'differs from global <>' message"
+    assert_contains "$out" "local user.email <me@work-corp.io> is set but no global user.email is" \
+        "Local email with no global says so plainly"
+}
+
 test_real_global_no_global_warning() {
     local out
     out=$(_run_identity)
@@ -1046,6 +1087,9 @@ run_test_with_setup test_worktree_local_identity_detected "#1533: .worktrees/* r
 run_test_with_setup test_devcontainer_fallback_warns "#1533: devcontainer@localhost fallback warns of pre-commit refusal"
 run_test_with_setup test_control_chars_stripped_and_dir_quoted "#1533: repo-controlled strings sanitized; remedy %q-quoted"
 run_test_with_setup test_missing_helper_falls_back "#1533: missing helper → still exits 0, differs check runs"
+run_test_with_setup test_root_worktrees_and_non_repos "#1533: WORKSPACE_ROOT/.worktrees scanned; non-repo dirs skipped"
+run_test_with_setup test_missing_workspace_root_is_silent "#1533: absent WORKSPACE_ROOT → silent, exit 0"
+run_test_with_setup test_empty_global_email "#1533: no global email → no '<>' placeholder/differs message"
 run_test_with_setup test_real_global_no_global_warning "#1533: real global email → no global warning"
 run_test_with_setup test_placeholder_rules_shared_not_duplicated "#1533: placeholder rules shared, not duplicated"
 

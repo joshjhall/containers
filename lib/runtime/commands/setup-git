@@ -161,7 +161,7 @@ _workspace_repo_candidates() {
     local root="${WORKSPACE_ROOT:-/workspace}" d
     [ -d "$root" ] || return 0
     printf '%s\n' "${root%/}"
-    for d in "${root%/}"/*/ "${root%/}"/*/.worktrees/*/; do
+    for d in "${root%/}"/.worktrees/*/ "${root%/}"/*/ "${root%/}"/*/.worktrees/*/; do
         [ -d "$d" ] && printf '%s\n' "${d%/}"
     done
 }
@@ -172,11 +172,12 @@ _printable() {
 }
 
 check_identity_shadowing() {
-    local global_email reason
+    local global_email shown_global reason
     global_email=$(git config --global --get user.email 2>/dev/null || true)
+    shown_global=$(_printable "$global_email")
 
     if [ -n "$global_email" ] && reason=$(placeholder_reason "$global_email"); then
-        _warn "global git email <${global_email}> is a placeholder (${reason})."
+        _warn "global git email <${shown_global}> is a placeholder (${reason})."
         _warn "  Commits will be refused by the pre-commit author-identity check"
         _warn "  until GIT_USER_EMAIL resolves (check OP_GIT_USER_EMAIL_REF)."
     fi
@@ -210,8 +211,10 @@ check_identity_shadowing() {
         printf -v qdir '%q' "$dir"
         if reason=$(placeholder_reason "$email"); then
             _warn "${shown_dir}: local user.email <${shown_email}> is a placeholder (${reason}),"
+        elif [ -z "$global_email" ]; then
+            _warn "${shown_dir}: local user.email <${shown_email}> is set but no global user.email is,"
         else
-            _warn "${shown_dir}: local user.email <${shown_email}> differs from global <${global_email}>,"
+            _warn "${shown_dir}: local user.email <${shown_email}> differs from global <${shown_global}>,"
         fi
         _warn "  set in ${shown_file} — it overrides the global identity for commits here."
         _warn "  If unintended: git -C ${qdir} config --local --unset user.name;" \
