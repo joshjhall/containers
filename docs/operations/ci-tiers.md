@@ -184,8 +184,11 @@ the same SHA triggers the merge tier (`ci.yml`).
 ### Rust tests: path-filtered OS matrix
 
 `rust-test` is **skipped** for a PR that touches no Rust input (#1653), and runs
-on ubuntu + macOS + Windows for a PR touching `crates/`, `Cargo.toml`,
-`Cargo.lock`, or `rust-toolchain*` (#1593). Push to main, `v*` tags, the nightly
+on ubuntu + macOS + Windows for a PR that does (#1593). Rust input is anything
+the job's outcome depends on: `crates/`, `Cargo.toml`, `Cargo.lock`,
+`rust-toolchain*`, `.cargo/`, `clippy.toml`, `.rustfmt.toml`, `VERSION`,
+`ci.yml`, `bin/read-librarian-pin.sh`, and a Dockerfile change to a
+`LIBRARIAN_REF` line (the render.sh parity pin). Push to main, `v*` tags, the nightly
 schedule, and `workflow_dispatch` always run all three — `build` needs them.
 `rust-latest-stable` follows the same skip.
 

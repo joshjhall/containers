@@ -42,9 +42,10 @@ readonly SKIP_MATRIX='["ubuntu-26.04"]'
 readonly RUN_FULL="run=true matrix=$FULL"
 readonly SKIP="run=false matrix=$SKIP_MATRIX"
 
-# Build a throwaway repo whose `origin/main` is the base commit, then put
-# one commit adding $1 on top as HEAD. Prints the repo path.
-# Several paths may be given as one comma-separated argument.
+# Build a throwaway repo whose `origin/main` is the base commit (README.md +
+# a Dockerfile pinning LIBRARIAN_REF), then put one commit touching $1 on top
+# as HEAD. Prints the repo path. Several paths may be given as one
+# comma-separated argument; "path:line" appends that line instead of "x".
 _pr_repo() {
     local changed="$1" repo
     repo="$(/usr/bin/mktemp -d "$TEST_TEMP_DIR/repo.XXXXXX")"
@@ -56,14 +57,23 @@ _pr_repo() {
         git config user.email t@example.com
         git config user.name t
         /usr/bin/printf 'base\n' >README.md
-        git add README.md
+        # A base Dockerfile carrying the pin, so a PR can edit around it or move it.
+        /usr/bin/printf 'FROM scratch\nARG LIBRARIAN_REF=v0.0.1\n' >Dockerfile
+        git add README.md Dockerfile
         git commit -qm base
         git update-ref refs/remotes/origin/main HEAD
-        local f
+        local f content
         IFS=',' read -ra files <<<"$changed"
         for f in "${files[@]}"; do
+            # "path:line" appends that line; a bare path appends "x".
+            content='x'
+            case "$f" in *:*)
+                content="${f#*:}"
+                f="${f%%:*}"
+                ;;
+            esac
             /usr/bin/mkdir -p "$(/usr/bin/dirname "$f")"
-            /usr/bin/printf 'x\n' >"$f"
+            /usr/bin/printf '%s\n' "$content" >>"$f"
             git add "$f"
         done
         git commit -qm change
@@ -95,6 +105,14 @@ test_matrix_by_changed_path() {
         "Cargo.lock|$RUN_FULL|a Cargo.lock PR runs all three OSes"
         "rust-toolchain.toml|$RUN_FULL|a rust-toolchain PR runs all three OSes"
         "docs/a.md,bin/b.sh,crates/stibbons/src/lib.rs|$RUN_FULL|a Rust path is not masked by other changed files"
+        ".cargo/config.toml|$RUN_FULL|cargo config changes build behaviour"
+        "clippy.toml|$RUN_FULL|clippy config changes the lint gate"
+        ".rustfmt.toml|$RUN_FULL|rustfmt config changes the fmt gate"
+        "VERSION|$RUN_FULL|VERSION is stamped into stibbons by build.rs"
+        ".github/workflows/ci.yml|$RUN_FULL|a PR editing the rust-test job must run it"
+        "bin/read-librarian-pin.sh|$RUN_FULL|the parity test's pin reader feeds rust-test"
+        "Dockerfile|$SKIP|a Dockerfile edit that leaves LIBRARIAN_REF alone skips"
+        "Dockerfile:ARG LIBRARIAN_REF=v9.9.9|$RUN_FULL|moving the librarian pin re-runs the parity test"
     )
     local row path want why repo got violations=0
     for row in "${cases[@]}"; do
