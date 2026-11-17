@@ -34,6 +34,10 @@ pub struct StreamingCommand<'a> {
     pub cwd: &'a Path,
     /// Variables added to the inherited environment.
     pub env: &'a BTreeMap<String, String>,
+    /// Variables removed from the inherited environment before `env` is
+    /// applied — for an inherited value that must not reach the child at
+    /// all (a bare compiler launcher with no compiler behind it, #1678).
+    pub env_remove: &'a [String],
 }
 
 /// One [`super::CommandRunner::run_streaming`] call as [`super::RecordingRunner`] saw it.
@@ -47,6 +51,8 @@ pub struct StreamingCall {
     pub cwd: PathBuf,
     /// Environment additions the child was given.
     pub env: BTreeMap<String, String>,
+    /// Inherited variables removed from the child's environment.
+    pub env_remove: Vec<String>,
 }
 
 /// Keeps the last [`STDERR_TAIL_LINES`] lines of a stream.
@@ -159,7 +165,11 @@ pub(super) fn run(
     on_line: &mut dyn FnMut(&str),
 ) -> Result<CommandOutcome> {
     let program = cmd.program;
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    for var in cmd.env_remove {
+        command.env_remove(var);
+    }
+    let mut child = command
         .args(cmd.args)
         .current_dir(cmd.cwd)
         .envs(cmd.env)

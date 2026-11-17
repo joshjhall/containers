@@ -629,6 +629,7 @@ fn no_launcher_leaves_the_build_env_untouched() {
     assert_eq!(calls.len(), 3);
     for call in calls {
         assert_eq!(call.env, env, "{}: env must be the catalog's, unchanged", call.program);
+        assert!(call.env_remove.is_empty(), "{}: nothing removed", call.program);
     }
 }
 
@@ -649,6 +650,7 @@ fn launcher_wraps_the_compilers_for_every_step() {
     for call in calls {
         assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc"), "{}", call.program);
         assert_eq!(call.env.get("CXX").map(String::as_str), Some("ccache g++"), "{}", call.program);
+        assert!(call.env_remove.is_empty(), "{}: compilers resolved", call.program);
     }
 }
 
@@ -869,6 +871,49 @@ fn launcher_does_not_wrap_an_already_launched_compiler() {
     assert_eq!(env["CC"], "ccache ccache-wrapper gcc", "a prefix match is not the launcher");
 }
 
+/// An inherited bare launcher with no compiler behind it cannot be dropped
+/// from `env` — the steps inherit it regardless — so it is returned for
+/// spawn-time removal (#1678). Only that case: a compiler found, a real
+/// inherited compiler, or a catalog-only bare launcher removes nothing.
+#[test]
+fn launcher_returns_an_unreplaced_inherited_bare_launcher_for_removal() {
+    let bare = |var: &str| matches!(var, "CC" | "CXX").then(|| "ccache".to_owned());
+
+    // No compiler anywhere: both inherited bare launchers are removed.
+    let mut env = BTreeMap::new();
+    let remove = apply_compiler_launcher(&mut env, "ccache", bare, path_with(&[]));
+    assert_eq!(remove, ["CC", "CXX"]);
+    assert!(env.is_empty(), "{env:?}");
+
+    // By path, and only for the variable left unresolved.
+    let by_path = |var: &str| (var == "CXX").then(|| "/opt/x/ccache".to_owned());
+    let mut env = BTreeMap::new();
+    let remove = apply_compiler_launcher(&mut env, "ccache", by_path, path_with(&["gcc"]));
+    assert_eq!(remove, ["CXX"]);
+    assert_eq!(env.get("CC").map(String::as_str), Some("ccache gcc"));
+
+    // A compiler found: the step env overrides the inherited value, so
+    // nothing is removed.
+    let mut env = BTreeMap::new();
+    let remove = apply_compiler_launcher(&mut env, "ccache", bare, path_with(ALL));
+    assert!(remove.is_empty(), "{remove:?}");
+    assert_eq!(env["CC"], "ccache gcc");
+    assert_eq!(env["CXX"], "ccache g++");
+
+    // An inherited real compiler is never removed, even with no probe hit.
+    let real = |var: &str| (var == "CC").then(|| "clang".to_owned());
+    let mut env = BTreeMap::new();
+    let remove = apply_compiler_launcher(&mut env, "ccache", real, path_with(&[]));
+    assert!(remove.is_empty(), "{remove:?}");
+    assert_eq!(env["CC"], "ccache clang");
+
+    // An inherited `ccache gcc` is a compiler, not a bare launcher.
+    let launched = |var: &str| (var == "CC").then(|| "ccache gcc".to_owned());
+    let mut env = BTreeMap::new();
+    let remove = apply_compiler_launcher(&mut env, "ccache", launched, path_with(&[]));
+    assert!(remove.is_empty(), "{remove:?}");
+}
+
 /// A `CC`/`CXX` that is only the launcher names no compiler (#1648). It is
 /// neither kept verbatim (`ccache`, a launcher with nothing to launch) nor
 /// doubled (`ccache ccache`): it is skipped like an empty value, so the next
@@ -901,10 +946,12 @@ fn launcher_ignores_a_bare_launcher_compiler() {
     assert_eq!(env["CC"], "ccache clang");
 
     // Nothing behind it: CC is left unset, as with no compiler at all — not
-    // the bare launcher verbatim and not `ccache ccache`.
+    // the bare launcher verbatim and not `ccache ccache`. Nothing inherited,
+    // so nothing to remove either.
     let mut env = BTreeMap::from([("CC".to_owned(), "ccache".to_owned())]);
-    apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&[]));
+    let remove = apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&[]));
     assert!(env.is_empty(), "{env:?}");
+    assert!(remove.is_empty(), "{remove:?}");
 
     // The predicates directly: the filter above keeps a bare launcher from
     // ever reaching `already_launched`, so pin that it would not count anyway.

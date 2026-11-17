@@ -27,7 +27,13 @@ fn recording_runner_streams_lines_through_the_callback() {
         },
     );
     let env = BTreeMap::new();
-    let cmd = StreamingCommand { program: "make", args: &[], cwd: Path::new("/src"), env: &env };
+    let cmd = StreamingCommand {
+        program: "make",
+        args: &[],
+        cwd: Path::new("/src"),
+        env: &env,
+        env_remove: &[],
+    };
     let mut seen = Vec::new();
     let outcome = runner.run_streaming(&cmd, &mut |l| seen.push(l.to_owned())).unwrap();
 
@@ -47,7 +53,13 @@ fn process_runner_streams_with_cwd_env_and_bounded_tail() {
     let script = "pwd; echo \"$LUGGAGE_TEST_VAR\"; \
                   i=0; while [ $i -lt 100 ]; do echo err$i >&2; i=$((i+1)); done; exit 3";
     let args = vec!["-c".to_owned(), script.to_owned()];
-    let cmd = StreamingCommand { program: "sh", args: &args, cwd: dir.path(), env: &env };
+    let cmd = StreamingCommand {
+        program: "sh",
+        args: &args,
+        cwd: dir.path(),
+        env: &env,
+        env_remove: &[],
+    };
 
     let mut seen = Vec::new();
     let outcome = ProcessRunner.run_streaming(&cmd, &mut |l| seen.push(l.to_owned())).unwrap();
@@ -64,6 +76,30 @@ fn process_runner_streams_with_cwd_env_and_bounded_tail() {
     assert_eq!(*tail.last().unwrap(), "err99");
 }
 
+/// `env_remove` strips an inherited variable before the child starts (#1678):
+/// the same `sh` sees `CARGO_MANIFEST_DIR` (cargo sets it for every test
+/// process) without the removal and not at all with it — so the assertion
+/// discriminates rather than passing on a variable that was never set.
+#[test]
+fn process_runner_removes_inherited_variables() {
+    let dir = tempdir().unwrap();
+    let env = BTreeMap::new();
+    let args = vec!["-c".to_owned(), "echo \"[${CARGO_MANIFEST_DIR-unset}]\"".to_owned()];
+    let remove = vec!["CARGO_MANIFEST_DIR".to_owned()];
+    let run = |env_remove: &[String]| {
+        let cmd =
+            StreamingCommand { program: "sh", args: &args, cwd: dir.path(), env: &env, env_remove };
+        let mut seen = Vec::new();
+        let outcome = ProcessRunner.run_streaming(&cmd, &mut |l| seen.push(l.to_owned())).unwrap();
+        assert!(outcome.success());
+        seen
+    };
+
+    let kept = run(&[]);
+    assert_eq!(kept, [format!("[{}]", env!("CARGO_MANIFEST_DIR"))], "control: inherited");
+    assert_eq!(run(&remove), ["[unset]"], "removed variable must not reach the child");
+}
+
 /// A program that cannot be spawned is a spawn failure naming the program,
 /// not a `BuildStepFailed` with a made-up exit code.
 #[test]
@@ -75,6 +111,7 @@ fn process_runner_spawn_failure_is_install_stage_failed() {
         args: &[],
         cwd: dir.path(),
         env: &env,
+        env_remove: &[],
     };
     let err = ProcessRunner.run_streaming(&cmd, &mut |_| {}).unwrap_err();
     match err {
@@ -91,7 +128,13 @@ fn sh_stream(script: &str) -> (CommandOutcome, Vec<String>) {
     let dir = tempdir().unwrap();
     let env = BTreeMap::new();
     let args = vec!["-c".to_owned(), script.to_owned()];
-    let cmd = StreamingCommand { program: "sh", args: &args, cwd: dir.path(), env: &env };
+    let cmd = StreamingCommand {
+        program: "sh",
+        args: &args,
+        cwd: dir.path(),
+        env: &env,
+        env_remove: &[],
+    };
     let mut seen = Vec::new();
     let outcome = ProcessRunner.run_streaming(&cmd, &mut |l| seen.push(l.to_owned())).unwrap();
     (outcome, seen)
