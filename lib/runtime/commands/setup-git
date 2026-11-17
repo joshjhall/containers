@@ -195,7 +195,12 @@ check_identity_shadowing() {
 
     local dir scope file email common_cfg seen=$'\n'
     while IFS= read -r dir; do
-        git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || continue
+        # Only work-tree top levels: a plain subdir of a repo (e.g. when
+        # WORKSPACE_ROOT is itself a repo) also passes rev-parse, but git
+        # reports its origin relative to the top level, not to $dir.
+        local prefix
+        prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || continue
+        [ -z "$prefix" ] || continue
         # Resolve user.email the way `git commit` does: every scope, includes
         # followed (a scope flag like --local would skip config.worktree and
         # include.path files). -z gives "<scope>\0file:<path>\0<email>\0"

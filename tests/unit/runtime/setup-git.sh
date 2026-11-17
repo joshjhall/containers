@@ -1141,6 +1141,25 @@ test_non_ascii_path_dedupes_with_local_remedy() {
     assert_not_contains "$out" "remove the [user] entries" "Not misrouted to the include remedy"
 }
 
+test_root_repo_subdirs_not_scanned() {
+    # WORKSPACE_ROOT is a repo with a local placeholder and plain subdirs:
+    # the subdirs are not repos of their own and must not each re-report it
+    # (with a nonexistent "<subdir>/.git/config" path and the include remedy).
+    git -C "$TEST_TEMP_DIR" init -q ws
+    git -C "$TEST_TEMP_DIR/ws" config user.email "t@t.t"
+    command mkdir -p "$TEST_TEMP_DIR/ws/src" "$TEST_TEMP_DIR/ws/docs"
+    local out q
+    out=$(_run_identity)
+    printf -v q '%q' "$TEST_TEMP_DIR/ws"
+    assert_equals "1" "$(printf '%s\n' "$out" | command grep -c 'local user.email <t@t.t>')" \
+        "Root repo reported once, not once per subdirectory"
+    assert_not_contains "$out" "ws/src" "Plain subdir src/ is not scanned as a repo"
+    assert_not_contains "$out" "ws/docs" "Plain subdir docs/ is not scanned as a repo"
+    assert_contains "$out" "git -C $q config --local --unset user.email" \
+        "Root repo gets the --local remedy"
+    assert_not_contains "$out" "remove the [user] entries" "Not misrouted to the include remedy"
+}
+
 test_real_global_no_global_warning() {
     local out
     out=$(_run_identity)
@@ -1177,6 +1196,7 @@ run_test_with_setup test_included_identity_detected "#1533: include.path identit
 run_test_with_setup test_symlinked_root_dedupes "#1533: symlinked WORKSPACE_ROOT + worktree reported once"
 run_test_with_setup test_reason_control_chars_stripped "#1533: placeholder reason sanitized (no ESC from domain)"
 run_test_with_setup test_non_ascii_path_dedupes_with_local_remedy "#1533: non-ASCII path — -z parse dedupes, --local remedy"
+run_test_with_setup test_root_repo_subdirs_not_scanned "#1533: root repo's plain subdirs not re-reported"
 run_test_with_setup test_real_global_no_global_warning "#1533: real global email → no global warning"
 run_test_with_setup test_placeholder_rules_shared_not_duplicated "#1533: placeholder rules shared, not duplicated"
 
