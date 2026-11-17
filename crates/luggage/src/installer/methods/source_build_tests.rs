@@ -642,9 +642,11 @@ fn no_launcher_leaves_the_build_env_untouched() {
 }
 
 /// Opted in, every step compiles through the launcher. The catalog names
-/// both compilers so the expected values are literals: what `run()` picks
-/// when it names none depends on the host's env and `PATH`, and that
-/// fallback is pinned by the injected `apply_compiler_launcher` tests below.
+/// both compilers so the expected values are literals. The fallback when it
+/// names none is pinned through the whole flow: the `PATH` probe by
+/// `launcher_falls_back_to_a_compiler_on_the_catalog_path` (via `run_with`,
+/// which `run()` delegates to) and the inherited reader by
+/// `launcher_wraps_a_compiler_inherited_by_the_production_run` (via `run()`).
 #[test]
 fn launcher_wraps_the_compilers_for_every_step() {
     let mut f = Fixture::python();
@@ -834,6 +836,106 @@ fn launcher_probes_the_step_path_when_the_catalog_sets_one() {
     // No catalog PATH: luggage's own is searched.
     assert!(step_on_path(&BTreeMap::new())("sh"), "sh is on luggage's PATH");
     assert!(!step_on_path(&BTreeMap::new())("gcc-luggage-probe"));
+}
+
+/// A catalog `PATH` the probe can see, holding exactly `names` as executables.
+#[cfg(unix)]
+fn path_dir_with(names: &[&str]) -> tempfile::TempDir {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempdir().unwrap();
+    for name in names {
+        let shim = dir.path().join(name);
+        fs::write(&shim, "#!/bin/sh\n").unwrap();
+        fs::set_permissions(&shim, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    dir
+}
+
+/// With no compiler named, the steps' `PATH` is probed for one (#1706). This
+/// drives `run_with` — where `run()` delegates and the probe is wired — with
+/// nothing inherited, so `ccache gcc` can only come from that `on_path`
+/// probe: a probe that finds nothing leaves both compilers
+/// unset. The control — the same run over an empty catalog `PATH` — must
+/// resolve nothing. Between them the two halves pin the probe to the catalog
+/// `PATH` rather than luggage's own on any host: with a host `gcc` a probe of
+/// luggage's `PATH` fails the control, and without one it fails the positive
+/// case. The injected `apply_compiler_launcher` tests above cannot see this
+/// wiring.
+#[cfg(unix)]
+#[test]
+fn launcher_falls_back_to_a_compiler_on_the_catalog_path() {
+    let run_over = |dir: &tempfile::TempDir| {
+        let mut f = Fixture::python();
+        f.launcher = Some("ccache");
+        f.inherited = Some(|_| None);
+        let env = BTreeMap::from([("PATH".to_owned(), dir.path().display().to_string())]);
+        f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+        let calls = f.runner.streaming_calls();
+        assert_eq!(calls.len(), 3);
+        calls
+    };
+
+    for call in run_over(&path_dir_with(&["gcc", "g++"])) {
+        assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc"), "{}", call.program);
+        assert_eq!(call.env.get("CXX").map(String::as_str), Some("ccache g++"), "{}", call.program);
+        assert!(call.env_remove.is_empty(), "{}: compilers resolved", call.program);
+    }
+    for call in run_over(&path_dir_with(&[])) {
+        assert_eq!(call.env.get("CC"), None, "{}: only the catalog PATH is probed", call.program);
+        assert_eq!(call.env.get("CXX"), None, "{}: only the catalog PATH is probed", call.program);
+    }
+}
+
+/// The production [`run`] reads luggage's own environment for an unnamed
+/// compiler (#1706): an inherited `CC`/`CXX` reaches the steps wrapped.
+///
+/// The compilers are inherited by construction — the test re-execs its own
+/// binary with them set on that `Command` (no `std::env::set_var`), and the
+/// checks run in that child through [`run`], not [`run_with`]. The catalog
+/// `PATH` is an empty directory, so the probe finds nothing: dropping the
+/// inherited reader from `run()` leaves both compilers unset and fails here.
+#[cfg(unix)]
+#[test]
+fn launcher_wraps_a_compiler_inherited_by_the_production_run() {
+    const MARKER: &str = "LUGGAGE_INHERITED_CC_MARKER";
+    const SENTINEL: &str = "inherited-compiler checks ran";
+    const CC: &str = "clang-luggage-1706";
+    const CXX: &str = "clang++-luggage-1706";
+
+    if std::env::var_os(MARKER).is_none() {
+        let module = module_path!();
+        let module = module.split_once("::").map_or(module, |(_, rest)| rest);
+        let name = format!("{module}::launcher_wraps_a_compiler_inherited_by_the_production_run");
+        let out = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &name, "--test-threads=1", "--nocapture"])
+            .env(MARKER, "1")
+            .env("CC", CC)
+            .env("CXX", CXX)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        let (stdout, stderr) =
+            (String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        assert!(out.status.success(), "child run failed ({}):\n{stdout}\n{stderr}", out.status);
+        assert!(stdout.contains(SENTINEL), "child never ran the checks:\n{stdout}\n{stderr}");
+        return;
+    }
+    assert_eq!(std::env::var("CC").as_deref(), Ok(CC), "the child must inherit CC");
+
+    let empty = path_dir_with(&[]);
+    let mut f = Fixture::python();
+    f.launcher = Some("ccache");
+    assert!(f.inherited.is_none(), "must drive the production run(), not run_with");
+    let env = BTreeMap::from([("PATH".to_owned(), empty.path().display().to_string())]);
+    f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+
+    let calls = f.runner.streaming_calls();
+    assert_eq!(calls.len(), 3);
+    for call in calls {
+        assert_eq!(call.env.get("CC"), Some(&format!("ccache {CC}")), "{}", call.program);
+        assert_eq!(call.env.get("CXX"), Some(&format!("ccache {CXX}")), "{}", call.program);
+    }
+    println!("{SENTINEL}");
 }
 
 /// The log note survives a compiler left unset (indexing `env["CXX"]` used
