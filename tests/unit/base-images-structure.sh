@@ -353,6 +353,30 @@ _check_floating_tags_gated() {
         /usr/bin/echo 'Trivy step must set exit-code: "1"'
         return
     }
+    # A skipped step does not trip success(): Trivy must be unconditional,
+    # and signing gated only on publish, or promotion could follow a skip.
+    if /usr/bin/grep -qE '^        if:' <<<"$trivy_body"; then
+        /usr/bin/echo "Trivy step must not have an if: (a skipped scan would still promote)"
+        return
+    fi
+    /usr/bin/grep -qE "^        if: steps\.gate\.outputs\.publish == 'true'\$" <<<"$sign_body" || {
+        /usr/bin/echo "sign step if: must be exactly the publish gate"
+        return
+    }
+    # The pushed (immutable) tag must be the sha tag alone, and no floating
+    # tag may name it: otherwise a floating tag would be pushed pre-scan.
+    local tags_body
+    tags_body="$(_step_body "$wf" "$(_step_line "$wf" 'Compute image tags')")"
+    /usr/bin/grep -qE '^ +echo "immutable=\$\{IMAGE\}:sha-\$\{SHORT_SHA\}"$' <<<"$tags_body" || {
+        /usr/bin/echo "immutable output must be exactly \${IMAGE}:sha-\${SHORT_SHA}"
+        return
+    }
+    local floating_list
+    floating_list="$(/usr/bin/awk '/floating<<TAGS_EOF/{f=1; next} /TAGS_EOF/{f=0} f' <<<"$tags_body")"
+    if [ -z "$floating_list" ] || /usr/bin/grep -qE 'sha-|immutable' <<<"$floating_list"; then
+        /usr/bin/echo "floating tag list must be non-empty and exclude the sha tag"
+        return
+    fi
     if /usr/bin/grep -q 'continue-on-error' <<<"$trivy_body$sign_body"; then
         /usr/bin/echo "Trivy/sign steps must not set continue-on-error"
         return
@@ -386,6 +410,35 @@ test_publish_gates_floating_tags_behind_trivy() {
         "floating tags are promoted only after Trivy + signing"
 }
 
+# Each mutation breaks the gate one way on a scratch copy; the checker must
+# reject every one with its specific reason (proves the guards discriminate).
+test_floating_tag_gate_rejects_mutations() {
+    local copy="$TEST_TEMP_DIR/build-base-images.yml" failures=0 name want got
+    _mutant() { /usr/bin/awk "$1" "$WORKFLOW_FILE" >"$copy"; }
+    while IFS='|' read -r name want prog; do
+        _mutant "$prog"
+        got="$(_check_floating_tags_gated "$copy")"
+        case "$got" in
+            *"$want"*) ;;
+            *)
+                /usr/bin/echo "  mutation '$name' not caught (got: $got)"
+                failures=$((failures + 1))
+                ;;
+        esac
+    done <<'MUTANTS'
+floating-in-push|immutable tag|{sub(/tags: \$\{\{ steps\.tags\.outputs\.immutable \}\}/, "tags: ${{ steps.tags.outputs.floating }}")} 1
+sha-in-floating|exclude the sha tag|/echo "floating<<TAGS_EOF"/{print; print "            echo \"${IMAGE}:sha-${SHORT_SHA}\""; next} 1
+trivy-if|Trivy step must not have an if|/- name: Trivy scan/{print; print "        if: steps.gate.outputs.publish != '\''true'\''"; next} 1
+trivy-exit0|exit-code|{sub(/exit-code: "1"/, "exit-code: \"0\"")} 1
+trivy-coe|continue-on-error|/- name: Trivy scan/{print; print "        continue-on-error: true"; next} 1
+sign-if-always|sign step if|/- name: Sign image and attest SBOM/{print; getline; print "        if: always()"; next} 1
+promote-always|promote step if|/- name: Promote floating tags/{print; getline; print; getline; print "        if: always()"; next} 1
+promote-before-trivy|order must be|/- name: Promote floating tags/{sub(/Promote floating tags/, "Promoted")} /- name: Build & push \(main/{print "      - name: Promote floating tags"; print "        run: docker buildx imagetools create"} 1
+MUTANTS
+    unset -f _mutant
+    assert_equals "0" "$failures" "every gate mutation is rejected"
+}
+
 run_test test_base_images_dir_exists "base-images directory exists"
 run_test test_readme_exists "base-images/README.md spec exists"
 run_test test_version_file_is_semver "base-images/VERSION is clean semver"
@@ -400,5 +453,6 @@ run_test test_evidence_dispatch_offers_every_tuple "evidence dispatch offers eve
 run_test test_ubuntu_images_drop_stock_extras "Ubuntu images drop the stock user and 26.04's pebble"
 run_test test_workflow_references_pilot_tuple "workflow matrix references pilot tuple"
 run_test test_publish_gates_floating_tags_behind_trivy "floating tags promoted only after Trivy gate"
+run_test test_floating_tag_gate_rejects_mutations "floating-tag gate check rejects each mutation"
 
 generate_report
