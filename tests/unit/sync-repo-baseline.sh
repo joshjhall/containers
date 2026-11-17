@@ -253,7 +253,11 @@ test_repo_default_resolution() {
     err="$(env -u CONTAINERS_DB_REPO CONTAINERS_DB="$notgit" REPO_BASELINE_DEST="$dest" \
         "$SYNC" "$sha" 2>&1 >/dev/null || true)"
     assert_not_contains "$err" "$notgit" "a non-git CONTAINERS_DB is never used as the repo"
-    assert_contains "$err" " in $SIBLING " "the sibling of the main checkout is tried instead"
+    # The sibling may or may not exist (it does in the dev container, not on
+    # a CI runner), so the error is either "not a git checkout of containers-db:
+    # <sibling>" or "commit ... not found in <sibling> (...)" — both name it.
+    assert_true "command grep -qE ': $SIBLING\$| in $SIBLING \\(' <<<'$err'" \
+        "the sibling of the main checkout is tried instead"
     assert_equals "2" "$(_sync "$dest" "$sha" "$notgit")" "a non-git repo argument is refused"
     assert_equals "2" "$(_sync "$dest" "$sha" "$other")" "a repo lacking the SHA is refused"
     command rm -rf "$repo" "$other" "$notgit" "$(command dirname "$dest")"
