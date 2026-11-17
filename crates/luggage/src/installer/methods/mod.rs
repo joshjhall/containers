@@ -201,6 +201,7 @@ impl CommandRunner for RecordingRunner {
             args: cmd.args.to_vec(),
             cwd: cmd.cwd.to_owned(),
             env: cmd.env.clone(),
+            env_remove: cmd.env_remove.to_vec(),
         });
         let mut tail = Tail::default();
         for line in String::from_utf8_lossy(&outcome.stdout).lines() {

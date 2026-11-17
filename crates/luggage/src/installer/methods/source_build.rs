@@ -144,12 +144,22 @@ pub fn parse_compiler_launcher(raw: Option<&str>) -> Result<Option<String>> {
 ///    an image that points `cc` elsewhere should export `CC`/`CXX`;
 /// 4. else nothing: the variable is left as it was. A C-only image has no
 ///    C++ compiler, and a `CXX` naming one that does not exist would turn
-///    an unwrapped build's "no C++" into a hard failure.
+///    an unwrapped build's "no C++" into a hard failure. The one exception
+///    is an inherited bare launcher: it is returned so the caller removes it
+///    from the steps' environment (see below).
 ///
 /// A blank value at either level counts as unset, as autoconf's
 /// `test -z "$CC"` treats it — wrapping it would hand ccache no compiler.
 /// A base that already starts with the launcher (an inherited
 /// `CC="ccache gcc"`) is kept as-is rather than wrapped a second time.
+///
+/// A value that is only the launcher (`ccache`) names no compiler and is
+/// skipped at either level. A catalog one is dropped from `env`; an
+/// inherited one cannot be, because the steps inherit luggage's environment
+/// and `env` only adds to it. So when nothing replaced an inherited bare
+/// launcher, its variable is returned, for [`StreamingCommand::env_remove`]
+/// to strip at spawn time — otherwise every step would see `CC=ccache` and
+/// fail with ccache's "no compiler" rather than the build's own (#1678).
 ///
 /// `inherited` looks a variable up in the process environment and `on_path`
 /// reports whether a program is executable on the steps' `PATH` (see
@@ -160,7 +170,8 @@ fn apply_compiler_launcher(
     launcher: &str,
     inherited: impl Fn(&str) -> Option<String>,
     on_path: impl Fn(&str) -> bool,
-) {
+) -> Vec<String> {
+    let mut remove = Vec::new();
     for (var, probe) in [("CC", ["gcc", "cc"]), ("CXX", ["g++", "c++"])] {
         // A value that is only the launcher names no compiler: skip it like
         // an empty one so the next source (inherited, then the probe) wins,
@@ -176,12 +187,16 @@ fn apply_compiler_launcher(
             .or_else(|| inherited(var).filter(set))
             .or_else(|| probe.into_iter().find(|p| on_path(p)).map(str::to_owned))
         else {
+            if inherited(var).is_some_and(|v| bare_launcher(&v, launcher)) {
+                remove.push(var.to_owned());
+            }
             continue;
         };
         let wrapped =
             if already_launched(&base, launcher) { base } else { format!("{launcher} {base}") };
         env.insert(var.to_owned(), wrapped);
     }
+    remove
 }
 
 /// `true` when `base` is the launcher followed by a compiler — its first word
@@ -223,9 +238,18 @@ fn step_on_path(env: &BTreeMap<String, String>) -> impl Fn(&str) -> bool + use<>
 }
 
 /// The log line naming the launcher and the `CC`/`CXX` it produced. Either
-/// may be absent (a C-only image has no `CXX`), shown as `unset`.
-fn launcher_note(launcher: &str, env: &BTreeMap<String, String>) -> String {
-    let shown = |var: &str| env.get(var).map_or("unset", String::as_str);
+/// may be absent (a C-only image has no `CXX`), shown as `unset`. One the
+/// steps will not inherit (`removed`, see [`apply_compiler_launcher`]) is
+/// named as such, so a later "no C compiler" does not hide that luggage
+/// stripped the operator's bare-launcher `CC`/`CXX` (#1678).
+fn launcher_note(launcher: &str, env: &BTreeMap<String, String>, removed: &[String]) -> String {
+    let shown = |var: &str| match env.get(var) {
+        Some(v) => v.clone(),
+        None if removed.iter().any(|r| r == var) => {
+            format!("unset (inherited bare `{launcher}` removed)")
+        }
+        None => "unset".to_owned(),
+    };
     format!("compiler launcher: {launcher} (CC=`{}`, CXX=`{}`)", shown("CC"), shown("CXX"))
 }
 
@@ -247,6 +271,13 @@ fn launcher_note(launcher: &str, env: &BTreeMap<String, String>) -> String {
 /// - [`LuggageError::BuildStepFailed`] when a step exits non-zero.
 /// - [`LuggageError::Io`] when the scratch dir or bin links cannot be made.
 pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
+    run_with(ctx, &|var| std::env::var(var).ok())
+}
+
+/// [`run`] with the inherited-environment lookup that
+/// [`apply_compiler_launcher`] reads injected, so tests can drive the whole
+/// flow with an inherited `CC`/`CXX` without `std::env::set_var`.
+fn run_with(ctx: &MethodContext<'_>, inherited: &dyn Fn(&str) -> Option<String>) -> Result<()> {
     // Validate the catalog shape before touching the filesystem: a source
     // build with nothing to run is a catalog defect, not an empty success.
     if ctx.build_steps.is_empty() {
@@ -310,10 +341,11 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
 
     // 3. Run the steps in order; the first failure aborts the rest.
     let mut env = build_env(ctx);
+    let mut env_remove = Vec::new();
     if let Some(launcher) = ctx.compiler_launcher {
         let on_path = step_on_path(&env);
-        apply_compiler_launcher(&mut env, launcher, |var| std::env::var(var).ok(), on_path);
-        let note = launcher_note(launcher, &env);
+        env_remove = apply_compiler_launcher(&mut env, launcher, inherited, on_path);
+        let note = launcher_note(launcher, &env, &env_remove);
         if let Some(l) = ctx.log {
             l.message(&note);
         } else {
@@ -324,13 +356,22 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
     let subs = Substitutions { nproc: Some(&nproc), ..Substitutions::default() };
     let total = ctx.build_steps.len();
     for (i, step) in ctx.build_steps.iter().enumerate() {
-        run_step(ctx, step, i + 1, total, source_root, &env, &subs)?;
+        let step_env = StepEnv { add: &env, remove: &env_remove };
+        run_step(ctx, step, i + 1, total, source_root, step_env, &subs)?;
     }
 
     // 4. Surface the catalog's binaries. Like a tarball, a source build
     //    installs under the prefix (python: `/usr/local/bin`), so that is
     //    what `bin_source_dir` resolves against.
     install_binaries(ctx, &prefix)
+}
+
+/// The environment changes every build step runs with: `add` layered over
+/// luggage's inherited environment after `remove` is stripped from it.
+#[derive(Clone, Copy)]
+struct StepEnv<'a> {
+    add: &'a BTreeMap<String, String>,
+    remove: &'a [String],
 }
 
 /// Substitute, log, and run one build step.
@@ -340,7 +381,7 @@ fn run_step(
     index: usize,
     total: usize,
     source_root: &Path,
-    env: &std::collections::BTreeMap<String, String>,
+    env: StepEnv<'_>,
     subs: &Substitutions<'_>,
 ) -> Result<()> {
     let args =
@@ -362,7 +403,13 @@ fn run_step(
 
     // With no per-feature log the lines still go to `tracing`, so a build
     // never runs silently just because logging degraded.
-    let cmd = StreamingCommand { program: &program, args: &args, cwd: source_root, env };
+    let cmd = StreamingCommand {
+        program: &program,
+        args: &args,
+        cwd: source_root,
+        env: env.add,
+        env_remove: env.remove,
+    };
     let outcome = ctx.runner.run_streaming(&cmd, &mut |line| {
         if let Some(l) = ctx.log {
             l.message(line);

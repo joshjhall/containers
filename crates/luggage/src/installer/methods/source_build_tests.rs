@@ -70,6 +70,11 @@ struct Fixture {
     runner: RecordingRunner,
     /// Compiler launcher handed to the method; `None` unless a test opts in.
     launcher: Option<&'static str>,
+    /// Injected inherited-env lookup; `None` runs the production [`run`],
+    /// which reads the real process env.
+    inherited: Option<fn(&str) -> Option<String>>,
+    /// Per-feature log handed to the method; `None` sends lines to `tracing`.
+    log: Option<crate::installer::logging::FeatureLogger>,
 }
 
 impl Fixture {
@@ -85,6 +90,8 @@ impl Fixture {
             artifact,
             runner: RecordingRunner::new(),
             launcher: None,
+            inherited: None,
+            log: None,
         }
     }
 
@@ -103,7 +110,7 @@ impl Fixture {
     ) -> Result<()> {
         let args: Vec<String> = vec![];
         let prefix = self.prefix.path().display().to_string();
-        run(&MethodContext {
+        let ctx = MethodContext {
             artifact: &self.artifact,
             args: &args,
             env,
@@ -118,9 +125,10 @@ impl Fixture {
             max_extract_bytes: DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: steps,
             compiler_launcher: self.launcher,
-            log: None,
+            log: self.log.as_ref(),
             runner: &self.runner,
-        })
+        };
+        self.inherited.map_or_else(|| run(&ctx), |inherited| run_with(&ctx, &inherited))
     }
 
     fn run(&self, steps: &[BuildStep], strip: u32) -> Result<()> {
@@ -629,6 +637,7 @@ fn no_launcher_leaves_the_build_env_untouched() {
     assert_eq!(calls.len(), 3);
     for call in calls {
         assert_eq!(call.env, env, "{}: env must be the catalog's, unchanged", call.program);
+        assert!(call.env_remove.is_empty(), "{}: nothing removed", call.program);
     }
 }
 
@@ -649,6 +658,7 @@ fn launcher_wraps_the_compilers_for_every_step() {
     for call in calls {
         assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc"), "{}", call.program);
         assert_eq!(call.env.get("CXX").map(String::as_str), Some("ccache g++"), "{}", call.program);
+        assert!(call.env_remove.is_empty(), "{}: compilers resolved", call.program);
     }
 }
 
@@ -833,12 +843,17 @@ fn launcher_note_shows_an_unset_compiler() {
     let mut env = BTreeMap::new();
     apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&["gcc"]));
     assert_eq!(
-        launcher_note("ccache", &env),
+        launcher_note("ccache", &env, &[]),
         "compiler launcher: ccache (CC=`ccache gcc`, CXX=`unset`)"
     );
     assert_eq!(
-        launcher_note("ccache", &BTreeMap::new()),
+        launcher_note("ccache", &BTreeMap::new(), &[]),
         "compiler launcher: ccache (CC=`unset`, CXX=`unset`)",
+    );
+    // A stripped inherited bare launcher is named, not shown as plain unset.
+    assert_eq!(
+        launcher_note("ccache", &env, &["CXX".to_owned()]),
+        "compiler launcher: ccache (CC=`ccache gcc`, CXX=`unset (inherited bare `ccache` removed)`)",
     );
 }
 
@@ -867,6 +882,120 @@ fn launcher_does_not_wrap_an_already_launched_compiler() {
     let mut env = BTreeMap::from([("CC".to_owned(), "ccache-wrapper gcc".to_owned())]);
     apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&[]));
     assert_eq!(env["CC"], "ccache ccache-wrapper gcc", "a prefix match is not the launcher");
+}
+
+/// An inherited bare launcher with no compiler behind it cannot be dropped
+/// from `env` — the steps inherit it regardless — so it is returned for
+/// spawn-time removal (#1678). Only that case: a compiler found, a real
+/// inherited compiler, or a catalog-only bare launcher removes nothing.
+#[test]
+fn launcher_returns_an_unreplaced_inherited_bare_launcher_for_removal() {
+    let bare = |var: &str| matches!(var, "CC" | "CXX").then(|| "ccache".to_owned());
+
+    // No compiler anywhere: both inherited bare launchers are removed.
+    let mut env = BTreeMap::new();
+    let remove = apply_compiler_launcher(&mut env, "ccache", bare, path_with(&[]));
+    assert_eq!(remove, ["CC", "CXX"]);
+    assert!(env.is_empty(), "{env:?}");
+
+    // A catalog bare launcher on top: it is dropped from `env` AND the
+    // inherited one is still removed, so neither reaches a step.
+    let mut env = BTreeMap::from([("CC".to_owned(), "ccache".to_owned())]);
+    let remove = apply_compiler_launcher(&mut env, "ccache", bare, path_with(&[]));
+    assert_eq!(remove, ["CC", "CXX"]);
+    assert!(env.is_empty(), "{env:?}");
+
+    // A catalog compiler replaces the inherited bare `CC` (env wins at
+    // spawn), so only the unresolved `CXX` is stripped.
+    let mut env = BTreeMap::from([("CC".to_owned(), "gcc-13".to_owned())]);
+    let remove = apply_compiler_launcher(&mut env, "ccache", bare, path_with(&[]));
+    assert_eq!(remove, ["CXX"]);
+    assert_eq!(env["CC"], "ccache gcc-13");
+
+    // By path, and only for the variable left unresolved.
+    let by_path = |var: &str| (var == "CXX").then(|| "/opt/x/ccache".to_owned());
+    let mut env = BTreeMap::new();
+    let remove = apply_compiler_launcher(&mut env, "ccache", by_path, path_with(&["gcc"]));
+    assert_eq!(remove, ["CXX"]);
+    assert_eq!(env.get("CC").map(String::as_str), Some("ccache gcc"));
+
+    // A compiler found: the step env overrides the inherited value, so
+    // nothing is removed.
+    let mut env = BTreeMap::new();
+    let remove = apply_compiler_launcher(&mut env, "ccache", bare, path_with(ALL));
+    assert!(remove.is_empty(), "{remove:?}");
+    assert_eq!(env["CC"], "ccache gcc");
+    assert_eq!(env["CXX"], "ccache g++");
+
+    // An inherited real compiler is never removed, even with no probe hit.
+    let real = |var: &str| (var == "CC").then(|| "clang".to_owned());
+    let mut env = BTreeMap::new();
+    let remove = apply_compiler_launcher(&mut env, "ccache", real, path_with(&[]));
+    assert!(remove.is_empty(), "{remove:?}");
+    assert_eq!(env["CC"], "ccache clang");
+
+    // An inherited `ccache gcc` is a compiler, not a bare launcher.
+    let launched = |var: &str| (var == "CC").then(|| "ccache gcc".to_owned());
+    let mut env = BTreeMap::new();
+    let remove = apply_compiler_launcher(&mut env, "ccache", launched, path_with(&[]));
+    assert!(remove.is_empty(), "{remove:?}");
+}
+
+/// End to end through `run()` (#1678): an inherited bare `CC`/`CXX` with no
+/// compiler on the steps' `PATH` reaches every step as an `env_remove`, not
+/// as an `env` entry. The control — same inherited values, a compiler on
+/// `PATH` — removes nothing, so the assertion cannot pass on a list that is
+/// always empty or always full.
+#[test]
+fn run_strips_an_unreplaced_inherited_bare_launcher_from_every_step() {
+    fn bare(var: &str) -> Option<String> {
+        matches!(var, "CC" | "CXX").then(|| "ccache".to_owned())
+    }
+    // The catalog's `PATH` is what `step_on_path` searches, so pointing it
+    // at a dir with or without a `gcc` decides the probe deterministically.
+    let path_dir = tempdir().unwrap();
+    let path = path_dir.path().display().to_string();
+    let env = BTreeMap::from([("PATH".to_owned(), path)]);
+
+    // The launcher note must name what was stripped (read back from the
+    // per-feature log, which is what an operator sees).
+    let log_dir = tempdir().unwrap();
+    let open_log = || {
+        crate::installer::logging::FeatureLogger::open(log_dir.path(), "python", "3.13.1").unwrap()
+    };
+    let removed = "unset (inherited bare `ccache` removed)";
+
+    let mut f = Fixture::python();
+    f.launcher = Some("ccache");
+    f.inherited = Some(bare);
+    f.log = Some(open_log());
+    f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+    let log = fs::read_to_string(f.log.as_ref().unwrap().path()).unwrap();
+    assert!(log.contains(&format!("CC=`{removed}`, CXX=`{removed}`")), "{log}");
+    let calls = f.runner.streaming_calls();
+    assert_eq!(calls.len(), 3);
+    for call in &calls {
+        assert_eq!(call.env_remove, ["CC", "CXX"], "{}", call.program);
+        assert!(!call.env.contains_key("CC") && !call.env.contains_key("CXX"), "{:?}", call.env);
+    }
+
+    // Control: a `gcc` on the steps' PATH replaces the inherited `CC`.
+    let gcc = path_dir.path().join("gcc");
+    fs::write(&gcc, b"#!/bin/sh\n").unwrap();
+    fs::set_permissions(&gcc, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let mut f = Fixture::python();
+    f.launcher = Some("ccache");
+    f.inherited = Some(bare);
+    f.log = Some(open_log());
+    f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+    let log = fs::read_to_string(f.log.as_ref().unwrap().path()).unwrap();
+    assert!(log.contains(&format!("CC=`ccache gcc`, CXX=`{removed}`")), "{log}");
+    let calls = f.runner.streaming_calls();
+    assert_eq!(calls.len(), 3, "the control must actually run every step");
+    for call in calls {
+        assert_eq!(call.env_remove, ["CXX"], "only the unresolved CXX: {}", call.program);
+        assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc"));
+    }
 }
 
 /// A `CC`/`CXX` that is only the launcher names no compiler (#1648). It is
@@ -901,10 +1030,12 @@ fn launcher_ignores_a_bare_launcher_compiler() {
     assert_eq!(env["CC"], "ccache clang");
 
     // Nothing behind it: CC is left unset, as with no compiler at all — not
-    // the bare launcher verbatim and not `ccache ccache`.
+    // the bare launcher verbatim and not `ccache ccache`. Nothing inherited,
+    // so nothing to remove either.
     let mut env = BTreeMap::from([("CC".to_owned(), "ccache".to_owned())]);
-    apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&[]));
+    let remove = apply_compiler_launcher(&mut env, "ccache", |_: &str| None, path_with(&[]));
     assert!(env.is_empty(), "{env:?}");
+    assert!(remove.is_empty(), "{remove:?}");
 
     // The predicates directly: the filter above keeps a bare launcher from
     // ever reaching `already_launched`, so pin that it would not count anyway.
