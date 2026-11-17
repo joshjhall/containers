@@ -70,6 +70,9 @@ struct Fixture {
     runner: RecordingRunner,
     /// Compiler launcher handed to the method; `None` unless a test opts in.
     launcher: Option<&'static str>,
+    /// Injected inherited-env lookup; `None` runs the production [`run`],
+    /// which reads the real process env.
+    inherited: Option<fn(&str) -> Option<String>>,
 }
 
 impl Fixture {
@@ -85,6 +88,7 @@ impl Fixture {
             artifact,
             runner: RecordingRunner::new(),
             launcher: None,
+            inherited: None,
         }
     }
 
@@ -103,7 +107,7 @@ impl Fixture {
     ) -> Result<()> {
         let args: Vec<String> = vec![];
         let prefix = self.prefix.path().display().to_string();
-        run(&MethodContext {
+        let ctx = MethodContext {
             artifact: &self.artifact,
             args: &args,
             env,
@@ -120,7 +124,8 @@ impl Fixture {
             compiler_launcher: self.launcher,
             log: None,
             runner: &self.runner,
-        })
+        };
+        self.inherited.map_or_else(|| run(&ctx), |inherited| run_with(&ctx, &inherited))
     }
 
     fn run(&self, steps: &[BuildStep], strip: u32) -> Result<()> {
@@ -912,6 +917,47 @@ fn launcher_returns_an_unreplaced_inherited_bare_launcher_for_removal() {
     let mut env = BTreeMap::new();
     let remove = apply_compiler_launcher(&mut env, "ccache", launched, path_with(&[]));
     assert!(remove.is_empty(), "{remove:?}");
+}
+
+/// End to end through `run()` (#1678): an inherited bare `CC`/`CXX` with no
+/// compiler on the steps' `PATH` reaches every step as an `env_remove`, not
+/// as an `env` entry. The control — same inherited values, a compiler on
+/// `PATH` — removes nothing, so the assertion cannot pass on a list that is
+/// always empty or always full.
+#[test]
+fn run_strips_an_unreplaced_inherited_bare_launcher_from_every_step() {
+    fn bare(var: &str) -> Option<String> {
+        matches!(var, "CC" | "CXX").then(|| "ccache".to_owned())
+    }
+    // The catalog's `PATH` is what `step_on_path` searches, so pointing it
+    // at a dir with or without a `gcc` decides the probe deterministically.
+    let path_dir = tempdir().unwrap();
+    let path = path_dir.path().display().to_string();
+    let env = BTreeMap::from([("PATH".to_owned(), path)]);
+
+    let mut f = Fixture::python();
+    f.launcher = Some("ccache");
+    f.inherited = Some(bare);
+    f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+    let calls = f.runner.streaming_calls();
+    assert_eq!(calls.len(), 3);
+    for call in &calls {
+        assert_eq!(call.env_remove, ["CC", "CXX"], "{}", call.program);
+        assert!(!call.env.contains_key("CC") && !call.env.contains_key("CXX"), "{:?}", call.env);
+    }
+
+    // Control: a `gcc` on the steps' PATH replaces the inherited `CC`.
+    let gcc = path_dir.path().join("gcc");
+    fs::write(&gcc, b"#!/bin/sh\n").unwrap();
+    fs::set_permissions(&gcc, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let mut f = Fixture::python();
+    f.launcher = Some("ccache");
+    f.inherited = Some(bare);
+    f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+    for call in f.runner.streaming_calls() {
+        assert_eq!(call.env_remove, ["CXX"], "only the unresolved CXX: {}", call.program);
+        assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc"));
+    }
 }
 
 /// A `CC`/`CXX` that is only the launcher names no compiler (#1648). It is

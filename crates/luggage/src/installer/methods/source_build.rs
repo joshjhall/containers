@@ -262,6 +262,13 @@ fn launcher_note(launcher: &str, env: &BTreeMap<String, String>) -> String {
 /// - [`LuggageError::BuildStepFailed`] when a step exits non-zero.
 /// - [`LuggageError::Io`] when the scratch dir or bin links cannot be made.
 pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
+    run_with(ctx, &|var| std::env::var(var).ok())
+}
+
+/// [`run`] with the inherited-environment lookup that
+/// [`apply_compiler_launcher`] reads injected, so tests can drive the whole
+/// flow with an inherited `CC`/`CXX` without `std::env::set_var`.
+fn run_with(ctx: &MethodContext<'_>, inherited: &dyn Fn(&str) -> Option<String>) -> Result<()> {
     // Validate the catalog shape before touching the filesystem: a source
     // build with nothing to run is a catalog defect, not an empty success.
     if ctx.build_steps.is_empty() {
@@ -328,8 +335,7 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
     let mut env_remove = Vec::new();
     if let Some(launcher) = ctx.compiler_launcher {
         let on_path = step_on_path(&env);
-        env_remove =
-            apply_compiler_launcher(&mut env, launcher, |var| std::env::var(var).ok(), on_path);
+        env_remove = apply_compiler_launcher(&mut env, launcher, inherited, on_path);
         let note = launcher_note(launcher, &env);
         if let Some(l) = ctx.log {
             l.message(&note);
