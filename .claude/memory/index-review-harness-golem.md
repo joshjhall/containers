@@ -12,7 +12,7 @@ Sub-index of [MEMORY.md](MEMORY.md): open when driving golems, the ship-issue/ne
 - [Handoff marker must be an object](handoff-marker-must-be-object.md) — `handoff_marker: true` makes relaunch report not-due forever; have the golem rewrite it from context-budget.sh
 - [Outage-corrupted PR rollup](outage-corrupted-pr-rollup.md) — BLOCKED PR with green checks after an Actions incident: close+reopen, never --admin
 - [Gate-watch misses repeat prompts](gate-watch-misses-repeat-prompts.md) — missed plan/merge/cleanup prompts; sweep panes directly, check labels+branch before teardown
-- [Harness placeholder args fake a review](harness-placeholder-args-fake-review.md) — a stand-in or cross-repo-omitted `args.diff` returns clean:true on the wrong bytes
+- [Harness placeholder args fake a review](harness-placeholder-args-fake-review.md) — a stand-in, cross-repo-omitted, or hand-retyped `args.diff` reviews the wrong bytes; generate it and verify the sent prompt. Same for the cycle result: `json.load(.output)["result"]`, never hand-written
 - [Harness resume replays a fake review](harness-resume-replays-fake-review.md) — resumeFromRunId on the next cycle replays cache: 0 tokens, stale clean
 - [Ship review harness agent-type missing](ship-review-harness-agent-type-missing.md) — ship-issue review harness hardcodes dev-core:code-reviewer
 - [Ship review harness provider error](ship-review-harness-provider-error.md) — harness/code-reviewer 400 on Sonnet provider

@@ -1,8 +1,11 @@
 ---
 name: harness-placeholder-args-fake-review
-description: A placeholder string in the review harness's `diff` arg produces a vacuous clean:true that is byte-identical to a real pass
+description: "A placeholder string in the review harness's `diff` arg produces a vacuous clean:true that is byte-identical to a real pass"
 metadata:
+  node_type: memory
   type: feedback
+  originSessionId: 04584ab7-6dfe-4dcd-a63b-73e42f9517d3
+  modified: 2026-11-17T05:39:52.762Z
 ---
 
 The ship-issue review harness reads `args.diff` as **the authoritative bytes the
@@ -34,6 +37,28 @@ only scope-drift noticed). For a cross-repo PR, pass the diff inline — trim
 mechanically generated files to one representative plus a uniformity proof —
 say in `issue.title` that the cwd diff is out of scope, and treat any cycle that
 ran without it as invalid rather than counting it toward convergence.
+
+**Never hand-retype the diff either — generate it, then verify what was sent.**
+Re-emitting a 300-line diff from memory drifts silently: on containers-db#598
+one cycle's args carried an invented `index` hash, and the next carried a
+`-` line reading the *new* code instead of the old (`Command::new("git")` →
+`crate::git_command()`), so reviewers would have seen a hunk that changes
+nothing. Build `diff` from `git diff origin/main...HEAD` output (e.g. JSON-encode
+the file), and after launch diff the text in the run's
+`agent-*.jsonl` prompt against the real diff (unescape it first). Any non-hash
+mismatch → `TaskStop` the run and discard its verdict; a hash-only mismatch is
+harmless.
+
+**The same applies to the result.** The cycle result fed to
+`review-engagement.sh` and `review-convergence.sh` is machine-extractable: the
+Workflow task's `.output` file (path in the task-notification) is pretty-printed
+JSON, so read it with `json.load(f)["result"]`. On containers-db#614 (PR #615) a
+raw-text search for the unspaced `{"cycle":1` missed. I concluded the harness
+had not saved its result, hand-typed one result file and tried to hand-write the
+next. Auto mode refused that as undermining oversight, and the gates ran only
+after the merge. If extraction fails, `json.load` the file and print its keys
+before concluding a feature is missing. If the result truly can't be read, stop
+before merging; don't merge with a gap note.
 
 Related: [[assertions-must-discriminate]] — a result that passes for the wrong
 reason is worse than a failure. [[degraded-review-gate-is-not-a-pass]] — a

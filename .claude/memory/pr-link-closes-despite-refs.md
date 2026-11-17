@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 49f89089-f381-4664-abda-38c9e61f1703
-  modified: 2026-10-27T18:02:46.357Z
+  modified: 2026-11-16T17:00:00.000Z
 ---
 
 Merging PR #1517 (2026-10-27) closed #1508 although every commit, the squash
@@ -17,6 +17,11 @@ association), and GitHub closes linked issues on merge regardless of keywords.
 **Why:** a deliberately partial delivery (#1508's "restore node + go" half was
 still outstanding in containers-db#495 → #1521) silently lost its open issue —
 and with it the `/workflow:next-issue` selection and the blocked-by chain.
+
+A second route (PR #1674 → #1522, 2026-11-16): the body sentence "It does
+**not** close #1522" was parsed as the closing keyword `close #1522`, because
+GitHub ignores negation and markdown. Never put `close`/`fix`/`resolve` (any
+tense) directly before `#N` in a PR body or commit, even to deny it.
 
 **How to apply:** before merging a PR meant to leave its issue open, run
 `gh issue view {N} --json closedByPullRequestsReferences`; if the PR is listed,

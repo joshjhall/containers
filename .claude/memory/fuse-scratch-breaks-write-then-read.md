@@ -57,3 +57,8 @@ short` — rustc's just-written object read back truncated. Because the recipe r
 `just test` there says nothing about the change. Fix: `CARGO_TARGET_DIR=/tmp/...`
 (29/29 green, same tree). Note the background-job wrapper reported exit 0 —
 read the recipe's own exit line, not the job status.
+
+**The pre-push cargo hooks hit it as well (2026-11-16).** It broke the first
+pushes of #1624 and #1625. Push from a worktree with the target dir off the
+mount: `CARGO_TARGET_DIR=/tmp/target-<N> SKIP_NETWORK_TESTS=1 git push -u origin HEAD`
+(see [[pre-push-skips-network-tests]]).
