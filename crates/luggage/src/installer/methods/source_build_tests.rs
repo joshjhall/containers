@@ -73,6 +73,8 @@ struct Fixture {
     /// Injected inherited-env lookup; `None` runs the production [`run`],
     /// which reads the real process env.
     inherited: Option<fn(&str) -> Option<String>>,
+    /// Per-feature log handed to the method; `None` sends lines to `tracing`.
+    log: Option<crate::installer::logging::FeatureLogger>,
 }
 
 impl Fixture {
@@ -89,6 +91,7 @@ impl Fixture {
             runner: RecordingRunner::new(),
             launcher: None,
             inherited: None,
+            log: None,
         }
     }
 
@@ -122,7 +125,7 @@ impl Fixture {
             max_extract_bytes: DEFAULT_MAX_EXTRACT_BYTES,
             build_steps: steps,
             compiler_launcher: self.launcher,
-            log: None,
+            log: self.log.as_ref(),
             runner: &self.runner,
         };
         self.inherited.map_or_else(|| run(&ctx), |inherited| run_with(&ctx, &inherited))
@@ -947,10 +950,21 @@ fn run_strips_an_unreplaced_inherited_bare_launcher_from_every_step() {
     let path = path_dir.path().display().to_string();
     let env = BTreeMap::from([("PATH".to_owned(), path)]);
 
+    // The launcher note must name what was stripped (read back from the
+    // per-feature log, which is what an operator sees).
+    let log_dir = tempdir().unwrap();
+    let open_log = || {
+        crate::installer::logging::FeatureLogger::open(log_dir.path(), "python", "3.13.1").unwrap()
+    };
+    let removed = "unset (inherited bare `ccache` removed)";
+
     let mut f = Fixture::python();
     f.launcher = Some("ccache");
     f.inherited = Some(bare);
+    f.log = Some(open_log());
     f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+    let log = fs::read_to_string(f.log.as_ref().unwrap().path()).unwrap();
+    assert!(log.contains(&format!("CC=`{removed}`, CXX=`{removed}`")), "{log}");
     let calls = f.runner.streaming_calls();
     assert_eq!(calls.len(), 3);
     for call in &calls {
@@ -965,7 +979,10 @@ fn run_strips_an_unreplaced_inherited_bare_launcher_from_every_step() {
     let mut f = Fixture::python();
     f.launcher = Some("ccache");
     f.inherited = Some(bare);
+    f.log = Some(open_log());
     f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+    let log = fs::read_to_string(f.log.as_ref().unwrap().path()).unwrap();
+    assert!(log.contains(&format!("CC=`ccache gcc`, CXX=`{removed}`")), "{log}");
     let calls = f.runner.streaming_calls();
     assert_eq!(calls.len(), 3, "the control must actually run every step");
     for call in calls {
