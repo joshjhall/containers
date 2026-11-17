@@ -1,12 +1,11 @@
 {
   "activity": {
     "scan_cadence_days": 1,
-    "scanned_at": "2026-10-21T18:55:21Z",
+    "scanned_at": "2026-11-10T22:03:40Z",
     "score": "very-active",
     "signals": {
-      "last_commit_at": "2026-10-21T14:42:52Z",
-      "last_release_at": "2026-10-20T01:26:11Z",
-      "releases_last_90d": 11
+      "last_release_at": "2026-11-10T00:00:00Z",
+      "releases_last_90d": 13
     }
   },
   "available": [
@@ -207,6 +206,9 @@
     },
     {
       "version": "1.26.10"
+    },
+    {
+      "version": "1.26.11"
     },
     {
       "version": "1.27.0"

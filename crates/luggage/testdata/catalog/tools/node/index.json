@@ -1,11 +1,11 @@
 {
   "activity": {
     "scan_cadence_days": 1,
-    "scanned_at": "2026-11-02T15:09:05Z",
+    "scanned_at": "2026-11-11T17:44:02Z",
     "score": "very-active",
     "signals": {
-      "last_release_at": "2026-10-28T00:00:00Z",
-      "releases_last_90d": 18
+      "last_release_at": "2026-11-11T00:00:00Z",
+      "releases_last_90d": 20
     }
   },
   "available": [
@@ -436,6 +436,9 @@
       "version": "22.23.4"
     },
     {
+      "version": "22.23.5"
+    },
+    {
       "version": "23.0.0"
     },
     {
@@ -574,6 +577,9 @@
       "version": "24.22.2"
     },
     {
+      "version": "24.22.3"
+    },
+    {
       "version": "25.0.0"
     },
     {
@@ -674,6 +680,9 @@
     },
     {
       "version": "26.13.0"
+    },
+    {
+      "version": "26.13.1"
     }
   ],
   "channels": {
@@ -682,7 +691,7 @@
       "description": "Node.js releases: even-numbered majors become LTS (Active then Maintenance); odd-numbered majors are short-lived Current lines."
     }
   },
-  "default_version": "26.13.0",
+  "default_version": "26.13.1",
   "display_name": "Node.js",
   "homepage": "https://nodejs.org",
   "id": "node",
