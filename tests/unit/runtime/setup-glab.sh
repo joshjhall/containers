@@ -736,4 +736,70 @@ run_test_with_setup test_glab_stored_token_still_exported "#1711: glab-stored to
 run_test_with_setup test_glab_force_export_without_stored_token "#1711: FORGE_TOKEN_EXPORT=true forces the glab export"
 run_test_with_setup test_glab_legacy_snippet_migrated "#1711: pre-#1711 glab bashrc block migrated"
 
+_write_glab_legacy_rc() {
+    command cat >"$TEST_HOME/.bashrc" <<'RC'
+before
+# setup-glab: GITLAB_TOKEN
+if [ -z "${GITLAB_TOKEN:-}" ] && command -v glab >/dev/null 2>&1 && glab auth status >/dev/null 2>&1; then
+    export GITLAB_TOKEN=$(glab config get token --host "${GITLAB_HOST:-gitlab.com}" 2>/dev/null | tr -d '[:space:]')
+fi
+after
+RC
+}
+
+# #1721: an older image without the shared helper must not fail setup-glab.
+test_glab_legacy_snippet_helper_absent_is_noop() {
+    _write_glab_legacy_rc
+    local rc=0 output
+    output=$(_run_setup_glab_authed RC_SNIPPET_LIB="$TEST_TEMP_DIR/missing-rc-snippet.sh") || rc=$?
+    assert_equals "0" "$rc" "setup-glab succeeds when the rc-snippet helper is absent"
+    assert_not_contains "$output" "removed pre-#1711" "Nothing is reported removed without the helper"
+    assert_file_contains "$TEST_HOME/.bashrc" '^# setup-glab: GITLAB_TOKEN$' \
+        "Without the helper the legacy block is left untouched"
+    assert_file_contains "$TEST_HOME/.bashrc" "# setup-glab: GITLAB_TOKEN (v2" \
+        "The v2 block is still appended without the helper"
+}
+
+# #1721: RC_SNIPPET_LIB is honoured — the migration goes through the helper.
+test_glab_legacy_snippet_uses_shared_helper() {
+    _write_glab_legacy_rc
+    local rc=0 output
+    output=$(_run_setup_glab_authed RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || rc=$?
+    assert_equals "0" "$rc" "setup exits 0 when the shared helper removes the block"
+    assert_contains "$output" "removed pre-#1711 token snippet" \
+        "The shared helper reports the removal through setup-glab's logger"
+    assert_file_not_contains "$TEST_HOME/.bashrc" '^# setup-glab: GITLAB_TOKEN$' \
+        "The shared helper removes the legacy block"
+}
+
+run_test_with_setup test_glab_legacy_snippet_helper_absent_is_noop "#1721: rc-snippet helper absent degrades to a no-op"
+run_test_with_setup test_glab_legacy_snippet_uses_shared_helper "#1721: glab migration runs through the shared rc-snippet helper"
+
+# #1721: when the in-place copy-back fails (rc truncated, cat errors), setup-glab
+# still exits 0 and warns with the kept full copy and a restore command.
+# The cat stub fails only when reading the helper's .bashrc.XXXXXX temp file,
+# so setup-glab's own heredoc append still works. BASH_ENV is unset by the runner.
+test_glab_legacy_snippet_copy_back_failure_warns() {
+    _write_glab_legacy_rc
+    command mkdir -p "$TEST_TEMP_DIR/catstub"
+    command cat >"$TEST_TEMP_DIR/catstub/cat" <<'STUB'
+#!/bin/sh
+case "$1" in *.bashrc.??????) exit 1 ;; esac
+exec /bin/cat "$@"
+STUB
+    command chmod +x "$TEST_TEMP_DIR/catstub/cat"
+    local rc=0 output kept
+    output=$(_run_setup_glab_authed PATH="$TEST_TEMP_DIR/catstub:$TEST_TEMP_DIR/bin:$PATH" \
+        RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || rc=$?
+    assert_equals "0" "$rc" "setup-glab still exits 0 when the copy-back fails"
+    assert_contains "$output" "could not rewrite" "setup-glab warns about the failed rewrite"
+    kept=$(printf '%s\n' "$output" | command sed -n "s/.*saved at \(.*\.bashrc\.[^ ]*\) — restore.*/\1/p")
+    assert_file_exists "$kept" "The warning names a kept file that exists"
+    assert_contains "$output" "cp '$kept'" "The warning includes a restore command for the kept file"
+    assert_file_contains "$kept" "^before$" "The kept copy holds the surrounding content"
+    assert_file_contains "$kept" "^after$" "The kept copy holds the trailing content"
+}
+
+run_test_with_setup test_glab_legacy_snippet_copy_back_failure_warns "#1721: failed copy-back warns with the kept copy and a restore command"
+
 generate_report

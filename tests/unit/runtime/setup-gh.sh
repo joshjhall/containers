@@ -665,4 +665,72 @@ run_test_with_setup test_stored_token_still_exported "#1711: gh-stored token sti
 run_test_with_setup test_force_export_without_stored_token "#1711: FORGE_TOKEN_EXPORT=true forces the export"
 run_test_with_setup test_legacy_snippet_migrated "#1711: pre-#1711 bashrc export block migrated, idempotently"
 
+_write_gh_legacy_rc() {
+    command cat >"$TEST_HOME/.bashrc" <<'RC'
+before
+# setup-gh: GITHUB_TOKEN
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    export GITHUB_TOKEN=$(gh auth token 2>/dev/null | tr -d '[:space:]')
+fi
+after
+RC
+}
+
+# #1721: an older image without the shared helper must not fail setup-gh —
+# the legacy block is simply left in place and the v2 block still appended.
+test_legacy_snippet_helper_absent_is_noop() {
+    _write_gh_legacy_rc
+    local rc=0 output
+    output=$(_run_setup_gh_authed RC_SNIPPET_LIB="$TEST_TEMP_DIR/missing-rc-snippet.sh") || rc=$?
+    assert_equals "0" "$rc" "setup-gh succeeds when the rc-snippet helper is absent"
+    assert_not_contains "$output" "removed pre-#1711" "Nothing is reported removed without the helper"
+    assert_file_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>&1 && gh auth status' \
+        "Without the helper the legacy block is left untouched"
+    assert_file_contains "$TEST_HOME/.bashrc" "# setup-gh: GITHUB_TOKEN (v2" \
+        "The v2 block is still appended without the helper"
+}
+
+# #1721: RC_SNIPPET_LIB is honoured — proves the migration really goes through
+# the shared helper, not a leftover inline copy.
+test_legacy_snippet_uses_shared_helper() {
+    _write_gh_legacy_rc
+    local rc=0 output
+    output=$(_run_setup_gh_authed RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || rc=$?
+    assert_equals "0" "$rc" "setup exits 0 when the shared helper removes the block"
+    assert_contains "$output" "removed pre-#1711 token snippet" \
+        "The shared helper reports the removal through setup-gh's logger"
+    assert_file_not_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>&1 && gh auth status' \
+        "The shared helper removes the legacy block"
+}
+
+run_test_with_setup test_legacy_snippet_helper_absent_is_noop "#1721: rc-snippet helper absent degrades to a no-op"
+run_test_with_setup test_legacy_snippet_uses_shared_helper "#1721: migration runs through the shared rc-snippet helper"
+
+# #1721: when the in-place copy-back fails (rc truncated, cat errors), setup-gh
+# still exits 0 and warns with the kept full copy and a restore command.
+# The cat stub fails only when reading the helper's .bashrc.XXXXXX temp file,
+# so setup-gh's own heredoc append still works. BASH_ENV is unset by the runner.
+test_legacy_snippet_copy_back_failure_warns() {
+    _write_gh_legacy_rc
+    command mkdir -p "$TEST_TEMP_DIR/catstub"
+    command cat >"$TEST_TEMP_DIR/catstub/cat" <<'STUB'
+#!/bin/sh
+case "$1" in *.bashrc.??????) exit 1 ;; esac
+exec /bin/cat "$@"
+STUB
+    command chmod +x "$TEST_TEMP_DIR/catstub/cat"
+    local rc=0 output kept
+    output=$(_run_setup_gh_authed PATH="$TEST_TEMP_DIR/catstub:$TEST_TEMP_DIR/bin:$PATH" \
+        RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || rc=$?
+    assert_equals "0" "$rc" "setup-gh still exits 0 when the copy-back fails"
+    assert_contains "$output" "could not rewrite" "setup-gh warns about the failed rewrite"
+    kept=$(printf '%s\n' "$output" | command sed -n "s/.*saved at \(.*\.bashrc\.[^ ]*\) — restore.*/\1/p")
+    assert_file_exists "$kept" "The warning names a kept file that exists"
+    assert_contains "$output" "cp '$kept'" "The warning includes a restore command for the kept file"
+    assert_file_contains "$kept" "^before$" "The kept copy holds the surrounding content"
+    assert_file_contains "$kept" "^after$" "The kept copy holds the trailing content"
+}
+
+run_test_with_setup test_legacy_snippet_copy_back_failure_warns "#1721: failed copy-back warns with the kept copy and a restore command"
+
 generate_report

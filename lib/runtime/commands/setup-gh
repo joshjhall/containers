@@ -157,31 +157,28 @@ BASHRC
     fi
 }
 
-# Remove the exact legacy block (and one blank line before it) from $1.
-# Pure awk: setup-* runs on minimal images. Only an exact 4-line match is
-# removed; anything else (a hand-edited block) is left untouched.
+# Remove the exact legacy block from $1 via the shared rc-snippet helper
+# (#1721). RC_SNIPPET_LIB, when set, is the only path tried (tests point it at
+# a missing file); otherwise the source-tree sibling, then the installed copy.
+# An older image without the helper degrades to a no-op.
 _remove_legacy_snippet() {
-    local rc="$1"
-    [ -f "$rc" ] && command grep -qxF "${_LEGACY_SNIPPET%%$'\n'*}" "$rc" 2>/dev/null || return 0
-    local tmp
-    tmp=$(mktemp "${rc}.XXXXXX") || return 0
-    if LEGACY="$_LEGACY_SNIPPET" command awk '
-        BEGIN { n = split(ENVIRON["LEGACY"], want, "\n") }
-        { line[NR] = $0 }
-        END {
-            for (i = 1; i <= NR; i++) {
-                hit = 1
-                for (j = 1; j <= n; j++) if (line[i + j - 1] != want[j]) { hit = 0; break }
-                if (hit) { start = i; break }
-            }
-            if (!start) exit 1
-            skip_from = start; if (start > 1 && line[start - 1] == "") skip_from = start - 1
-            for (i = 1; i <= NR; i++) if (i < skip_from || i >= start + n) print line[i]
-        }' "$rc" >"$tmp" 2>/dev/null; then
-        command cat "$tmp" >"$rc"
-        _info "removed pre-#1711 token snippet from ${rc}"
+    local lib="${RC_SNIPPET_LIB:-}" cand
+    if [ -z "$lib" ]; then
+        for cand in "$(command dirname "${BASH_SOURCE[0]}")/../lib/rc-snippet.sh" \
+                    /opt/container-runtime/lib/rc-snippet.sh; do
+            if [ -f "$cand" ]; then lib="$cand"; break; fi
+        done
     fi
-    command rm -f "$tmp"
+    [ -n "$lib" ] && [ -f "$lib" ] || return 0
+    # shellcheck source=/dev/null
+    . "$lib"
+    local st=0
+    rc_remove_block "$1" "$_LEGACY_SNIPPET" || st=$?
+    case "$st" in
+        0) _info "removed pre-#1711 token snippet from $1" ;;
+        2) _warn "could not rewrite $1 while removing the pre-#1711 token snippet; its full edited content is saved at ${RC_REMOVE_BLOCK_KEPT} — restore it with: cp '${RC_REMOVE_BLOCK_KEPT}' '$1'" ;;
+    esac
+    return 0
 }
 
 main "$@"
