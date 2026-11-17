@@ -854,9 +854,11 @@ fn path_dir_with(names: &[&str]) -> tempfile::TempDir {
 /// Nothing is inherited, so `ccache gcc` can only come from the `on_path`
 /// probe `run()` wires in: a probe that finds nothing leaves both compilers
 /// unset. The control — the same run over an empty catalog `PATH` — must
-/// resolve nothing, which pins the probe to the catalog `PATH` rather than
-/// luggage's own (where a host `gcc` would satisfy the positive case). The
-/// injected `apply_compiler_launcher` tests above cannot see this wiring.
+/// resolve nothing. Between them the two halves pin the probe to the catalog
+/// `PATH` rather than luggage's own on any host: with a host `gcc` a probe of
+/// luggage's `PATH` fails the control, and without one it fails the positive
+/// case. The injected `apply_compiler_launcher` tests above cannot see this
+/// wiring.
 #[cfg(unix)]
 #[test]
 fn launcher_falls_back_to_a_compiler_on_the_catalog_path() {
