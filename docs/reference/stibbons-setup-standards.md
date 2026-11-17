@@ -2,10 +2,10 @@
 
 `stibbons setup standards` applies the repo baseline (git hooks, linter
 configs, justfile, test runner, tool installer, and GitHub or GitLab CI) to any
-repository and reports when it drifts. The baseline is librarian's
-`repo-baseline` scaffold (`plugins/dev-core/skills/repo-baseline/`). This
-command is its deterministic, non-LLM renderer: for the same selection it
-writes the same bytes as librarian's reference `render.sh`.
+repository and reports when it drifts. The baseline is containers-db's
+repo-baseline scaffold (`baseline/templates/`). This command is its
+deterministic, non-LLM renderer: for the same selection it writes the same
+bytes as the reference `render.sh`.
 
 No devcontainer or `.igor.yml` is required.
 
@@ -23,7 +23,7 @@ stibbons setup standards accept ruff.toml       # ...or just the named ones
 
 Every subcommand also takes `--templates-dir DIR` to read a
 `repo-baseline/templates` directory instead of the copy built into stibbons
-(for example a newer `/opt/librarian/plugins/dev-core/skills/repo-baseline/templates`).
+(for example a containers-db checkout's `baseline/templates`).
 
 ## Selection
 
@@ -66,18 +66,22 @@ again.
 
 The templates are vendored into `crates/stibbons/assets/repo-baseline/` and
 compiled into the binary, so `brew`, `apt`, and `cargo` installs need no
-librarian checkout. `SOURCE` in that directory records which librarian release
-they came from, plus a `+suffix` for any local patch carried on top. The one
-patch today pins `pygments>=2.20.0` in the Python slice's
-`tests/requirements.txt`, which librarian 0.18.0 does not yet do (see the
-header of `bin/sync-repo-baseline.sh`). To refresh them after a librarian bump:
+containers-db checkout. `SOURCE` in that directory records the containers-db
+commit they came from (`containers-db <sha>`); no local patch is carried. The
+sync reads that exact commit with `git archive` — never a branch, tag, short
+SHA, or the working tree. To bump the pin, fetch containers-db and sync at the
+new full SHA, then rebuild stibbons:
 
 ```bash
-just sync-repo-baseline            # from /opt/librarian
-just sync-repo-baseline ../librarian
+just sync-repo-baseline                     # re-sync the SHA already in SOURCE
+just sync-repo-baseline <40-hex-sha>        # move the pin
+just sync-repo-baseline <sha> ../containers-db
 ```
 
-The manifest format is librarian's contract (`templates/README.md` there):
+The checkout defaults to `$CONTAINERS_DB` when that is a git repo, else the
+`containers-db` sibling of the main checkout.
+
+The manifest format is containers-db's contract (`baseline/templates/README.md`):
 rows filtered by slice and CI, concatenated per target in manifest order, and
 `*.sh` targets made executable. `crates/stibbons/tests/standards_integration.rs`
 checks byte parity with librarian's `render.sh` whenever `/opt/librarian` is
