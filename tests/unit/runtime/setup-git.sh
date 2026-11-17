@@ -1221,10 +1221,24 @@ test_broken_worktree_skipped() {
 test_ownership_rejected_repo_says_so() {
     # A host-owned bind mount without safe.directory: git refuses the repo.
     # Say so once instead of skipping silently (and never override the check).
-    # GIT_TEST_ASSUME_DIFFERENT_OWNER is git's own hook for simulating this.
+    # Simulated with a git wrapper that refuses only this repo, exactly as
+    # git does — portable, unlike git's internal GIT_TEST_ASSUME_DIFFERENT_OWNER
+    # (honored only by some git builds; CI's ignores it).
     _ws_repo hostowned "t@t.t"
+    local real_git hostowned="$TEST_TEMP_DIR/ws/hostowned"
+    real_git=$(command -v git)
+    command mkdir -p "$TEST_TEMP_DIR/bin"
+    command cat >"$TEST_TEMP_DIR/bin/git" <<STUB
+#!/bin/bash
+if [ "\$1" = "-C" ] && [ "\$2" = "$hostowned" ]; then
+    printf "fatal: detected dubious ownership in repository at '%s'\\n" "\$2" >&2
+    exit 128
+fi
+exec "$real_git" "\$@"
+STUB
+    command chmod +x "$TEST_TEMP_DIR/bin/git"
     local out rc=0
-    out=$(_run_identity GIT_TEST_ASSUME_DIFFERENT_OWNER=1) || rc=$?
+    out=$(_run_identity) || rc=$?
     assert_equals "0" "$rc" "setup-git exits 0 when a repo is ownership-rejected"
     assert_contains "$out" "ws/hostowned: cannot check repo-local identity" \
         "Ownership-rejected repo is reported, not skipped silently"
