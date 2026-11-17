@@ -42,7 +42,7 @@ rc_remove_block() {
         END {
             for (i = 1; i <= NR; i++) {
                 hit = 1
-                for (j = 1; j <= n; j++) if (line[i + j - 1] != want[j]) { hit = 0; break }
+                for (j = 1; j <= n; j++) if (i + j - 1 > NR || line[i + j - 1] != want[j]) { hit = 0; break }
                 if (hit) { start = i; break }
             }
             if (!start) exit 1

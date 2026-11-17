@@ -153,4 +153,23 @@ run_test_with_setup test_empty_text_never_matches "Empty TEXT never matches"
 run_test_with_setup test_mode_preserved "rc file mode preserved by in-place rewrite"
 run_test_with_setup test_failed_copy_back_keeps_full_copy "Failed copy-back keeps the full copy and returns 2"
 
+# The matcher must not read past EOF: an unset awk element is "", so a TEXT
+# ending in a blank line could otherwise "match" a block that ends the file.
+test_no_match_past_eof() {
+    printf 'x\na\n' >"$RC"
+    assert_equals "1" "$(_remove "$RC" $'a\n\n')" "A trailing blank in TEXT cannot match beyond EOF"
+    assert_equals "x|a" "$(command paste -sd'|' "$RC")" "File unchanged when the match would run past EOF"
+}
+
+test_truncated_block_at_eof_left_alone() {
+    printf 'before\n%s\n' "${BLOCK%$'\n'*}" >"$RC"
+    local orig
+    orig=$(command cat "$RC")
+    assert_equals "1" "$(_remove "$RC" "$BLOCK")" "A block cut short by EOF is not a match"
+    assert_equals "$orig" "$(command cat "$RC")" "Truncated block left untouched"
+}
+
+run_test_with_setup test_no_match_past_eof "Matcher never reads past EOF"
+run_test_with_setup test_truncated_block_at_eof_left_alone "Block truncated at EOF left untouched"
+
 generate_report

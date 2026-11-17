@@ -706,4 +706,31 @@ test_legacy_snippet_uses_shared_helper() {
 run_test_with_setup test_legacy_snippet_helper_absent_is_noop "#1721: rc-snippet helper absent degrades to a no-op"
 run_test_with_setup test_legacy_snippet_uses_shared_helper "#1721: migration runs through the shared rc-snippet helper"
 
+# #1721: when the in-place copy-back fails (rc truncated, cat errors), setup-gh
+# still exits 0 and warns with the kept full copy and a restore command.
+# The cat stub fails only when reading the helper's .bashrc.XXXXXX temp file,
+# so setup-gh's own heredoc append still works. BASH_ENV is unset by the runner.
+test_legacy_snippet_copy_back_failure_warns() {
+    _write_gh_legacy_rc
+    command mkdir -p "$TEST_TEMP_DIR/catstub"
+    command cat >"$TEST_TEMP_DIR/catstub/cat" <<'STUB'
+#!/bin/sh
+case "$1" in *.bashrc.??????) exit 1 ;; esac
+exec /bin/cat "$@"
+STUB
+    command chmod +x "$TEST_TEMP_DIR/catstub/cat"
+    local rc=0 output kept
+    output=$(_run_setup_gh_authed PATH="$TEST_TEMP_DIR/catstub:$TEST_TEMP_DIR/bin:$PATH" \
+        RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || rc=$?
+    assert_equals "0" "$rc" "setup-gh still exits 0 when the copy-back fails"
+    assert_contains "$output" "could not rewrite" "setup-gh warns about the failed rewrite"
+    kept=$(printf '%s\n' "$output" | command sed -n "s/.*saved at \(.*\.bashrc\.[^ ]*\) — restore.*/\1/p")
+    assert_file_exists "$kept" "The warning names a kept file that exists"
+    assert_contains "$output" "cp '$kept'" "The warning includes a restore command for the kept file"
+    assert_file_contains "$kept" "^before$" "The kept copy holds the surrounding content"
+    assert_file_contains "$kept" "^after$" "The kept copy holds the trailing content"
+}
+
+run_test_with_setup test_legacy_snippet_copy_back_failure_warns "#1721: failed copy-back warns with the kept copy and a restore command"
+
 generate_report
