@@ -42,5 +42,4 @@ Add it to your local `dockerComposeFile` list:
 Don't commit that `devcontainer.json` change: Compose fails on a missing file,
 so a clean checkout without an override would no longer open.
 
-Full reference: `docs/claude-code/secrets-and-setup.md` § External Credential
-Providers.
+Full reference: `docs/claude-code/external-credential-providers.md`.

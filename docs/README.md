@@ -112,6 +112,8 @@ Claude Code integration reference:
   agents, codebase audit system
 - [Secrets & Setup](claude-code/secrets-and-setup.md) - 1Password conventions,
   setup commands, authentication
+- [External Credential Providers](claude-code/external-credential-providers.md) -
+  host-side `op`/`gh`/`glab`/git credential providers, pre-secrets hooks
 
 ### [Reference](reference/)
 

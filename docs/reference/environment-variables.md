@@ -437,7 +437,7 @@ These variables can be set when running containers (via `docker run -e`):
 
 ### External Credential Providers
 
-See [External Credential Providers](../claude-code/secrets-and-setup.md#external-credential-providers).
+See [External Credential Providers](../claude-code/external-credential-providers.md).
 
 | Variable                         | Default                                   | Description                                                      |
 | -------------------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
