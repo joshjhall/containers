@@ -925,7 +925,9 @@ test_local_placeholder_warns() {
         "Placeholder local email is named as a placeholder"
     assert_contains "$out" "set in $TEST_TEMP_DIR/ws/proj/.git/config" \
         "Warning names the overriding .git/config"
-    assert_contains "$out" "git -C '$TEST_TEMP_DIR/ws/proj' config --local --unset user.name; git -C '$TEST_TEMP_DIR/ws/proj' config --local --unset user.email" \
+    local qproj
+    printf -v qproj '%q' "$TEST_TEMP_DIR/ws/proj"
+    assert_contains "$out" "git -C $qproj config --local --unset user.name; git -C $qproj config --local --unset user.email" \
         "Warning prints the unset remedy"
     assert_equals "t@t.t" "$(git -C "$TEST_TEMP_DIR/ws/proj" config --local user.email)" \
         "Local identity is left in place (never auto-unset)"
@@ -955,7 +957,13 @@ test_worktree_config_reported_once() {
     _ws_repo proj "t@t.t"
     git -C "$TEST_TEMP_DIR/ws/proj" -c user.name=a -c user.email=a@b.co \
         commit -q --allow-empty -m init
-    git -C "$TEST_TEMP_DIR/ws/proj" worktree add -q .worktrees/issue-1 2>/dev/null
+    git -C "$TEST_TEMP_DIR/ws/proj" worktree add -q .worktrees/issue-1
+    # Without the worktree the count below is trivially 1 — prove it exists
+    # and that git sees the shared local identity from inside it.
+    assert_dir_exists "$TEST_TEMP_DIR/ws/proj/.worktrees/issue-1" "Worktree was created"
+    assert_equals "t@t.t" \
+        "$(git -C "$TEST_TEMP_DIR/ws/proj/.worktrees/issue-1" config --local user.email)" \
+        "Worktree resolves the parent's local identity"
     local out
     out=$(_run_identity)
     assert_equals "1" "$(printf '%s\n' "$out" | command grep -c 'local user.email <t@t.t>')" \
@@ -985,6 +993,31 @@ test_devcontainer_fallback_warns() {
         "Warning mentions the pre-commit refusal"
 }
 
+test_control_chars_stripped_and_dir_quoted() {
+    _ws_repo "it's" "$(printf 'x\033[2Jy@t.t')"
+    local out
+    out=$(_run_identity)
+    assert_not_contains "$out" "$(printf '\033')" "ESC from a repo-local email never reaches the terminal"
+    assert_contains "$out" "local user.email <x[2Jy@t.t>" "Email shown with control chars stripped"
+    assert_contains "$out" "git -C $(printf '%q' "$TEST_TEMP_DIR/ws/it's") config --local --unset user.email" \
+        "Remedy %q-quotes a dir containing a single quote"
+}
+
+test_missing_helper_falls_back() {
+    # setup-git copied alone (no _git-email-placeholder beside it): it must
+    # still exit 0 and still run the differs-from-global check.
+    command mkdir -p "$TEST_TEMP_DIR/lone"
+    command cp "$SETUP_GIT_SCRIPT" "$TEST_TEMP_DIR/lone/setup-git"
+    _ws_repo work "t@t.t"
+    local out rc=0
+    out=$(SETUP_GIT_SCRIPT="$TEST_TEMP_DIR/lone/setup-git" _run_setup_git \
+        SKIP_GIT_SSH_SETUP=true SKIP_GIT_SIGNING_SETUP=true GIT_USER_EMAIL=) || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0 without the helper"
+    assert_contains "$out" "local user.email <t@t.t> differs from global <devcontainer@localhost>" \
+        "Differs check still runs without the helper"
+    assert_not_contains "$out" "placeholder" "Without the helper nothing is called a placeholder"
+}
+
 test_real_global_no_global_warning() {
     local out
     out=$(_run_identity)
@@ -1011,6 +1044,8 @@ run_test_with_setup test_no_local_identity_is_silent "#1533: no local identity �
 run_test_with_setup test_worktree_config_reported_once "#1533: worktree sharing repo config reported once"
 run_test_with_setup test_worktree_local_identity_detected "#1533: .worktrees/* repos are scanned"
 run_test_with_setup test_devcontainer_fallback_warns "#1533: devcontainer@localhost fallback warns of pre-commit refusal"
+run_test_with_setup test_control_chars_stripped_and_dir_quoted "#1533: repo-controlled strings sanitized; remedy %q-quoted"
+run_test_with_setup test_missing_helper_falls_back "#1533: missing helper → still exits 0, differs check runs"
 run_test_with_setup test_real_global_no_global_warning "#1533: real global email → no global warning"
 run_test_with_setup test_placeholder_rules_shared_not_duplicated "#1533: placeholder rules shared, not duplicated"
 

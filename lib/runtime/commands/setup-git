@@ -166,11 +166,16 @@ _workspace_repo_candidates() {
     done
 }
 
+# Echo $1 with control characters (incl. ANSI escapes' ESC) removed.
+_printable() {
+    printf '%s' "$1" | command tr -d '[:cntrl:]'
+}
+
 check_identity_shadowing() {
     local global_email reason
     global_email=$(git config --global --get user.email 2>/dev/null || true)
 
-    if reason=$(placeholder_reason "$global_email"); then
+    if [ -n "$global_email" ] && reason=$(placeholder_reason "$global_email"); then
         _warn "global git email <${global_email}> is a placeholder (${reason})."
         _warn "  Commits will be refused by the pre-commit author-identity check"
         _warn "  until GIT_USER_EMAIL resolves (check OP_GIT_USER_EMAIL_REF)."
@@ -195,14 +200,22 @@ check_identity_shadowing() {
             continue
         fi
 
+        # The email, dir and file come from the workspace (possibly a cloned,
+        # untrusted repo): strip control chars so they cannot spoof terminal
+        # output, and %q-quote the dir in the copy-paste remedy.
+        local shown_email shown_dir shown_file qdir
+        shown_email=$(_printable "$email")
+        shown_dir=$(_printable "$dir")
+        shown_file=$(_printable "$file")
+        printf -v qdir '%q' "$dir"
         if reason=$(placeholder_reason "$email"); then
-            _warn "${dir}: local user.email <${email}> is a placeholder (${reason}),"
+            _warn "${shown_dir}: local user.email <${shown_email}> is a placeholder (${reason}),"
         else
-            _warn "${dir}: local user.email <${email}> differs from global <${global_email}>,"
+            _warn "${shown_dir}: local user.email <${shown_email}> differs from global <${global_email}>,"
         fi
-        _warn "  set in ${file} — it overrides the global identity for commits here."
-        _warn "  If unintended: git -C '${dir}' config --local --unset user.name;" \
-            "git -C '${dir}' config --local --unset user.email"
+        _warn "  set in ${shown_file} — it overrides the global identity for commits here."
+        _warn "  If unintended: git -C ${qdir} config --local --unset user.name;" \
+            "git -C ${qdir} config --local --unset user.email"
     done < <(_workspace_repo_candidates)
     return 0
 }
