@@ -128,6 +128,9 @@ _run_script_isolated() {
         OP_READ_MAX_ATTEMPTS="${OP_READ_MAX_ATTEMPTS:-}" \
         OP_READ_RETRY_DELAY="${OP_READ_RETRY_DELAY:-}" \
         ENV_SECRETS_FILE="${ENV_SECRETS_FILE:-}" \
+        OP_USABLE_LIB="$PROJECT_ROOT/lib/runtime/lib/op-usable.sh" \
+        CONTAINER_CREDENTIAL_ENV_FILE="${CONTAINER_CREDENTIAL_ENV_FILE:-$TEST_TEMP_DIR/no-credential-env}" \
+        OP_USABLE_NEGATIVE_TTL=0 \
         bash "$TEST_SCRIPT"
 }
 
@@ -629,5 +632,104 @@ run_test test_non_tmpfs_primary_falls_back "Behaviour: non-tmpfs primary falls b
 run_test test_no_cache_graceful "Behaviour: all cache paths unavailable is graceful"
 run_test test_persistent_cache_ttl_zero_bypasses "Behaviour: TTL=0 bypasses cache"
 run_test test_exits_zero_on_completion "Exit 0 on completion"
+
+# ============================================================================
+# #1711: externally authenticated op (no OP_SERVICE_ACCOUNT_TOKEN)
+# ============================================================================
+
+# Mock op that only works via `whoami` success (a credential provider's shim):
+# `whoami` exits $1, `read` returns a value. Every call is still recorded.
+_mock_op_whoami() {
+    local whoami_rc="$1"
+    command cat >"$MOCK_BIN_DIR/op" <<EOF
+#!/bin/bash
+echo "\$*" >> "${MOCK_COUNTER}"
+case "\$1" in
+    whoami) exit ${whoami_rc} ;;
+    read) printf 'mock-value:%s' "\$2"; exit 0 ;;
+esac
+exit 1
+EOF
+    chmod +x "$MOCK_BIN_DIR/op"
+}
+
+test_external_op_resolves_refs() {
+    _prepare_mock_env
+    _mock_op_whoami 0
+    unset OP_SERVICE_ACCOUNT_TOKEN
+    export OP_GITHUB_TOKEN_REF="op://test/github/token"
+
+    _run_script_isolated >/dev/null 2>&1 || true
+
+    assert_file_contains "$MOCK_COUNTER" "whoami" \
+        "With no token, op whoami is probed"
+    assert_file_contains "$MOCK_COUNTER" "read op://test/github/token" \
+        "With a whoami-authenticated op, OP_*_REF secrets are read"
+    assert_file_contains "$TEST_TEMP_DIR/op-secrets-cache" "GITHUB_TOKEN" \
+        "Resolved secret lands in the op secrets cache"
+}
+
+test_no_token_no_auth_clean_skip() {
+    _prepare_mock_env
+    _mock_op_whoami 1
+    unset OP_SERVICE_ACCOUNT_TOKEN
+    export OP_GITHUB_TOKEN_REF="op://test/github/token"
+
+    local rc=0
+    _run_script_isolated >/dev/null 2>&1 || rc=$?
+
+    assert_equals "0" "$rc" "Neither token nor authenticated op: exits 0"
+    assert_file_not_contains "$MOCK_COUNTER" "read " \
+        "Neither token nor authenticated op: no op read attempted"
+    assert_file_not_exists "$TEST_TEMP_DIR/op-secrets-cache" \
+        "Neither token nor authenticated op: no cache written"
+}
+
+test_token_path_skips_whoami_probe() {
+    _prepare_mock_env
+    _mock_op_whoami 1
+    export OP_GITHUB_TOKEN_REF="op://test/github/token"
+
+    _run_script_isolated >/dev/null 2>&1 || true
+
+    assert_file_not_contains "$MOCK_COUNTER" "whoami" \
+        "Token set: fast path, no whoami subprocess (unchanged behaviour)"
+    assert_file_contains "$MOCK_COUNTER" "read op://test/github/token" \
+        "Token set: OP_*_REF read as before"
+}
+
+test_handoff_file_puts_provider_op_on_path() {
+    _prepare_mock_env
+    unset OP_SERVICE_ACCOUNT_TOKEN
+    export OP_GITHUB_TOKEN_REF="op://test/github/token"
+    # The provider's op lives OUTSIDE the runner's PATH; only the hand-off
+    # file written by a pre-secrets hook puts it there.
+    local shim_dir="$TEST_TEMP_DIR/provider-shims"
+    mkdir -p "$shim_dir"
+    command mv "$MOCK_BIN_DIR/op" "$shim_dir/op"
+    command cat >"$shim_dir/op" <<EOF
+#!/bin/bash
+echo "\$*" >> "${MOCK_COUNTER}"
+case "\$1" in
+    whoami) exit 0 ;;
+    read) printf 'mock-value:%s' "\$2"; exit 0 ;;
+esac
+exit 1
+EOF
+    chmod +x "$shim_dir/op"
+    export CONTAINER_CREDENTIAL_ENV_FILE="$TEST_TEMP_DIR/credential-env"
+    (umask 077 && printf 'export PATH="%s:$PATH"\n' "$shim_dir" >"$CONTAINER_CREDENTIAL_ENV_FILE")
+
+    _run_script_isolated >/dev/null 2>&1 || true
+    unset CONTAINER_CREDENTIAL_ENV_FILE
+
+    assert_file_contains "$MOCK_COUNTER" "read op://test/github/token" \
+        "A provider op reachable only via the hook hand-off resolves OP_*_REF"
+}
+
+run_test test_external_op_resolves_refs "#1711: whoami-authenticated op (no token) resolves OP_*_REF"
+run_test test_no_token_no_auth_clean_skip "#1711: no token and unauthenticated op → clean skip, no reads"
+run_test test_token_path_skips_whoami_probe "#1711: token path unchanged — no whoami probe"
+run_test test_handoff_file_puts_provider_op_on_path "#1711: hook hand-off file puts the provider's op on PATH"
 
 generate_report

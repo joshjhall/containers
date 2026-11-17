@@ -787,6 +787,14 @@ RUN if [ -f /opt/container-runtime/60-setup-git.sh ]; then \
     chmod 755 /etc/container/startup/60-setup-git.sh; \
     fi
 
+# Install the pre-secrets credential-provider hook runner (issue #1711).
+# Numbered 30 so it runs before 35-claude-auth-watcher, 45-op-secrets and
+# 60-setup-git; a no-op unless a project configures a hook.
+RUN if [ -f /opt/container-runtime/30-credential-setup.sh ]; then \
+    cp /opt/container-runtime/30-credential-setup.sh /etc/container/startup/30-credential-setup.sh && \
+    chmod 755 /etc/container/startup/30-credential-setup.sh; \
+    fi
+
 # Create audit log directory with secure permissions (when audit logging enabled)
 # Directory is writable by root only, logs have restricted read access
 RUN mkdir -p /var/log/audit && \

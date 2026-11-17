@@ -601,15 +601,16 @@ test_env_secrets_disables_xtrace() {
 # Static: 45-op-secrets.sh sources .env.secrets before OP_SERVICE_ACCOUNT_TOKEN check
 test_env_secrets_in_startup_before_op_check() {
     local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
-    # .env.secrets sourcing must appear before the OP_SERVICE_ACCOUNT_TOKEN guard
-    # (skip comment lines — only match the actual code check)
+    # .env.secrets sourcing must appear before the op-usability gate (#1711:
+    # op_is_usable replaced the bare OP_SERVICE_ACCOUNT_TOKEN guard; the token
+    # it checks first may live in .env.secrets).
     local secrets_line op_token_line
     secrets_line=$(command grep -n '\.env\.secrets' "$source_file" | command head -1 | command cut -d: -f1)
-    op_token_line=$(command grep -n '^\[.*OP_SERVICE_ACCOUNT_TOKEN' "$source_file" | command head -1 | command cut -d: -f1)
+    op_token_line=$(command grep -n '^ *op_is_usable || exit 0' "$source_file" | command head -1 | command cut -d: -f1)
     if [ -n "$secrets_line" ] && [ -n "$op_token_line" ] && [ "$secrets_line" -lt "$op_token_line" ]; then
-        assert_true 0 "45-op-secrets.sh sources .env.secrets before OP_SERVICE_ACCOUNT_TOKEN check"
+        assert_true 0 "45-op-secrets.sh sources .env.secrets before the op_is_usable gate"
     else
-        assert_true 1 "45-op-secrets.sh must source .env.secrets before OP_SERVICE_ACCOUNT_TOKEN check"
+        assert_true 1 "45-op-secrets.sh must source .env.secrets before the op_is_usable gate"
     fi
 }
 

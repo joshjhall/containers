@@ -4,7 +4,14 @@ set -euo pipefail
 # setup-gh — Authenticate GitHub CLI
 #
 # Environment variables (set directly or via OP_*_REF convention):
-#   GITHUB_TOKEN  - GitHub personal access token
+#   GITHUB_TOKEN        - GitHub personal access token
+#   FORGE_TOKEN_EXPORT  - true|false|auto (default auto). Whether shells get
+#                         GITHUB_TOKEN copied from `gh auth token` (#1711).
+#                         auto: only when gh holds its own stored token
+#                         (hosts.yml, i.e. this script's login flow). A gh
+#                         authenticated some other way (e.g. an external
+#                         credential provider's shim) is left alone so its
+#                         token is never copied into every process's env.
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,18 +66,17 @@ main() {
     local _xt; _xt=$(set +o | command grep xtrace)
     { set +x; } 2>/dev/null
 
-    # Already authenticated — export token and exit
+    # Already authenticated — decide whether shells should get GITHUB_TOKEN
     if gh auth status >/dev/null 2>&1; then
         _skip "gh already authenticated"
-        # Ensure GITHUB_TOKEN is available for child processes
-        if [ -z "${GITHUB_TOKEN:-}" ]; then
-            local token
-            token=$(gh auth token 2>/dev/null | tr -d '[:space:]') || true
-            if [ -n "$token" ]; then
-                export GITHUB_TOKEN="$token"
-            fi
-        fi
+        # Test the token while xtrace is still off — expanding it under -x
+        # is exactly the leak #1468 closed.
+        local _have_token=false
+        [ -n "${GITHUB_TOKEN:-}" ] && _have_token=true
         eval "$_xt"
+        if [ "$_have_token" = false ] && ! _should_export_token; then
+            _skip "not exporting GITHUB_TOKEN: gh authenticates without a stored token (set FORGE_TOKEN_EXPORT=true to force)"
+        fi
         _persist_token
         return 0
     fi
@@ -113,17 +119,69 @@ main() {
     fi
 }
 
-_persist_token() {
-    local marker="# setup-gh: GITHUB_TOKEN"
-    if ! command grep -qF "$marker" "${HOME}/.bashrc" 2>/dev/null; then
-        command cat >> "${HOME}/.bashrc" <<'BASHRC'
+# Whether shells should get GITHUB_TOKEN copied out of gh (#1711).
+# Mirrors the condition in the persisted bashrc snippet below.
+_gh_hosts_file() {
+    printf '%s/hosts.yml' "${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}"
+}
+_should_export_token() {
+    case "${FORGE_TOKEN_EXPORT:-auto}" in
+        true) return 0 ;;
+        false) return 1 ;;
+    esac
+    command grep -qs 'oauth_token:' "$(_gh_hosts_file)"
+}
 
-# setup-gh: GITHUB_TOKEN
+# The pre-#1711 snippet, removed verbatim on upgrade so a persisted $HOME stops
+# exporting a provider's token. Matched exactly; a hand-edited block is left
+# alone (it no longer carries the marker below, so the new one is added too).
+_LEGACY_SNIPPET='# setup-gh: GITHUB_TOKEN
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    export GITHUB_TOKEN=$(gh auth token 2>/dev/null | tr -d '[:space:]')
+    export GITHUB_TOKEN=$(gh auth token 2>/dev/null | tr -d '"'"'[:space:]'"'"')
+fi'
+
+_persist_token() {
+    local rc="${HOME}/.bashrc"
+    local marker="# setup-gh: GITHUB_TOKEN (v2"
+    _remove_legacy_snippet "$rc"
+    if ! command grep -qF "$marker" "$rc" 2>/dev/null; then
+        command cat >> "$rc" <<'BASHRC'
+
+# setup-gh: GITHUB_TOKEN (v2, #1711; FORGE_TOKEN_EXPORT=true|false|auto)
+if [ -z "${GITHUB_TOKEN:-}" ] && [ "${FORGE_TOKEN_EXPORT:-auto}" != "false" ] && command -v gh >/dev/null 2>&1; then
+    if [ "${FORGE_TOKEN_EXPORT:-auto}" = "true" ] || command grep -qs 'oauth_token:' "${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}/hosts.yml"; then
+        gh auth status >/dev/null 2>&1 && export GITHUB_TOKEN=$(gh auth token 2>/dev/null | tr -d '[:space:]')
+    fi
 fi
 BASHRC
     fi
+}
+
+# Remove the exact legacy block (and one blank line before it) from $1.
+# Pure awk: setup-* runs on minimal images. Only an exact 4-line match is
+# removed; anything else (a hand-edited block) is left untouched.
+_remove_legacy_snippet() {
+    local rc="$1"
+    [ -f "$rc" ] && command grep -qxF "${_LEGACY_SNIPPET%%$'\n'*}" "$rc" 2>/dev/null || return 0
+    local tmp
+    tmp=$(mktemp "${rc}.XXXXXX") || return 0
+    if LEGACY="$_LEGACY_SNIPPET" command awk '
+        BEGIN { n = split(ENVIRON["LEGACY"], want, "\n") }
+        { line[NR] = $0 }
+        END {
+            for (i = 1; i <= NR; i++) {
+                hit = 1
+                for (j = 1; j <= n; j++) if (line[i + j - 1] != want[j]) { hit = 0; break }
+                if (hit) { start = i; break }
+            }
+            if (!start) exit 1
+            skip_from = start; if (start > 1 && line[start - 1] == "") skip_from = start - 1
+            for (i = 1; i <= NR; i++) if (i < skip_from || i >= start + n) print line[i]
+        }' "$rc" >"$tmp" 2>/dev/null; then
+        command cat "$tmp" >"$rc"
+        _info "removed pre-#1711 token snippet from ${rc}"
+    fi
+    command rm -f "$tmp"
 }
 
 main "$@"

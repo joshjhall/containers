@@ -430,6 +430,23 @@ These variables can be set when running containers (via `docker run -e`):
 | `OP_SECRET_CACHE_MAX_CONCURRENT` | `4`                              | Cap on concurrent `op read` calls                                   |
 | `OP_READ_MAX_ATTEMPTS`           | `3`                              | Retries per ref on detected 1Password throttle                      |
 | `OP_READ_RETRY_DELAY`            | `1`                              | Initial retry backoff in seconds (doubles per attempt)              |
+| `OP_WHOAMI_TIMEOUT`              | `5`                              | Bound on the `op whoami` usability probe (external providers)       |
+| `OP_NO_WHOAMI_PROBE`             | `false`                          | `true` = treat op as usable only via token/Connect                  |
+| `OP_USABLE_NEGATIVE_TTL`         | `30`                             | Seconds a "op not usable" verdict is reused before re-probing       |
+| `OP_WHOAMI_CACHE_DIR`            | `/dev/shm`                       | Directory for the shared `op whoami` verdict cache                  |
+
+### External Credential Providers
+
+See [External Credential Providers](../claude-code/secrets-and-setup.md#external-credential-providers).
+
+| Variable                         | Default                                   | Description                                                      |
+| -------------------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
+| `CONTAINER_CREDENTIAL_SETUP_CMD` | —                                         | Command run before secret loading (startup script 30)            |
+| `CREDENTIAL_SETUP_TIMEOUT`       | `30`                                      | Per-hook timeout in seconds                                      |
+| `CONTAINER_CREDENTIAL_ENV_FILE`  | `/dev/shm/container-credential-env.<uid>` | Hook → later-script env hand-off file                            |
+| `SKIP_GIT_SSH_SETUP`             | `false`                                   | `setup-git` leaves ssh agent / auth key / `core.sshCommand` alone |
+| `SKIP_GIT_SIGNING_SETUP`         | `false`                                   | `setup-git` neither writes nor clears signing config             |
+| `FORGE_TOKEN_EXPORT`             | `auto`                                    | Copy `gh`/`glab` token into shells: `true` / `false` / `auto`    |
 
 ### Resource Limits
 
