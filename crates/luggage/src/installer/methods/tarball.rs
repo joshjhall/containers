@@ -615,12 +615,10 @@ fn walk_leaves(dir: &Path, list: &dyn Fn(&Path) -> Listing) -> (usize, bool) {
                 exact &= sub_exact;
             }
             Ok(false) => count += 1,
-            // The entry exists, so it is at least one leaf; but if it is
-            // really a directory, its contents went uncounted.
-            Err(_) => {
-                count += 1;
-                exact = false;
-            }
+            // Unknown type: it could be a file (one leaf) or an empty
+            // directory (zero), so count nothing — `AtLeast` must stay a
+            // true lower bound — and mark the total incomplete.
+            Err(_) => exact = false,
         }
     }
     (count, exact)

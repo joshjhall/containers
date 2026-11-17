@@ -1284,9 +1284,9 @@ fn count_leaves_marks_an_unreadable_subtree_as_a_lower_bound() {
     assert_eq!(count_leaves_with(root.path(), &list_dir), EntryTotal::Exact(4));
 }
 
-/// An entry the listing could not read is skipped, and an entry whose file
-/// type could not be read counts as one leaf — either way the walk may have
-/// missed entries, so the total becomes a lower bound.
+/// An entry the listing could not read, or whose file type could not be
+/// read, is not counted — it might be an empty directory, and `AtLeast` must
+/// never overshoot — and either way the total becomes a lower bound.
 #[test]
 fn count_leaves_marks_unreadable_entries_and_file_types_as_a_lower_bound() {
     let denied = || std::io::Error::from(std::io::ErrorKind::PermissionDenied);
@@ -1296,7 +1296,7 @@ fn count_leaves_marks_unreadable_entries_and_file_types_as_a_lower_bound() {
     assert_eq!(count_leaves_with(Path::new("/x"), &bad_entry), EntryTotal::AtLeast(2));
 
     let bad_type = |_: &Path| Ok(vec![file("a"), Ok((PathBuf::from("b"), Err(denied())))]);
-    assert_eq!(count_leaves_with(Path::new("/x"), &bad_type), EntryTotal::AtLeast(2));
+    assert_eq!(count_leaves_with(Path::new("/x"), &bad_type), EntryTotal::AtLeast(1));
 
     let all_good = |_: &Path| Ok(vec![file("a"), file("b")]);
     assert_eq!(count_leaves_with(Path::new("/x"), &all_good), EntryTotal::Exact(2));
