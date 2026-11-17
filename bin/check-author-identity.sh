@@ -12,52 +12,10 @@
 # (GIT_AUTHOR_* / GIT_COMMITTER_* env, then local > global > system config).
 set -euo pipefail
 
-# Returns 0 (and prints the reason) when $1 is a placeholder email.
-placeholder_reason() {
-    local email="$1" local_part domain tld
-    case "$email" in
-        *@*) ;;
-        *)
-            echo "no @domain"
-            return 0
-            ;;
-    esac
-    local_part="${email%@*}"
-    domain="${email##*@}"
-    domain="${domain,,}"
-    [ -n "$local_part" ] || {
-        echo "empty local part"
-        return 0
-    }
-    # Also catches git's auto-guessed `user@host.(none)` when no email is set.
-    if [[ ! "$domain" =~ ^[a-z0-9.-]+$ ]]; then
-        echo "domain '$domain' is not a valid hostname"
-        return 0
-    fi
-    case "$domain" in
-        *.*) ;;
-        *)
-            echo "domain '$domain' has no dot"
-            return 0
-            ;;
-    esac
-    tld="${domain##*.}"
-    if [ "${#tld}" -lt 2 ]; then
-        echo "top-level domain '.$tld' is not real"
-        return 0
-    fi
-    # RFC 2606 / RFC 6761 reserved names, plus test.com (a real, claimable
-    # domain that test fixtures habitually use).
-    case "$domain" in
-        example.com | example.org | example.net | *.example.com | *.example.org | *.example.net | \
-            *.example | *.test | *.invalid | *.localhost | *.local | *.localdomain | \
-            test.com)
-            echo "domain '$domain' is reserved for testing/examples"
-            return 0
-            ;;
-    esac
-    return 1
-}
+# placeholder_reason EMAIL — shared with setup-git (#1533) so the rules
+# cannot drift; returns 0 and prints the reason for a placeholder email.
+# shellcheck source=lib/runtime/commands/_git-email-placeholder
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/runtime/commands/_git-email-placeholder"
 
 fail=0
 for role in AUTHOR COMMITTER; do

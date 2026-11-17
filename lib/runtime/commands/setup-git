@@ -76,6 +76,15 @@ _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "${_SELF_DIR}/_source-env-secrets" ] && . "${_SELF_DIR}/_source-env-secrets"
 # shellcheck disable=SC1091
 [ -f "${_SELF_DIR}/_wait-for-op-cache" ] && . "${_SELF_DIR}/_wait-for-op-cache"
+# placeholder_reason — the placeholder-email rules shared with the pre-commit
+# hook bin/check-author-identity.sh (#1533). Absent → nothing is a placeholder;
+# the differs-from-global check still runs.
+if [ -f "${_SELF_DIR}/_git-email-placeholder" ]; then
+    # shellcheck source=lib/runtime/commands/_git-email-placeholder
+    . "${_SELF_DIR}/_git-email-placeholder"
+else
+    placeholder_reason() { return 1; }
+fi
 unset _SELF_DIR
 
 # Write key material to file only if content differs. Returns 0 if written, 1 if unchanged.
@@ -135,6 +144,67 @@ setup_identity() {
     else
         _skip "git identity already configured"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# 1b. Repo-local identity shadowing (#1533) — warn only, never fix
+# ---------------------------------------------------------------------------
+# `git commit` prefers a repo-local .git/config identity over the global one
+# set above, and that file lives in the bind-mounted workspace, so it survives
+# rebuilds and re-running setup-git. A stale local `t@t.t` once shipped 31
+# commits under a stranger's GitHub account while setup-git reported the real
+# global identity. A per-repo work email can be deliberate, so this only warns.
+
+# Print candidate repo dirs: WORKSPACE_ROOT, its children, and their
+# .worktrees/* entries. Callers filter to real repos.
+_workspace_repo_candidates() {
+    local root="${WORKSPACE_ROOT:-/workspace}" d
+    [ -d "$root" ] || return 0
+    printf '%s\n' "${root%/}"
+    for d in "${root%/}"/*/ "${root%/}"/*/.worktrees/*/; do
+        [ -d "$d" ] && printf '%s\n' "${d%/}"
+    done
+}
+
+check_identity_shadowing() {
+    local global_email reason
+    global_email=$(git config --global --get user.email 2>/dev/null || true)
+
+    if reason=$(placeholder_reason "$global_email"); then
+        _warn "global git email <${global_email}> is a placeholder (${reason})."
+        _warn "  Commits will be refused by the pre-commit author-identity check"
+        _warn "  until GIT_USER_EMAIL resolves (check OP_GIT_USER_EMAIL_REF)."
+    fi
+
+    local dir origin file email seen=$'\n'
+    while IFS= read -r dir; do
+        git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || continue
+        origin=$(git -C "$dir" config --local --show-origin --get user.email 2>/dev/null) || continue
+        # "file:/path/.git/config<TAB>email" — worktrees share their repo's
+        # config, so report each config file once.
+        file="${origin%%$'\t'*}"
+        file="${file#file:}"
+        # Relative to -C dir (".git/config"); absolutize for the message and
+        # so a worktree's "../../.git/config" dedupes against its parent.
+        case "$file" in /*) ;; *) file="${dir}/${file}" ;; esac
+        file=$(command realpath -m "$file" 2>/dev/null || printf '%s' "$file")
+        email="${origin#*$'\t'}"
+        case "$seen" in *$'\n'"$file"$'\n'*) continue ;; esac
+        seen+="${file}"$'\n'
+        if [ -z "$email" ] || [ "$email" = "$global_email" ]; then
+            continue
+        fi
+
+        if reason=$(placeholder_reason "$email"); then
+            _warn "${dir}: local user.email <${email}> is a placeholder (${reason}),"
+        else
+            _warn "${dir}: local user.email <${email}> differs from global <${global_email}>,"
+        fi
+        _warn "  set in ${file} — it overrides the global identity for commits here."
+        _warn "  If unintended: git -C '${dir}' config --local --unset user.name;" \
+            "git -C '${dir}' config --local --unset user.email"
+    done < <(_workspace_repo_candidates)
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -405,6 +475,7 @@ setup_signing_key() {
 main() {
     _info "configuring git environment"
     setup_identity
+    check_identity_shadowing || true
 
     local reason
     if reason=$(_external_ssh_reason); then

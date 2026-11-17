@@ -752,6 +752,7 @@ _run_setup_git() {
         PATH="$TEST_TEMP_DIR/bin:/usr/bin:/bin" \
         GIT_CONFIG_GLOBAL="$TEST_HOME/.gitconfig" \
         _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        WORKSPACE_ROOT="$TEST_TEMP_DIR/ws" \
         GIT_USER_NAME="Test User" GIT_USER_EMAIL="test@example.com" \
         "$@" bash "$SETUP_GIT_SCRIPT" 2>&1
 }
@@ -890,5 +891,127 @@ run_test_with_setup test_skip_flags "#1711: SKIP_GIT_SSH_SETUP / SKIP_GIT_SIGNIN
 run_test_with_setup test_ssh_provider_does_not_skip_signing "#1711: ssh provider alone does not skip signing"
 run_test_with_setup test_auth_key_add_failure_continues "#1723: failed auth-key ssh-add warns, still writes core.sshCommand"
 run_test_with_setup test_signing_key_add_failure_continues "#1723: failed signing-key ssh-add warns, still configures signing"
+
+# ---------------------------------------------------------------------------
+# #1533: repo-local identity shadowing the global one (warn only)
+# ---------------------------------------------------------------------------
+# Scratch workspace under $TEST_TEMP_DIR/ws (the WORKSPACE_ROOT _run_setup_git
+# passes); the global identity is a real address so only the local one varies.
+REAL_EMAIL="josh@yaplabs.com"
+
+# _ws_repo NAME [EMAIL] — init a workspace repo, optionally with a local email.
+_ws_repo() {
+    local repo="$TEST_TEMP_DIR/ws/$1"
+    command mkdir -p "$repo"
+    git -C "$repo" init -q
+    if [ -n "${2:-}" ]; then
+        git -C "$repo" config --local user.name "t"
+        git -C "$repo" config --local user.email "$2"
+    fi
+}
+
+# Run setup-git with ssh/signing out of the way and a real global identity.
+_run_identity() {
+    _run_setup_git SKIP_GIT_SSH_SETUP=true SKIP_GIT_SIGNING_SETUP=true \
+        GIT_USER_EMAIL="$REAL_EMAIL"
+}
+
+test_local_placeholder_warns() {
+    _ws_repo proj "t@t.t"
+    local out rc=0
+    out=$(_run_identity) || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0 (warn-only)"
+    assert_contains "$out" "WARN: $TEST_TEMP_DIR/ws/proj: local user.email <t@t.t> is a placeholder" \
+        "Placeholder local email is named as a placeholder"
+    assert_contains "$out" "set in $TEST_TEMP_DIR/ws/proj/.git/config" \
+        "Warning names the overriding .git/config"
+    assert_contains "$out" "git -C '$TEST_TEMP_DIR/ws/proj' config --local --unset user.name; git -C '$TEST_TEMP_DIR/ws/proj' config --local --unset user.email" \
+        "Warning prints the unset remedy"
+    assert_equals "t@t.t" "$(git -C "$TEST_TEMP_DIR/ws/proj" config --local user.email)" \
+        "Local identity is left in place (never auto-unset)"
+}
+
+test_local_real_differing_warns_not_placeholder() {
+    _ws_repo work "me@work-corp.io"
+    local out rc=0
+    out=$(_run_identity) || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0 (warn-only)"
+    assert_contains "$out" "local user.email <me@work-corp.io> differs from global <$REAL_EMAIL>" \
+        "Differing real local email warns"
+    assert_not_contains "$out" "placeholder" "A real address is not called a placeholder"
+    assert_contains "$out" "--unset user.email" "Remedy still printed"
+}
+
+test_no_local_identity_is_silent() {
+    _ws_repo clean
+    _ws_repo same "$REAL_EMAIL"
+    local out rc=0
+    out=$(_run_identity) || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0"
+    assert_not_contains "$out" "WARN" "No local identity (or same as global) → no new output"
+}
+
+test_worktree_config_reported_once() {
+    _ws_repo proj "t@t.t"
+    git -C "$TEST_TEMP_DIR/ws/proj" -c user.name=a -c user.email=a@b.co \
+        commit -q --allow-empty -m init
+    git -C "$TEST_TEMP_DIR/ws/proj" worktree add -q .worktrees/issue-1 2>/dev/null
+    local out
+    out=$(_run_identity)
+    assert_equals "1" "$(printf '%s\n' "$out" | command grep -c 'local user.email <t@t.t>')" \
+        "A .worktrees/* checkout sharing the repo config is reported once"
+}
+
+test_worktree_local_identity_detected() {
+    # The only repo with a local identity sits under .worktrees/ of a parent
+    # whose own config is clean — proves .worktrees/* is actually scanned.
+    _ws_repo parent
+    _ws_repo parent/.worktrees/nested "t@t.t"
+    local out
+    out=$(_run_identity)
+    assert_contains "$out" "ws/parent/.worktrees/nested: local user.email <t@t.t>" \
+        ".worktrees/* repos are scanned"
+}
+
+test_devcontainer_fallback_warns() {
+    local out rc=0
+    out=$(_run_setup_git SKIP_GIT_SSH_SETUP=true SKIP_GIT_SIGNING_SETUP=true \
+        GIT_USER_EMAIL=) || rc=$?
+    assert_equals "0" "$rc" "setup-git exits 0 with the fallback identity"
+    assert_equals "devcontainer@localhost" "$(_gitcfg user.email)" "Fallback identity applied"
+    assert_contains "$out" "WARN: global git email <devcontainer@localhost> is a placeholder" \
+        "Fallback global email warns"
+    assert_contains "$out" "refused by the pre-commit author-identity check" \
+        "Warning mentions the pre-commit refusal"
+}
+
+test_real_global_no_global_warning() {
+    local out
+    out=$(_run_identity)
+    assert_not_contains "$out" "global git email" "A real global email does not warn"
+}
+
+test_placeholder_rules_shared_not_duplicated() {
+    local helper="$PROJECT_ROOT/lib/runtime/commands/_git-email-placeholder"
+    assert_file_contains "$helper" 'placeholder_reason()' "Shared helper defines placeholder_reason"
+    assert_file_not_contains "$PROJECT_ROOT/bin/check-author-identity.sh" 'placeholder_reason()' \
+        "Pre-commit hook does not redefine the rules"
+    assert_file_contains "$PROJECT_ROOT/bin/check-author-identity.sh" '_git-email-placeholder' \
+        "Pre-commit hook sources the shared helper"
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_git-email-placeholder' \
+        "setup-git sources the shared helper"
+    assert_file_contains "$PROJECT_ROOT/Dockerfile" \
+        'COPY lib/runtime/commands/_git-email-placeholder /usr/local/bin/_git-email-placeholder' \
+        "Dockerfile installs the helper next to setup-git"
+}
+
+run_test_with_setup test_local_placeholder_warns "#1533: local t@t.t → WARN names .git/config + unset remedy"
+run_test_with_setup test_local_real_differing_warns_not_placeholder "#1533: differing real local email warns, not a placeholder"
+run_test_with_setup test_no_local_identity_is_silent "#1533: no local identity → no new output"
+run_test_with_setup test_worktree_config_reported_once "#1533: worktree sharing repo config reported once"
+run_test_with_setup test_worktree_local_identity_detected "#1533: .worktrees/* repos are scanned"
+run_test_with_setup test_devcontainer_fallback_warns "#1533: devcontainer@localhost fallback warns of pre-commit refusal"
+run_test_with_setup test_real_global_no_global_warning "#1533: real global email → no global warning"
+run_test_with_setup test_placeholder_rules_shared_not_duplicated "#1533: placeholder rules shared, not duplicated"
 
 generate_report

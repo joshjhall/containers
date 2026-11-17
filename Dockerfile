@@ -627,6 +627,7 @@ RUN chmod 755 /usr/local/bin/detect-case-sensitivity.sh
 # Copy setup commands and sourceable helpers
 COPY lib/runtime/commands/_source-env-secrets /usr/local/bin/_source-env-secrets
 COPY lib/runtime/commands/_wait-for-op-cache /usr/local/bin/_wait-for-op-cache
+COPY lib/runtime/commands/_git-email-placeholder /usr/local/bin/_git-email-placeholder
 COPY lib/runtime/commands/setup-git /usr/local/bin/setup-git
 COPY lib/runtime/commands/setup-gh /usr/local/bin/setup-gh
 COPY lib/runtime/commands/setup-glab /usr/local/bin/setup-glab
@@ -640,6 +641,7 @@ COPY lib/runtime/commands/artifact-dir /usr/local/bin/artifact-dir
 COPY lib/runtime/commands/reconcile-cache-owner /usr/local/sbin/reconcile-cache-owner
 COPY lib/runtime/commands/reconcile-run-owner /usr/local/sbin/reconcile-run-owner
 RUN chmod 755 /usr/local/bin/_source-env-secrets /usr/local/bin/_wait-for-op-cache \
+    /usr/local/bin/_git-email-placeholder \
     /usr/local/bin/setup-git /usr/local/bin/setup-gh /usr/local/bin/setup-glab \
     /usr/local/bin/recover-entrypoint /usr/local/bin/fix-docker-socket \
     /usr/local/bin/unwedge-worktree /usr/local/bin/artifact-dir \
