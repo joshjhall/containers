@@ -357,6 +357,27 @@ _check_floating_tags_gated() {
         /usr/bin/echo "Trivy/sign steps must not set continue-on-error"
         return
     fi
+    if /usr/bin/grep -qE '\|\| *true|(always|failure|cancelled)\(' <<<"$trivy_body$sign_body"; then
+        /usr/bin/echo "Trivy/sign steps must not swallow failure (|| true, always/failure/cancelled)"
+        return
+    fi
+    # Trivy must scan the pushed digest (via trivy_target), not a tag.
+    local target_line target_body
+    target_line="$(_step_line "$wf" 'Compute Trivy target')"
+    target_body="$(_step_body "$wf" "${target_line:-0}")"
+    /usr/bin/grep -qE '^          image-ref: \$\{\{ steps\.trivy_target\.outputs\.ref \}\}$' <<<"$trivy_body" &&
+        /usr/bin/grep -q 'steps\.build_push\.outputs\.digest' <<<"$target_body" || {
+        /usr/bin/echo "Trivy must scan steps.trivy_target.outputs.ref built from the build_push digest"
+        return
+    }
+    # The summary's promoted/withheld line is driven by the promote output.
+    local summary_body
+    summary_body="$(_step_body "$wf" "$(_step_line "$wf" 'Write build summary')")"
+    /usr/bin/grep -q 'promoted=true.*GITHUB_OUTPUT' <<<"$promote_body" &&
+        /usr/bin/grep -q 'steps\.promote\.outputs\.promoted' <<<"$summary_body" || {
+        /usr/bin/echo "promote must emit promoted=true and the summary must read steps.promote.outputs.promoted"
+        return
+    }
     /usr/bin/echo ok
 }
 
