@@ -286,6 +286,159 @@ test_workflow_references_pilot_tuple() {
     fi
 }
 
+# Line number of the first `- name: <prefix>...` step in a workflow file, or
+# empty when absent.
+_step_line() {
+    /usr/bin/awk -v want="      - name: $2" \
+        'index($0, want) == 1 { print NR; exit }' "$1"
+}
+
+# Lines of the step starting at line $2, up to (not including) the next step.
+_step_body() {
+    /usr/bin/awk -v s="$2" \
+        'NR > s && /^      - name:/ { exit } NR >= s { print }' "$1"
+}
+
+# #1670: on publish runs the floating tags (latest, vX*) must move only after
+# the Trivy gate and signing pass. build-push may push the immutable sha tag
+# alone; a later `imagetools create` step promotes the floating ones.
+_check_floating_tags_gated() {
+    local wf="$1" push_line trivy_line sign_line promote_line push_tags
+    push_line="$(_step_line "$wf" 'Build & push (main / tag')"
+    trivy_line="$(_step_line "$wf" 'Trivy scan')"
+    sign_line="$(_step_line "$wf" 'Sign image and attest SBOM')"
+    promote_line="$(_step_line "$wf" 'Promote floating tags')"
+    [ -n "$push_line" ] && [ -n "$trivy_line" ] && [ -n "$sign_line" ] && [ -n "$promote_line" ] || {
+        /usr/bin/echo "missing step (push=$push_line trivy=$trivy_line sign=$sign_line promote=$promote_line)"
+        return
+    }
+    # The `tags:` line inside the build-push step (before the next step).
+    push_tags="$(/usr/bin/awk -v s="$push_line" \
+        'NR > s && /^      - name:/ { exit } NR > s && /^          tags:/ { sub(/^ +tags: */, ""); print }' "$wf")"
+    [ "$push_tags" = '${{ steps.tags.outputs.immutable }}' ] || {
+        /usr/bin/echo "build-push tags must be only the immutable tag, got: $push_tags"
+        return
+    }
+    [ "$push_line" -lt "$trivy_line" ] && [ "$trivy_line" -lt "$sign_line" ] &&
+        [ "$sign_line" -lt "$promote_line" ] || {
+        /usr/bin/echo "order must be push < trivy < sign < promote ($push_line $trivy_line $sign_line $promote_line)"
+        return
+    }
+    local promote_body trivy_body sign_body
+    promote_body="$(_step_body "$wf" "$promote_line")"
+    trivy_body="$(_step_body "$wf" "$trivy_line")"
+    sign_body="$(_step_body "$wf" "$sign_line")"
+    /usr/bin/grep -q 'imagetools create' <<<"$promote_body" || {
+        /usr/bin/echo "promote step does not use imagetools create"
+        return
+    }
+    # Promotion must copy the scanned digest onto the floating tag set, and
+    # only on publish runs (never PRs).
+    /usr/bin/grep -q 'steps\.build_push\.outputs\.digest' <<<"$promote_body" || {
+        /usr/bin/echo "promote source is not the build_push digest"
+        return
+    }
+    /usr/bin/grep -q 'steps\.tags\.outputs\.floating' <<<"$promote_body" || {
+        /usr/bin/echo "promote step does not read steps.tags.outputs.floating"
+        return
+    }
+    /usr/bin/grep -qE "^        if: steps\.gate\.outputs\.publish == 'true'\$" <<<"$promote_body" || {
+        /usr/bin/echo "promote step if: must be exactly the publish gate"
+        return
+    }
+    # The gate rests on the implicit success() guard and a hard-failing scan:
+    # Trivy must exit non-zero on findings, and neither Trivy nor signing may
+    # swallow its own failure, or a vulnerable/unsigned digest gets promoted.
+    /usr/bin/grep -qE '^          exit-code: "1"$' <<<"$trivy_body" || {
+        /usr/bin/echo 'Trivy step must set exit-code: "1"'
+        return
+    }
+    # A skipped step does not trip success(): Trivy must be unconditional,
+    # and signing gated only on publish, or promotion could follow a skip.
+    if /usr/bin/grep -qE '^        if:' <<<"$trivy_body"; then
+        /usr/bin/echo "Trivy step must not have an if: (a skipped scan would still promote)"
+        return
+    fi
+    /usr/bin/grep -qE "^        if: steps\.gate\.outputs\.publish == 'true'\$" <<<"$sign_body" || {
+        /usr/bin/echo "sign step if: must be exactly the publish gate"
+        return
+    }
+    # The pushed (immutable) tag must be the sha tag alone, and no floating
+    # tag may name it: otherwise a floating tag would be pushed pre-scan.
+    local tags_body
+    tags_body="$(_step_body "$wf" "$(_step_line "$wf" 'Compute image tags')")"
+    /usr/bin/grep -qE '^ +echo "immutable=\$\{IMAGE\}:sha-\$\{SHORT_SHA\}"$' <<<"$tags_body" || {
+        /usr/bin/echo "immutable output must be exactly \${IMAGE}:sha-\${SHORT_SHA}"
+        return
+    }
+    local floating_list
+    floating_list="$(/usr/bin/awk '/floating<<TAGS_EOF/{f=1; next} /TAGS_EOF/{f=0} f' <<<"$tags_body")"
+    if [ -z "$floating_list" ] || /usr/bin/grep -qE 'sha-|immutable' <<<"$floating_list"; then
+        /usr/bin/echo "floating tag list must be non-empty and exclude the sha tag"
+        return
+    fi
+    if /usr/bin/grep -q 'continue-on-error' <<<"$trivy_body$sign_body"; then
+        /usr/bin/echo "Trivy/sign steps must not set continue-on-error"
+        return
+    fi
+    if /usr/bin/grep -qE '\|\| *true|(always|failure|cancelled)\(' <<<"$trivy_body$sign_body"; then
+        /usr/bin/echo "Trivy/sign steps must not swallow failure (|| true, always/failure/cancelled)"
+        return
+    fi
+    # Trivy must scan the pushed digest (via trivy_target), not a tag.
+    local target_line target_body
+    target_line="$(_step_line "$wf" 'Compute Trivy target')"
+    target_body="$(_step_body "$wf" "${target_line:-0}")"
+    /usr/bin/grep -qE '^          image-ref: \$\{\{ steps\.trivy_target\.outputs\.ref \}\}$' <<<"$trivy_body" &&
+        /usr/bin/grep -q 'steps\.build_push\.outputs\.digest' <<<"$target_body" || {
+        /usr/bin/echo "Trivy must scan steps.trivy_target.outputs.ref built from the build_push digest"
+        return
+    }
+    # The summary's promoted/withheld line is driven by the promote output.
+    local summary_body
+    summary_body="$(_step_body "$wf" "$(_step_line "$wf" 'Write build summary')")"
+    /usr/bin/grep -q 'promoted=true.*GITHUB_OUTPUT' <<<"$promote_body" &&
+        /usr/bin/grep -q 'steps\.promote\.outputs\.promoted' <<<"$summary_body" || {
+        /usr/bin/echo "promote must emit promoted=true and the summary must read steps.promote.outputs.promoted"
+        return
+    }
+    /usr/bin/echo ok
+}
+
+test_publish_gates_floating_tags_behind_trivy() {
+    assert_equals "ok" "$(_check_floating_tags_gated "$WORKFLOW_FILE")" \
+        "floating tags are promoted only after Trivy + signing"
+}
+
+# Each mutation breaks the gate one way on a scratch copy; the checker must
+# reject every one with its specific reason (proves the guards discriminate).
+test_floating_tag_gate_rejects_mutations() {
+    local copy="$TEST_TEMP_DIR/build-base-images.yml" failures=0 name want got
+    _mutant() { /usr/bin/awk "$1" "$WORKFLOW_FILE" >"$copy"; }
+    while IFS='|' read -r name want prog; do
+        _mutant "$prog"
+        got="$(_check_floating_tags_gated "$copy")"
+        case "$got" in
+            *"$want"*) ;;
+            *)
+                /usr/bin/echo "  mutation '$name' not caught (got: $got)"
+                failures=$((failures + 1))
+                ;;
+        esac
+    done <<'MUTANTS'
+floating-in-push|immutable tag|{sub(/tags: \$\{\{ steps\.tags\.outputs\.immutable \}\}/, "tags: ${{ steps.tags.outputs.floating }}")} 1
+sha-in-floating|exclude the sha tag|/echo "floating<<TAGS_EOF"/{print; print "            echo \"${IMAGE}:sha-${SHORT_SHA}\""; next} 1
+trivy-if|Trivy step must not have an if|/- name: Trivy scan/{print; print "        if: steps.gate.outputs.publish != '\''true'\''"; next} 1
+trivy-exit0|exit-code|{sub(/exit-code: "1"/, "exit-code: \"0\"")} 1
+trivy-coe|continue-on-error|/- name: Trivy scan/{print; print "        continue-on-error: true"; next} 1
+sign-if-always|sign step if|/- name: Sign image and attest SBOM/{print; getline; print "        if: always()"; next} 1
+promote-always|promote step if|/- name: Promote floating tags/{print; getline; print; getline; print "        if: always()"; next} 1
+promote-before-trivy|order must be|/- name: Promote floating tags/{sub(/Promote floating tags/, "Promoted")} /- name: Build & push \(main/{print "      - name: Promote floating tags"; print "        run: docker buildx imagetools create"} 1
+MUTANTS
+    unset -f _mutant
+    assert_equals "0" "$failures" "every gate mutation is rejected"
+}
+
 run_test test_base_images_dir_exists "base-images directory exists"
 run_test test_readme_exists "base-images/README.md spec exists"
 run_test test_version_file_is_semver "base-images/VERSION is clean semver"
@@ -299,5 +452,7 @@ run_test test_workflow_matrix_matches_dockerfiles "workflow matrix, Dockerfiles,
 run_test test_evidence_dispatch_offers_every_tuple "evidence dispatch offers every supported tuple"
 run_test test_ubuntu_images_drop_stock_extras "Ubuntu images drop the stock user and 26.04's pebble"
 run_test test_workflow_references_pilot_tuple "workflow matrix references pilot tuple"
+run_test test_publish_gates_floating_tags_behind_trivy "floating tags promoted only after Trivy gate"
+run_test test_floating_tag_gate_rejects_mutations "floating-tag gate check rejects each mutation"
 
 generate_report
