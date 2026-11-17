@@ -179,6 +179,9 @@ jobs:
         run: |
           read -r origin sha _ < crates/stibbons/assets/repo-baseline/SOURCE
           [ "$origin" = containers-db ] || { echo "SOURCE does not name containers-db: $origin" >&2; exit 1; }
+          # A full SHA only: no branch/tag (a moving ref) and nothing git could
+          # parse as an option.
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "SOURCE pin is not a full commit SHA: $sha" >&2; exit 1; }
           git -C _containers-db fetch --depth 1 origin "$sha"
 
       - name: Run unit tests
