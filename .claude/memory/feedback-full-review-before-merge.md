@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 66e41fd1-0b53-402c-a820-bd6497155246
-  modified: 2026-10-17T20:22:37.515Z
+  modified: 2026-11-16T20:00:00.000Z
 ---
 
 Before merging, the last clean review cycle must be a **full-scope** pass over
@@ -17,6 +17,12 @@ cycle even if that goes past `REVIEW_MAX_CYCLES`.
 The operator asked for a 6th, full cycle. It found a real false positive
 introduced by the cycle-4 fix (a `#.*` continuation arm matching a quoted `|
 #`). That fix was reverted and cycle 7 (full) came back clean.
+
+**A cap-stop never means "park for the operator's manual merge".** The fix is
+one more full cycle, which the golem runs and then merges itself. A finding
+that already existed on main and is filed as its own issue is out of scope for
+the PR, not a blocker (user, 2026-11-16, on #1701 → #1698: "why do I need to
+manually merge shit?").
 
 **How to apply:** When convergence returns `rule=C1-cap` and `capped_over` is
 `C3-narrow-zero` or `C8-novel`, do not auto-merge. Run one more full-diff cycle,
