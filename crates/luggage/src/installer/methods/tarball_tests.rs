@@ -1221,6 +1221,78 @@ fn nested_merge_failure_counts_across_recursion() {
     assert_eq!(path, f.prefix.path().join("a/sub"));
 }
 
+/// The lower bound must survive the whole merge-failure path, not just its
+/// parts (#1712): a real merge failure whose staging walk cannot read a
+/// subtree reports `at least` rather than an exact total. Staging is built by
+/// hand so the denied subdir's path is known. Entries merge in name order, so
+/// `a.txt` and `b.txt` land, `c/` hits the planted file, and `c/x` plus the
+/// never-reached `d/y` stay in staging.
+#[test]
+fn merge_failure_with_an_unreadable_staging_subtree_reports_a_lower_bound() {
+    let setup = || {
+        let staging = tempdir().unwrap();
+        let prefix = tempdir().unwrap();
+        fs::create_dir_all(staging.path().join("c")).unwrap();
+        fs::create_dir_all(staging.path().join("d")).unwrap();
+        for (name, body) in [("a.txt", "a"), ("b.txt", "b"), ("c/x", "x"), ("d/y", "y")] {
+            fs::write(staging.path().join(name), body).unwrap();
+        }
+        fs::write(prefix.path().join("c"), b"in the way").unwrap();
+        (staging, prefix)
+    };
+
+    let (staging, prefix) = setup();
+    let denied = staging.path().join("d");
+    let lister = |d: &Path| {
+        if d == denied {
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        } else {
+            list_dir(d)
+        }
+    };
+    let err =
+        merge_into_prefix_with(staging.path(), prefix.path(), "tool.tar.gz", &lister).unwrap_err();
+    let message = err.to_string();
+    let LuggageError::ArchiveMergeFailed(failure) = err else {
+        panic!("expected ArchiveMergeFailed, got {message}");
+    };
+    let ArchiveMergeFailure { merged, total, path, .. } = *failure;
+    // 2 landed + c/x readable in staging; d/y is hidden, so only a lower bound.
+    assert_eq!((merged, total), (2, EntryTotal::AtLeast(3)));
+    assert_eq!(path, prefix.path().join("c"));
+    assert!(message.contains("after 2 of at least 3 entries"), "{message}");
+
+    // The same merge with nothing denied is exact — the lister alone changes it.
+    let (staging, prefix) = setup();
+    let err = merge_into_prefix_with(staging.path(), prefix.path(), "tool.tar.gz", &list_dir)
+        .unwrap_err();
+    let LuggageError::ArchiveMergeFailed(failure) = err else {
+        panic!("expected ArchiveMergeFailed, got {err}");
+    };
+    assert_eq!((failure.merged, failure.total), (2, EntryTotal::Exact(4)));
+}
+
+/// The staging walk only feeds the failure report, so a merge that succeeds
+/// must never call the lister — walking staging on every install would cost
+/// real time on node-sized archives and no failure-path test would notice.
+#[test]
+fn successful_merge_never_walks_staging() {
+    let staging = tempdir().unwrap();
+    let prefix = tempdir().unwrap();
+    fs::create_dir_all(staging.path().join("bin")).unwrap();
+    fs::write(staging.path().join("bin/tool"), b"t").unwrap();
+
+    let called = std::cell::Cell::new(false);
+    let lister = |d: &Path| {
+        called.set(true);
+        list_dir(d)
+    };
+    merge_into_prefix_with(staging.path(), prefix.path(), "tool.tar.gz", &lister).unwrap();
+
+    assert!(!called.get(), "a successful merge consulted the staging lister");
+    assert_eq!(fs::read(prefix.path().join("bin/tool")).unwrap(), b"t");
+}
+
 /// An existing prefix file is overwritten by the archive's copy. The merge
 /// now relies on `rename` replacing it atomically (no `remove_file` first,
 /// so a failed rename can't leave the prefix missing the file); this guards

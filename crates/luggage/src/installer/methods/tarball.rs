@@ -512,6 +512,19 @@ type MergeFailure = (PathBuf, std::io::Error);
 /// many of the archive's files and links already landed, and logs which ones
 /// at `warn` level so the build log carries the recovery information.
 fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()> {
+    merge_into_prefix_with(staging, prefix, artifact, &list_dir)
+}
+
+/// [`merge_into_prefix`] with the staging lister injected. The lister only
+/// feeds the failure report's total, so it is the one seam that lets a test
+/// drive a real merge failure to an [`EntryTotal::AtLeast`] total — `chmod`
+/// cannot hide part of staging when the tests run as root.
+fn merge_into_prefix_with(
+    staging: &Path,
+    prefix: &Path,
+    artifact: &str,
+    list: &dyn Fn(&Path) -> Listing,
+) -> Result<()> {
     let mut moved = Vec::new();
     let Err((path, source)) = merge_dir(staging, prefix, &mut moved) else {
         return Ok(());
@@ -521,7 +534,7 @@ fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()
     // staging as they land, so what is still in staging plus what moved is
     // the archive's full contribution — or a lower bound on it, when part of
     // staging could not be read.
-    let total = add_moved(moved.len(), count_leaves(staging));
+    let total = add_moved(moved.len(), count_leaves_with(staging, list));
     tracing::warn!(
         prefix = %prefix.display(),
         merged = moved.len(),
@@ -559,16 +572,9 @@ fn landed_summary(moved: &[PathBuf], limit: usize) -> String {
     format!("[{}]{tail}", shown.join(", "))
 }
 
-/// Count the files and links under `dir` (directories themselves excluded).
-///
-/// Best-effort: it only feeds an error message, so it never fails — an
-/// unreadable directory, entry, or file type cannot mask the merge failure
-/// being reported. Anything it could not read makes the result
-/// [`EntryTotal::AtLeast`] instead of silently counting as empty, since the
-/// failures that trigger this report are often the same permission or I/O
-/// problems that hide part of staging. `DirEntry::file_type` does not follow
-/// links, so a link to a directory counts as one leaf rather than being
-/// descended into.
+/// [`count_leaves_with`] with the real [`list_dir`] lister — a test
+/// convenience; production reaches the walk through [`merge_into_prefix_with`].
+#[cfg(test)]
 fn count_leaves(dir: &Path) -> EntryTotal {
     count_leaves_with(dir, &list_dir)
 }
@@ -590,10 +596,21 @@ fn list_dir(dir: &Path) -> Listing {
         .collect())
 }
 
-/// [`count_leaves`] with the directory lister injected. Tests may run as
-/// root, where `chmod` cannot make a directory unreadable, so the seam is the
-/// only hermetic way to force each of the walk's failure modes — an
-/// unreadable directory, entry, or file type.
+/// Count the files and links under `dir` (directories themselves excluded).
+///
+/// Best-effort: it only feeds an error message, so it never fails — an
+/// unreadable directory, entry, or file type cannot mask the merge failure
+/// being reported. Anything it could not read makes the result
+/// [`EntryTotal::AtLeast`] instead of silently counting as empty, since the
+/// failures that trigger this report are often the same permission or I/O
+/// problems that hide part of staging. `DirEntry::file_type` does not follow
+/// links, so a link to a directory counts as one leaf rather than being
+/// descended into.
+///
+/// The directory lister is injected. Tests may run as root, where `chmod`
+/// cannot make a directory unreadable, so the seam is the only hermetic way
+/// to force each of the walk's failure modes — an unreadable directory,
+/// entry, or file type.
 fn count_leaves_with(dir: &Path, list: &dyn Fn(&Path) -> Listing) -> EntryTotal {
     let (count, exact) = walk_leaves(dir, list);
     if exact { EntryTotal::Exact(count) } else { EntryTotal::AtLeast(count) }
