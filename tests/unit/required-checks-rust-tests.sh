@@ -45,7 +45,9 @@ readonly SKIP="run=false matrix=$SKIP_MATRIX"
 # Build a throwaway repo whose `origin/main` is the base commit (README.md +
 # a Dockerfile pinning LIBRARIAN_REF), then put one commit touching $1 on top
 # as HEAD. Prints the repo path. Several paths may be given as one
-# comma-separated argument; "path:line" appends that line instead of "x".
+# comma-separated argument; "path:line" appends that line instead of "x",
+# and "path:=text" REPLACES the file with text (printf %b, so \n splits
+# lines) — the only way to express an in-place edit or a deleted line.
 _pr_repo() {
     local changed="$1" repo
     repo="$(/usr/bin/mktemp -d "$TEST_TEMP_DIR/repo.XXXXXX")"
@@ -65,7 +67,6 @@ _pr_repo() {
         local f content
         IFS=',' read -ra files <<<"$changed"
         for f in "${files[@]}"; do
-            # "path:line" appends that line; a bare path appends "x".
             content='x'
             case "$f" in *:*)
                 content="${f#*:}"
@@ -73,7 +74,10 @@ _pr_repo() {
                 ;;
             esac
             /usr/bin/mkdir -p "$(/usr/bin/dirname "$f")"
-            /usr/bin/printf '%s\n' "$content" >>"$f"
+            case "$content" in
+                =*) /usr/bin/printf '%b\n' "${content#=}" >"$f" ;;
+                *) /usr/bin/printf '%s\n' "$content" >>"$f" ;;
+            esac
             git add "$f"
         done
         git commit -qm change
@@ -112,7 +116,10 @@ test_matrix_by_changed_path() {
         ".github/workflows/ci.yml|$RUN_FULL|a PR editing the rust-test job must run it"
         "bin/read-librarian-pin.sh|$RUN_FULL|the parity test's pin reader feeds rust-test"
         "Dockerfile|$SKIP|a Dockerfile edit that leaves LIBRARIAN_REF alone skips"
-        "Dockerfile:ARG LIBRARIAN_REF=v9.9.9|$RUN_FULL|moving the librarian pin re-runs the parity test"
+        "Dockerfile:ARG LIBRARIAN_REF=v9.9.9|$RUN_FULL|adding a librarian pin line re-runs the parity test"
+        "Dockerfile:=FROM scratch\\nARG LIBRARIAN_REF=v0.0.2|$RUN_FULL|bumping the pin in place re-runs the parity test"
+        "Dockerfile:=FROM scratch|$RUN_FULL|deleting the pin line re-runs the parity test"
+        "Dockerfile:=FROM debian\\nARG LIBRARIAN_REF=v0.0.1|$SKIP|rewriting another line beside an unchanged pin skips"
     )
     local row path want why repo got violations=0
     for row in "${cases[@]}"; do
