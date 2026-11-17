@@ -1,10 +1,11 @@
 //! `stibbons setup standards` — apply and check the repo baseline.
 //!
 //! The baseline (hooks, linter configs, justfile, test runner, tool installer,
-//! GitHub/GitLab CI) is librarian's `repo-baseline` scaffold. Its templates are
-//! vendored into `crates/stibbons/assets/repo-baseline/` by
-//! `bin/sync-repo-baseline.sh` and embedded at build time, so this works on a
-//! host with no librarian checkout; `--templates-dir` points at another copy.
+//! GitHub/GitLab CI) is containers-db's repo-baseline scaffold
+//! (`baseline/templates/`). Its templates are vendored into
+//! `crates/stibbons/assets/repo-baseline/` from a pinned containers-db commit
+//! by `bin/sync-repo-baseline.sh` and embedded at build time, so this works on
+//! a host with no checkout; `--templates-dir` points at another copy.
 //!
 //! - [`init`] renders the manifest for the selected slices/CI and writes it,
 //!   never clobbering a user-edited file without `--force`.

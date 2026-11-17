@@ -308,9 +308,11 @@ check-pr-checks PR:
 update-checksums:
     ./bin/update-checksums.sh
 
-# Re-vendor librarian's repo-baseline templates into stibbons (default /opt/librarian)
-sync-repo-baseline SRC="/opt/librarian":
-    ./bin/sync-repo-baseline.sh {{ quote(SRC) }}
+# Re-vendor containers-db's repo-baseline templates into stibbons at a pinned
+# full commit SHA (default: the SHA already in assets/repo-baseline/SOURCE).
+# REPO defaults to the containers-db sibling checkout (see the script header).
+sync-repo-baseline SHA="" REPO="":
+    ./bin/sync-repo-baseline.sh {{ quote(SHA) }} {{ quote(REPO) }}
 
 # ============================================================================
 # Release

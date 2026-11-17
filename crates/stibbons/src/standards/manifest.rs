@@ -1,6 +1,6 @@
 //! The repo-baseline `manifest.tsv` contract, implemented in Rust.
 //!
-//! The format is owned by librarian (`repo-baseline/templates/README.md`): one
+//! The format is owned by containers-db (`baseline/templates/README.md`): one
 //! row per line, four tab-separated columns `target slice when source`. Keep a
 //! row when its slice is `core` or selected **and** its `when` is `always` or
 //! names a selected CI platform; then each distinct target, in first-appearance

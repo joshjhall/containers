@@ -215,7 +215,7 @@ stibbons setup                             # umbrella: runs labels sync
 stibbons setup standards init|check|accept # repo baseline (lint, hooks, tests, CI)
 ```
 
-`setup standards` applies librarian's `repo-baseline` scaffold without a
+`setup standards` applies containers-db's repo-baseline scaffold without a
 skill; see [stibbons setup standards](../reference/stibbons-setup-standards.md).
 
 Platform (GitHub vs GitLab) is detected from the `origin` remote and driven
