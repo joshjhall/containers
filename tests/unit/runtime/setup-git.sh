@@ -1110,6 +1110,37 @@ test_symlinked_root_dedupes() {
         "Symlinked root + worktree still reported once"
 }
 
+test_reason_control_chars_stripped() {
+    # The invalid-hostname reason quotes the raw domain; an ESC there must
+    # not reach the terminal any more than one in the email itself.
+    _ws_repo esc "$(printf 'a@b\033[2Jc.io')"
+    local out
+    out=$(_run_identity)
+    assert_contains "$out" "is a placeholder (domain 'b[2jc.io' is not a valid hostname)" \
+        "Invalid-hostname reason is shown with control chars stripped"
+    assert_not_contains "$out" "$(printf '\033')" "No ESC from the reason reaches the terminal"
+}
+
+test_non_ascii_path_dedupes_with_local_remedy() {
+    # git C-quotes non-ASCII --show-origin paths unless -z is used; a quoted
+    # path would defeat dedupe and route a plain local identity to the
+    # include.path remedy.
+    _ws_repo "pé" "t@t.t"
+    git -C "$TEST_TEMP_DIR/ws/pé" -c user.name=a -c user.email=a@b.co \
+        commit -q --allow-empty -m init
+    git -C "$TEST_TEMP_DIR/ws/pé" worktree add -q .worktrees/w
+    local out
+    out=$(_run_identity)
+    assert_equals "1" "$(printf '%s\n' "$out" | command grep -c 'local user.email <t@t.t>')" \
+        "Non-ASCII repo + worktree reported once"
+    assert_contains "$out" "set in $TEST_TEMP_DIR/ws/pé/.git/config " "Unquoted, real config path shown"
+    # %q's rendering of é depends on the locale (setup-git runs under env -i),
+    # so assert the remedy form rather than the exact quoting.
+    assert_contains "$out" "config --local --unset user.email" \
+        "Plain local identity gets the --local --unset remedy"
+    assert_not_contains "$out" "remove the [user] entries" "Not misrouted to the include remedy"
+}
+
 test_real_global_no_global_warning() {
     local out
     out=$(_run_identity)
@@ -1144,6 +1175,8 @@ run_test_with_setup test_empty_global_email "#1533: no global email → no '<>' 
 run_test_with_setup test_worktree_scope_identity_detected "#1533: config.worktree identity detected; --worktree remedy"
 run_test_with_setup test_included_identity_detected "#1533: include.path identity detected; names the included file"
 run_test_with_setup test_symlinked_root_dedupes "#1533: symlinked WORKSPACE_ROOT + worktree reported once"
+run_test_with_setup test_reason_control_chars_stripped "#1533: placeholder reason sanitized (no ESC from domain)"
+run_test_with_setup test_non_ascii_path_dedupes_with_local_remedy "#1533: non-ASCII path — -z parse dedupes, --local remedy"
 run_test_with_setup test_real_global_no_global_warning "#1533: real global email → no global warning"
 run_test_with_setup test_placeholder_rules_shared_not_duplicated "#1533: placeholder rules shared, not duplicated"
 

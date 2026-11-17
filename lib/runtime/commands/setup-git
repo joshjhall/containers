@@ -188,24 +188,28 @@ check_identity_shadowing() {
     shown_global=$(_printable "$global_email")
 
     if [ -n "$global_email" ] && reason=$(placeholder_reason "$global_email"); then
-        _warn "global git email <${shown_global}> is a placeholder (${reason})."
+        _warn "global git email <${shown_global}> is a placeholder ($(_printable "$reason"))."
         _warn "  Commits will be refused by the pre-commit author-identity check"
         _warn "  until GIT_USER_EMAIL resolves (check OP_GIT_USER_EMAIL_REF)."
     fi
 
-    local dir origin scope file email common_cfg seen=$'\n'
+    local dir scope file email common_cfg seen=$'\n'
     while IFS= read -r dir; do
         git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || continue
         # Resolve user.email the way `git commit` does: every scope, includes
         # followed (a scope flag like --local would skip config.worktree and
-        # include.path files). Output: "<scope>\tfile:<path>\t<email>".
-        origin=$(git -C "$dir" config --show-scope --show-origin --get user.email 2>/dev/null) || continue
-        scope="${origin%%$'\t'*}"
-        origin="${origin#*$'\t'}"
+        # include.path files). -z gives "<scope>\0file:<path>\0<email>\0"
+        # with the path unquoted — without it git C-quotes non-ASCII, '"',
+        # '\' and control chars in the path, breaking dedupe and the remedy.
+        scope="" file="" email=""
+        {
+            IFS= read -r -d '' scope
+            IFS= read -r -d '' file
+            IFS= read -r -d '' email
+        } < <(git -C "$dir" config -z --show-scope --show-origin --get user.email 2>/dev/null) || true
+        [ -n "$scope" ] || continue
         case "$scope" in local | worktree) ;; *) continue ;; esac
-        file="${origin%%$'\t'*}"
-        file="${file#file:}"
-        email="${origin#*$'\t'}"
+        case "$file" in file:*) file="${file#file:}" ;; *) continue ;; esac
         # Relative to -C dir (".git/config"); absolutize for the message and
         # so a worktree's "../../.git/config" dedupes against its parent.
         # The file exists, so plain realpath (no GNU -m) is enough.
@@ -220,13 +224,15 @@ check_identity_shadowing() {
         # The email, dir and file come from the workspace (possibly a cloned,
         # untrusted repo): strip control chars so they cannot spoof terminal
         # output, and %q-quote the dir in the copy-paste remedy.
-        local shown_email shown_dir shown_file qdir
+        local shown_email shown_dir shown_file shown_reason qdir
         shown_email=$(_printable "$email")
         shown_dir=$(_printable "$dir")
         shown_file=$(_printable "$file")
         printf -v qdir '%q' "$dir"
         if reason=$(placeholder_reason "$email"); then
-            _warn "${shown_dir}: ${scope} user.email <${shown_email}> is a placeholder (${reason}),"
+            # reason can quote the raw domain — sanitize it like the email.
+            shown_reason=$(_printable "$reason")
+            _warn "${shown_dir}: ${scope} user.email <${shown_email}> is a placeholder (${shown_reason}),"
         elif [ -z "$global_email" ]; then
             _warn "${shown_dir}: ${scope} user.email <${shown_email}> is set but no global user.email is,"
         else
