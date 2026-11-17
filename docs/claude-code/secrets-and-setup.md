@@ -399,13 +399,20 @@ Providers usually need to put shims on `PATH` or set env **before** secrets
 load. `/etc/container/startup/30-credential-setup.sh` runs, in order:
 
 1. `CONTAINER_CREDENTIAL_SETUP_CMD`, if set (run via `bash -c`)
-1. `/workspace/<project>/.devcontainer/pre-secrets.d/*.sh`, sorted
+1. `/workspace/<project>/.devcontainer/pre-secrets.d/*.sh`, sorted —
+   **only when `CREDENTIAL_SETUP_HOOKS=true`**
 
-Hooks run **before** secrets load, so they are a trust boundary: anything in
-`pre-secrets.d/` of a mounted repo executes at boot. A hook is refused, with a
-`WARN: ignoring hook …` line naming the reason, unless it is a regular file
-(not a symlink), owned by the current user or root, and not group- or
-world-writable. Review a repository's `pre-secrets.d/` before mounting it.
+Workspace hooks are **opt-in** because they are a trust boundary: they come
+from whatever repos are mounted under `/workspace` and run at boot, before
+secrets load, where a hook could put a fake `op` or `gh` on `PATH`. Without the
+flag, any hook files present are skipped with one log line saying how to enable
+them. `CONTAINER_CREDENTIAL_SETUP_CMD` needs no opt-in: it comes from your own
+environment or compose file, not from a repository.
+
+With the flag on, a hook is still refused, with a `WARN: ignoring hook …` line
+naming the reason, unless it is a regular file (not a symlink), owned by the
+current user or root, and not group- or world-writable. Set the flag only for
+workspaces whose `pre-secrets.d/` you have reviewed.
 
 Startup scripts run in filename order — 30 comes before
 `35-claude-auth-watcher`, `45-op-secrets` and `60-setup-git` — on both the
@@ -464,7 +471,9 @@ Wire a provider in locally without committing it:
   add it to your local `dockerComposeFile` list. Compose cannot optionally
   include a missing file, so the checked-in `devcontainer.json` keeps the
   single file and a clean checkout still opens.
-- Drop hook scripts in `.devcontainer/pre-secrets.d/` — see the README there.
+- Drop hook scripts in `.devcontainer/pre-secrets.d/` and set
+  `CREDENTIAL_SETUP_HOOKS: "true"` in that override's `environment` — see the
+  README there.
 
 ## Interactive 1Password Helper Functions
 

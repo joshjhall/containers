@@ -12,7 +12,9 @@
 #
 # Hooks (both optional; run in this order):
 #   1. $CONTAINER_CREDENTIAL_SETUP_CMD — a command line, run via `bash -c`
-#   2. /workspace/*/.devcontainer/pre-secrets.d/*.sh — run with `bash`, sorted
+#   2. /workspace/*/.devcontainer/pre-secrets.d/*.sh — run with `bash`, sorted;
+#      OPT-IN: only when CREDENTIAL_SETUP_HOOKS=true (a mounted repo must not
+#      get code execution at boot by shipping a file)
 #
 # Hand-off: every startup script is its own process, so a hook that changes
 # PATH or exports variables would otherwise be invisible to 45-op-secrets.
@@ -27,6 +29,7 @@
 #
 # Environment:
 #   CONTAINER_CREDENTIAL_SETUP_CMD - command to run first (optional)
+#   CREDENTIAL_SETUP_HOOKS         - "true" to run workspace pre-secrets.d hooks
 #   CREDENTIAL_SETUP_TIMEOUT       - per-hook timeout in seconds (default 30)
 #   CREDENTIAL_SETUP_HOOK_GLOB     - override hook glob (testing; default
 #                                    /workspace/*/.devcontainer/pre-secrets.d/*.sh)
@@ -69,9 +72,17 @@ shopt -s nullglob
 # shellcheck disable=SC2206 # the glob is a pattern by design; nullglob drops non-matches
 _candidates=($_hook_glob)
 shopt -u nullglob
-for _h in "${_candidates[@]}"; do
-    _hook_trusted "$_h" && _hooks+=("$_h")
-done
+# Workspace hooks are opt-in: a repo mounted under /workspace must not get
+# code execution at boot (before secrets load) just by shipping a file here.
+# CONTAINER_CREDENTIAL_SETUP_CMD comes from the operator's own env/compose,
+# not a repo, so it needs no opt-in.
+if [ "${CREDENTIAL_SETUP_HOOKS:-false}" = "true" ]; then
+    for _h in "${_candidates[@]}"; do
+        _hook_trusted "$_h" && _hooks+=("$_h")
+    done
+elif [ "${#_candidates[@]}" -gt 0 ]; then
+    _log "skipping ${#_candidates[@]} pre-secrets.d hook(s): workspace hooks are opt-in (set CREDENTIAL_SETUP_HOOKS=true)"
+fi
 unset _h _candidates
 
 if [ -z "${CONTAINER_CREDENTIAL_SETUP_CMD:-}" ] && [ "${#_hooks[@]}" -eq 0 ]; then
@@ -104,7 +115,7 @@ _run_hook() {
     fi
     if [ "$rc" -eq 0 ]; then
         _log "ran ${label}"
-    elif [ "$rc" -eq 124 ]; then
+    elif [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
         _log "WARN: ${label} timed out after ${_timeout}s (continuing)"
     else
         _log "WARN: ${label} failed (exit ${rc}) (continuing)"

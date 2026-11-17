@@ -442,6 +442,7 @@ See [External Credential Providers](../claude-code/secrets-and-setup.md#external
 | Variable                         | Default                                   | Description                                                      |
 | -------------------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
 | `CONTAINER_CREDENTIAL_SETUP_CMD` | —                                         | Command run before secret loading (startup script 30)            |
+| `CREDENTIAL_SETUP_HOOKS`         | `false`                                   | `true` runs workspace `.devcontainer/pre-secrets.d/*.sh` hooks   |
 | `CREDENTIAL_SETUP_TIMEOUT`       | `30`                                      | Per-hook timeout in seconds                                      |
 | `CONTAINER_CREDENTIAL_ENV_FILE`  | `/dev/shm/container-credential-env.<uid>` | Hook → later-script env hand-off file                            |
 | `SKIP_GIT_SSH_SETUP`             | `false`                                   | `setup-git` leaves ssh agent / auth key / `core.sshCommand` alone |

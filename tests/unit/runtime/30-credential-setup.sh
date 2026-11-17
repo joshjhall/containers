@@ -43,6 +43,7 @@ _run() {
     command env -i BASH_ENV= HOME="$TEST_TEMP_DIR" PATH="/usr/bin:/bin" \
         CREDENTIAL_SETUP_HOOK_GLOB="$TEST_TEMP_DIR/ws/*/.devcontainer/pre-secrets.d/*.sh" \
         CONTAINER_CREDENTIAL_ENV_FILE="$ENV_FILE" \
+        CREDENTIAL_SETUP_HOOKS="${HOOKS_FLAG-true}" \
         "$@" bash "$SCRIPT" 2>&1
 }
 
@@ -118,6 +119,36 @@ test_writable_hook_refused_loudly() {
         "The refusal names the file and the reason"
 }
 
+test_hooks_are_opt_in() {
+    _hook 10-repo.sh "echo repo >>'$TEST_TEMP_DIR/order'"
+    local out
+    out=$(HOOKS_FLAG=false _run)
+    assert_file_not_contains "$TEST_TEMP_DIR/order" "repo" \
+        "Without CREDENTIAL_SETUP_HOOKS=true a workspace hook never runs"
+    assert_contains "$out" "skipping 1 pre-secrets.d hook(s): workspace hooks are opt-in (set CREDENTIAL_SETUP_HOOKS=true)" \
+        "The skip is logged with how to enable it (never silent)"
+    assert_file_not_exists "$ENV_FILE" "Flag off and no command: nothing is created"
+    out=$(HOOKS_FLAG='' _run)
+    assert_file_not_contains "$TEST_TEMP_DIR/order" "repo" "Unset flag is off too"
+}
+
+test_setup_cmd_needs_no_opt_in() {
+    _hook 10-repo.sh "echo repo >>'$TEST_TEMP_DIR/order'"
+    HOOKS_FLAG=false _run CONTAINER_CREDENTIAL_SETUP_CMD="echo cmd >>'$TEST_TEMP_DIR/order'" >/dev/null
+    assert_file_contains "$TEST_TEMP_DIR/order" "cmd" \
+        "CONTAINER_CREDENTIAL_SETUP_CMD (operator env, not repo) runs without the opt-in"
+    assert_file_not_contains "$TEST_TEMP_DIR/order" "repo" "…while workspace hooks stay off"
+}
+
+test_term_ignoring_hook_reported_as_timeout() {
+    # A hook that traps TERM is KILLed after the grace period (exit 137).
+    _hook 10-stubborn.sh "trap '' TERM; sleep 30"
+    local out
+    out=$(_run CREDENTIAL_SETUP_TIMEOUT=1)
+    assert_contains "$out" "10-stubborn.sh timed out after 1s" \
+        "A KILL after the grace period is reported as a timeout, not a failure"
+}
+
 test_handoff_reaches_later_consumer() {
     # The hook can only change ITS OWN process; the hand-off file is how its
     # PATH reaches 45-op-secrets (a separate process) via credential_env_load.
@@ -166,6 +197,9 @@ run_test_with_setup test_failing_hook_does_not_stop_next "Failing hook logged; n
 run_test_with_setup test_hanging_hook_is_bounded "Hanging hook bounded by CREDENTIAL_SETUP_TIMEOUT"
 run_test_with_setup test_symlinked_hook_ignored "Symlinked hooks ignored"
 run_test_with_setup test_writable_hook_refused_loudly "Group/world-writable hooks refused with a reason"
+run_test_with_setup test_hooks_are_opt_in "Workspace hooks are opt-in; skip is logged"
+run_test_with_setup test_setup_cmd_needs_no_opt_in "CONTAINER_CREDENTIAL_SETUP_CMD runs without the opt-in"
+run_test_with_setup test_term_ignoring_hook_reported_as_timeout "TERM-ignoring hook killed and logged as timeout"
 run_test_with_setup test_handoff_reaches_later_consumer "Hook PATH reaches a later process via the hand-off"
 run_test_with_setup test_stale_handoff_cleared_each_boot "Stale hand-off cleared each boot"
 run_test_with_setup test_missing_bash_env_file_is_harmless "BASH_ENV pointing at a missing file is harmless"
