@@ -196,6 +196,7 @@ test_rejects_escaping_sources() {
     assert_equals "2 none" "$(_escape "$(command mktemp -u)")" "an absolute source is refused"
     assert_equals "2 none" "$(_escape 'core/link.txt')" "a symlinked source is refused"
     assert_equals "2 none" "$(_escape 'dirlink/f.txt')" "a source under a symlinked directory is refused"
+    assert_equals "2 none" "$(_escape 'core/nonexistent.txt')" "a manifest row naming a missing source is refused"
 }
 
 test_rejects_symlinked_manifest() {
@@ -303,9 +304,18 @@ test_missing_templates_dir_is_named() {
     command rm -rf "$repo" "$(command dirname "$dest")"
 }
 
+test_tracked_source_is_a_full_sha_pin() {
+    # Needs no checkout, so it runs everywhere: SOURCE is exactly
+    # `containers-db <40-hex>` — no branch, no short SHA, no patch suffix.
+    assert_true "command grep -qxE 'containers-db [0-9a-f]{40}' '$TRACKED/SOURCE'" \
+        "tracked SOURCE is 'containers-db <full sha>' and nothing else"
+}
+
 test_tracked_copy_round_trips() {
     # Re-vendoring at the pinned SHA must reproduce the committed copy byte for
-    # byte — proves the tracked tree carries no local patch.
+    # byte — proves the tracked tree carries no local patch. CI fetches the
+    # pinned commit into CONTAINERS_DB_REPO (ci.yml), so there a missing
+    # checkout is a broken setup: fail, never skip (a skip reads as a pass).
     local repo="${CONTAINERS_DB_REPO:-$SIBLING}" origin sha out diffout
     read -r origin sha _ <"$TRACKED/SOURCE" || true
     if [ "$origin" != containers-db ]; then
@@ -313,7 +323,11 @@ test_tracked_copy_round_trips() {
         return 0
     fi
     if ! _git -C "$repo" cat-file -e "${sha}^{commit}" 2>/dev/null; then
-        skip_test "no containers-db checkout with $sha at $repo"
+        if [ "${CI:-false}" = "true" ]; then
+            fail_test "no containers-db checkout with $sha at $repo — required in CI, cannot silently skip (see .github/workflows/ci.yml)"
+        else
+            skip_test "no containers-db checkout with $sha at $repo"
+        fi
         return 0
     fi
     out="$(command mktemp -d)/out"
@@ -337,6 +351,7 @@ run_test test_repo_default_resolution "repo default resolution (env, non-git, mi
 run_test test_leaked_git_dir_is_ignored "a leaked GIT_DIR is ignored"
 run_test test_fallback_outside_any_git_repo "default repo outside any git checkout"
 run_test test_missing_templates_dir_is_named "a commit without baseline/templates is named"
+run_test test_tracked_source_is_a_full_sha_pin "tracked SOURCE is a full-SHA containers-db pin"
 run_test test_tracked_copy_round_trips "tracked copy round-trips from the pinned SHA"
 
 generate_report

@@ -170,6 +170,17 @@ jobs:
           sudo install -m 0755 /tmp/yq /usr/local/bin/yq
           yq --version
 
+      # tests/unit/sync-repo-baseline.sh re-vendors stibbons' repo-baseline at
+      # the SHA pinned in crates/stibbons/assets/repo-baseline/SOURCE and diffs
+      # it against the tracked copy (#1748). The shallow checkout above is the
+      # default branch's tip, so fetch the pinned commit into it explicitly;
+      # the test fails (not skips) under CI when the commit is absent.
+      - name: Fetch pinned repo-baseline commit into containers-db checkout
+        run: |
+          read -r origin sha _ < crates/stibbons/assets/repo-baseline/SOURCE
+          [ "$origin" = containers-db ] || { echo "SOURCE does not name containers-db: $origin" >&2; exit 1; }
+          git -C _containers-db fetch --depth 1 origin "$sha"
+
       - name: Run unit tests
         env:
           # Points tests/unit/vendored-catalog.sh at the checkout above. Named
@@ -177,6 +188,9 @@ jobs:
           # image sets to its own COPY of the vendored snapshot, so reusing it
           # would compare the catalog against itself and pass vacuously.
           CONTAINERS_DB_SRC: ${{ github.workspace }}/_containers-db
+          # The checkout tests/unit/sync-repo-baseline.sh re-vendors from (it
+          # holds the pinned commit fetched above).
+          CONTAINERS_DB_REPO: ${{ github.workspace }}/_containers-db
           # The pinned scanner tests/unit/okf-memory-bundle.sh drives (above).
           OKF_SCANNER: ${{ github.workspace }}/_librarian/plugins/review-audit/skills/check-okf-conformance/patterns.sh
         run: |
