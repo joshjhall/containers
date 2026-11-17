@@ -20,7 +20,8 @@ use common::run_worktree;
 /// Runs `git <args>` in `dir` with a fixed identity and a clean git env,
 /// asserting success.
 fn git(dir: &Path, args: &[&str]) {
-    let out = Command::new("git")
+    // Prevent the enclosing repo's git env from leaking into the fixture.
+    let out = common::scrub_git_env(&mut Command::new("git"))
         .current_dir(dir)
         .args(args)
         // Hermetic identity — no reliance on a global gitconfig.
@@ -28,9 +29,6 @@ fn git(dir: &Path, args: &[&str]) {
         .env("GIT_AUTHOR_EMAIL", "test@example.com")
         .env("GIT_COMMITTER_NAME", "Test")
         .env("GIT_COMMITTER_EMAIL", "test@example.com")
-        // Prevent the enclosing repo's git env from leaking into the fixture.
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
         .output()
         .expect("failed to spawn git");
     assert!(
@@ -203,11 +201,9 @@ fn worktree_list_and_sync() {
 
 /// `git -C <dir> rev-parse HEAD` with a clean git env, returning the trimmed SHA.
 fn rev_parse_head(dir: &Path) -> String {
-    let out = Command::new("git")
+    let out = common::scrub_git_env(&mut Command::new("git"))
         .current_dir(dir)
         .args(["rev-parse", "HEAD"])
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
         .output()
         .expect("failed to spawn git");
     assert!(out.status.success(), "rev-parse failed: {}", String::from_utf8_lossy(&out.stderr));
@@ -282,11 +278,9 @@ fn create_agent(project: &Path, n: &str) {
 /// True when the worktree at `dir` is stopped mid-rebase: git's own
 /// `rebase-merge` state dir (resolved per-worktree via `--git-path`) exists.
 fn is_mid_rebase(dir: &Path) -> bool {
-    let out = Command::new("git")
+    let out = common::scrub_git_env(&mut Command::new("git"))
         .current_dir(dir)
         .args(["rev-parse", "--git-path", "rebase-merge"])
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
         .output()
         .expect("failed to spawn git");
     assert!(out.status.success(), "rev-parse --git-path failed: {}", stderr(&out));
@@ -457,4 +451,35 @@ fn worktree_sync_rejects_invalid_agent_number() {
         );
     }
     assert_eq!(rev_parse_head(&worktree_dir), tip_before, "rejected syncs must not move the tip");
+}
+
+/// #1694: every stibbons spawn must strip the enclosing git env and carry a
+/// fixed identity, so stibbons' own git children (`worktree add`, `rebase`)
+/// can neither retarget the outer repo nor fail on a host with no gitconfig.
+#[test]
+fn stibbons_cmd_is_hermetic() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let cmd = common::stibbons_cmd("worktree", dir.path());
+    let envs: std::collections::HashMap<_, _> = cmd
+        .get_envs()
+        .map(|(k, v)| {
+            (k.to_string_lossy().into_owned(), v.map(|v| v.to_string_lossy().into_owned()))
+        })
+        .collect();
+
+    // Pin the list itself too, so trimming it is a visible test failure.
+    for must in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"] {
+        assert!(common::LEAKY_GIT_VARS.contains(&must), "{must} missing from LEAKY_GIT_VARS");
+    }
+    for &removed in common::LEAKY_GIT_VARS {
+        assert_eq!(envs.get(removed), Some(&None), "{removed} must be explicitly removed");
+    }
+    for (key, want) in [
+        ("GIT_AUTHOR_NAME", common::TEST_GIT_NAME),
+        ("GIT_AUTHOR_EMAIL", common::TEST_GIT_EMAIL),
+        ("GIT_COMMITTER_NAME", common::TEST_GIT_NAME),
+        ("GIT_COMMITTER_EMAIL", common::TEST_GIT_EMAIL),
+    ] {
+        assert_eq!(envs.get(key), Some(&Some(want.to_owned())), "{key} must be pinned");
+    }
 }
