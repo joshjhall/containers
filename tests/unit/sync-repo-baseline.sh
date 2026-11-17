@@ -22,6 +22,9 @@ test_suite "sync-repo-baseline"
 
 SYNC="$PROJECT_ROOT/bin/sync-repo-baseline.sh"
 TRACKED="$PROJECT_ROOT/crates/stibbons/assets/repo-baseline"
+# The default repo: containers-db beside the main checkout (worktree-aware).
+SIBLING="$(command dirname "$(command dirname "$(env -u GIT_DIR -u GIT_WORK_TREE \
+    git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir)")")/containers-db"
 
 # Hermetic git: no user/system config, no leaked GIT_DIR from a hook.
 _git() {
@@ -249,7 +252,7 @@ test_repo_default_resolution() {
     err="$(env -u CONTAINERS_DB_REPO CONTAINERS_DB="$notgit" REPO_BASELINE_DEST="$dest" \
         "$SYNC" "$sha" 2>&1 >/dev/null || true)"
     assert_not_contains "$err" "$notgit" "a non-git CONTAINERS_DB is never used as the repo"
-    assert_contains "$err" "containers-db" "the fallback sibling checkout is tried instead"
+    assert_contains "$err" " in $SIBLING " "the sibling of the main checkout is tried instead"
     assert_equals "2" "$(_sync "$dest" "$sha" "$notgit")" "a non-git repo argument is refused"
     assert_equals "2" "$(_sync "$dest" "$sha" "$other")" "a repo lacking the SHA is refused"
     command rm -rf "$repo" "$other" "$notgit" "$(command dirname "$dest")"
@@ -268,15 +271,42 @@ test_leaked_git_dir_is_ignored() {
     command rm -rf "$repo" "$decoy" "$(command dirname "$dest")"
 }
 
+test_fallback_outside_any_git_repo() {
+    # With no git checkout around the script, the default repo is
+    # <script>/../../containers-db — not anything under bin/.
+    local root sha repo err
+    root="$(command mktemp -d)"
+    repo="$(command mktemp -d)"
+    command mkdir -p "$root/proj/bin"
+    command cp "$SYNC" "$root/proj/bin/sync-repo-baseline.sh"
+    _fixture "$repo"
+    sha="$(_head "$repo")"
+    err="$(cd "$root" && env -u CONTAINERS_DB -u CONTAINERS_DB_REPO GIT_CEILING_DIRECTORIES="$root" \
+        REPO_BASELINE_DEST="$root/out" "$root/proj/bin/sync-repo-baseline.sh" "$sha" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "not a git checkout of containers-db: $root/containers-db" \
+        "outside git, the default is the checkout's parent's containers-db"
+    command rm -rf "$root" "$repo"
+}
+
+test_missing_templates_dir_is_named() {
+    local repo dest sha err
+    repo="$(command mktemp -d)"
+    dest="$(command mktemp -d)/out"
+    command printf 'x\n' >"$repo/x"
+    _git -C "$repo" init -q -b main
+    _git -C "$repo" add -A
+    _git -C "$repo" commit -q -m no-templates
+    sha="$(_head "$repo")"
+    err="$(REPO_BASELINE_DEST="$dest" "$SYNC" "$sha" "$repo" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "$sha has no baseline/templates" "a commit without the templates dir is named as such"
+    assert_dir_not_exists "$dest" "nothing written"
+    command rm -rf "$repo" "$(command dirname "$dest")"
+}
+
 test_tracked_copy_round_trips() {
     # Re-vendoring at the pinned SHA must reproduce the committed copy byte for
     # byte — proves the tracked tree carries no local patch.
-    local repo="${CONTAINERS_DB_REPO:-}" common origin sha out diffout
-    if [ -z "$repo" ]; then
-        # Same default as the script: containers-db beside the main checkout.
-        common="$(_git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
-        repo="$(command dirname "$(command dirname "${common:-$PROJECT_ROOT/.git}")")/containers-db"
-    fi
+    local repo="${CONTAINERS_DB_REPO:-$SIBLING}" origin sha out diffout
     read -r origin sha _ <"$TRACKED/SOURCE" || true
     if [ "$origin" != containers-db ]; then
         assert_equals "containers-db" "$origin" "tracked SOURCE names containers-db"
@@ -305,6 +335,8 @@ run_test test_rejects_escaping_sources "rejects sources escaping the templates d
 run_test test_rejects_symlinked_manifest "rejects a symlinked manifest.tsv"
 run_test test_repo_default_resolution "repo default resolution (env, non-git, missing SHA)"
 run_test test_leaked_git_dir_is_ignored "a leaked GIT_DIR is ignored"
+run_test test_fallback_outside_any_git_repo "default repo outside any git checkout"
+run_test test_missing_templates_dir_is_named "a commit without baseline/templates is named"
 run_test test_tracked_copy_round_trips "tracked copy round-trips from the pinned SHA"
 
 generate_report

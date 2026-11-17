@@ -86,12 +86,19 @@ fi
 stage="$(command mktemp -d)"
 trap 'command rm -rf "$stage"' EXIT
 
+if ! command git -C "$repo" cat-file -e "${sha}:baseline/templates" 2>/dev/null; then
+    printf 'sync-repo-baseline: %s has no baseline/templates\n' "$sha" >&2
+    exit 2
+fi
+
 # Extract the committed templates tree into scratch; the working tree is never
-# read. Symlinks survive as symlinks, so the guards below still see them.
+# read. Symlinks survive as symlinks, so the guards below still see them. The
+# tracked-copy round-trip test would catch any .gitattributes export filtering
+# (export-ignore/export-subst) changing the bytes.
 command mkdir -p "$stage/src" "$stage/out"
 if ! command git -C "$repo" archive --format=tar "$sha" baseline/templates |
     command tar -x -C "$stage/src"; then
-    printf 'sync-repo-baseline: %s has no baseline/templates\n' "$sha" >&2
+    printf 'sync-repo-baseline: extracting baseline/templates at %s failed\n' "$sha" >&2
     exit 2
 fi
 
