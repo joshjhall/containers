@@ -851,27 +851,34 @@ fn path_dir_with(names: &[&str]) -> tempfile::TempDir {
 }
 
 /// With no compiler named, `run()` probes the steps' `PATH` for one (#1706).
-/// The catalog `PATH` holds `gcc`/`g++` shims and nothing is inherited, so
-/// the only route to `ccache gcc` is the `on_path` probe `run()` wires in —
-/// handing `apply_compiler_launcher` a probe that finds nothing leaves both
-/// compilers unset and fails here. The injected `apply_compiler_launcher`
-/// tests above cannot see that wiring.
+/// Nothing is inherited, so `ccache gcc` can only come from the `on_path`
+/// probe `run()` wires in: a probe that finds nothing leaves both compilers
+/// unset. The control — the same run over an empty catalog `PATH` — must
+/// resolve nothing, which pins the probe to the catalog `PATH` rather than
+/// luggage's own (where a host `gcc` would satisfy the positive case). The
+/// injected `apply_compiler_launcher` tests above cannot see this wiring.
 #[cfg(unix)]
 #[test]
 fn launcher_falls_back_to_a_compiler_on_the_catalog_path() {
-    let bin = path_dir_with(&["gcc", "g++"]);
-    let mut f = Fixture::python();
-    f.launcher = Some("ccache");
-    f.inherited = Some(|_| None);
-    let env = BTreeMap::from([("PATH".to_owned(), bin.path().display().to_string())]);
-    f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+    let run_over = |dir: &tempfile::TempDir| {
+        let mut f = Fixture::python();
+        f.launcher = Some("ccache");
+        f.inherited = Some(|_| None);
+        let env = BTreeMap::from([("PATH".to_owned(), dir.path().display().to_string())]);
+        f.run_full(&python_steps(), 1, &[], None, &BTreeMap::new(), &env).unwrap();
+        let calls = f.runner.streaming_calls();
+        assert_eq!(calls.len(), 3);
+        calls
+    };
 
-    let calls = f.runner.streaming_calls();
-    assert_eq!(calls.len(), 3);
-    for call in calls {
+    for call in run_over(&path_dir_with(&["gcc", "g++"])) {
         assert_eq!(call.env.get("CC").map(String::as_str), Some("ccache gcc"), "{}", call.program);
         assert_eq!(call.env.get("CXX").map(String::as_str), Some("ccache g++"), "{}", call.program);
         assert!(call.env_remove.is_empty(), "{}: compilers resolved", call.program);
+    }
+    for call in run_over(&path_dir_with(&[])) {
+        assert_eq!(call.env.get("CC"), None, "{}: only the catalog PATH is probed", call.program);
+        assert_eq!(call.env.get("CXX"), None, "{}: only the catalog PATH is probed", call.program);
     }
 }
 
