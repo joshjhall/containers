@@ -234,9 +234,15 @@ check_identity_shadowing() {
         # Dedupe per (repo, file): a repo's .worktrees/* share its common git
         # dir and fold into one report, while unrelated repos that include the
         # same identity file are each still reported.
-        common_dir=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
-        common_dir=$(_abs_path "$common_dir")
-        key="${common_dir}"$'\t'"${file}"
+        # --git-common-dir (git >= 2.5) prints a path relative to $dir unless
+        # absolute; avoid --path-format=absolute, which needs git >= 2.31.
+        # Resolve <common>/config with the same helper as $file so a symlinked
+        # .git compares equal.
+        common_dir=$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null) || continue
+        [ -n "$common_dir" ] || continue
+        case "$common_dir" in /*) ;; *) common_dir="${dir}/${common_dir}" ;; esac
+        common_cfg=$(_abs_path "${common_dir}/config")
+        key="${common_cfg}"$'\t'"${file}"
         case "$seen" in *$'\n'"$key"$'\n'*) continue ;; esac
         seen+="${key}"$'\n'
         if [ -z "$email" ] || [ "$email" = "$global_email" ]; then
@@ -261,7 +267,6 @@ check_identity_shadowing() {
             _warn "${shown_dir}: ${scope} user.email <${shown_email}> differs from global <${shown_global}>,"
         fi
         _warn "  set in ${shown_file} — it overrides the global identity for commits here."
-        common_cfg="${common_dir}/config"
         if [ "$scope" = worktree ]; then
             _warn "  If unintended: git -C ${qdir} config --worktree --unset user.name;" \
                 "git -C ${qdir} config --worktree --unset user.email"

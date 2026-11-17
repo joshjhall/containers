@@ -1245,6 +1245,43 @@ STUB
     assert_not_contains "$out" "user.email <t@t.t>" "safe.directory is not overridden to read it"
 }
 
+test_symlinked_dot_git_gets_local_remedy() {
+    # .git is a symlink to the real git dir. git reports both the origin file
+    # and the common dir relative (".git/..."), so both sides resolve the same
+    # way; this pins that a symlinked .git keeps the --local remedy.
+    git init -q --separate-git-dir="$TEST_TEMP_DIR/real-gitdir" "$TEST_TEMP_DIR/ws/linked"
+    command rm -f "$TEST_TEMP_DIR/ws/linked/.git"
+    command ln -s "$TEST_TEMP_DIR/real-gitdir" "$TEST_TEMP_DIR/ws/linked/.git"
+    git -C "$TEST_TEMP_DIR/ws/linked" config user.email "t@t.t"
+    local out q
+    out=$(_run_identity)
+    printf -v q '%q' "$TEST_TEMP_DIR/ws/linked"
+    assert_contains "$out" "ws/linked: local user.email <t@t.t>" "Repo with a symlinked .git is reported"
+    assert_contains "$out" "git -C $q config --local --unset user.email" "Symlinked .git gets --local remedy"
+    assert_not_contains "$out" "remove the [user] entries" "Not misrouted to the include remedy"
+}
+
+test_old_git_without_path_format() {
+    # git < 2.31 rejects --path-format; the scan must not depend on it.
+    _ws_repo proj "t@t.t"
+    local real_git q
+    real_git=$(command -v git)
+    command mkdir -p "$TEST_TEMP_DIR/bin"
+    command cat >"$TEST_TEMP_DIR/bin/git" <<STUB
+#!/bin/bash
+for a in "\$@"; do
+    case "\$a" in --path-format*) echo "fatal: unknown option" >&2; exit 128 ;; esac
+done
+exec "$real_git" "\$@"
+STUB
+    command chmod +x "$TEST_TEMP_DIR/bin/git"
+    local out
+    out=$(_run_identity)
+    printf -v q '%q' "$TEST_TEMP_DIR/ws/proj"
+    assert_contains "$out" "ws/proj: local user.email <t@t.t>" "Detected without --path-format"
+    assert_contains "$out" "git -C $q config --local --unset user.email" "Still the --local remedy"
+}
+
 test_real_global_no_global_warning() {
     local out
     out=$(_run_identity)
@@ -1287,6 +1324,8 @@ run_test_with_setup test_bare_repo_reported_with_local_remedy "#1533: bare repo 
 run_test_with_setup test_submodule_gets_local_remedy "#1533: submodule config path + --local remedy"
 run_test_with_setup test_broken_worktree_skipped "#1533: broken worktree skipped, exit 0"
 run_test_with_setup test_ownership_rejected_repo_says_so "#1533: ownership-rejected repo → one skip line, exit 0"
+run_test_with_setup test_symlinked_dot_git_gets_local_remedy "#1533: symlinked .git → --local remedy"
+run_test_with_setup test_old_git_without_path_format "#1533: works on git without --path-format (< 2.31)"
 run_test_with_setup test_real_global_no_global_warning "#1533: real global email → no global warning"
 run_test_with_setup test_placeholder_rules_shared_not_duplicated "#1533: placeholder rules shared, not duplicated"
 
