@@ -18,12 +18,36 @@ const fn stibbons_bin() -> &'static str {
     env!("CARGO_BIN_EXE_stibbons")
 }
 
+/// Fixed git identity injected into every stibbons spawn (matches the `git()`
+/// fixture helper in `worktree_integration.rs`).
+pub const TEST_GIT_NAME: &str = "Test";
+pub const TEST_GIT_EMAIL: &str = "test@example.com";
+
+/// Build a hermetic `stibbons <subcommand>` command rooted at `cwd`.
+///
+/// stibbons shells out to git (`worktree add`, `status`, `rebase`, ...), so the
+/// enclosing environment must not steer those children: `GIT_DIR` /
+/// `GIT_WORK_TREE` leaked from e.g. a pre-push hook would retarget them at the
+/// outer repo, and a host without a global gitconfig would fail any commit or
+/// rebase for lack of an identity.
+pub fn stibbons_cmd(subcommand: &str, cwd: &Path) -> Command {
+    let mut cmd = Command::new(stibbons_bin());
+    cmd.current_dir(cwd)
+        .arg(subcommand)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env("GIT_AUTHOR_NAME", TEST_GIT_NAME)
+        .env("GIT_AUTHOR_EMAIL", TEST_GIT_EMAIL)
+        .env("GIT_COMMITTER_NAME", TEST_GIT_NAME)
+        .env("GIT_COMMITTER_EMAIL", TEST_GIT_EMAIL);
+    cmd
+}
+
 /// Run `stibbons init --non-interactive --config <fixture>` in `cwd`.
 pub fn run_init_noninteractive(cwd: &Path, fixture: &str) -> Output {
     let config_path = testdata_dir().join(fixture);
-    Command::new(stibbons_bin())
-        .current_dir(cwd)
-        .args(["init", "--non-interactive", "--config"])
+    stibbons_cmd("init", cwd)
+        .args(["--non-interactive", "--config"])
         .arg(config_path)
         .output()
         .expect("failed to spawn stibbons")
@@ -31,72 +55,38 @@ pub fn run_init_noninteractive(cwd: &Path, fixture: &str) -> Output {
 
 /// Run `stibbons init` with custom args in `cwd`.
 pub fn run_init_with_args(cwd: &Path, extra_args: &[&str]) -> Output {
-    Command::new(stibbons_bin())
-        .current_dir(cwd)
-        .arg("init")
-        .args(extra_args)
-        .output()
-        .expect("failed to spawn stibbons")
+    stibbons_cmd("init", cwd).args(extra_args).output().expect("failed to spawn stibbons")
 }
 
 /// Run `stibbons agent <args...>` in `cwd`.
 pub fn run_agent(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(stibbons_bin())
-        .current_dir(cwd)
-        .arg("agent")
-        .args(args)
-        .output()
-        .expect("failed to spawn stibbons")
+    stibbons_cmd("agent", cwd).args(args).output().expect("failed to spawn stibbons")
 }
 
 /// Run `stibbons status` in `cwd`, returning the full [`Output`] so callers can
 /// assert on both the exit code (0 = clean, 1 = drift/error) and stdout.
 pub fn run_status(cwd: &Path) -> Output {
-    Command::new(stibbons_bin())
-        .current_dir(cwd)
-        .arg("status")
-        .output()
-        .expect("failed to spawn stibbons")
+    stibbons_cmd("status", cwd).output().expect("failed to spawn stibbons")
 }
 
 /// Run `stibbons worktree <args...>` in `cwd`.
 pub fn run_worktree(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(stibbons_bin())
-        .current_dir(cwd)
-        .arg("worktree")
-        .args(args)
-        .output()
-        .expect("failed to spawn stibbons")
+    stibbons_cmd("worktree", cwd).args(args).output().expect("failed to spawn stibbons")
 }
 
 /// Run `stibbons add <args...>` in `cwd`.
 pub fn run_add(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(stibbons_bin())
-        .current_dir(cwd)
-        .arg("add")
-        .args(args)
-        .output()
-        .expect("failed to spawn stibbons")
+    stibbons_cmd("add", cwd).args(args).output().expect("failed to spawn stibbons")
 }
 
 /// Run `stibbons remove <args...>` in `cwd`.
 pub fn run_remove(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(stibbons_bin())
-        .current_dir(cwd)
-        .arg("remove")
-        .args(args)
-        .output()
-        .expect("failed to spawn stibbons")
+    stibbons_cmd("remove", cwd).args(args).output().expect("failed to spawn stibbons")
 }
 
 /// Run `stibbons update <args...>` in `cwd`.
 pub fn run_update(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(stibbons_bin())
-        .current_dir(cwd)
-        .arg("update")
-        .args(args)
-        .output()
-        .expect("failed to spawn stibbons")
+    stibbons_cmd("update", cwd).args(args).output().expect("failed to spawn stibbons")
 }
 
 /// Seed a project by running `init --non-interactive --config <fixture>` in
