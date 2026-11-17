@@ -694,8 +694,9 @@ test_legacy_snippet_helper_absent_is_noop() {
 # the shared helper, not a leftover inline copy.
 test_legacy_snippet_uses_shared_helper() {
     _write_gh_legacy_rc
-    local output
-    output=$(_run_setup_gh_authed RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || true
+    local rc=0 output
+    output=$(_run_setup_gh_authed RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || rc=$?
+    assert_equals "0" "$rc" "setup exits 0 when the shared helper removes the block"
     assert_contains "$output" "removed pre-#1711 token snippet" \
         "The shared helper reports the removal through setup-gh's logger"
     assert_file_not_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>&1 && gh auth status' \

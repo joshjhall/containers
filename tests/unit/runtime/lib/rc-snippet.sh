@@ -109,4 +109,48 @@ run_test_with_setup test_missing_file_returns_1 "Missing rc file returns 1"
 run_test_with_setup test_idempotent "Removal is idempotent"
 run_test_with_setup test_no_temp_files_left "Temp file is cleaned up"
 
+test_trailing_newline_in_text_ignored() {
+    printf 'before\n%s\nafter\n' "$BLOCK" >"$RC"
+    assert_equals "0" "$(_remove "$RC" "$BLOCK"$'\n')" "TEXT with a trailing newline still matches"
+    assert_equals "$(printf 'before\nafter')" "$(command cat "$RC")" "Block removed despite trailing newline in TEXT"
+}
+
+test_empty_text_never_matches() {
+    printf 'before\n\nafter\n' >"$RC"
+    local orig
+    orig=$(command cat "$RC")
+    assert_equals "1" "$(_remove "$RC" "")" "Empty TEXT returns 1 (not a false 'removed')"
+    assert_equals "$orig" "$(command cat "$RC")" "Empty TEXT leaves the file unchanged"
+}
+
+test_mode_preserved() {
+    printf 'before\n%s\n' "$BLOCK" >"$RC"
+    command chmod 600 "$RC"
+    _remove "$RC" "$BLOCK" >/dev/null
+    assert_equals "600" "$(command stat -c %a "$RC")" "In-place rewrite keeps the rc file's mode"
+}
+
+# A copy-back that fails after the redirect truncated FILE must keep the temp
+# file (the only complete copy), name it, and return 2 — never delete it.
+test_failed_copy_back_keeps_full_copy() {
+    printf 'before\n%s\nafter\n' "$BLOCK" >"$RC"
+    command mkdir -p "$TEST_TEMP_DIR/stub"
+    printf '#!/bin/sh\nexit 1\n' >"$TEST_TEMP_DIR/stub/cat"
+    command chmod +x "$TEST_TEMP_DIR/stub/cat"
+    local out rc=0
+    # BASH_ENV is unset: it rebuilds PATH in non-interactive bash, dropping the stub.
+    out=$(command env -u BASH_ENV PATH="$TEST_TEMP_DIR/stub:$PATH" bash -c '. "$1" && rc_remove_block "$2" "$3"; st=$?; printf "%s|%s" "$st" "$RC_REMOVE_BLOCK_KEPT"' _ "$SOURCE_FILE" "$RC" "$BLOCK") || rc=$?
+    assert_equals "0" "$rc" "Probe shell itself succeeds"
+    assert_equals "2" "${out%%|*}" "Failed copy-back returns 2"
+    local kept="${out#*|}"
+    assert_file_exists "$kept" "The temp file holding the edited content is kept"
+    assert_equals "$(printf 'before\nafter')" "$(command cat "$kept")" \
+        "The kept file holds the complete edited content"
+}
+
+run_test_with_setup test_trailing_newline_in_text_ignored "Trailing newline on TEXT is ignored"
+run_test_with_setup test_empty_text_never_matches "Empty TEXT never matches"
+run_test_with_setup test_mode_preserved "rc file mode preserved by in-place rewrite"
+run_test_with_setup test_failed_copy_back_keeps_full_copy "Failed copy-back keeps the full copy and returns 2"
+
 generate_report

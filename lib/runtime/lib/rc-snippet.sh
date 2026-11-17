@@ -11,16 +11,26 @@
 #                               multi-line TEXT (and one blank line directly
 #                               before it) from FILE. Only an exact, line-for-
 #                               line match is removed; a hand-edited block is
-#                               left untouched. Returns 0 when the block was
-#                               removed, 1 otherwise (no file, no match, or a
-#                               temp-file failure) so callers can log.
+#                               left untouched. One trailing newline on TEXT is
+#                               ignored; an empty TEXT never matches.
+#                               Returns:
+#                                 0 - block removed
+#                                 1 - nothing removed, FILE unchanged (no file,
+#                                     empty TEXT, no match, mktemp failure)
+#                                 2 - copy-back failed after FILE was truncated;
+#                                     the complete edited content is kept at
+#                                     $RC_REMOVE_BLOCK_KEPT so the caller can
+#                                     warn (never deleted on this path).
 
 [ -n "${_RC_SNIPPET_LOADED:-}" ] && return 0
 _RC_SNIPPET_LOADED=1
 
 rc_remove_block() {
     local rc="$1" text="$2"
-    [ -f "$rc" ] || return 1
+    # shellcheck disable=SC2034  # output variable read by callers
+    RC_REMOVE_BLOCK_KEPT=""
+    text="${text%$'\n'}"
+    [ -n "$text" ] && [ -f "$rc" ] || return 1
     # Cheap pre-check on the first line before reading the whole file in awk.
     command grep -qxF "${text%%$'\n'*}" "$rc" 2>/dev/null || return 1
     local tmp
@@ -39,8 +49,15 @@ rc_remove_block() {
             skip_from = start; if (start > 1 && line[start - 1] == "") skip_from = start - 1
             for (i = 1; i <= NR; i++) if (i < skip_from || i >= start + n) print line[i]
         }' "$rc" >"$tmp" 2>/dev/null; then
-        # Rewrite in place (not mv) so the rc file keeps its inode, owner and mode.
-        command cat "$tmp" >"$rc" && removed=0
+        # Rewrite in place (not mv) so the rc file keeps its inode, owner and
+        # mode. The redirect truncates FILE first, so if cat then fails the
+        # temp file is the only complete copy: keep it and report it.
+        if ! command cat "$tmp" >"$rc"; then
+            # shellcheck disable=SC2034  # output variable read by callers
+            RC_REMOVE_BLOCK_KEPT="$tmp"
+            return 2
+        fi
+        removed=0
     fi
     command rm -f "$tmp"
     return "$removed"

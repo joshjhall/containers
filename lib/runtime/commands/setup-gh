@@ -172,9 +172,12 @@ _remove_legacy_snippet() {
     [ -n "$lib" ] && [ -f "$lib" ] || return 0
     # shellcheck source=/dev/null
     . "$lib"
-    if rc_remove_block "$1" "$_LEGACY_SNIPPET"; then
-        _info "removed pre-#1711 token snippet from $1"
-    fi
+    local st=0
+    rc_remove_block "$1" "$_LEGACY_SNIPPET" || st=$?
+    case "$st" in
+        0) _info "removed pre-#1711 token snippet from $1" ;;
+        2) _warn "could not rewrite $1 while removing the pre-#1711 token snippet; its full edited content is saved at ${RC_REMOVE_BLOCK_KEPT} — restore it with: cp '${RC_REMOVE_BLOCK_KEPT}' '$1'" ;;
+    esac
     return 0
 }
 
