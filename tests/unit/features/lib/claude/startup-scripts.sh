@@ -391,6 +391,26 @@ test_claude_setup_helper_absent_token_only() {
     assert_file_not_contains "$TEST_TEMP_DIR/op.calls" "whoami" "Fallback: no whoami probe"
 }
 
+# The guard must NOT fire when claude-setup is executed — directly or via a
+# symlink (how it is installed on PATH). Executed with CLAUDE_PLUGIN_LIB
+# pointing nowhere, it must get past the guard and fail loud at the library
+# check; a guard that misfired would exit 0 silently and skip setup entirely.
+test_claude_setup_executed_passes_guard() {
+    command ln -s "$CLAUDE_SETUP_BIN" "$TEST_TEMP_DIR/bin/claude-setup"
+    local via out rc
+    for via in "$CLAUDE_SETUP_BIN" "$TEST_TEMP_DIR/bin/claude-setup"; do
+        rc=0
+        out=$(command env -i BASH_ENV= HOME="$TEST_TEMP_DIR/home" \
+            PATH="$TEST_TEMP_DIR/bin:/usr/bin:/bin" \
+            OP_USABLE_LIB="$TEST_TEMP_DIR/absent-op-usable.sh" \
+            CLAUDE_PLUGIN_LIB="$TEST_TEMP_DIR/no-plugin-lib.sh" \
+            "$via" 2>&1) || rc=$?
+        assert_equals "1" "$rc" "Executed via $via: exits 1 at the library check"
+        assert_contains "$out" "required library not found: $TEST_TEMP_DIR/no-plugin-lib.sh" \
+            "Executed via $via: reached the plugin-library check past the guard"
+    done
+}
+
 test_claude_setup_no_legacy_token_gate() {
     # Fixed-string match: assert_file_not_contains takes a regex, and the
     # brackets in this line would turn it into a character class.
@@ -408,6 +428,7 @@ run_test test_watcher_helper_absent_token_only "#1722: auth-watcher falls back t
 run_test test_claude_setup_resolves_with_external_op "#1722: claude-setup resolves Anthropic ref via externally authenticated op"
 run_test test_claude_setup_skips_without_auth "#1722: claude-setup skips cleanly with no auth"
 run_test test_claude_setup_helper_absent_token_only "#1722: claude-setup falls back to token-only gate without op-usable.sh"
+run_test test_claude_setup_executed_passes_guard "#1722: executed claude-setup (direct + symlink) passes the source guard"
 run_test test_claude_setup_no_legacy_token_gate "#1711: claude-setup no longer requires OP_SERVICE_ACCOUNT_TOKEN"
 
 generate_report
