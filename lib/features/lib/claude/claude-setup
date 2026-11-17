@@ -66,44 +66,6 @@ for arg in "$@"; do
     esac
 done
 
-# ============================================================================
-# Shared Plugin Primitives
-# ============================================================================
-# The override/deny-list resolution, the `claude plugin list` parsers, the
-# enablement-aware status + enable primitives, the setup lock, and the whole
-# librarian (local, offline) install path live in claude-plugin-lib.sh. They
-# were MOVED there, not copied (#777): `claude-plugins-repair` sources the same
-# file, so the every-boot path and the on-demand repair path cannot drift.
-#
-# Sourced FIRST, before anything else runs, because the mutual-exclusion lock
-# (#784) is one of the things it defines and that lock must be held for the
-# whole run — including the settings.json writes further down.
-#
-# Sourced with an explicit existence check rather than a bare `source`, because
-# under `set -e` a missing file aborts with only bash's own terse message —
-# unhelpful for the one operator who will ever hit it (a hand-copied
-# claude-setup without its library).
-CLAUDE_PLUGIN_LIB="${CLAUDE_PLUGIN_LIB:-/usr/local/lib/claude/claude-plugin-lib.sh}"
-if [ ! -r "$CLAUDE_PLUGIN_LIB" ]; then
-    echo "ERROR: required library not found: $CLAUDE_PLUGIN_LIB" >&2
-    echo "       Reinstall the claude-code-setup feature, or set CLAUDE_PLUGIN_LIB." >&2
-    exit 1
-fi
-# shellcheck source=/dev/null
-source "$CLAUDE_PLUGIN_LIB"
-
-# ============================================================================
-# Mutual Exclusion (issue #784)
-# ============================================================================
-# Acquired once and held for the whole run via an open fd, not just around the
-# plugin phase, because settings.json is touched in more than one place. The
-# lock lives in the callee rather than in either caller, so every invocation
-# path is covered — including a manual `claude-setup` run racing a
-# watcher-triggered one, and a `claude-plugins-repair` run racing either (#777).
-# Both the constant and the function come from claude-plugin-lib.sh, so the two
-# entry points cannot drift onto different lock files.
-_acquire_setup_lock "$CLAUDE_SETUP_LOCK"
-
 # Secure token storage path (RAM-backed, never touches disk)
 ANTHROPIC_TOKEN_FILE="/dev/shm/anthropic-auth-token"
 
@@ -122,15 +84,6 @@ _read_anthropic_token() {
 _has_anthropic_token() {
     [ -s "$ANTHROPIC_TOKEN_FILE" ]
 }
-
-# ============================================================================
-# Load Build-Time Configuration
-# ============================================================================
-ENABLED_FEATURES_FILE="/etc/container/config/enabled-features.conf"
-if [ -f "$ENABLED_FEATURES_FILE" ]; then
-    # shellcheck source=/dev/null
-    source "$ENABLED_FEATURES_FILE"
-fi
 
 # ============================================================================
 # Authentication Check (Token-based or OAuth)
@@ -187,6 +140,61 @@ is_claude_authenticated() {
     return 1
 }
 
+# Source guard (#1722): when sourced (tests), stop here with only the
+# definitions above loaded — no plugin library, no setup lock, no setup run.
+# Executed normally, BASH_SOURCE[0] == $0 and the script continues unchanged.
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+    return 0
+fi
+
+# ============================================================================
+# Shared Plugin Primitives
+# ============================================================================
+# The override/deny-list resolution, the `claude plugin list` parsers, the
+# enablement-aware status + enable primitives, the setup lock, and the whole
+# librarian (local, offline) install path live in claude-plugin-lib.sh. They
+# were MOVED there, not copied (#777): `claude-plugins-repair` sources the same
+# file, so the every-boot path and the on-demand repair path cannot drift.
+#
+# Sourced before any setup step runs — only the op-usable/credential-env load
+# (variable-only) and the auth-helper definitions precede it — because the
+# mutual-exclusion lock (#784) is one of the things it defines and that lock
+# must be held for the whole run, including the token-file and settings.json
+# writes further down.
+#
+# Sourced with an explicit existence check rather than a bare `source`, because
+# under `set -e` a missing file aborts with only bash's own terse message —
+# unhelpful for the one operator who will ever hit it (a hand-copied
+# claude-setup without its library).
+CLAUDE_PLUGIN_LIB="${CLAUDE_PLUGIN_LIB:-/usr/local/lib/claude/claude-plugin-lib.sh}"
+if [ ! -r "$CLAUDE_PLUGIN_LIB" ]; then
+    echo "ERROR: required library not found: $CLAUDE_PLUGIN_LIB" >&2
+    echo "       Reinstall the claude-code-setup feature, or set CLAUDE_PLUGIN_LIB." >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "$CLAUDE_PLUGIN_LIB"
+
+# ============================================================================
+# Mutual Exclusion (issue #784)
+# ============================================================================
+# Acquired once and held for the whole run via an open fd, not just around the
+# plugin phase, because settings.json is touched in more than one place. The
+# lock lives in the callee rather than in either caller, so every invocation
+# path is covered — including a manual `claude-setup` run racing a
+# watcher-triggered one, and a `claude-plugins-repair` run racing either (#777).
+# Both the constant and the function come from claude-plugin-lib.sh, so the two
+# entry points cannot drift onto different lock files.
+_acquire_setup_lock "$CLAUDE_SETUP_LOCK"
+
+# ============================================================================
+# Load Build-Time Configuration
+# ============================================================================
+ENABLED_FEATURES_FILE="/etc/container/config/enabled-features.conf"
+if [ -f "$ENABLED_FEATURES_FILE" ]; then
+    # shellcheck source=/dev/null
+    source "$ENABLED_FEATURES_FILE"
+fi
 
 # Exit early if Claude Code not available
 if ! command -v claude &> /dev/null; then
@@ -196,20 +204,6 @@ fi
 
 echo "=== Claude Code Setup ==="
 echo ""
-# ============================================================================
-# Shared Plugin Primitives
-# ============================================================================
-# The override/deny-list resolution, the `claude plugin list` parsers, the
-# enablement-aware status + enable primitives, and the whole librarian (local,
-# offline) install path live in claude-plugin-lib.sh. They were MOVED there,
-# not copied (#777): `claude-plugins-repair` sources the same file, so the
-# every-boot path and the on-demand repair path cannot drift.
-#
-# Sourced with an explicit existence check rather than a bare `source`, because
-# under `set -e` a missing file aborts with only bash's own terse message —
-# unhelpful for the one operator who will ever hit it (a hand-copied
-# claude-setup without its library).
-
 # ============================================================================
 # Plugin Installation Logic
 # ============================================================================
