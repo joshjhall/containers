@@ -130,20 +130,39 @@ test_ci_uses_shared_script() {
     assert_equals "0" "$inline" "render.sh parity no longer reads librarian"
 }
 
+# Print one ci.yml step: from the `- name: <name>` line (exact match) up to,
+# not including, the next `- name:` line. Prints nothing if absent, so every
+# caller first asserts on a line only that step carries.
+ci_step() {
+    command awk -v want="- name: $1" '
+        { line = $0; sub(/^[[:space:]]+/, "", line) }
+        on && line ~ /^- name: / { exit }
+        line == want { on = 1 }
+        on
+    ' "$CI_WORKFLOW"
+}
+
 # matches_baseline_render_sh skips without the pinned commit, and a skip
-# renders as a pass (#768). The rust-test step must therefore point it at the
-# pinned checkout AND set REQUIRE_BASELINE_PARITY, or parity goes green unrun.
+# renders as a pass (#768). The rust-test job must therefore check
+# containers-db out at the pinned SHA, point the test at it, AND set
+# REQUIRE_BASELINE_PARITY, or parity goes green unrun.
 test_ci_requires_parity() {
     local step
-    # The `Run tests` step of rust-test: from its name to the next step.
-    step=$(command awk '/- name: Run tests$/ {on=1} on && /- name: Verify build/ {exit} on' "$CI_WORKFLOW")
+    step=$(ci_step "Checkout containers-db at the pin (for render.sh parity)")
+    assert_contains "$step" "repository: joshjhall/containers-db" "found the parity checkout step"
+    assert_contains "$step" "ref: \${{ steps.baseline.outputs.sha }}" "parity checkout is at the pinned SHA"
+    assert_contains "$step" "path: _containers-db" "parity checkout lands where Run tests looks"
+    assert_contains "$step" "persist-credentials: false" "parity checkout keeps the token out"
+
+    step=$(ci_step "Read repo-baseline pin (for render.sh parity)")
+    assert_contains "$step" "id: baseline" "the pin step is the one the checkout reads"
+
+    step=$(ci_step "Run tests")
     assert_contains "$step" "cargo test --workspace" "found the rust-test Run tests step"
     assert_contains "$step" "REQUIRE_BASELINE_PARITY: \${{ runner.os == 'Linux' && '1' || '' }}" \
         "Run tests requires parity on Linux"
     assert_contains "$step" "CONTAINERS_DB_REPO: \${{ github.workspace }}/_containers-db" \
         "Run tests points parity at the containers-db checkout"
-    assert_true "command grep -q 'ref: \${{ steps.baseline.outputs.sha }}' '$CI_WORKFLOW'" \
-        "containers-db is checked out at the pinned SHA"
 }
 
 run_test test_valid_source_prints_sha "valid SOURCE prints the SHA"
