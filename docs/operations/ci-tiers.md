@@ -183,18 +183,23 @@ the same SHA triggers the merge tier (`ci.yml`).
 
 ### Rust tests: path-filtered OS matrix
 
-`rust-test` runs on **ubuntu only** for a PR that touches no Rust input, and on
-ubuntu + macOS + Windows for a PR touching `crates/`, `Cargo.toml`,
-`Cargo.lock`, or `rust-toolchain*` (#1593). Push to main, `v*` tags, the nightly
+`rust-test` is **skipped** for a PR that touches no Rust input (#1653), and runs
+on ubuntu + macOS + Windows for a PR that does (#1593). Rust input is anything
+the job's outcome depends on: `crates/`, `Cargo.toml`, `Cargo.lock`,
+`rust-toolchain*`, `.cargo/`, `clippy.toml`, `.rustfmt.toml`, `VERSION`,
+`ci.yml`, `bin/read-librarian-pin.sh`, and a Dockerfile change to a
+`LIBRARIAN_REF` line (the render.sh parity pin). Push to main, `v*` tags, the nightly
 schedule, and `workflow_dispatch` always run all three — `build` needs them.
+`rust-latest-stable` follows the same skip.
 
 [`bin/rust-test-matrix.sh`](../../bin/rust-test-matrix.sh), run by the
-`rust-changes` job (`Rust Test Matrix`), picks the list and fails safe to the
-full matrix if the diff cannot be computed. The per-OS legs carry a templated
-name, so the required context is the always-running rollup
-**`Rust Tests`** (`rust-test-result`), the same pattern as `PR Tier`. It passes
-only when the detector and every leg it chose succeeded; a skipped or cancelled
-leg is never a pass (#904). Tested by
+`rust-changes` job (`Rust Test Matrix`), emits `run=true|false` plus the OS list,
+and fails safe to `run=true` and the full matrix if the diff cannot be computed.
+The per-OS legs carry a templated name, so the required context is the
+always-running rollup **`Rust Tests`** (`rust-test-result`), the same pattern as
+`PR Tier`. It passes when the detector succeeded and either every leg succeeded
+or `rust-test` was skipped **because the detector said `run=false`**. Any other
+skip, a cancelled leg, or a failed detector is never a pass (#904). Tested by
 [`tests/unit/required-checks-rust-tests.sh`](../../tests/unit/required-checks-rust-tests.sh).
 
 ## ci.yml job tiers
@@ -206,10 +211,10 @@ after merge. PR-tier jobs are the required contexts or feed one.
 | ----------------------------------------------- | -- | --------- | ------- | -------- | --- |
 | `test` (Run Tests)                              | ✅ diff-scoped lint | ✅ full | ✅ full | ✅ | Required context; the only shell/unit gate |
 | `lint-ai-templates`                             | ✅ (no-op unless templates change) | ✅ | ✅ | ✅ | Seconds when skipped; cheap |
-| `rust-changes` (Rust Test Matrix)               | ✅ | ✅ | ✅ | ✅ | Picks the rust-test OS list |
-| `rust-test` (Rust Tests (stibbons) — *os*)      | ubuntu; all 3 if Rust paths change | all 3 | all 3 | all 3 | macOS/Windows are the scarce, 10×/2×-billed runners |
+| `rust-changes` (Rust Test Matrix)               | ✅ | ✅ | ✅ | ✅ | Decides whether rust-test runs, and on which OSes |
+| `rust-test` (Rust Tests (stibbons) — *os*)      | skipped unless Rust paths change, then all 3 | all 3 | all 3 | all 3 | macOS/Windows are the scarce, 10×/2×-billed runners |
 | `rust-test-result` (Rust Tests)                 | ✅ | ✅ | ✅ | ✅ | Required-context rollup |
-| `rust-latest-stable`                            | ✅ (non-blocking) | ✅ | ✅ | ✅ | One ubuntu runner; early warning for the next MSRV bump |
+| `rust-latest-stable`                            | ✅ if Rust paths change (non-blocking) | ✅ | ✅ | ✅ | One ubuntu runner; early warning for the next MSRV bump |
 | `build` (Build (Merge Tier))                    | — | ✅ | — | ✅ | Merge tier; the PR tier covers PRs |
 | `integration-test`                              | — | ✅ | — | ✅ | Needs `build` |
 | `debian-version-test`                           | — | ✅ | — | ✅ | Heavy; merge tier |

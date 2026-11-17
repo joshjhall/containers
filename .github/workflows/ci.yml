@@ -514,16 +514,18 @@ jobs:
   # =====================================
   # Rust Tests (stibbons)
   # =====================================
-  # PR tier (#1593): a PR that touches no Rust input runs rust-test on ubuntu
-  # only; one touching crates/, Cargo.{toml,lock} or rust-toolchain* runs all
-  # three OSes, as do push, tags, schedule and dispatch (`build` needs the
-  # full matrix). bin/rust-test-matrix.sh decides and fails safe to FULL.
+  # PR tier (#1593, #1653): a PR that touches no Rust input skips rust-test
+  # (run=false) and `Rust Tests` passes on that skip; one touching crates/,
+  # Cargo.{toml,lock} or rust-toolchain* runs all three OSes, as do push, tags,
+  # schedule and dispatch (`build` needs the full matrix).
+  # bin/rust-test-matrix.sh decides and fails safe to run=true + FULL.
   rust-changes:
     name: Rust Test Matrix
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
-      matrix: ${{ steps.matrix.outputs.os }}
+      run: ${{ steps.matrix.outputs.run }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -537,13 +539,15 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          os=$(bin/rust-test-matrix.sh "$EVENT_NAME" "$BASE_REF")
-          echo "rust-test OS matrix: $os"
-          echo "os=$os" >>"$GITHUB_OUTPUT"
+          out=$(bin/rust-test-matrix.sh "$EVENT_NAME" "$BASE_REF")
+          echo "rust-test decision:"
+          echo "$out"
+          echo "$out" >>"$GITHUB_OUTPUT"
 
   rust-test:
     name: Rust Tests (stibbons) — ${{ matrix.os }}
     needs: rust-changes
+    if: needs.rust-changes.outputs.run == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -619,9 +623,11 @@ jobs:
 
   # Required-check rollup for rust-test (#1593, #904). The matrix legs carry a
   # templated, shape-dependent name, so branch protection points at this one
-  # literal context instead. Fail closed: every leg must have run and passed,
-  # and the matrix detector must have succeeded — a skipped or cancelled
-  # rust-test is never a pass (the ubuntu leg is in every matrix).
+  # literal context instead. Fail closed: the matrix detector must have
+  # succeeded, and every leg must have run and passed — EXCEPT that a skipped
+  # rust-test passes when the detector explicitly said run=false (a PR with no
+  # Rust input, #1653). Skipped with run=true or an empty run, or cancelled,
+  # is never a pass.
   rust-test-result:
     name: Rust Tests
     needs: [rust-changes, rust-test]
@@ -633,13 +639,18 @@ jobs:
         env:
           DETECT_RESULT: ${{ needs.rust-changes.result }}
           TEST_RESULT: ${{ needs.rust-test.result }}
+          RUN: ${{ needs.rust-changes.outputs.run }}
           MATRIX: ${{ needs.rust-changes.outputs.matrix }}
         run: |
           set -euo pipefail
-          echo "rust-changes=${DETECT_RESULT} rust-test=${TEST_RESULT} matrix=${MATRIX:-<none>}"
+          echo "rust-changes=${DETECT_RESULT} run=${RUN:-<none>} rust-test=${TEST_RESULT} matrix=${MATRIX:-<none>}"
           if [ "$DETECT_RESULT" != "success" ]; then
             echo "::error::Rust test matrix detector did not succeed (${DETECT_RESULT})"
             exit 1
+          fi
+          if [ "$TEST_RESULT" = "skipped" ] && [ "${RUN:-}" = "false" ]; then
+            echo "Rust Tests skipped: no Rust input changed"
+            exit 0
           fi
           if [ "$TEST_RESULT" != "success" ]; then
             echo "::error::rust-test did not pass (${TEST_RESULT})"
@@ -653,8 +664,11 @@ jobs:
   # clippy on the floating `stable` toolchain, never failing the run. 1.99's
   # `assert_is_empty` (28 sites, #1104) is the kind of thing this catches
   # weeks early instead of mid-release.
+  # Follows rust-test's skip: nothing to lint on a PR with no Rust input.
   rust-latest-stable:
     name: Rust lints on latest stable (non-blocking)
+    needs: rust-changes
+    if: needs.rust-changes.outputs.run == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     continue-on-error: true
@@ -694,6 +708,7 @@ jobs:
     name: Build (Merge Tier) — ${{ matrix.variant.name }}
     runs-on: ubuntu-26.04
     timeout-minutes: 60
+    # Never sees a skipped rust-test: run=false is PR-only, and build is not.
     needs: [test, rust-test]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
