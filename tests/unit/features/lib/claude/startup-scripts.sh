@@ -428,6 +428,23 @@ test_claude_setup_executed_passes_guard() {
     done
 }
 
+# Ordering tripwire for the #1722 hoist: the source guard, then the setup lock,
+# then the first is_claude_authenticated CALL (its first token-file write). A
+# behavioural check would have to execute claude-setup with a token set, which
+# writes the hardcoded live /dev/shm token file — so this one is structural.
+test_claude_setup_lock_precedes_first_auth_call() {
+    local guard lock call
+    guard=$(command grep -n '^if \[\[ "${BASH_SOURCE\[0\]}" != "\$0" \]\]; then$' "$CLAUDE_SETUP_BIN" | command head -1 | command cut -d: -f1)
+    lock=$(command grep -n '^_acquire_setup_lock "\$CLAUDE_SETUP_LOCK"$' "$CLAUDE_SETUP_BIN" | command head -1 | command cut -d: -f1)
+    call=$(command grep -n 'is_claude_authenticated;' "$CLAUDE_SETUP_BIN" | command head -1 | command cut -d: -f1)
+    if [ -n "$guard" ] && [ -n "$lock" ] && [ -n "$call" ] &&
+        [ "$guard" -lt "$lock" ] && [ "$lock" -lt "$call" ]; then
+        pass_test "source guard ($guard) < setup lock ($lock) < first auth call ($call)"
+    else
+        fail_test "expected source guard < setup lock < first auth call; got guard='$guard' lock='$lock' call='$call'"
+    fi
+}
+
 test_claude_setup_no_legacy_token_gate() {
     # Tripwire only: a revert of #1711 restoring the exact token-only gate. The
     # behavioural tests above are what pin the gate's actual semantics.
@@ -449,6 +466,7 @@ run_test test_claude_setup_skips_without_auth "#1722: claude-setup skips cleanly
 run_test test_claude_setup_token_path_unchanged "#1722: claude-setup token path unchanged (no whoami)"
 run_test test_claude_setup_helper_absent_token_only "#1722: claude-setup falls back to token-only gate without op-usable.sh"
 run_test test_claude_setup_executed_passes_guard "#1722: executed claude-setup (direct + symlink) passes the source guard"
+run_test test_claude_setup_lock_precedes_first_auth_call "#1722: claude-setup takes its lock before the first auth call"
 run_test test_claude_setup_no_legacy_token_gate "#1711: claude-setup no longer requires OP_SERVICE_ACCOUNT_TOKEN"
 
 generate_report
