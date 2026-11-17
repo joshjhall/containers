@@ -132,6 +132,11 @@ _mutant() {
         echo "mutation did not apply: $script"
         return 1
     fi
+    # A mutant that no longer parses would "differ" for the wrong reason.
+    if ! bash -n "$out" 2>/dev/null; then
+        echo "mutation broke syntax: $script"
+        return 1
+    fi
 }
 
 # ----------------------------------------------------------------------------
@@ -189,7 +194,7 @@ test_cache_hit_never_probes_op() {
             assert_equals "" "$err" "mutation applies"
             return
         }
-    assert_not_equals "whoami=0 read=0 token=from-cache cache=token" \
+    assert_equals "whoami=1 read=0 token=from-cache cache=token" \
         "$(_case_cache_hit "$m")" \
         "Mutant (gate before cache check) is caught: whoami probed"
 }
@@ -211,7 +216,7 @@ test_no_token_whoami_ok_resolves_and_caches() {
             assert_equals "" "$err" "mutation applies"
             return
         }
-    assert_not_equals "whoami=1 read=1 token=secret:op://Dev/GitHub/token cache=token" \
+    assert_equals "whoami=0 read=0 token=<unset> cache=absent" \
         "$(_case_whoami_ok "$m")" \
         "Mutant (token-only gate) is caught: secret not resolved"
 }
@@ -236,7 +241,7 @@ test_no_token_whoami_fails_reads_nothing() {
             return
         }
     got=$(_case_whoami_fails "$m")
-    assert_not_equals "read=0 token=<unset> cache=absent" "${got#whoami=* }" \
+    assert_equals "read=1 token=secret:op://Dev/GitHub/token cache=token" "${got#whoami=* }" \
         "Mutant (gate always open) is caught: op read / cache write"
 }
 
@@ -279,7 +284,7 @@ test_token_fast_path_without_op_usable() {
             assert_equals "" "$err" "mutation applies"
             return
         }
-    assert_not_equals "whoami=0 read=1 token=secret:op://Dev/GitHub/token cache=token" \
+    assert_equals "whoami=0 read=0 token=<unset> cache=absent" \
         "$(_case_token_fast_path "$m")" \
         "Mutant (no token fast path) is caught"
 }
