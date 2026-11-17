@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# Unit tests for the path-filtered rust-test OS matrix and its `Rust Tests`
-# rollup in .github/workflows/ci.yml (#1593).
+# Unit tests for the path-filtered rust-test decision and its `Rust Tests`
+# rollup in .github/workflows/ci.yml (#1593, #1653).
 #
 # `Rust Tests` is a required context (tests/unit/required-checks.sh proves it
 # always REPORTS). This suite proves:
-#   - bin/rust-test-matrix.sh picks ubuntu-only for a non-Rust PR, the full
-#     ubuntu/macOS/Windows matrix for a Rust PR and every non-PR event, and
-#     fails SAFE (full matrix) when the diff cannot be computed;
-#   - the shipped Summarize block passes only when the detector AND every
-#     matrix leg succeeded — never on `skipped` or `cancelled` (#904);
-#   - the job wiring (needs, always(), fromJSON matrix) that makes both true.
+#   - bin/rust-test-matrix.sh says run=false for a non-Rust PR, run=true with
+#     the full ubuntu/macOS/Windows matrix for a Rust PR and every non-PR
+#     event, and fails SAFE (run=true, full matrix) when the diff cannot be
+#     computed;
+#   - the shipped Summarize block passes only when the detector succeeded AND
+#     either every matrix leg succeeded or rust-test was skipped because the
+#     detector said run=false — never on `cancelled`, nor on a skip the
+#     detector did not ask for (#904);
+#   - the job wiring (needs, if gates, always(), fromJSON matrix) behind both.
 #
 # The rollup is extracted from the workflow and EXECUTED, not re-described.
 #
@@ -34,7 +37,10 @@ CI_WORKFLOW="${CI_WORKFLOW:-$PROJECT_ROOT/.github/workflows/ci.yml}"
 MATRIX_SCRIPT="${MATRIX_SCRIPT:-$PROJECT_ROOT/bin/rust-test-matrix.sh}"
 
 readonly FULL='["ubuntu-26.04","macos-26","windows-2025"]'
-readonly LINUX_ONLY='["ubuntu-26.04"]'
+readonly SKIP_MATRIX='["ubuntu-26.04"]'
+# The detector's whole answer, as the two lines it appends to $GITHUB_OUTPUT.
+readonly RUN_FULL="run=true matrix=$FULL"
+readonly SKIP="run=false matrix=$SKIP_MATRIX"
 
 # Build a throwaway repo whose `origin/main` is the base commit, then put
 # one commit adding $1 on top as HEAD. Prints the repo path.
@@ -65,26 +71,30 @@ _pr_repo() {
     /usr/bin/printf '%s\n' "$repo"
 }
 
+# Run the detector in $1 and print its output joined onto one line
+# ("run=… matrix=…") so a whole answer compares in one string.
 _matrix_in() {
-    local repo="$1"
+    local repo="$1" out
     shift
-    (
+    out="$(
         unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
         cd "$repo" && bash "$MATRIX_SCRIPT" "$@" 2>/dev/null
-    )
+    )" || return $?
+    /usr/bin/printf '%s\n' "$out" | /usr/bin/paste -sd' ' -
 }
 
 test_matrix_by_changed_path() {
     # changed path | expected matrix | why
     local -a cases=(
-        "bin/check-versions.sh|$LINUX_ONLY|a bin/-only PR runs ubuntu only"
-        "tests/unit/foo.sh|$LINUX_ONLY|a tests/-only PR runs ubuntu only"
-        "docs/operations/ci-tiers.md|$LINUX_ONLY|a docs-only PR runs ubuntu only"
-        "crates/stibbons/src/lib.rs|$FULL|a crates/ PR runs all three OSes"
-        "Cargo.toml|$FULL|a Cargo.toml PR runs all three OSes"
-        "Cargo.lock|$FULL|a Cargo.lock PR runs all three OSes"
-        "rust-toolchain.toml|$FULL|a rust-toolchain PR runs all three OSes"
-        "docs/a.md,bin/b.sh,crates/stibbons/src/lib.rs|$FULL|a Rust path is not masked by other changed files"
+        "bin/check-versions.sh|$SKIP|a bin/-only PR skips rust-test"
+        "tests/unit/foo.sh|$SKIP|a tests/-only PR skips rust-test"
+        "docs/operations/ci-tiers.md|$SKIP|a docs-only PR skips rust-test"
+        ".claude/memory/x.md|$SKIP|a memory-only PR (#1652) skips rust-test"
+        "crates/stibbons/src/lib.rs|$RUN_FULL|a crates/ PR runs all three OSes"
+        "Cargo.toml|$RUN_FULL|a Cargo.toml PR runs all three OSes"
+        "Cargo.lock|$RUN_FULL|a Cargo.lock PR runs all three OSes"
+        "rust-toolchain.toml|$RUN_FULL|a rust-toolchain PR runs all three OSes"
+        "docs/a.md,bin/b.sh,crates/stibbons/src/lib.rs|$RUN_FULL|a Rust path is not masked by other changed files"
     )
     local row path want why repo got violations=0
     for row in "${cases[@]}"; do
@@ -99,7 +109,7 @@ test_matrix_by_changed_path() {
             violations=$((violations + 1))
         fi
     done
-    assert_equals 0 "$violations" "PR matrix is right for all ${#cases[@]} changed-path shapes"
+    assert_equals 0 "$violations" "PR decision is right for all ${#cases[@]} changed-path shapes"
 }
 
 test_matrix_full_for_non_pr_events() {
@@ -108,11 +118,11 @@ test_matrix_full_for_non_pr_events() {
         assert_true false "could not build a scratch repo"
         return 0
     }
-    # A docs-only diff would be ubuntu-only on a PR: proves the event decides.
+    # A docs-only diff would skip on a PR: proves the event decides.
     for ev in push schedule workflow_dispatch; do
         got="$(_matrix_in "$repo" "$ev" main)"
-        if [ "$got" != "$FULL" ]; then
-            /usr/bin/echo "  $ev: expected $FULL, got $got"
+        if [ "$got" != "$RUN_FULL" ]; then
+            /usr/bin/echo "  $ev: expected $RUN_FULL, got $got"
             violations=$((violations + 1))
         fi
     done
@@ -126,9 +136,9 @@ test_matrix_fails_safe() {
         return 0
     }
     got="$(_matrix_in "$repo" pull_request no-such-base)"
-    assert_equals "$FULL" "$got" "an unresolvable base ref yields the full matrix, not ubuntu-only"
+    assert_equals "$RUN_FULL" "$got" "an unresolvable base ref runs the full matrix, never the skip"
     got="$(_matrix_in "$repo" pull_request "")"
-    assert_equals "$FULL" "$got" "a PR with no base ref yields the full matrix"
+    assert_equals "$RUN_FULL" "$got" "a PR with no base ref runs the full matrix, never the skip"
 }
 
 # --- rollup verdict ----------------------------------------------------------
@@ -148,25 +158,31 @@ test_rollup_verdict_matrix() {
         assert_true false "could not extract rust-test-result's 'Summarize' step from ci.yml"
         return 0
     fi
-    # detect result | rust-test result | expected exit | why
-    # The passing row matters as much as the failing ones: a rollup that failed
+    # detect result | rust-test result | detector run output | expected exit | why
+    # The passing rows matter as much as the failing ones: a rollup that failed
     # everything would satisfy every other row while blocking every PR.
     local -a cases=(
-        "success|success|0|detector and every leg passed"
-        "success|failure|1|a failing leg fails the rollup"
-        "success|cancelled|1|a cancelled rust-test fails the rollup"
-        "success|skipped|1|a skipped rust-test is never a pass"
-        "failure|skipped|1|a failed detector fails the rollup"
-        "cancelled|skipped|1|a cancelled detector fails the rollup"
+        "success|success|true|0|detector and every leg passed"
+        "success|skipped|false|0|a no-Rust PR's skip, asked for by the detector, passes (#1653)"
+        "success|failure|true|1|a failing leg fails the rollup"
+        "success|cancelled|true|1|a cancelled rust-test fails the rollup"
+        "success|cancelled|false|1|a cancelled rust-test fails even when the detector said skip"
+        "success|failure|false|1|a failing rust-test fails even when the detector said skip"
+        "success|skipped|true|1|a skip the detector did not ask for is never a pass"
+        "success|skipped||1|a skip with no run output is never a pass"
+        "success|skipped|False|1|only the exact string 'false' admits a skip"
+        "failure|skipped|false|1|a failed detector fails the rollup, whatever it printed"
+        "cancelled|skipped|false|1|a cancelled detector fails the rollup"
+        "skipped|skipped||1|a skipped detector fails the rollup"
     )
-    local row detect test want why rc violations=0
+    local row detect test run want why rc violations=0
     for row in "${cases[@]}"; do
-        IFS='|' read -r detect test want why <<<"$row"
+        IFS='|' read -r detect test run want why <<<"$row"
         rc=0
-        DETECT_RESULT="$detect" TEST_RESULT="$test" MATRIX="$LINUX_ONLY" \
+        DETECT_RESULT="$detect" TEST_RESULT="$test" RUN="$run" MATRIX="$SKIP_MATRIX" \
             bash "$script" >/dev/null 2>&1 || rc=$?
         if [ "$rc" != "$want" ]; then
-            /usr/bin/echo "  detect=$detect rust-test=$test: expected exit $want, got $rc — $why"
+            /usr/bin/echo "  detect=$detect rust-test=$test run=${run:-<empty>}: expected exit $want, got $rc — $why"
             violations=$((violations + 1))
         fi
     done
@@ -185,11 +201,29 @@ test_rollup_job_shape() {
     out=$(run_yq '.jobs["rust-test"].strategy.matrix.os' "$CI_WORKFLOW") || out="FAILED"
     assert_equals '${{ fromJSON(needs.rust-changes.outputs.matrix) }}' "$out" \
         "rust-test's OS list comes from the detector"
+    local gate="needs.rust-changes.outputs.run == 'true'"
     out=$(run_yq '.jobs["rust-test"].if // "none"' "$CI_WORKFLOW") || out="FAILED"
-    assert_equals "none" "$out" "rust-test is never skipped by a job-level if (build needs it)"
+    assert_equals "$gate" "$out" "rust-test runs only when the detector says run=true"
+    out=$(run_yq '.jobs["rust-latest-stable"].if // "none"' "$CI_WORKFLOW") || out="FAILED"
+    assert_equals "$gate" "$out" "rust-latest-stable follows rust-test's skip"
+    out=$(run_yq '.jobs["rust-latest-stable"].needs' "$CI_WORKFLOW") || out="FAILED"
+    assert_equals "rust-changes" "$out" "rust-latest-stable reads the detector"
+    out=$(run_yq '.jobs["rust-changes"].outputs.run' "$CI_WORKFLOW") || out="FAILED"
+    assert_equals '${{ steps.matrix.outputs.run }}' "$out" "the detector job exposes the run decision"
+    out=$(run_yq '.jobs["rust-changes"].outputs.matrix' "$CI_WORKFLOW") || out="FAILED"
+    assert_equals '${{ steps.matrix.outputs.matrix }}' "$out" "the detector job exposes the OS matrix"
+    out=$(run_yq '.jobs["rust-test-result"].steps[] | select(.name == "Summarize") | .env.RUN' "$CI_WORKFLOW") || out="FAILED"
+    assert_equals '${{ needs.rust-changes.outputs.run }}' "$out" \
+        "the rollup reads the detector's run decision, not just its result"
+    # build needs rust-test, and a skipped need skips build. run=false is
+    # PR-only, so build must never run on a PR.
+    out=$(run_yq '.jobs["build"].if' "$CI_WORKFLOW") || out="FAILED"
+    assert_equals "github.event_name == 'push' || github.event_name == 'workflow_dispatch'" "$out" \
+        "build runs only on push/dispatch, where rust-test is never skipped"
     out=$(run_yq '.jobs["rust-changes"].steps[] | select(.id == "matrix") | .run' "$CI_WORKFLOW") || out="FAILED"
     assert_contains "$out" 'bin/rust-test-matrix.sh "$EVENT_NAME" "$BASE_REF"' \
         "the detector job runs the tested script"
+    assert_contains "$out" '>>"$GITHUB_OUTPUT"' "the detector's lines land in the step outputs"
     # Without full history origin/<base> is absent, the diff fails, and the
     # detector falls back to FULL on every PR — safe, but silently loses the
     # whole saving.
@@ -199,9 +233,9 @@ test_rollup_job_shape() {
     assert_not_equals "null" "$out" "ci.yml has a nightly schedule for the full matrix"
 }
 
-run_test test_matrix_by_changed_path "rust-test OS matrix follows the PR's changed paths"
-run_test test_matrix_full_for_non_pr_events "non-PR events always get the full OS matrix"
-run_test test_matrix_fails_safe "the matrix detector fails safe to the full matrix"
+run_test test_matrix_by_changed_path "rust-test decision follows the PR's changed paths"
+run_test test_matrix_full_for_non_pr_events "non-PR events always run the full OS matrix"
+run_test test_matrix_fails_safe "the detector fails safe to run=true and the full matrix"
 run_test test_rollup_verdict_matrix "Rust Tests rollup verdict across upstream states"
 run_test test_rollup_job_shape "Rust Tests rollup and matrix wiring in ci.yml"
 
