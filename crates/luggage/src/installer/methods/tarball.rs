@@ -521,10 +521,7 @@ fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()
     // staging as they land, so what is still in staging plus what moved is
     // the archive's full contribution — or a lower bound on it, when part of
     // staging could not be read.
-    let total = match count_leaves(staging) {
-        EntryTotal::Exact(n) => EntryTotal::Exact(moved.len() + n),
-        EntryTotal::AtLeast(n) => EntryTotal::AtLeast(moved.len() + n),
-    };
+    let total = add_moved(moved.len(), count_leaves(staging));
     tracing::warn!(
         prefix = %prefix.display(),
         merged = moved.len(),
@@ -542,6 +539,15 @@ fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()
         path,
         source,
     })
+}
+
+/// Add the `moved` entries that already landed to what is still in
+/// staging, keeping a lower bound a lower bound.
+const fn add_moved(moved: usize, staged: EntryTotal) -> EntryTotal {
+    match staged {
+        EntryTotal::Exact(n) => EntryTotal::Exact(moved + n),
+        EntryTotal::AtLeast(n) => EntryTotal::AtLeast(moved + n),
+    }
 }
 
 /// Render the landed paths for the merge-failure log: the first `limit`

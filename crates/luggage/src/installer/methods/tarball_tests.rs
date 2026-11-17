@@ -1282,6 +1282,16 @@ fn count_leaves_marks_an_unreadable_subtree_as_a_lower_bound() {
     assert_eq!(count_leaves_with(root.path(), &|d| fs::read_dir(d)), EntryTotal::Exact(4));
 }
 
+/// The merge-failure total adds what already landed to what is still in
+/// staging; an incomplete staging count must stay a lower bound after that
+/// sum rather than being promoted to exact.
+#[test]
+fn add_moved_preserves_whether_the_total_is_exact() {
+    assert_eq!(add_moved(2, EntryTotal::Exact(1)), EntryTotal::Exact(3));
+    assert_eq!(add_moved(2, EntryTotal::AtLeast(1)), EntryTotal::AtLeast(3));
+    assert_eq!(add_moved(0, EntryTotal::AtLeast(0)), EntryTotal::AtLeast(0));
+}
+
 #[test]
 fn landed_summary_lists_everything_under_the_limit() {
     let moved = vec![PathBuf::from("/p/a"), PathBuf::from("/p/b")];
