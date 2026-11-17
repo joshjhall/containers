@@ -905,6 +905,13 @@ fn launcher_returns_an_unreplaced_inherited_bare_launcher_for_removal() {
     assert_eq!(remove, ["CC", "CXX"]);
     assert!(env.is_empty(), "{env:?}");
 
+    // A catalog compiler replaces the inherited bare `CC` (env wins at
+    // spawn), so only the unresolved `CXX` is stripped.
+    let mut env = BTreeMap::from([("CC".to_owned(), "gcc-13".to_owned())]);
+    let remove = apply_compiler_launcher(&mut env, "ccache", bare, path_with(&[]));
+    assert_eq!(remove, ["CXX"]);
+    assert_eq!(env["CC"], "ccache gcc-13");
+
     // By path, and only for the variable left unresolved.
     let by_path = |var: &str| (var == "CXX").then(|| "/opt/x/ccache".to_owned());
     let mut env = BTreeMap::new();
