@@ -273,8 +273,13 @@ setup_auth_key() {
     key_fp=$(ssh-keygen -lf "$key_path" 2>/dev/null | awk '{print $2}') || true
     if [ -n "$key_fp" ]; then
         if ! ssh-add -l 2>/dev/null | command grep -qF "$key_fp"; then
-            ssh-add "$key_path" 2>/dev/null
-            _ok "auth key added to ssh-agent"
+            # Best-effort: core.sshCommand below does not need the agent, so a
+            # failed add (dead socket, refused key) must not abort under set -e.
+            if ssh-add "$key_path" 2>/dev/null; then
+                _ok "auth key added to ssh-agent"
+            else
+                _warn "could not add auth key to ssh-agent (agent unreachable or key refused); continuing"
+            fi
         else
             _skip "auth key already in ssh-agent"
         fi
@@ -358,8 +363,13 @@ setup_signing_key() {
         key_fp=$(ssh-keygen -lf "$priv" 2>/dev/null | awk '{print $2}') || true
         if [ -n "$key_fp" ]; then
             if ! ssh-add -l 2>/dev/null | command grep -qF "$key_fp"; then
-                ssh-add "$priv" 2>/dev/null
-                _ok "signing key added to ssh-agent"
+                # Best-effort: signing is already configured above from the
+                # key file; a failed agent add must not abort under set -e.
+                if ssh-add "$priv" 2>/dev/null; then
+                    _ok "signing key added to ssh-agent"
+                else
+                    _warn "could not add signing key to ssh-agent (agent unreachable or key refused); continuing"
+                fi
             else
                 _skip "signing key already in ssh-agent"
             fi
