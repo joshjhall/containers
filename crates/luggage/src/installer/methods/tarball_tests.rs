@@ -1176,15 +1176,21 @@ fn merge_failure_reports_how_far_it_got() {
     let err = f.run_plain(0).unwrap_err();
     let message = err.to_string();
 
-    let LuggageError::ArchiveMergeFailed { artifact, prefix, merged, total, path, .. } = err else {
+    let LuggageError::ArchiveMergeFailed(failure) = err else {
         panic!("expected ArchiveMergeFailed, got {message}");
     };
+    let ArchiveMergeFailure { artifact, prefix, merged, total, path, .. } = *failure;
     assert_eq!(artifact, "tool.tar.gz");
     assert_eq!(prefix, f.prefix.path());
-    assert_eq!((merged, total), (2, 3), "two of the three entries landed before `c/` failed");
+    assert_eq!(
+        (merged, total),
+        (2, EntryTotal::Exact(3)),
+        "two of the three entries landed before `c/` failed"
+    );
     assert_eq!(path, f.prefix.path().join("c"));
 
     assert!(message.contains("2 of 3"), "progress missing from: {message}");
+    assert!(!message.contains("at least"), "a complete count must read as exact: {message}");
     assert!(
         message.contains(&f.prefix.path().display().to_string()),
         "prefix missing from: {message}"
@@ -1207,10 +1213,11 @@ fn nested_merge_failure_counts_across_recursion() {
     fs::write(f.prefix.path().join("a/sub"), b"in the way").unwrap();
 
     let err = f.run_plain(0).unwrap_err();
-    let LuggageError::ArchiveMergeFailed { merged, total, path, .. } = err else {
+    let LuggageError::ArchiveMergeFailed(failure) = err else {
         panic!("expected ArchiveMergeFailed, got {err}");
     };
-    assert_eq!((merged, total), (2, 4));
+    let ArchiveMergeFailure { merged, total, path, .. } = *failure;
+    assert_eq!((merged, total), (2, EntryTotal::Exact(4)));
     assert_eq!(path, f.prefix.path().join("a/sub"));
 }
 
@@ -1243,8 +1250,66 @@ fn count_leaves_counts_nested_files_and_does_not_follow_dir_links() {
     fs::create_dir(root.path().join("empty")).unwrap();
 
     // top, a/one, a/b/two, link-to-a (one leaf, not its 2-file target).
-    assert_eq!(count_leaves(root.path()), 4);
-    assert_eq!(count_leaves(&root.path().join("missing")), 0);
+    assert_eq!(count_leaves(root.path()), EntryTotal::Exact(4));
+    // An unreadable root is "unknown", not "empty".
+    assert_eq!(count_leaves(&root.path().join("missing")), EntryTotal::AtLeast(0));
+}
+
+/// A subtree that cannot be read must turn the count into a lower bound
+/// rather than silently counting as empty (#1688). Injected through the
+/// `read_dir` seam because tests may run as root, where `chmod 000` would
+/// not stop the walk.
+#[test]
+fn count_leaves_marks_an_unreadable_subtree_as_a_lower_bound() {
+    let root = tempdir().unwrap();
+    fs::create_dir_all(root.path().join("ok")).unwrap();
+    fs::create_dir_all(root.path().join("locked/deep")).unwrap();
+    fs::write(root.path().join("top"), b"").unwrap();
+    fs::write(root.path().join("ok/one"), b"").unwrap();
+    fs::write(root.path().join("locked/hidden"), b"").unwrap();
+    fs::write(root.path().join("locked/deep/hidden"), b"").unwrap();
+
+    let locked = root.path().join("locked");
+    let lister = |d: &Path| {
+        if d == locked {
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        } else {
+            list_dir(d)
+        }
+    };
+
+    // top + ok/one are readable; locked/'s two files are not.
+    assert_eq!(count_leaves_with(root.path(), &lister), EntryTotal::AtLeast(2));
+    // The same tree with nothing blocked is exact — the seam alone changes it.
+    assert_eq!(count_leaves_with(root.path(), &list_dir), EntryTotal::Exact(4));
+}
+
+/// An entry the listing could not read, or whose file type could not be
+/// read, is not counted — it might be an empty directory, and `AtLeast` must
+/// never overshoot — and either way the total becomes a lower bound.
+#[test]
+fn count_leaves_marks_unreadable_entries_and_file_types_as_a_lower_bound() {
+    let denied = || std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+    let file = |name: &str| Ok((PathBuf::from(name), Ok(false)));
+
+    let bad_entry = |_: &Path| Ok(vec![file("a"), Err(denied()), file("b")]);
+    assert_eq!(count_leaves_with(Path::new("/x"), &bad_entry), EntryTotal::AtLeast(2));
+
+    let bad_type = |_: &Path| Ok(vec![file("a"), Ok((PathBuf::from("b"), Err(denied())))]);
+    assert_eq!(count_leaves_with(Path::new("/x"), &bad_type), EntryTotal::AtLeast(1));
+
+    let all_good = |_: &Path| Ok(vec![file("a"), file("b")]);
+    assert_eq!(count_leaves_with(Path::new("/x"), &all_good), EntryTotal::Exact(2));
+}
+
+/// The merge-failure total adds what already landed to what is still in
+/// staging; an incomplete staging count must stay a lower bound after that
+/// sum rather than being promoted to exact.
+#[test]
+fn add_moved_preserves_whether_the_total_is_exact() {
+    assert_eq!(add_moved(2, EntryTotal::Exact(1)), EntryTotal::Exact(3));
+    assert_eq!(add_moved(2, EntryTotal::AtLeast(1)), EntryTotal::AtLeast(3));
+    assert_eq!(add_moved(0, EntryTotal::AtLeast(0)), EntryTotal::AtLeast(0));
 }
 
 #[test]

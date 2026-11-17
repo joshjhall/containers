@@ -81,7 +81,7 @@ impl From<&LuggageError> for ErrorClass {
             | LuggageError::UnsafeArchiveEntry { .. }
             | LuggageError::ArchiveTooLarge { .. }
             | LuggageError::ArchiveExtractionFailed { .. }
-            | LuggageError::ArchiveMergeFailed { .. }
+            | LuggageError::ArchiveMergeFailed(_)
             | LuggageError::BuildStepFailed { .. } => Self::InstallMethod,
             LuggageError::Io { .. }
             | LuggageError::Parse { .. }
@@ -123,6 +123,61 @@ pub struct UnsupportedPlatformDetails {
     pub reason: Option<String>,
     /// Optional upstream tracking URL.
     pub tracking_url: Option<String>,
+}
+
+/// How many files and links an archive contributes, as reported by
+/// [`LuggageError::ArchiveMergeFailed`].
+///
+/// The total is walked best-effort after a merge has already failed, often
+/// because of a permission or I/O problem that also hides part of the staging
+/// tree. When some of it could not be read the count is only a lower bound,
+/// and it renders as `at least N` so it is not mistaken for an exact figure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntryTotal {
+    /// Every entry was counted.
+    Exact(usize),
+    /// Part of the tree was unreadable; the true total is at least this.
+    AtLeast(usize),
+}
+
+impl fmt::Display for EntryTotal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Exact(n) => write!(f, "{n}"),
+            Self::AtLeast(n) => write!(f, "at least {n}"),
+        }
+    }
+}
+
+/// Detail payload for [`LuggageError::ArchiveMergeFailed`]: moving an
+/// already-extracted archive from staging into its prefix failed partway.
+///
+/// The prefix is shared with other tools, so the merge cannot be rolled
+/// back safely; instead this reports how far it got, so whoever has to
+/// repair a half-installed toolchain knows where to look. The paths that
+/// already landed are also logged at `warn` level when this is raised.
+#[derive(Debug, Error)]
+#[error(
+    "merging `{artifact}` into {prefix} failed after {merged} of {total} entries landed, \
+     at {path}: {source}"
+)]
+pub struct ArchiveMergeFailure {
+    /// Artifact being installed.
+    pub artifact: String,
+    /// Extraction prefix the entries were being merged into.
+    pub prefix: PathBuf,
+    /// Files and links already moved into the prefix before the failure.
+    pub merged: usize,
+    /// Files and links the archive contributes in total — a lower bound
+    /// ([`EntryTotal::AtLeast`]) when part of staging was unreadable.
+    pub total: EntryTotal,
+    /// Path the failing operation was acting on. Usually the destination
+    /// inside the prefix; when reading the extracted tree itself failed it
+    /// is the staging path, which is removed once this error returns.
+    pub path: PathBuf,
+    /// Underlying I/O error.
+    #[source]
+    pub source: std::io::Error,
 }
 
 /// Errors raised by luggage during catalog load and version resolution.
@@ -394,33 +449,14 @@ pub enum LuggageError {
     },
 
     /// Moving an already-extracted archive from staging into its prefix
-    /// failed partway.
+    /// failed partway. See [`ArchiveMergeFailure`] for the fields.
     ///
-    /// The prefix is shared with other tools, so the merge cannot be rolled
-    /// back safely; instead this reports how far it got, so whoever has to
-    /// repair a half-installed toolchain knows where to look. The paths that
-    /// already landed are also logged at `warn` level when this is raised.
-    #[error(
-        "merging `{artifact}` into {prefix} failed after {merged} of {total} entries landed, \
-         at {path}: {source}"
-    )]
-    ArchiveMergeFailed {
-        /// Artifact being installed.
-        artifact: String,
-        /// Extraction prefix the entries were being merged into.
-        prefix: PathBuf,
-        /// Files and links already moved into the prefix before the failure.
-        merged: usize,
-        /// Files and links the archive contributes in total.
-        total: usize,
-        /// Path the failing operation was acting on. Usually the destination
-        /// inside the prefix; when reading the extracted tree itself failed it
-        /// is the staging path, which is removed once this error returns.
-        path: PathBuf,
-        /// Underlying I/O error.
-        #[source]
-        source: std::io::Error,
-    },
+    /// Boxed so the [`LuggageError`] enum stays small enough to satisfy
+    /// `clippy::result_large_err` — two `PathBuf`s, a `String`, an
+    /// `io::Error`, and the [`EntryTotal`] tag push it past the threshold on
+    /// Windows, where `PathBuf` is wider than on Unix.
+    #[error(transparent)]
+    ArchiveMergeFailed(Box<ArchiveMergeFailure>),
 
     /// A `source-build` step exited non-zero.
     ///
@@ -505,6 +541,31 @@ impl fmt::Display for FormatUnsupported<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn entry_total_renders_a_lower_bound_distinctly() {
+        assert_eq!(EntryTotal::Exact(3).to_string(), "3");
+        assert_eq!(EntryTotal::AtLeast(3).to_string(), "at least 3");
+    }
+
+    /// An incomplete count changes only how the total reads: the progress,
+    /// failing path, and original I/O error all still come through.
+    #[test]
+    fn archive_merge_failed_marks_an_incomplete_total() {
+        let err = LuggageError::ArchiveMergeFailed(Box::new(ArchiveMergeFailure {
+            artifact: "node.tar.xz".into(),
+            prefix: PathBuf::from("/usr/local"),
+            merged: 2,
+            total: EntryTotal::AtLeast(3),
+            path: PathBuf::from("/usr/local/lib"),
+            source: std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied"),
+        }));
+        let message = err.to_string();
+        assert!(message.contains("after 2 of at least 3 entries"), "{message}");
+        assert!(message.contains("/usr/local/lib: denied"), "{message}");
+        let source = std::error::Error::source(&err).expect("source preserved");
+        assert_eq!(source.to_string(), "denied");
+    }
 
     #[test]
     fn unsupported_platform_exit_code_is_two() {
@@ -799,14 +860,14 @@ mod tests {
                 ErrorClass::InstallMethod,
             ),
             (
-                LuggageError::ArchiveMergeFailed {
+                LuggageError::ArchiveMergeFailed(Box::new(ArchiveMergeFailure {
                     artifact: "node.tar.xz".into(),
                     prefix: PathBuf::from("/usr/local"),
                     merged: 1,
-                    total: 2,
+                    total: EntryTotal::Exact(2),
                     path: PathBuf::from("/usr/local/bin"),
                     source: std::io::Error::other("x"),
-                },
+                })),
                 ErrorClass::InstallMethod,
             ),
             (
