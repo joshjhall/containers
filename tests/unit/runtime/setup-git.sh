@@ -1043,6 +1043,8 @@ test_missing_workspace_root_is_silent() {
 test_empty_global_email() {
     # setup_identity always writes a fallback, so drive check_identity_shadowing
     # directly: source a scratch copy without its trailing `main "$@"` call.
+    assert_equals 'main "$@"' "$(command tail -n 1 "$SETUP_GIT_SCRIPT")" \
+        "setup-git still ends with the main call this test strips"
     command sed '$d' "$SETUP_GIT_SCRIPT" >"$TEST_TEMP_DIR/setup-git-fns"
     command cp "$PROJECT_ROOT/lib/runtime/commands/_git-email-placeholder" "$TEST_TEMP_DIR/"
     _ws_repo work "me@work-corp.io"
@@ -1057,6 +1059,55 @@ test_empty_global_email() {
     assert_not_contains "$out" "differs from global <>" "No 'differs from global <>' message"
     assert_contains "$out" "local user.email <me@work-corp.io> is set but no global user.email is" \
         "Local email with no global says so plainly"
+}
+
+test_worktree_scope_identity_detected() {
+    # extensions.worktreeConfig + `git config --worktree` writes config.worktree,
+    # which `git config --local` never reads — but git commit does.
+    _ws_repo wtcfg
+    git -C "$TEST_TEMP_DIR/ws/wtcfg" config extensions.worktreeConfig true
+    git -C "$TEST_TEMP_DIR/ws/wtcfg" config --worktree user.email "t@t.t"
+    local out q
+    out=$(_run_identity)
+    printf -v q '%q' "$TEST_TEMP_DIR/ws/wtcfg"
+    assert_contains "$out" "ws/wtcfg: worktree user.email <t@t.t> is a placeholder" \
+        "A config.worktree identity is detected"
+    assert_contains "$out" "set in $TEST_TEMP_DIR/ws/wtcfg/.git/config.worktree" \
+        "Warning names config.worktree"
+    assert_contains "$out" "git -C $q config --worktree --unset user.email" \
+        "Remedy uses --worktree for a worktree-scoped identity"
+}
+
+test_included_identity_detected() {
+    # An identity pulled in via include.path still shadows the global one.
+    _ws_repo inc
+    printf '[user]\n\temail = t@t.t\n' >"$TEST_TEMP_DIR/ws/inc/.git/identity.inc"
+    git -C "$TEST_TEMP_DIR/ws/inc" config include.path identity.inc
+    local out
+    out=$(_run_identity)
+    assert_contains "$out" "ws/inc: local user.email <t@t.t> is a placeholder" \
+        "An included identity is detected"
+    assert_contains "$out" "set in $TEST_TEMP_DIR/ws/inc/.git/identity.inc" \
+        "Warning names the included file, not .git/config"
+    assert_contains "$out" "remove the [user] entries from $TEST_TEMP_DIR/ws/inc/.git/identity.inc" \
+        "Remedy points at the included file (--unset cannot reach it)"
+}
+
+test_symlinked_root_dedupes() {
+    # WORKSPACE_ROOT reached via a symlink: the parent reports a relative
+    # .git/config (prefixed with the symlinked dir) while its worktree reports
+    # git's resolved absolute path. Only symlink-resolving normalization makes
+    # them the same file, so the repo must still be reported once.
+    _ws_repo proj "t@t.t"
+    git -C "$TEST_TEMP_DIR/ws/proj" -c user.name=a -c user.email=a@b.co \
+        commit -q --allow-empty -m init
+    git -C "$TEST_TEMP_DIR/ws/proj" worktree add -q .worktrees/w
+    command ln -s "$TEST_TEMP_DIR/ws" "$TEST_TEMP_DIR/ws-link"
+    local out
+    out=$(_run_identity WORKSPACE_ROOT="$TEST_TEMP_DIR/ws-link")
+    assert_contains "$out" "local user.email <t@t.t>" "Repo found through the symlinked root"
+    assert_equals "1" "$(printf '%s\n' "$out" | command grep -c 'local user.email <t@t.t>')" \
+        "Symlinked root + worktree still reported once"
 }
 
 test_real_global_no_global_warning() {
@@ -1090,6 +1141,9 @@ run_test_with_setup test_missing_helper_falls_back "#1533: missing helper → st
 run_test_with_setup test_root_worktrees_and_non_repos "#1533: WORKSPACE_ROOT/.worktrees scanned; non-repo dirs skipped"
 run_test_with_setup test_missing_workspace_root_is_silent "#1533: absent WORKSPACE_ROOT → silent, exit 0"
 run_test_with_setup test_empty_global_email "#1533: no global email → no '<>' placeholder/differs message"
+run_test_with_setup test_worktree_scope_identity_detected "#1533: config.worktree identity detected; --worktree remedy"
+run_test_with_setup test_included_identity_detected "#1533: include.path identity detected; names the included file"
+run_test_with_setup test_symlinked_root_dedupes "#1533: symlinked WORKSPACE_ROOT + worktree reported once"
 run_test_with_setup test_real_global_no_global_warning "#1533: real global email → no global warning"
 run_test_with_setup test_placeholder_rules_shared_not_duplicated "#1533: placeholder rules shared, not duplicated"
 

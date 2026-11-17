@@ -166,6 +166,17 @@ _workspace_repo_candidates() {
     done
 }
 
+# Absolute, symlink-resolved form of an existing path $1; portable to
+# BusyBox (no GNU `realpath -m`). Falls back to $1 unchanged.
+_abs_path() {
+    local p="$1" d
+    if d=$(cd "$(dirname "$p")" 2>/dev/null && pwd -P); then
+        printf '%s/%s' "$d" "$(basename "$p")"
+    else
+        printf '%s' "$p"
+    fi
+}
+
 # Echo $1 with control characters (incl. ANSI escapes' ESC) removed.
 _printable() {
     printf '%s' "$1" | command tr -d '[:cntrl:]'
@@ -182,19 +193,24 @@ check_identity_shadowing() {
         _warn "  until GIT_USER_EMAIL resolves (check OP_GIT_USER_EMAIL_REF)."
     fi
 
-    local dir origin file email seen=$'\n'
+    local dir origin scope file email common_cfg seen=$'\n'
     while IFS= read -r dir; do
         git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || continue
-        origin=$(git -C "$dir" config --local --show-origin --get user.email 2>/dev/null) || continue
-        # "file:/path/.git/config<TAB>email" — worktrees share their repo's
-        # config, so report each config file once.
+        # Resolve user.email the way `git commit` does: every scope, includes
+        # followed (a scope flag like --local would skip config.worktree and
+        # include.path files). Output: "<scope>\tfile:<path>\t<email>".
+        origin=$(git -C "$dir" config --show-scope --show-origin --get user.email 2>/dev/null) || continue
+        scope="${origin%%$'\t'*}"
+        origin="${origin#*$'\t'}"
+        case "$scope" in local | worktree) ;; *) continue ;; esac
         file="${origin%%$'\t'*}"
         file="${file#file:}"
+        email="${origin#*$'\t'}"
         # Relative to -C dir (".git/config"); absolutize for the message and
         # so a worktree's "../../.git/config" dedupes against its parent.
+        # The file exists, so plain realpath (no GNU -m) is enough.
         case "$file" in /*) ;; *) file="${dir}/${file}" ;; esac
-        file=$(command realpath -m "$file" 2>/dev/null || printf '%s' "$file")
-        email="${origin#*$'\t'}"
+        file=$(_abs_path "$file")
         case "$seen" in *$'\n'"$file"$'\n'*) continue ;; esac
         seen+="${file}"$'\n'
         if [ -z "$email" ] || [ "$email" = "$global_email" ]; then
@@ -210,15 +226,25 @@ check_identity_shadowing() {
         shown_file=$(_printable "$file")
         printf -v qdir '%q' "$dir"
         if reason=$(placeholder_reason "$email"); then
-            _warn "${shown_dir}: local user.email <${shown_email}> is a placeholder (${reason}),"
+            _warn "${shown_dir}: ${scope} user.email <${shown_email}> is a placeholder (${reason}),"
         elif [ -z "$global_email" ]; then
-            _warn "${shown_dir}: local user.email <${shown_email}> is set but no global user.email is,"
+            _warn "${shown_dir}: ${scope} user.email <${shown_email}> is set but no global user.email is,"
         else
-            _warn "${shown_dir}: local user.email <${shown_email}> differs from global <${shown_global}>,"
+            _warn "${shown_dir}: ${scope} user.email <${shown_email}> differs from global <${shown_global}>,"
         fi
         _warn "  set in ${shown_file} — it overrides the global identity for commits here."
-        _warn "  If unintended: git -C ${qdir} config --local --unset user.name;" \
-            "git -C ${qdir} config --local --unset user.email"
+        common_cfg=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+        common_cfg=$(_abs_path "${common_cfg}/config")
+        if [ "$scope" = worktree ]; then
+            _warn "  If unintended: git -C ${qdir} config --worktree --unset user.name;" \
+                "git -C ${qdir} config --worktree --unset user.email"
+        elif [ "$file" = "$common_cfg" ]; then
+            _warn "  If unintended: git -C ${qdir} config --local --unset user.name;" \
+                "git -C ${qdir} config --local --unset user.email"
+        else
+            # Pulled in via include.path / includeIf — --unset can't reach it.
+            _warn "  If unintended: remove the [user] entries from ${shown_file} (included by the repo config)."
+        fi
     done < <(_workspace_repo_candidates)
     return 0
 }
