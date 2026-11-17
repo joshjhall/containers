@@ -412,6 +412,8 @@ test_claude_setup_executed_passes_guard() {
 }
 
 test_claude_setup_no_legacy_token_gate() {
+    # Tripwire only: a revert of #1711 restoring the exact token-only gate. The
+    # behavioural tests above are what pin the gate's actual semantics.
     # Fixed-string match: assert_file_not_contains takes a regex, and the
     # brackets in this line would turn it into a character class.
     if command grep -qF '[ -n "${OP_ANTHROPIC_AUTH_TOKEN_REF:-}" ] && [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]' "$CLAUDE_SETUP_BIN"; then
