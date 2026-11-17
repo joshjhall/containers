@@ -208,6 +208,9 @@ test_no_token_whoami_ok_resolves_and_caches() {
     assert_equals "whoami=1 read=1 token=secret:op://Dev/GitHub/token cache=token" \
         "$(_case_whoami_ok "$BASHRC")" \
         "No token + whoami ok: OP_*_REF resolved and cache written"
+    # The cache holds secrets and is later trusted via -O: it must be private.
+    assert_equals "600" "$(command stat -c '%a' "$CACHE_FILE" 2>/dev/null)" \
+        "Cache written mode 600"
 
     # Mutation: gate ignores op_is_usable (token-only, the pre-#1711 gate).
     local m="$TEST_TEMP_DIR/mutant.sh" err
