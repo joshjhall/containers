@@ -23,19 +23,38 @@ const fn stibbons_bin() -> &'static str {
 pub const TEST_GIT_NAME: &str = "Test";
 pub const TEST_GIT_EMAIL: &str = "test@example.com";
 
+/// Repository-locating git env vars that a hook (pre-commit/pre-push) exports
+/// and that would steer a git child at the enclosing repo. All are removed
+/// from every stibbons spawn.
+pub const LEAKY_GIT_VARS: &[&str] = &[
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_PREFIX",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+];
+
+/// Remove every [`LEAKY_GIT_VARS`] entry from `cmd`'s environment. Use on any
+/// git or stibbons spawn in these tests.
+pub fn scrub_git_env(cmd: &mut Command) -> &mut Command {
+    for var in LEAKY_GIT_VARS {
+        cmd.env_remove(var);
+    }
+    cmd
+}
+
 /// Build a hermetic `stibbons <subcommand>` command rooted at `cwd`.
 ///
 /// stibbons shells out to git (`worktree add`, `status`, `rebase`, ...), so the
-/// enclosing environment must not steer those children: `GIT_DIR` /
-/// `GIT_WORK_TREE` leaked from e.g. a pre-push hook would retarget them at the
-/// outer repo, and a host without a global gitconfig would fail any commit or
+/// enclosing environment must not steer those children: any of
+/// [`LEAKY_GIT_VARS`] leaked from e.g. a pre-push hook would retarget them at
+/// the outer repo, and a host without a global gitconfig would fail any commit or
 /// rebase for lack of an identity.
 pub fn stibbons_cmd(subcommand: &str, cwd: &Path) -> Command {
     let mut cmd = Command::new(stibbons_bin());
-    cmd.current_dir(cwd)
-        .arg(subcommand)
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
+    scrub_git_env(cmd.current_dir(cwd).arg(subcommand))
         .env("GIT_AUTHOR_NAME", TEST_GIT_NAME)
         .env("GIT_AUTHOR_EMAIL", TEST_GIT_EMAIL)
         .env("GIT_COMMITTER_NAME", TEST_GIT_NAME)
