@@ -119,6 +119,15 @@ test_writable_hook_refused_loudly() {
         "The refusal names the file and the reason"
 }
 
+test_stale_handoff_cleared_when_nothing_runs() {
+    # A previous boot's hooks wrote the hand-off; now hooks are switched off.
+    printf 'export PATH="/old/provider/shims:$PATH"\n' >"$ENV_FILE"
+    _hook 10-repo.sh "true"
+    HOOKS_FLAG=false _run >/dev/null
+    assert_file_not_exists "$ENV_FILE" \
+        "Turning hooks off retires the stale hand-off (no old PATH re-applied)"
+}
+
 test_hooks_are_opt_in() {
     _hook 10-repo.sh "echo repo >>'$TEST_TEMP_DIR/order'"
     local out
@@ -197,6 +206,7 @@ run_test_with_setup test_failing_hook_does_not_stop_next "Failing hook logged; n
 run_test_with_setup test_hanging_hook_is_bounded "Hanging hook bounded by CREDENTIAL_SETUP_TIMEOUT"
 run_test_with_setup test_symlinked_hook_ignored "Symlinked hooks ignored"
 run_test_with_setup test_writable_hook_refused_loudly "Group/world-writable hooks refused with a reason"
+run_test_with_setup test_stale_handoff_cleared_when_nothing_runs "Stale hand-off cleared even when no hook runs"
 run_test_with_setup test_hooks_are_opt_in "Workspace hooks are opt-in; skip is logged"
 run_test_with_setup test_setup_cmd_needs_no_opt_in "CONTAINER_CREDENTIAL_SETUP_CMD runs without the opt-in"
 run_test_with_setup test_term_ignoring_hook_reported_as_timeout "TERM-ignoring hook killed and logged as timeout"

@@ -85,14 +85,17 @@ elif [ "${#_candidates[@]}" -gt 0 ]; then
 fi
 unset _h _candidates
 
+# Fresh hand-off file every boot: stale entries from a previous start must not
+# outlive the hooks that wrote them. Cleared BEFORE the nothing-to-run exit, so
+# turning hooks off (or removing them) also retires what they last wrote — a
+# recover-entrypoint replay keeps /dev/shm across "boots".
+_env_file="${CONTAINER_CREDENTIAL_ENV_FILE:-/dev/shm/container-credential-env.$(id -u)}"
+command rm -f "$_env_file" 2>/dev/null
+
 if [ -z "${CONTAINER_CREDENTIAL_SETUP_CMD:-}" ] && [ "${#_hooks[@]}" -eq 0 ]; then
     exit 0
 fi
 
-# Fresh hand-off file every boot: stale entries from a previous start must not
-# outlive the hooks that wrote them.
-_env_file="${CONTAINER_CREDENTIAL_ENV_FILE:-/dev/shm/container-credential-env.$(id -u)}"
-command rm -f "$_env_file" 2>/dev/null
 if ! (umask 077 && : >"$_env_file") 2>/dev/null; then
     _log "WARN: cannot create hand-off file ${_env_file}; hooks' env will not reach later scripts"
 fi
