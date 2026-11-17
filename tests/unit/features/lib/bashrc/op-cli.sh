@@ -289,11 +289,50 @@ test_token_fast_path_without_op_usable() {
         "Mutant (no token fast path) is caught"
 }
 
+# The -O guard keeps a cache another user could have planted from being
+# sourced as shell. A symlink to a root-owned file passes -f and fails -O, so
+# the shell must fall through to the gate rather than source it. (It also must
+# not overwrite it: the write is skipped while the path exists.)
+test_foreign_cache_not_sourced() {
+    if [ "$(id -u)" = 0 ]; then
+        skip_test "running as root: every file passes -O"
+        return
+    fi
+    _sandbox_bashrc >/dev/null || {
+        assert_equals "" "sandbox failed" "sandbox"
+        return
+    }
+    _stub_op 0
+    local foreign=/etc/passwd
+    _case_foreign() {
+        _reset_run
+        command ln -s "$foreign" "$CACHE_FILE"
+        _verdict "$1"
+    }
+    assert_equals "whoami=1 read=1 token=secret:op://Dev/GitHub/token cache=no-token" \
+        "$(_case_foreign "$BASHRC")" \
+        "Cache not owned by the user: ignored, secrets resolved via op"
+
+    # Mutation: drop the ownership check.
+    local m="$TEST_TEMP_DIR/mutant.sh" err
+    err=$(_mutant "$m" 's/ \&\& \[ -O "\$_OP_SECRETS_CACHE" \]//') ||
+        {
+            assert_equals "" "$err" "mutation applies"
+            return
+        }
+    # Sourcing the foreign file short-circuits secret loading (read=0); the
+    # later git-identity step still probes whoami since it set no identity.
+    assert_equals "whoami=1 read=0 token=<unset> cache=no-token" \
+        "$(_case_foreign "$m")" \
+        "Mutant (no -O check) is caught: foreign cache sourced"
+}
+
 run_test_with_setup test_sandbox_rewrites_apply "Sandbox rewrites the cache + op-usable.sh paths"
 run_test_with_setup test_cache_hit_never_probes_op "Cache hit → op whoami never called (mutation-checked)"
 run_test_with_setup test_no_token_whoami_ok_resolves_and_caches "No token + whoami ok → secrets resolve, cache written (mutation-checked)"
 run_test_with_setup test_no_token_whoami_fails_reads_nothing "No token + whoami fails → no op read, no cache (mutation-checked)"
 run_test_with_setup test_token_fast_path_skips_whoami "Token fast path → no whoami"
 run_test_with_setup test_token_fast_path_without_op_usable "No op-usable.sh: token fast path still opens the gate (mutation-checked)"
+run_test_with_setup test_foreign_cache_not_sourced "Cache not owned by the user → not sourced (mutation-checked)"
 
 generate_report
