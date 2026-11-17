@@ -5,7 +5,7 @@ configs, justfile, test runner, tool installer, and GitHub or GitLab CI) to any
 repository and reports when it drifts. The baseline is containers-db's
 repo-baseline scaffold (`baseline/templates/`). This command is its
 deterministic, non-LLM renderer: for the same selection it writes the same
-bytes as the reference `render.sh`.
+bytes as librarian's reference `render.sh`.
 
 No devcontainer or `.igor.yml` is required.
 

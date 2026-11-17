@@ -29,6 +29,10 @@
 # REPO_BASELINE_DEST overrides the destination (tests vendor into scratch).
 set -euo pipefail
 
+# `git -C <repo>` must mean <repo>: a GIT_DIR/GIT_WORK_TREE leaked from a hook
+# or worktree context would silently redirect every call below.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dest="${REPO_BASELINE_DEST:-$here/../crates/stibbons/assets/repo-baseline}"
 
@@ -42,8 +46,13 @@ if [ -z "$repo" ]; then
     else
         # Sibling of the main checkout — resolved through the common git dir so
         # a run from .worktrees/<name> still finds it.
+        # Without git's answer, fall back to the parent of this checkout.
         common="$(command git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
-        repo="$(command dirname "$(command dirname "${common:-$here/../.git}")")/containers-db"
+        if [ -n "$common" ]; then
+            repo="$(command dirname "$(command dirname "$common")")/containers-db"
+        else
+            repo="$(cd "$here/../.." && pwd)/containers-db"
+        fi
     fi
 fi
 
@@ -90,6 +99,10 @@ templates="$stage/src/baseline/templates"
 manifest="$templates/manifest.tsv"
 out="$stage/out"
 
+if [ -L "$manifest" ]; then
+    printf 'sync-repo-baseline: manifest is a symlink: baseline/templates/manifest.tsv\n' >&2
+    exit 2
+fi
 if [ ! -f "$manifest" ]; then
     printf 'sync-repo-baseline: manifest not found at %s: baseline/templates/manifest.tsv\n' "$sha" >&2
     exit 2

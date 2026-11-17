@@ -195,6 +195,79 @@ test_rejects_escaping_sources() {
     assert_equals "2 none" "$(_escape 'dirlink/f.txt')" "a source under a symlinked directory is refused"
 }
 
+test_rejects_symlinked_manifest() {
+    local repo dest t
+    repo="$(command mktemp -d)"
+    dest="$(command mktemp -d)/out"
+    _fixture "$repo"
+    t="$repo/baseline/templates"
+    command mv "$t/manifest.tsv" "$repo/real-manifest.tsv"
+    # Absolute, so it resolves to a real host file after extraction — a
+    # relative link would dangle in scratch and fail for the wrong reason.
+    command ln -s "$repo/real-manifest.tsv" "$t/manifest.tsv"
+    _git -C "$repo" add -A
+    _git -C "$repo" commit -q -m symlink-manifest
+    assert_equals "2" "$(_sync "$dest" "$(_head "$repo")" "$repo")" "a symlinked manifest.tsv is refused"
+    assert_dir_not_exists "$dest" "nothing written"
+    command rm -rf "$repo" "$(command dirname "$dest")"
+}
+
+# _sync_env <dest> <sha> [VAR=value ...] — run the sync with no repo argument
+# and the given environment; prints the exit code.
+_sync_env() {
+    local dest="$1" sha="$2" rc=0
+    shift 2
+    env -u CONTAINERS_DB -u CONTAINERS_DB_REPO "$@" REPO_BASELINE_DEST="$dest" \
+        "$SYNC" "$sha" >/dev/null 2>&1 || rc=$?
+    command echo "$rc"
+}
+
+test_repo_default_resolution() {
+    local repo other dest sha notgit
+    repo="$(command mktemp -d)"
+    other="$(command mktemp -d)"
+    notgit="$(command mktemp -d)"
+    dest="$(command mktemp -d)/out"
+    _fixture "$repo"
+    # A distinct repo that never held <repo>'s commit (a _fixture copy would
+    # share its SHA: same bytes, same second).
+    command printf 'other\n' >"$other/marker"
+    _git -C "$other" init -q -b main
+    _git -C "$other" add -A
+    _git -C "$other" commit -q -m other
+    sha="$(_head "$repo")"
+    assert_not_equals "$sha" "$(_head "$other")" "fixtures have distinct SHAs"
+    assert_equals "0" "$(_sync_env "$dest" "$sha" CONTAINERS_DB_REPO="$repo")" \
+        "CONTAINERS_DB_REPO is honoured"
+    assert_equals "0" "$(_sync_env "$dest" "$sha" CONTAINERS_DB="$repo")" \
+        "a git-checkout CONTAINERS_DB is used"
+    # A non-git CONTAINERS_DB (the in-image catalog snapshot) must be skipped,
+    # never used. Either way the run fails (the fallback sibling lacks the
+    # fixture SHA), so the exit code cannot tell them apart — assert on which
+    # repo the error names instead.
+    local err
+    err="$(env -u CONTAINERS_DB_REPO CONTAINERS_DB="$notgit" REPO_BASELINE_DEST="$dest" \
+        "$SYNC" "$sha" 2>&1 >/dev/null || true)"
+    assert_not_contains "$err" "$notgit" "a non-git CONTAINERS_DB is never used as the repo"
+    assert_contains "$err" "containers-db" "the fallback sibling checkout is tried instead"
+    assert_equals "2" "$(_sync "$dest" "$sha" "$notgit")" "a non-git repo argument is refused"
+    assert_equals "2" "$(_sync "$dest" "$sha" "$other")" "a repo lacking the SHA is refused"
+    command rm -rf "$repo" "$other" "$notgit" "$(command dirname "$dest")"
+}
+
+test_leaked_git_dir_is_ignored() {
+    local repo decoy dest sha
+    repo="$(command mktemp -d)"
+    decoy="$(command mktemp -d)"
+    dest="$(command mktemp -d)/out"
+    _fixture "$repo"
+    _git -C "$decoy" init -q
+    sha="$(_head "$repo")"
+    assert_equals "0" "$(GIT_DIR="$decoy/.git" GIT_WORK_TREE="$decoy" _sync "$dest" "$sha" "$repo")" \
+        "a leaked GIT_DIR does not redirect git -C <repo>"
+    command rm -rf "$repo" "$decoy" "$(command dirname "$dest")"
+}
+
 test_tracked_copy_round_trips() {
     # Re-vendoring at the pinned SHA must reproduce the committed copy byte for
     # byte — proves the tracked tree carries no local patch.
@@ -229,6 +302,9 @@ run_test test_defaults_to_pinned_sha_in_source "defaults to the SHA pinned in SO
 run_test test_no_sha_and_no_pin_is_refused "no SHA and no containers-db pin is refused"
 run_test test_dropped_fragment_does_not_linger "dropped fragment does not linger"
 run_test test_rejects_escaping_sources "rejects sources escaping the templates dir"
+run_test test_rejects_symlinked_manifest "rejects a symlinked manifest.tsv"
+run_test test_repo_default_resolution "repo default resolution (env, non-git, missing SHA)"
+run_test test_leaked_git_dir_is_ignored "a leaked GIT_DIR is ignored"
 run_test test_tracked_copy_round_trips "tracked copy round-trips from the pinned SHA"
 
 generate_report
