@@ -76,6 +76,15 @@ _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "${_SELF_DIR}/_source-env-secrets" ] && . "${_SELF_DIR}/_source-env-secrets"
 # shellcheck disable=SC1091
 [ -f "${_SELF_DIR}/_wait-for-op-cache" ] && . "${_SELF_DIR}/_wait-for-op-cache"
+# placeholder_reason — the placeholder-email rules shared with the pre-commit
+# hook bin/check-author-identity.sh (#1533). Absent → nothing is a placeholder;
+# the differs-from-global check still runs.
+if [ -f "${_SELF_DIR}/_git-email-placeholder" ]; then
+    # shellcheck source=lib/runtime/commands/_git-email-placeholder
+    . "${_SELF_DIR}/_git-email-placeholder"
+else
+    placeholder_reason() { return 1; }
+fi
 unset _SELF_DIR
 
 # Write key material to file only if content differs. Returns 0 if written, 1 if unchanged.
@@ -135,6 +144,141 @@ setup_identity() {
     else
         _skip "git identity already configured"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# 1b. Repo-local identity shadowing (#1533) — warn only, never fix
+# ---------------------------------------------------------------------------
+# `git commit` prefers a repo-local .git/config identity over the global one
+# set above, and that file lives in the bind-mounted workspace, so it survives
+# rebuilds and re-running setup-git. A stale local `t@t.t` once shipped 31
+# commits under a stranger's GitHub account while setup-git reported the real
+# global identity. A per-repo work email can be deliberate, so this only warns.
+
+# Print candidate repo dirs: WORKSPACE_ROOT, its children, and their
+# .worktrees/* entries. Callers filter to real repos.
+_workspace_repo_candidates() {
+    local root="${WORKSPACE_ROOT:-/workspace}" d
+    [ -d "$root" ] || return 0
+    printf '%s\n' "${root%/}"
+    for d in "${root%/}"/.worktrees/*/ "${root%/}"/*/ "${root%/}"/*/.worktrees/*/; do
+        [ -d "$d" ] && printf '%s\n' "${d%/}"
+    done
+}
+
+# Absolute, symlink-resolved form of an existing path $1; portable to
+# BusyBox (no GNU `realpath -m`). Falls back to $1 unchanged.
+_abs_path() {
+    local p="$1" d
+    if d=$(cd "$(dirname "$p")" 2>/dev/null && pwd -P); then
+        printf '%s/%s' "$d" "$(basename "$p")"
+    else
+        printf '%s' "$p"
+    fi
+}
+
+# Echo $1 with control characters (incl. ANSI escapes' ESC) removed.
+_printable() {
+    printf '%s' "$1" | command tr -d '[:cntrl:]'
+}
+
+check_identity_shadowing() {
+    local global_email shown_global reason
+    global_email=$(git config --global --get user.email 2>/dev/null || true)
+    shown_global=$(_printable "$global_email")
+
+    if [ -n "$global_email" ] && reason=$(placeholder_reason "$global_email"); then
+        _warn "global git email <${shown_global}> is a placeholder ($(_printable "$reason"))."
+        _warn "  Commits will be refused by the pre-commit author-identity check"
+        _warn "  until GIT_USER_EMAIL resolves (check OP_GIT_USER_EMAIL_REF)."
+    fi
+
+    local dir scope file email common_dir common_cfg key err seen=$'\n'
+    while IFS= read -r dir; do
+        # Only work-tree top levels: a plain subdir of a repo (e.g. when
+        # WORKSPACE_ROOT is itself a repo) also passes rev-parse, but git
+        # reports its origin relative to the top level, not to $dir.
+        local prefix
+        if ! prefix=$(git -C "$dir" rev-parse --show-prefix 2>&1); then
+            # Not a repo → silent. Rejected by git's ownership check (a
+            # host-owned bind mount without safe.directory) → say so once,
+            # rather than overriding the check on an untrusted repo.
+            err="$prefix"
+            case "$err" in
+                *"dubious ownership"*)
+                    _skip "$(_printable "$dir"): cannot check repo-local identity — git rejects the repo's ownership (see safe.directory)"
+                    ;;
+            esac
+            continue
+        fi
+        [ -z "$prefix" ] || continue
+        # Resolve user.email the way `git commit` does: every scope, includes
+        # followed (a scope flag like --local would skip config.worktree and
+        # include.path files). -z gives "<scope>\0file:<path>\0<email>\0"
+        # with the path unquoted — without it git C-quotes non-ASCII, '"',
+        # '\' and control chars in the path, breaking dedupe and the remedy.
+        scope="" file="" email=""
+        {
+            IFS= read -r -d '' scope
+            IFS= read -r -d '' file
+            IFS= read -r -d '' email
+        } < <(git -C "$dir" config -z --show-scope --show-origin --get user.email 2>/dev/null) || true
+        [ -n "$scope" ] || continue
+        case "$scope" in local | worktree) ;; *) continue ;; esac
+        case "$file" in file:*) file="${file#file:}" ;; *) continue ;; esac
+        # Relative to -C dir (".git/config"); absolutize for the message and
+        # so a worktree's "../../.git/config" dedupes against its parent.
+        # The file exists, so plain realpath (no GNU -m) is enough.
+        case "$file" in /*) ;; *) file="${dir}/${file}" ;; esac
+        file=$(_abs_path "$file")
+        # Dedupe per (repo, file): a repo's .worktrees/* share its common git
+        # dir and fold into one report, while unrelated repos that include the
+        # same identity file are each still reported.
+        # --git-common-dir (git >= 2.5) prints a path relative to $dir unless
+        # absolute; avoid --path-format=absolute, which needs git >= 2.31.
+        # Resolve <common>/config with the same helper as $file so a symlinked
+        # .git compares equal.
+        common_dir=$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null) || continue
+        [ -n "$common_dir" ] || continue
+        case "$common_dir" in /*) ;; *) common_dir="${dir}/${common_dir}" ;; esac
+        common_cfg=$(_abs_path "${common_dir}/config")
+        key="${common_cfg}"$'\t'"${file}"
+        case "$seen" in *$'\n'"$key"$'\n'*) continue ;; esac
+        seen+="${key}"$'\n'
+        if [ -z "$email" ] || [ "$email" = "$global_email" ]; then
+            continue
+        fi
+
+        # The email, dir and file come from the workspace (possibly a cloned,
+        # untrusted repo): strip control chars so they cannot spoof terminal
+        # output, and %q-quote the dir in the copy-paste remedy.
+        local shown_email shown_dir shown_file shown_reason qdir
+        shown_email=$(_printable "$email")
+        shown_dir=$(_printable "$dir")
+        shown_file=$(_printable "$file")
+        printf -v qdir '%q' "$dir"
+        if reason=$(placeholder_reason "$email"); then
+            # reason can quote the raw domain — sanitize it like the email.
+            shown_reason=$(_printable "$reason")
+            _warn "${shown_dir}: ${scope} user.email <${shown_email}> is a placeholder (${shown_reason}),"
+        elif [ -z "$global_email" ]; then
+            _warn "${shown_dir}: ${scope} user.email <${shown_email}> is set but no global user.email is,"
+        else
+            _warn "${shown_dir}: ${scope} user.email <${shown_email}> differs from global <${shown_global}>,"
+        fi
+        _warn "  set in ${shown_file} — it overrides the global identity for commits here."
+        if [ "$scope" = worktree ]; then
+            _warn "  If unintended: git -C ${qdir} config --worktree --unset user.name;" \
+                "git -C ${qdir} config --worktree --unset user.email"
+        elif [ "$file" = "$common_cfg" ]; then
+            _warn "  If unintended: git -C ${qdir} config --local --unset user.name;" \
+                "git -C ${qdir} config --local --unset user.email"
+        else
+            # Pulled in via include.path / includeIf — --unset can't reach it.
+            _warn "  If unintended: remove the [user] entries from ${shown_file} (included by the repo config)."
+        fi
+    done < <(_workspace_repo_candidates)
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -405,6 +549,7 @@ setup_signing_key() {
 main() {
     _info "configuring git environment"
     setup_identity
+    check_identity_shadowing || true
 
     local reason
     if reason=$(_external_ssh_reason); then

@@ -304,7 +304,16 @@ This means `postStartCommand` in devcontainers needs no manual cache sourcing:
 Runs five steps in order:
 
 1. **Git identity**: Sets `user.name` and `user.email` from `GIT_USER_NAME` /
-   `GIT_USER_EMAIL` (falls back to `Devcontainer` / `devcontainer@localhost`)
+   `GIT_USER_EMAIL` (falls back to `Devcontainer` / `devcontainer@localhost`),
+   then **warns** (never fixes) about identities that will misattribute
+   commits: a placeholder global email (including the `devcontainer@localhost`
+   fallback, which the pre-commit author check refuses), and any repo under
+   `WORKSPACE_ROOT` (default `/workspace`, its child repos, and their
+   `.worktrees/*`) whose repo-local `user.email` overrides the global one. A
+   local identity lives in the bind-mounted `.git/config`, so it survives
+   rebuilds; the warning names the file and prints the `--unset` remedy.
+   Placeholder rules are shared with `bin/check-author-identity.sh` via
+   `_git-email-placeholder`.
 1. **SSH agent**: Starts `ssh-agent` if not running, persists socket info to
    `~/.ssh/agent.env` for future shells
 1. **SSH keep-alive**: Adds `ServerAliveInterval 60` / `ServerAliveCountMax 10`
