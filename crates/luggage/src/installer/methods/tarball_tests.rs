@@ -1176,9 +1176,10 @@ fn merge_failure_reports_how_far_it_got() {
     let err = f.run_plain(0).unwrap_err();
     let message = err.to_string();
 
-    let LuggageError::ArchiveMergeFailed { artifact, prefix, merged, total, path, .. } = err else {
+    let LuggageError::ArchiveMergeFailed(failure) = err else {
         panic!("expected ArchiveMergeFailed, got {message}");
     };
+    let ArchiveMergeFailure { artifact, prefix, merged, total, path, .. } = *failure;
     assert_eq!(artifact, "tool.tar.gz");
     assert_eq!(prefix, f.prefix.path());
     assert_eq!(
@@ -1212,9 +1213,10 @@ fn nested_merge_failure_counts_across_recursion() {
     fs::write(f.prefix.path().join("a/sub"), b"in the way").unwrap();
 
     let err = f.run_plain(0).unwrap_err();
-    let LuggageError::ArchiveMergeFailed { merged, total, path, .. } = err else {
+    let LuggageError::ArchiveMergeFailed(failure) = err else {
         panic!("expected ArchiveMergeFailed, got {err}");
     };
+    let ArchiveMergeFailure { merged, total, path, .. } = *failure;
     assert_eq!((merged, total), (2, EntryTotal::Exact(4)));
     assert_eq!(path, f.prefix.path().join("a/sub"));
 }

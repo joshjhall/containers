@@ -88,7 +88,7 @@ use super::MethodContext;
 use super::archive_limit::{LimitedReader, LimitedWriter};
 use super::archive_path::{safe_relative_path, strip_prefix_components, validate_link_target};
 use super::layout::{install_binaries, prepare_cache_dirs};
-use crate::error::{EntryTotal, LuggageError, Result};
+use crate::error::{ArchiveMergeFailure, EntryTotal, LuggageError, Result};
 
 /// Compression wrapping the tar stream, inferred from the artifact filename.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -531,14 +531,14 @@ fn merge_into_prefix(staging: &Path, prefix: &Path, artifact: &str) -> Result<()
         landed_summary(&moved, MERGE_FAILURE_LOG_LIMIT),
     );
 
-    Err(LuggageError::ArchiveMergeFailed {
+    Err(LuggageError::ArchiveMergeFailed(Box::new(ArchiveMergeFailure {
         artifact: artifact.to_owned(),
         prefix: prefix.to_owned(),
         merged: moved.len(),
         total,
         path,
         source,
-    })
+    })))
 }
 
 /// Add the `moved` entries that already landed to what is still in
