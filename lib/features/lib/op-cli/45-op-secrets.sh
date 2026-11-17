@@ -72,7 +72,7 @@ unset _secrets_file
 if declare -f op_is_usable >/dev/null 2>&1; then
     op_is_usable || exit 0
 else
-    [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && exit 0
+    [ -z "${OP_SERVICE_ACCOUNT_TOKEN:+set}" ] && exit 0
 fi
 
 # Disable xtrace to prevent secret exposure in logs

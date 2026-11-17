@@ -50,7 +50,7 @@ fi
 # or an externally authenticated op (bounded `op whoami`, see op-usable.sh).
 _op_cli_ready() {
     command -v op >/dev/null 2>&1 || return 1
-    [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && return 0
+    [ -n "${OP_SERVICE_ACCOUNT_TOKEN:+set}" ] && return 0
     declare -f op_is_usable >/dev/null 2>&1 && op_is_usable
 }
 

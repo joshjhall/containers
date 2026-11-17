@@ -110,7 +110,7 @@ test_env_secrets_sourced_before_precondition() {
     # test, rather than any line merely mentioning them.
     local source_line precond_line
     source_line=$(command grep -n '^\[ -f "\${_woc_self_dir}/_source-env-secrets" \]' "$WAIT_SCRIPT" | command head -1 | command cut -d: -f1)
-    precond_line=$(command grep -n '\[ -n "\${OP_SERVICE_ACCOUNT_TOKEN:-}" \]' "$WAIT_SCRIPT" | command head -1 | command cut -d: -f1)
+    precond_line=$(command grep -n '\[ -n "\${OP_SERVICE_ACCOUNT_TOKEN:+set}" \]' "$WAIT_SCRIPT" | command head -1 | command cut -d: -f1)
 
     assert_not_empty "$source_line" "Should source _source-env-secrets"
     assert_not_empty "$precond_line" "Should check OP_SERVICE_ACCOUNT_TOKEN"
@@ -145,6 +145,60 @@ test_returns_cleanly_without_token() {
         "Should return 0 (not hang or error) when no token is available"
 }
 
+# ---------------------------------------------------------------------------
+# #1711: an externally authenticated op (no token) also takes the wait path
+# ---------------------------------------------------------------------------
+test_external_op_precondition_waits() {
+    # Drive the precondition directly: no cache anywhere, whoami ok. The poll
+    # would run 60s, so assert on the decision variable instead of waiting.
+    local tmp_dir out
+    tmp_dir="/tmp/test-woc-1711p-$$-$RANDOM"
+    mkdir -p "$tmp_dir/bin"
+    printf '#!/bin/bash\n[ "$1" = whoami ] && exit 0\nexit 0\n' >"$tmp_dir/bin/op"
+    chmod +x "$tmp_dir/bin/op"
+    # Stop right after the precondition block: everything before the wait loop.
+    command sed -n '1,/^if \[ "\$_woc_should_wait" = true \]; then$/p' "$WAIT_SCRIPT" |
+        command sed '$d' |
+        command sed "s|/dev/shm/op-secrets-cache|$tmp_dir/op-secrets-cache|" >"$tmp_dir/pre"
+    out=$(command env -i BASH_ENV= HOME="$tmp_dir" PATH="$tmp_dir/bin:/usr/bin:/bin" \
+        OP_KAGI_API_KEY_REF="op://v/kagi/key" _ENV_SECRETS_LOADED=1 OP_WHOAMI_CACHE_DIR="$tmp_dir" \
+        bash -c '. "$1"; . "$2"; echo "wait=$_woc_should_wait"' _ \
+        "$PROJECT_ROOT/lib/runtime/lib/op-usable.sh" "$tmp_dir/pre" 2>&1)
+    assert_equals "wait=true" "$out" "No token + whoami ok → helper decides to wait for the cache"
+
+    printf '#!/bin/bash\n[ "$1" = whoami ] && exit 1\nexit 0\n' >"$tmp_dir/bin/op"
+    command rm -f "$tmp_dir"/op-whoami.*
+    out=$(command env -i BASH_ENV= HOME="$tmp_dir" PATH="$tmp_dir/bin:/usr/bin:/bin" \
+        OP_KAGI_API_KEY_REF="op://v/kagi/key" _ENV_SECRETS_LOADED=1 OP_WHOAMI_CACHE_DIR="$tmp_dir" \
+        bash -c '. "$1"; . "$2"; echo "wait=$_woc_should_wait"' _ \
+        "$PROJECT_ROOT/lib/runtime/lib/op-usable.sh" "$tmp_dir/pre" 2>&1)
+    assert_equals "wait=false" "$out" "No token + whoami fails → no wait (clean skip, no hang)"
+    command rm -rf "$tmp_dir"
+}
+
+# #1711: _source-env-secrets loads the pre-secrets hook hand-off, which is how
+# a provider's PATH/env reaches every setup-* command.
+test_source_env_secrets_loads_handoff() {
+    local tmp_dir out
+    tmp_dir="/tmp/test-ess-1711-$$-$RANDOM"
+    mkdir -p "$tmp_dir"
+    (umask 077 && printf 'export PROVIDER_MARK=from-hook\n' >"$tmp_dir/cred-env")
+    local ess="$PROJECT_ROOT/lib/runtime/commands/_source-env-secrets"
+    out=$(command env -i BASH_ENV= HOME="$tmp_dir" PATH="/usr/bin:/bin" ENV_SECRETS_FILE=/nonexistent \
+        OP_USABLE_LIB="$PROJECT_ROOT/lib/runtime/lib/op-usable.sh" \
+        CONTAINER_CREDENTIAL_ENV_FILE="$tmp_dir/cred-env" \
+        bash -c 'set -euo pipefail; cd /; . "$1"; echo "${PROVIDER_MARK:-unset}"' _ "$ess" 2>&1)
+    assert_equals "from-hook" "$out" "Hand-off variables are loaded by _source-env-secrets"
+    out=$(command env -i BASH_ENV= HOME="$tmp_dir" PATH="/usr/bin:/bin" ENV_SECRETS_FILE=/nonexistent \
+        OP_USABLE_LIB="$tmp_dir/missing-op-usable.sh" \
+        CONTAINER_CREDENTIAL_ENV_FILE="$tmp_dir/cred-env" \
+        bash -c 'set -euo pipefail; cd /; . "$1"; echo "ok ${PROVIDER_MARK:-unset}"' _ "$ess" 2>&1)
+    assert_equals "ok unset" "$out" "Absent helper: no-op under set -euo pipefail (older images)"
+    command rm -rf "$tmp_dir"
+}
+
+run_test test_source_env_secrets_loads_handoff "#1711: _source-env-secrets loads the hook hand-off; absent helper is a no-op"
+run_test test_external_op_precondition_waits "#1711: precondition waits iff op is usable (no token)"
 run_test test_sources_env_secrets_helper "Sources _source-env-secrets helper (#785)"
 run_test test_env_secrets_sourced_before_precondition "Sources .env.secrets before token check (#785)"
 run_test test_returns_cleanly_without_token "Returns cleanly when no token available (#785)"

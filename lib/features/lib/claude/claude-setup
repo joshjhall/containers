@@ -53,7 +53,7 @@ _op_ready() {
     if declare -f op_is_usable >/dev/null 2>&1; then
         op_is_usable
     else
-        [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]
+        [ -n "${OP_SERVICE_ACCOUNT_TOKEN:+set}" ]
     fi
 }
 

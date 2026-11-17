@@ -268,6 +268,42 @@ test_handoff_restores_allexport() {
 }
 
 # ----------------------------------------------------------------------------
+# xtrace safety (#1468 class)
+# ----------------------------------------------------------------------------
+
+test_token_never_expanded_under_xtrace() {
+    _stub_op 1
+    local out
+    out=$(_probe 'set -x; op_is_usable; _OP_USABLE=; op_is_usable' \
+        OP_SERVICE_ACCOUNT_TOKEN=SENTINEL-SA-TOKEN-1711 2>&1)
+    assert_not_contains "$out" "SENTINEL-SA-TOKEN-1711" \
+        "The service account token never appears in an xtrace of op_is_usable"
+    out=$(_probe 'set -x; op_is_usable' \
+        OP_CONNECT_HOST=http://c OP_CONNECT_TOKEN=SENTINEL-CONNECT-1711 2>&1)
+    assert_not_contains "$out" "SENTINEL-CONNECT-1711" \
+        "The Connect token never appears in an xtrace of op_is_usable"
+}
+
+test_callers_never_expand_token_under_xtrace() {
+    # Every gate site this change touched, checked statically: the token is
+    # only ever tested via ${VAR:+set}, which traces as a constant.
+    local f hits=""
+    for f in lib/runtime/lib/op-usable.sh lib/features/lib/bashrc/op-cli.sh \
+        lib/features/lib/claude/claude-setup lib/features/lib/claude/claude-auth-watcher \
+        lib/runtime/commands/_wait-for-op-cache lib/features/lib/op-cli/45-op-secrets.sh; do
+        if command grep -nF '${OP_SERVICE_ACCOUNT_TOKEN:-}' "$PROJECT_ROOT/$f" >/dev/null 2>&1 ||
+            command grep -nF '${OP_CONNECT_TOKEN:-}' "$PROJECT_ROOT/$f" >/dev/null 2>&1; then
+            hits="$hits $f"
+        fi
+    done
+    if [ -z "$hits" ]; then
+        pass_test "No gate expands the token value (xtrace-safe)"
+    else
+        fail_test "Token value expanded (leaks under bash -x) in:$hits"
+    fi
+}
+
+# ----------------------------------------------------------------------------
 # BASH_ENV safety (#1711 item E)
 # ----------------------------------------------------------------------------
 
@@ -300,6 +336,8 @@ run_test_with_setup test_handoff_refuses_group_writable "credential_env_load: re
 run_test_with_setup test_handoff_refuses_symlink "credential_env_load: refuses symlink"
 run_test_with_setup test_handoff_safe_under_strict_mode "credential_env_load: safe under set -euo pipefail"
 run_test_with_setup test_handoff_restores_allexport "credential_env_load: restores allexport"
+run_test_with_setup test_token_never_expanded_under_xtrace "xtrace: op_is_usable never prints the token"
+run_test_with_setup test_callers_never_expand_token_under_xtrace "xtrace: no touched gate expands the token value"
 run_test_with_setup test_missing_bash_env_file_is_harmless "BASH_ENV pointing at a missing file is harmless"
 
 # Generate test report

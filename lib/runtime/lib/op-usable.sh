@@ -118,13 +118,13 @@ op_is_usable() {
     fi
 
     # 1. Service account token (unchanged fast path, no subprocess).
-    if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+    if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:+set}" ]; then
         _OP_USABLE=yes
         return 0
     fi
 
     # 2. 1Password Connect.
-    if [ -n "${OP_CONNECT_HOST:-}" ] && [ -n "${OP_CONNECT_TOKEN:-}" ]; then
+    if [ -n "${OP_CONNECT_HOST:-}" ] && [ -n "${OP_CONNECT_TOKEN:+set}" ]; then
         _OP_USABLE=yes
         return 0
     fi

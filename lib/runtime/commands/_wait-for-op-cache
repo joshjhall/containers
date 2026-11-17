@@ -49,7 +49,7 @@ unset _woc_self_dir
 _woc_should_wait=false
 if command -v op >/dev/null 2>&1; then
     if compgen -v | command grep -q '^OP_.\+_REF$'; then
-        if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+        if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:+set}" ]; then
             _woc_should_wait=true
         elif declare -f op_is_usable >/dev/null 2>&1 && op_is_usable; then
             _woc_should_wait=true

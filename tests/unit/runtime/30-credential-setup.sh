@@ -102,6 +102,22 @@ test_symlinked_hook_ignored() {
     assert_file_contains "$TEST_TEMP_DIR/order" "real" "Regular hooks still run"
 }
 
+test_writable_hook_refused_loudly() {
+    _hook 10-open.sh "echo open >>'$TEST_TEMP_DIR/order'"
+    chmod 666 "$HOOK_DIR/10-open.sh"
+    _hook 20-group.sh "echo group >>'$TEST_TEMP_DIR/order'"
+    chmod 664 "$HOOK_DIR/20-group.sh"
+    _hook 30-ok.sh "echo ok >>'$TEST_TEMP_DIR/order'"
+    chmod 644 "$HOOK_DIR/30-ok.sh"
+    local out
+    out=$(_run)
+    assert_file_not_contains "$TEST_TEMP_DIR/order" "open" "A world-writable hook is not run"
+    assert_file_not_contains "$TEST_TEMP_DIR/order" "group" "A group-writable hook is not run"
+    assert_file_contains "$TEST_TEMP_DIR/order" "ok" "A 0644 hook owned by the user still runs"
+    assert_contains "$out" "ignoring hook $HOOK_DIR/10-open.sh (group/world-writable, mode 666)" \
+        "The refusal names the file and the reason"
+}
+
 test_handoff_reaches_later_consumer() {
     # The hook can only change ITS OWN process; the hand-off file is how its
     # PATH reaches 45-op-secrets (a separate process) via credential_env_load.
@@ -149,6 +165,7 @@ run_test_with_setup test_cmd_runs_before_hooks_in_order "CMD first, then hooks i
 run_test_with_setup test_failing_hook_does_not_stop_next "Failing hook logged; next hook runs; exit 0"
 run_test_with_setup test_hanging_hook_is_bounded "Hanging hook bounded by CREDENTIAL_SETUP_TIMEOUT"
 run_test_with_setup test_symlinked_hook_ignored "Symlinked hooks ignored"
+run_test_with_setup test_writable_hook_refused_loudly "Group/world-writable hooks refused with a reason"
 run_test_with_setup test_handoff_reaches_later_consumer "Hook PATH reaches a later process via the hand-off"
 run_test_with_setup test_stale_handoff_cleared_each_boot "Stale hand-off cleared each boot"
 run_test_with_setup test_missing_bash_env_file_is_harmless "BASH_ENV pointing at a missing file is harmless"

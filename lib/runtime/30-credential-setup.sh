@@ -37,13 +37,42 @@ set +e
 
 _log() { printf '[credential-setup] %s\n' "$*" >&2; }
 
+# Trust boundary: hooks come from the mounted workspace and run BEFORE secrets
+# load, so a hook another user could have written is refused — loudly, so a
+# refused hook never looks like "no hook". Regular files only (no symlinks,
+# same rule as run_startup_scripts), owned by the current user or root, and
+# not group/world-writable.
+_hook_trusted() {
+    local f="$1" owner perms
+    if [ -L "$f" ] || [ ! -f "$f" ]; then
+        _log "WARN: ignoring hook ${f} (not a regular file)"
+        return 1
+    fi
+    owner=$(command stat -c '%u' "$f" 2>/dev/null || echo "")
+    if [ "$owner" != "$(id -u)" ] && [ "$owner" != "0" ]; then
+        _log "WARN: ignoring hook ${f} (owned by uid ${owner:-?}, not the current user or root)"
+        return 1
+    fi
+    perms=$(command stat -c '%a' "$f" 2>/dev/null || echo "")
+    case "$perms" in
+        *[2367]? | *[2367])
+            _log "WARN: ignoring hook ${f} (group/world-writable, mode ${perms})"
+            return 1
+            ;;
+    esac
+    return 0
+}
+
 _hook_glob="${CREDENTIAL_SETUP_HOOK_GLOB:-/workspace/*/.devcontainer/pre-secrets.d/*.sh}"
 _hooks=()
-for _h in $_hook_glob; do
-    # Regular files only — no symlinks (same rule as run_startup_scripts).
-    [ -f "$_h" ] && [ ! -L "$_h" ] && _hooks+=("$_h")
+shopt -s nullglob
+# shellcheck disable=SC2206 # the glob is a pattern by design; nullglob drops non-matches
+_candidates=($_hook_glob)
+shopt -u nullglob
+for _h in "${_candidates[@]}"; do
+    _hook_trusted "$_h" && _hooks+=("$_h")
 done
-unset _h
+unset _h _candidates
 
 if [ -z "${CONTAINER_CREDENTIAL_SETUP_CMD:-}" ] && [ "${#_hooks[@]}" -eq 0 ]; then
     exit 0

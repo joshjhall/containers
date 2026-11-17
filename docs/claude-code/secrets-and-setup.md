@@ -399,8 +399,13 @@ Providers usually need to put shims on `PATH` or set env **before** secrets
 load. `/etc/container/startup/30-credential-setup.sh` runs, in order:
 
 1. `CONTAINER_CREDENTIAL_SETUP_CMD`, if set (run via `bash -c`)
-1. `/workspace/<project>/.devcontainer/pre-secrets.d/*.sh`, sorted (regular
-   files only; symlinks are ignored)
+1. `/workspace/<project>/.devcontainer/pre-secrets.d/*.sh`, sorted
+
+Hooks run **before** secrets load, so they are a trust boundary: anything in
+`pre-secrets.d/` of a mounted repo executes at boot. A hook is refused, with a
+`WARN: ignoring hook …` line naming the reason, unless it is a regular file
+(not a symlink), owned by the current user or root, and not group- or
+world-writable. Review a repository's `pre-secrets.d/` before mounting it.
 
 Startup scripts run in filename order — 30 comes before
 `35-claude-auth-watcher`, `45-op-secrets` and `60-setup-git` — on both the
