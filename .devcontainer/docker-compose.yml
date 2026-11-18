@@ -25,10 +25,10 @@ services:
         # Dockerfile default, the workspace MSRV (Cargo.toml rust-version), and
         # the CI toolchain pins. Bump all of these together — see #736.
         RUST_VERSION: "1.100.0"
-      cache_from:
-        - type=local,src=/tmp/.buildx-cache
-      cache_to:
-        - type=local,dest=/tmp/.buildx-cache,mode=max
+      # No cache_from/cache_to: `type=local` cache export only works with the
+      # containerd image store or a docker-container builder, and the default
+      # `docker` driver on the classic store refuses the whole build. BuildKit's
+      # built-in layer cache covers local rebuilds anyway.
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/workspace/containers
