@@ -12,8 +12,8 @@ use std::fs;
 use std::process::Command;
 
 use standards_common::{
-    accepted_keys, assert_ok, copy_dir, shell_python_repo, standards, stdout_of, stibbons_bin,
-    vendored_templates,
+    accepted_keys, assert_ok, baseline_templates, copy_dir, shell_python_repo, standards,
+    stdout_of, stibbons_bin,
 };
 
 #[test]
@@ -291,7 +291,7 @@ fn bare_accept_clears_acceptance_of_stale_and_missing_files() {
     // flagged, not silently re-approved.
     let tmp = shell_python_repo();
     let tpl = tempfile::tempdir().unwrap();
-    copy_dir(&vendored_templates(), tpl.path());
+    copy_dir(&baseline_templates(), tpl.path());
     let tpl_arg = tpl.path().to_str().unwrap();
     assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "init");
 
@@ -396,7 +396,7 @@ fn bare_accept_clears_earlier_acceptance_of_reverted_file() {
 fn accept_stale_file_warns() {
     let tmp = shell_python_repo();
     let tpl = tempfile::tempdir().unwrap();
-    copy_dir(&vendored_templates(), tpl.path());
+    copy_dir(&baseline_templates(), tpl.path());
     let tpl_arg = tpl.path().to_str().unwrap();
     assert_ok(&standards(tmp.path(), &["init", "--templates-dir", tpl_arg]), "init");
     let frag = tpl.path().join("core/dprint.json.tmpl");
@@ -420,7 +420,7 @@ fn init_drops_acceptance_once_the_render_matches_it() {
     // accepted bytes: the acceptance is no longer needed, and `init` drops it,
     // so a later template change updates the file instead of keeping it.
     let tpl = tempfile::tempdir().unwrap();
-    copy_dir(&vendored_templates(), tpl.path());
+    copy_dir(&baseline_templates(), tpl.path());
     let tpl_arg = tpl.path().to_str().unwrap();
     let frag = tpl.path().join("core/dprint.json.tmpl");
     let original_frag = fs::read_to_string(&frag).unwrap();

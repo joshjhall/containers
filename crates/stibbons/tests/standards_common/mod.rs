@@ -43,22 +43,29 @@ pub fn shell_python_repo() -> tempfile::TempDir {
     tmp
 }
 
-/// The vendored templates directory in this checkout.
-pub fn vendored_templates() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/repo-baseline")
+/// The pinned containers-db `baseline/templates` directory the embedded
+/// templates were compiled from (the `repo-baseline` git checkout).
+pub fn baseline_templates() -> PathBuf {
+    PathBuf::from(repo_baseline::TEMPLATES_DIR)
 }
 
-/// `(relative path, bytes, executable)` for every file under `root`, sorted.
+/// `(relative path, bytes, executable)` for every entry under `root`, sorted.
+/// A symlink is not followed: its bytes are `-> <link text>` and it is never
+/// executable, so a link and a copy of its target compare unequal.
 pub fn tree(root: &Path) -> Vec<(String, Vec<u8>, bool)> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         for e in fs::read_dir(&dir).unwrap() {
             let p = e.unwrap().path();
-            if p.is_dir() {
+            let rel = p.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+            let meta = fs::symlink_metadata(&p).unwrap();
+            if meta.file_type().is_symlink() {
+                let text = fs::read_link(&p).unwrap().to_string_lossy().into_owned();
+                out.push((rel, format!("-> {text}").into_bytes(), false));
+            } else if meta.is_dir() {
                 stack.push(p);
             } else {
-                let rel = p.strip_prefix(root).unwrap().to_string_lossy().into_owned();
                 out.push((rel, fs::read(&p).unwrap(), is_executable(&p)));
             }
         }

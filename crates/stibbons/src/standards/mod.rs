@@ -1,16 +1,20 @@
 //! `stibbons setup standards` — apply and check the repo baseline.
 //!
 //! The baseline (hooks, linter configs, justfile, test runner, tool installer,
-//! GitHub/GitLab CI) is containers-db's repo-baseline scaffold
-//! (`baseline/templates/`). Its templates are vendored into
-//! `crates/stibbons/assets/repo-baseline/` from a pinned containers-db commit
-//! by `bin/sync-repo-baseline.sh` and embedded at build time, so this works on
-//! a host with no checkout; `--templates-dir` points at another copy.
+//! GitHub/GitLab CI, docs and platform stubs) is containers-db's repo-baseline
+//! scaffold (`baseline/templates/`). It is compiled in through the
+//! `repo-baseline` git dependency, pinned to a full containers-db commit SHA in
+//! the workspace `Cargo.toml` (#1649), so this works on a host with no
+//! checkout; `--templates-dir` points at another copy.
 //!
 //! - [`init`] renders the manifest for the selected slices/CI and writes it,
-//!   never clobbering a user-edited file without `--force`.
+//!   never clobbering a user-edited file without `--force`. Create-only
+//!   targets (`once`, `link`) are written only when absent and never
+//!   overwritten, even with `--force`.
 //! - [`check`] re-renders and reports drift: a missing file, a locally modified
 //!   one, or an unedited one the current templates would change (stale).
+//!   Create-only targets are never drift, and a snapshot change since `init`
+//!   is reported on its own line.
 //! - [`accept()`] records a reviewed local edit (the templates' `# per-repo:`
 //!   lines exist to be edited) so `check` stops flagging it.
 //!
@@ -32,8 +36,8 @@ use containers_common::generate::hash_bytes;
 
 pub use accept::accept;
 use accept::classify_all;
-use fsutil::{ensure_no_symlink, read_if_exists};
-use manifest::{Ci, Manifest, RenderedFile};
+use fsutil::{ensure_no_symlink, exists_no_follow, read_if_exists};
+use manifest::{Ci, Manifest, Mode, RenderedFile};
 use state::{STATE_FILE, StandardsState};
 pub use templates::Templates;
 pub use write::error_chain;
@@ -74,6 +78,12 @@ pub enum InitAction {
     Accepted,
     /// Would have been skipped/accepted, but `--force` overwrote it.
     Forced,
+    /// A create-only (`once`/`link`) target that already exists: the user's
+    /// now, left alone even with `--force`.
+    Kept,
+    /// A `link` target this platform cannot create (no symlinks off Unix);
+    /// left for the user rather than aborting the rest of the render.
+    Unsupported,
 }
 
 impl InitAction {
@@ -89,6 +99,10 @@ impl InitAction {
             Self::Skipped => "skipped (locally modified; --force to overwrite)",
             Self::Accepted => "kept (accepted local edit; --force to overwrite)",
             Self::Forced => "overwritten (--force)",
+            Self::Kept => "kept (create-only; already exists)",
+            Self::Unsupported => {
+                "skipped (symlinks are not supported here; create this link yourself)"
+            }
         }
     }
 }
@@ -106,6 +120,12 @@ pub enum FileState {
     Modified,
     /// Unedited, but the current templates render different bytes.
     Stale,
+    /// A create-only (`once`/`link`) target that exists: the user's, whatever
+    /// it now holds.
+    Kept,
+    /// A create-only target that is absent. Not drift — it is the user's to
+    /// delete — but `init` would create it again.
+    Absent,
 }
 
 impl FileState {
@@ -192,6 +212,7 @@ pub fn init(opts: &InitOptions, out: &mut impl Write) -> Result<(), Box<dyn std:
 
     let mut new = StandardsState::new();
     new.source = opts.templates.label();
+    new.snapshot = opts.templates.snapshot().unwrap_or_default().to_string();
     new.slices = slices.into_iter().collect();
     new.ci = ci.iter().map(|c| c.as_str().to_string()).collect();
     seed_state(&mut new, prev, &rendered, &actions);
@@ -241,7 +262,19 @@ pub fn check(
     let (state, rendered) = load_and_render(root, templates)?;
     let report = classify_all(root, &state, &rendered)?;
 
-    if state.source != templates.label() {
+    // A moved pin is its own fact, apart from any file being edited: the
+    // per-file lines below say which targets it changed (stale).
+    if let Some(now) = templates.snapshot()
+        && !state.snapshot.is_empty()
+        && state.snapshot != now
+    {
+        writeln!(
+            out,
+            "note: templates moved on since init: containers-db {} -> {}",
+            short_sha(&state.snapshot),
+            short_sha(now)
+        )?;
+    } else if state.source != templates.label() {
         writeln!(
             out,
             "note: init used templates from `{}`; checking against `{}`",
@@ -262,6 +295,10 @@ pub fn check(
             FileState::Missing => format!("  ✗ {target} (missing)"),
             FileState::Modified => format!("  ! {target} (modified)"),
             FileState::Stale => format!("  ~ {target} (stale: templates changed; re-run init)"),
+            FileState::Kept => format!("  ✓ {target} (create-only; yours to edit)"),
+            FileState::Absent => {
+                format!("  - {target} (create-only; absent, init would create it)")
+            }
         };
         writeln!(out, "{line}")?;
     }
@@ -289,6 +326,11 @@ fn seed_state(
 ) {
     for (file, action) in rendered.iter().zip(actions) {
         let t = &file.target;
+        // Create-only targets are never compared against a render again, so
+        // they carry no provenance or accepted hash.
+        if file.mode.create_only() {
+            continue;
+        }
         if *action == InitAction::Unchanged {
             new.files.insert(t.clone(), hash_bytes(&file.content));
             continue;
@@ -330,6 +372,10 @@ fn classify_init(
     prev: &StandardsState,
     force: bool,
 ) -> Result<InitAction, Box<dyn std::error::Error>> {
+    if file.mode.create_only() {
+        let present = exists_no_follow(&root.join(&file.target))?;
+        return Ok(classify_create_only(file.mode, present, SYMLINKS_SUPPORTED));
+    }
     let Some(disk) = read_if_exists(&root.join(&file.target))? else {
         return Ok(InitAction::Created);
     };
@@ -408,7 +454,65 @@ fn touches(file: &RenderedFile, action: InitAction) -> bool {
     action.writes() || (file.executable && action == InitAction::Unchanged)
 }
 
+/// Whether this platform can create the symlinks `link` targets need:
+/// unprivileged symlinks are a Unix feature (Windows needs Developer Mode).
+const SYMLINKS_SUPPORTED: bool = cfg!(unix);
+
+/// `init`'s action for a create-only (`once`/`link`) target. Anything at the
+/// path — even a dangling symlink — makes it the user's ([`InitAction::Kept`]);
+/// an absent link where symlinks are unsupported is
+/// [`InitAction::Unsupported`], so the rest of the render still runs.
+/// Pure, so every platform's branch is unit-tested on any host.
+const fn classify_create_only(mode: Mode, present: bool, symlinks: bool) -> InitAction {
+    if present {
+        InitAction::Kept
+    } else if matches!(mode, Mode::Link) && !symlinks {
+        InitAction::Unsupported
+    } else {
+        InitAction::Created
+    }
+}
+
+/// The first 12 hex digits of a commit SHA, for display.
+fn short_sha(sha: &str) -> &str {
+    sha.get(..12).unwrap_or(sha)
+}
+
 fn join<'a>(items: impl Iterator<Item = &'a str>) -> String {
     let v: Vec<&str> = items.collect();
     if v.is_empty() { "none".to_string() } else { v.join(", ") }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_only_classification_covers_every_platform() {
+        use InitAction::{Created, Kept, Unsupported};
+        for (mode, present, symlinks, want) in [
+            (Mode::Once, false, true, Created),
+            (Mode::Once, false, false, Created),
+            (Mode::Once, true, true, Kept),
+            (Mode::Link, false, true, Created),
+            (Mode::Link, false, false, Unsupported),
+            (Mode::Link, true, false, Kept),
+            (Mode::Link, true, true, Kept),
+        ] {
+            assert_eq!(
+                classify_create_only(mode, present, symlinks),
+                want,
+                "{mode:?} present={present} symlinks={symlinks}"
+            );
+        }
+    }
+
+    #[test]
+    fn unsupported_link_is_reported_not_written() {
+        assert!(!InitAction::Unsupported.writes());
+        assert_eq!(
+            InitAction::Unsupported.verb(),
+            "skipped (symlinks are not supported here; create this link yourself)"
+        );
+    }
 }

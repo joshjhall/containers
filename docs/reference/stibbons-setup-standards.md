@@ -1,8 +1,8 @@
 # stibbons setup standards
 
 `stibbons setup standards` applies the repo baseline (git hooks, linter
-configs, justfile, test runner, tool installer, and GitHub or GitLab CI) to any
-repository and reports when it drifts. The baseline is containers-db's
+configs, justfile, test runner, tool installer, GitHub or GitLab CI, and
+starter docs and platform files) to any repository and reports when it drifts. The baseline is containers-db's
 repo-baseline scaffold (`baseline/templates/`). This command is its
 deterministic, non-LLM renderer: for the same selection it writes the same
 bytes as containers-db's reference `render.sh`.
@@ -22,8 +22,9 @@ stibbons setup standards accept ruff.toml       # ...or just the named ones
 ```
 
 Every subcommand also takes `--templates-dir DIR` to read a
-`repo-baseline/templates` directory instead of the copy built into stibbons
-(for example a containers-db checkout's `baseline/templates`).
+`baseline/templates` directory instead of the snapshot built into stibbons
+(for example a local containers-db checkout, to try template changes before
+they are pinned).
 
 ## Selection
 
@@ -41,7 +42,9 @@ Every subcommand also takes `--templates-dir DIR` to read a
 ## State and drift
 
 `init` writes `.stibbons-standards.yml` at the repo root. Commit it. It records
-the selection, where the templates came from, and two hash maps:
+the selection, where the templates came from (`source`), the containers-db
+commit of the built-in templates (`snapshot`; absent for a `--templates-dir`
+run), and two hash maps:
 
 - `files`: what stibbons last wrote. `init` updates a file only while it still
   matches this, so a local edit is never overwritten without `--force`. A file
@@ -57,6 +60,24 @@ the selection, where the templates came from, and two hash maps:
 | `missing`  | Not on disk                                                | yes   |
 | `modified` | Edited and not accepted                                    | yes   |
 | `stale`    | Unedited, but the current templates render different bytes | yes   |
+| `kept`     | A create-only file that exists, whatever it now holds      | no    |
+| `absent`   | A create-only file that is not on disk                     | no    |
+
+When the recorded `snapshot` differs from the one this stibbons was built with,
+`check` prints `note: templates moved on since init: containers-db <old> ->
+<new>` before the per-file lines. That note is not drift by itself: the files
+the new templates change show up as `stale`, apart from any you edited
+(`modified`).
+
+### Create-only files
+
+Some targets are starter files you are meant to own: `README.md`, `CLAUDE.md`,
+`docs/.gitkeep`, `CODEOWNERS`, and the issue and PR/MR templates. The manifest
+marks them `once`. `AGENTS.md` is a `link` target: a symlink to `CLAUDE.md`.
+`init` creates these only when nothing is at the path (a dangling symlink
+counts as something) and never overwrites them, even with `--force`. They carry
+no hash, `check` never reports them as drift, and `accept` has nothing to
+record for them. Delete one and the next `init` creates it again.
 
 The templates mark lines you are expected to change with `# per-repo:`. Make
 those edits, run `accept`, and `check` stays green until the file changes
@@ -64,30 +85,33 @@ again.
 
 ## Template source
 
-The templates are vendored into `crates/stibbons/assets/repo-baseline/` and
-compiled into the binary, so `brew`, `apt`, and `cargo` installs need no
-containers-db checkout. `SOURCE` in that directory records the containers-db
-commit they came from (`containers-db <sha>`); no local patch is carried. The
-sync reads that exact commit with `git archive` — never a branch, tag, short
-SHA, or the working tree. To bump the pin, fetch containers-db and sync at the
-new full SHA, then rebuild stibbons:
+The templates come from containers-db's `baseline/templates/`, through the
+`repo-baseline` crate. stibbons depends on it as a git dependency pinned to a
+full commit SHA in the workspace `Cargo.toml`:
 
-```bash
-just sync-repo-baseline                     # re-sync the SHA already in SOURCE
-just sync-repo-baseline <40-hex-sha>        # move the pin
-just sync-repo-baseline <sha> ../containers-db
+```toml
+repo-baseline = { git = "https://github.com/joshjhall/containers-db", rev = "<40-hex sha>" }
 ```
 
-The checkout defaults to `$CONTAINERS_DB` when that is a git repo, else the
-`containers-db` sibling of the main checkout.
+The crate embeds every template file at build time, so `brew`, `apt`, and
+`cargo` installs need no containers-db checkout at run time. The rev is the
+only pin: there is no vendored copy and no local patch. `build.rs` reads the
+SHA from `Cargo.lock`, refuses to build if it disagrees with the rev, and
+stamps it into the binary as the `snapshot` that `init` records.
+
+To move the pin to a new containers-db commit:
+
+```bash
+# edit the rev in Cargo.toml to the new full SHA, then:
+cargo update -p repo-baseline
+cargo test -p stibbons
+```
 
 The manifest format is containers-db's contract (`baseline/templates/README.md`):
-rows filtered by slice and CI, concatenated per target in manifest order, and
-`*.sh` targets made executable. `matches_baseline_render_sh` in
-`crates/stibbons/tests/standards_templates.rs` checks byte parity with
-containers-db's `baseline/templates/render.sh` **at the SHA in `SOURCE`** — read
-from that commit with `git show`, never a branch or working tree. It uses the
-same checkout resolution as the sync (`CONTAINERS_DB_REPO` overrides it) and
-skips when the checkout or the pinned commit is absent, unless
-`REQUIRE_BASELINE_PARITY=1`, which CI sets on Linux after checking containers-db
-out at that SHA.
+rows filtered by slice and CI, concatenated per target in manifest order,
+`*.sh` targets made executable, and the `once` and `link` modes above.
+`matches_baseline_render_sh` in `crates/stibbons/tests/standards_templates.rs`
+checks that stibbons writes the same bytes and links as containers-db's
+`render.sh`. It runs that script from the pinned crate's own checkout
+(`repo_baseline::TEMPLATES_DIR`), the same commit the templates are built from,
+so it never skips.

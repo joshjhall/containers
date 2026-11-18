@@ -12,6 +12,18 @@ pub fn read_if_exists(path: &Path) -> Result<Option<Vec<u8>>, Box<dyn std::error
     }
 }
 
+/// Whether anything is at `path`, without following a final symlink — so a
+/// dangling link counts as present, as in `render.sh`'s `[ -e ] || [ -L ]`.
+/// Only not-found is "absent": any other error (a permission-denied parent,
+/// a file where a directory should be) is returned, never read as absent.
+pub fn exists_no_follow(path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(format!("failed to stat {}: {e}", path.display()).into()),
+    }
+}
+
 /// Refuse a target whose path, at any existing component under `root`, is a
 /// symlink — writing through one could land outside the repository.
 pub fn ensure_no_symlink(root: &Path, target: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -54,6 +66,44 @@ pub const fn set_executable(_path: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn exists_no_follow_counts_a_dangling_link_and_maps_only_not_found_to_false() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(!exists_no_follow(&tmp.path().join("absent")).unwrap());
+        let link = tmp.path().join("dangling");
+        std::os::unix::fs::symlink(tmp.path().join("nowhere"), &link).unwrap();
+        assert!(exists_no_follow(&link).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exists_no_follow_errors_on_an_unreadable_parent() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("locked");
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(dir.join("f"), b"x").unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let probe = std::fs::symlink_metadata(dir.join("f"));
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // Control: root (or CAP_DAC_OVERRIDE) stats through mode 000. CI runs
+        // unprivileged with REQUIRE_UNPRIVILEGED_TESTS=1, making this skip a failure.
+        if probe.is_ok() {
+            assert!(
+                std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
+                "REQUIRE_UNPRIVILEGED_TESTS=1 but mode 000 is traversable (running as root?)"
+            );
+            eprintln!("skipping: mode 000 is traversable here (running as root?)");
+            return;
+        }
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let res = exists_no_follow(&dir.join("f"));
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let err = res.unwrap_err().to_string();
+        assert!(err.starts_with(&format!("failed to stat {}: ", dir.join("f").display())), "{err}");
+    }
 
     #[test]
     fn read_if_exists_maps_only_not_found_to_none() {

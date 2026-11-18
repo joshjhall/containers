@@ -27,9 +27,16 @@ pub struct StandardsState {
     /// Schema version.
     #[serde(default)]
     pub version: u32,
-    /// Where the templates came from (e.g. `librarian 0.18.0`).
+    /// Where the templates came from (e.g. `containers-db <sha>` or
+    /// `dir <path>`).
     #[serde(default)]
     pub source: String,
+    /// The containers-db commit SHA of the embedded templates `init` rendered,
+    /// so `check` can say the templates moved on, apart from a file being
+    /// edited. Empty for a `--templates-dir` render, and in a state file
+    /// written before #1649 — additive, so the schema version is unchanged.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub snapshot: String,
     /// Selected language slices.
     #[serde(default)]
     pub slices: Vec<String>,
@@ -138,7 +145,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join(STATE_FILE);
         let mut s = StandardsState::new();
-        s.source = "librarian 0.18.0".into();
+        s.source = "containers-db a2c04c8c22c71a73ba8e9b206db1c3ba1e712e24".into();
+        s.snapshot = "a2c04c8c22c71a73ba8e9b206db1c3ba1e712e24".into();
         s.slices = vec!["python".into(), "shell".into()];
         s.ci = vec!["github".into()];
         s.files.insert("justfile".into(), "abc".into());
@@ -173,6 +181,21 @@ mod tests {
             format!("failed to write {}", tmp.path().join(STATE_FILE).display())
         );
         assert!(save.source().expect("source").is::<std::io::Error>(), "{save}");
+    }
+
+    /// A state file written before #1649 has no `snapshot`; it still loads,
+    /// and an empty snapshot is not written back.
+    #[test]
+    fn snapshot_is_optional_and_omitted_when_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(STATE_FILE);
+        std::fs::write(&path, "version: 1\nsource: librarian 0.18.0\nslices: [shell]\n").unwrap();
+        let s = StandardsState::load(&path).unwrap().unwrap();
+        assert_eq!(s.snapshot, "");
+        assert_eq!(s.source, "librarian 0.18.0");
+        s.save(tmp.path()).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("snapshot"), "{text}");
     }
 
     #[test]

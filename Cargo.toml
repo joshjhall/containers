@@ -17,6 +17,11 @@ repository = "https://github.com/joshjhall/containers"
 # Internal crates
 containers-common = { path = "crates/containers-common" }
 luggage = { path = "crates/luggage" }
+# The repo-baseline templates `stibbons setup standards` embeds (#1649). The rev
+# IS the snapshot pin: a full containers-db commit SHA, never a branch or tag.
+# Move it by editing the rev and running `cargo update -p repo-baseline`;
+# stibbons' build.rs refuses a Cargo.lock entry that disagrees with it.
+repo-baseline = { git = "https://github.com/joshjhall/containers-db", rev = "a2c04c8c22c71a73ba8e9b206db1c3ba1e712e24" }
 
 # Shared dependencies
 clap = { version = "4", features = ["derive"] }

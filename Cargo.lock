@@ -1798,6 +1798,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51743d3e274e2b18df81c4dc6caf8a5b8e15dbe799e0dca05c7617380094e884"
 
 [[package]]
+name = "repo-baseline"
+version = "0.1.0"
+source = "git+https://github.com/joshjhall/containers-db?rev=a2c04c8c22c71a73ba8e9b206db1c3ba1e712e24#a2c04c8c22c71a73ba8e9b206db1c3ba1e712e24"
+
+[[package]]
 name = "rfc6979"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2243,6 +2248,7 @@ dependencies = [
  "clap",
  "containers-common",
  "inquire",
+ "repo-baseline",
  "rustix",
  "serde",
  "serde-saphyr",
