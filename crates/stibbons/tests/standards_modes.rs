@@ -184,3 +184,21 @@ fn absent_create_only_target_under_a_symlinked_dir_is_refused() {
     assert!(String::from_utf8_lossy(&out.stderr).contains(".github is a symlink"));
     assert!(!outside.path().join("ISSUE_TEMPLATE").exists(), "wrote through the symlink");
 }
+
+/// Without symlinks (Windows), a missing link is reported and skipped, and
+/// `init` still writes every other target — it must not abort mid-render.
+#[cfg(not(unix))]
+#[test]
+fn link_is_skipped_without_aborting_where_symlinks_are_unsupported() {
+    let tmp = shell_python_repo();
+    let out = standards(tmp.path(), &["init"]);
+    assert_ok(&out, "init");
+    let s = stdout_of(&out);
+    assert!(s.contains("skip       AGENTS.md"), "{s}");
+    assert!(s.contains("symlinks are not supported here; create this link yourself"), "{s}");
+    assert!(!tmp.path().join("AGENTS.md").exists());
+    for f in ["CLAUDE.md", "docs/.gitkeep", "CODEOWNERS", ".stibbons-standards.yml"] {
+        assert!(tmp.path().join(f).is_file(), "expected {f} after the skipped link");
+    }
+    assert_ok(&standards(tmp.path(), &["check"]), "check");
+}

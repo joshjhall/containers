@@ -148,8 +148,9 @@ fn write_link(text: &[u8], path: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(std::ffi::OsStr::from_bytes(text), path)
 }
 
-/// Symlinks need privileges on Windows; refuse rather than write a copy that
-/// `render.sh` would not.
+/// Symlinks need privileges on Windows, so `init` classifies a missing link as
+/// [`InitAction::Unsupported`] there and never reaches this; it refuses rather
+/// than write a copy that `render.sh` would not.
 #[cfg(not(unix))]
 fn write_link(_text: &[u8], path: &Path) -> std::io::Result<()> {
     Err(std::io::Error::new(
@@ -198,7 +199,7 @@ const fn action_mark(a: InitAction) -> &'static str {
         InitAction::Created => "create",
         InitAction::Updated => "update",
         InitAction::Unchanged => "ok",
-        InitAction::Skipped => "skip",
+        InitAction::Skipped | InitAction::Unsupported => "skip",
         InitAction::Accepted | InitAction::Kept => "keep",
         InitAction::Forced => "overwrite",
     }

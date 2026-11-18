@@ -37,7 +37,7 @@ use containers_common::generate::hash_bytes;
 pub use accept::accept;
 use accept::classify_all;
 use fsutil::{ensure_no_symlink, read_if_exists};
-use manifest::{Ci, Manifest, RenderedFile};
+use manifest::{Ci, Manifest, Mode, RenderedFile};
 use state::{STATE_FILE, StandardsState};
 pub use templates::Templates;
 pub use write::error_chain;
@@ -81,6 +81,9 @@ pub enum InitAction {
     /// A create-only (`once`/`link`) target that already exists: the user's
     /// now, left alone even with `--force`.
     Kept,
+    /// A `link` target this platform cannot create (no symlinks off Unix);
+    /// left for the user rather than aborting the rest of the render.
+    Unsupported,
 }
 
 impl InitAction {
@@ -97,6 +100,9 @@ impl InitAction {
             Self::Accepted => "kept (accepted local edit; --force to overwrite)",
             Self::Forced => "overwritten (--force)",
             Self::Kept => "kept (create-only; already exists)",
+            Self::Unsupported => {
+                "skipped (symlinks are not supported here; create this link yourself)"
+            }
         }
     }
 }
@@ -371,6 +377,8 @@ fn classify_init(
         // user's; only a truly absent target is created.
         return Ok(if exists_no_follow(&root.join(&file.target)) {
             InitAction::Kept
+        } else if file.mode == Mode::Link && !cfg!(unix) {
+            InitAction::Unsupported
         } else {
             InitAction::Created
         });

@@ -5,11 +5,9 @@
 mod standards_common;
 
 use std::fs;
-use std::path::Path;
-use std::process::Command;
 
 use standards_common::{
-    assert_ok, baseline_templates, copy_dir, shell_python_repo, standards, stdout_of, tree,
+    assert_ok, baseline_templates, copy_dir, shell_python_repo, standards, stdout_of,
 };
 
 #[test]
@@ -66,8 +64,15 @@ fn templates_dir_manifest_with_missing_source_errors() {
 /// cargo git checkout of the exact rev the embedded templates were compiled
 /// from, so there is no checkout to resolve and nothing to skip. Covers every
 /// mode — tracked files, `once` stubs, and the `AGENTS.md` symlink.
+// Unix only: `render.sh` makes `AGENTS.md` with `ln -s`, which Windows shells
+// emulate (often as a copy) while stibbons leaves the link to the user there.
+#[cfg(unix)]
 #[test]
 fn matches_baseline_render_sh() {
+    use standards_common::tree;
+    use std::path::Path;
+    use std::process::Command;
+
     let render = Path::new(repo_baseline::TEMPLATES_DIR).join("render.sh");
     for (slices, ci) in
         [("shell,python", "github"), ("shell", "gitlab"), ("python", "github,gitlab")]
