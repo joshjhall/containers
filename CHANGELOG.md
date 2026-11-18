@@ -5,6 +5,75 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.23.0] - 2026-11-18
+
+### Added
+
+- Restrict binary-tarball entry types to an allowlist (#1701)
+- Work with an externally authenticated op (#1718)
+- Warn when a repo-local git identity shadows the global one (#1732)
+
+### Changed
+
+- Extract removal/presence block into installer/sysremove.rs (#1690)
+- Split installer mod.rs tests and type report_from_stages inputs (#1693)
+- Split scripts_dir.rs install machinery into a module dir (#1703)
+- Split agent/commands.rs into per-subcommand modules (#1708)
+- Share legacy rc-snippet removal between setup-gh and setup-glab (#1747)
+- Vendor repo-baseline from a pinned containers-db commit (#1753)
+- Check render.sh parity against containers-db at the SOURCE pin (#1756)
+- Read repo-baseline from a pinned containers-db snapshot (#1759)
+
+### Documentation
+
+- Split External Credential Providers into its own page (#1741)
+
+### Fixed
+
+- Satisfy clippy map_unwrap_or in labels exec drain join (#1660)
+- Bump rhel-9 base images to ubi-minimal:9.9 (#1671)
+- Keep util-linux on rhel and classify refused build-dep removal (#1676)
+- Name the package in single-package build-dep removal failures (#1681)
+- Bare-launcher CC and direct absolute-PATH probe test (#1677)
+- Report merge progress when a binary-tarball merge fails (#1687)
+- Refuse writes through extracted symlinks in binary-tarball (#1702)
+- Strip an inherited bare-launcher CC/CXX when no compiler is found (#1714)
+- Mark binary-tarball merge-failure total as a lower bound (#1713)
+- Keep setup-git running when ssh-add fails (#1724)
+- Gate base-image floating tags behind the Trivy scan (#1727)
+- Skip Rust tests on PRs that touch no Rust input (#1738)
+- Re-mirror vendored catalog for upstream go/node/rust versions (#1758)
+- Drop type=local buildx cache from the compose build
+
+### Miscellaneous
+
+- Update compatibility matrix for v4.22.2 (#1663)
+- Note pgp 0.21 as sole block-buffer 0.10 path (#1674)
+- Record review-gate and merge lessons from 2026-11-16 sessions (#1731)
+- Record closing-keyword, solo-review and yq lessons
+
+### Testing
+
+- Unit-test build-dep gone-list and multi-refusal aggregate (#1682)
+- Pin each is_toplevel branch directly (#1675)
+- Cover the late-pid cleanup branch of the capture-fds test (#1685)
+- Assert install reports carry removed build deps on success and failure (#1683)
+- Pin the git path for a linked-worktree (gitfile) root (#1686)
+- Close #749 coverage + 7z PATH-trust gaps (#1689)
+- Cover worktree sync/list edge cases end-to-end (#1691)
+- Unit-test build-dep removal orchestration in run_stages (#1696)
+- Cover apt and rpm build-dep removal in containers (#1699)
+- Pin scripts-dir moved-aside cleanup failure behavior (#1692)
+- Close compiler launcher test gaps (#1705)
+- Cover UreqClient's ureq adapter wiring (#1709)
+- Own the env_remove test's inherited variable via re-exec (#1725)
+- Behavioural tests for op-cli bashrc op gating (#1726)
+- Cover per-tuple Trivy ignore selection and waiver exp: (#1737)
+- Drive merge_into_prefix to an AtLeast total end-to-end (#1729)
+- Behavioural tests for claude-setup op gate and helper-absent fallback (#1735)
+- Pin source-build launcher fallback wiring in run() (#1742)
+- Make stibbons test spawns hermetic against git env leaks (#1745)
+
 ## [4.22.2] - 2026-11-15
 
 ### Added
@@ -36,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tier PR CI to cut runner load on PRs (#1639)
 - Record orchestrator run lessons and rebalance MEMORY.md (#1652)
 - Remove octarine and bump Cargo dependencies (#1658)
+- Automated version updates to v4.22.2
 
 ### Testing
 
@@ -1309,12 +1379,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add Cargo workspace with stibbons and containers-common crates
-- Port feature registry and dependency resolution from Go to Rust
-- Port .igor.yml config parsing from Go to Rust
-- Port template rendering and golden file tests from Go to Rust
-- Port TUI wizard from charmbracelet/huh to Rust with inquire
-- Wire up stibbons init file generation and remove Go codebase
 - Update octarine to v0.3.0-beta.1 and require Windows CI
 - Add lefthook + gitleaks, migrate git hooks from pre-commit (#366)
 - Add cspell spell checker
@@ -1322,8 +1386,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI/CD
 
-- Add Rust CI job, pre-commit hooks, and editor integration
-- Add v5 branch to CI triggers
 - Remove Go test job and fix Rust CI for octarine dependency
 - Fix octarine fetch in test job and allow Windows failure
 - Install mado and dprint so lefthook lint step passes in CI
@@ -1333,21 +1395,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrate markdown hooks to mado + dprint (#377)
 - Replace pre-commit-hooks uvx shims with native equivalents (#382)
 
-### Documentation
-
-- Rewrite README and CLAUDE.md for v5 architecture
-- Add claude memory files for v5 architecture decisions
-
 ### Fixed
 
-- Use HTTPS URL for octarine git dependency
 - Widen curl retry window for tool downloads
 - Gunzip install path produced gzipped binaries; add nmap (#378)
 
 ### Miscellaneous
 
-- Add Rust tooling config and update ignore files
-- Fix cspell dictionary ordering and add ratatui
 - Skip Go tests when cmd/igor/ no longer exists
 - Update Trivy image ref and add memory entries
 - Refresh Cargo lockfile and bump inquire 0.7 → 0.9
@@ -1460,9 +1514,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.15.11] - 2026-03-25
 
+### Added
+
+- Add Cargo workspace with stibbons and containers-common crates
+- Port feature registry and dependency resolution from Go to Rust
+- Port .igor.yml config parsing from Go to Rust
+- Port template rendering and golden file tests from Go to Rust
+- Port TUI wizard from charmbracelet/huh to Rust with inquire
+- Wire up stibbons init file generation and remove Go codebase
+
+### CI/CD
+
+- Add Rust CI job, pre-commit hooks, and editor integration
+- Add v5 branch to CI triggers
+
+### Documentation
+
+- Rewrite README and CLAUDE.md for v5 architecture
+- Add claude memory files for v5 architecture decisions
+
 ### Fixed
 
 - Add MEMORY_FILE_PATH env var and fix comment indentation
+- Use HTTPS URL for octarine git dependency
 - Skip issues with status/on-hold label
 - Measure production code only for file-length thresholds
 - Exclude git submodules from codebase-audit scans
@@ -1470,6 +1544,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 
 - Parallelize op read calls and background claude-setup
+
+### Miscellaneous
+
+- Add Rust tooling config and update ignore files
+- Fix cspell dictionary ordering and add ratatui
 
 ## [4.15.10] - 2026-03-23
 
@@ -2186,10 +2265,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.12.8] - 2025-12-28
 
-### Fixed
-
-- Ignore devcontainer.json and remove invalid linter key
-
 ### Miscellaneous
 
 - Sync extension recommendations across configs
@@ -2201,6 +2276,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Filter out Go pre-release versions
+- Ignore devcontainer.json and remove invalid linter key
 
 ### Miscellaneous
 
@@ -2919,6 +2995,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.23.0]: https://github.com/joshjhall/containers/compare/v4.22.2...v4.23.0
 [4.22.2]: https://github.com/joshjhall/containers/compare/v4.22.1...v4.22.2
 [4.22.1]: https://github.com/joshjhall/containers/compare/v4.22.0...v4.22.1
 [4.22.0]: https://github.com/joshjhall/containers/compare/v4.21.3...v4.22.0
