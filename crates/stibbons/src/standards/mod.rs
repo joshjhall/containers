@@ -36,7 +36,7 @@ use containers_common::generate::hash_bytes;
 
 pub use accept::accept;
 use accept::classify_all;
-use fsutil::{ensure_no_symlink, read_if_exists};
+use fsutil::{ensure_no_symlink, exists_no_follow, read_if_exists};
 use manifest::{Ci, Manifest, Mode, RenderedFile};
 use state::{STATE_FILE, StandardsState};
 pub use templates::Templates;
@@ -373,7 +373,7 @@ fn classify_init(
     force: bool,
 ) -> Result<InitAction, Box<dyn std::error::Error>> {
     if file.mode.create_only() {
-        let present = exists_no_follow(&root.join(&file.target));
+        let present = exists_no_follow(&root.join(&file.target))?;
         return Ok(classify_create_only(file.mode, present, SYMLINKS_SUPPORTED));
     }
     let Some(disk) = read_if_exists(&root.join(&file.target))? else {
@@ -471,12 +471,6 @@ const fn classify_create_only(mode: Mode, present: bool, symlinks: bool) -> Init
     } else {
         InitAction::Created
     }
-}
-
-/// Whether anything is at `path`, without following a final symlink — so a
-/// dangling link counts as present, as in `render.sh`'s `[ -e ] || [ -L ]`.
-fn exists_no_follow(path: &Path) -> bool {
-    std::fs::symlink_metadata(path).is_ok()
 }
 
 /// The first 12 hex digits of a commit SHA, for display.

@@ -7,7 +7,7 @@ use std::path::Path;
 
 use containers_common::generate::hash_bytes;
 
-use super::fsutil::read_if_exists;
+use super::fsutil::{exists_no_follow, read_if_exists};
 use super::manifest::RenderedFile;
 use super::state::StandardsState;
 use super::{CheckReport, FileState, Templates, load_and_render};
@@ -163,7 +163,7 @@ fn classify_check(
     state: &StandardsState,
 ) -> Result<FileState, Box<dyn std::error::Error>> {
     if file.mode.create_only() {
-        let present = std::fs::symlink_metadata(root.join(&file.target)).is_ok();
+        let present = exists_no_follow(&root.join(&file.target))?;
         return Ok(if present { FileState::Kept } else { FileState::Absent });
     }
     let Some(disk) = read_if_exists(&root.join(&file.target))? else {
