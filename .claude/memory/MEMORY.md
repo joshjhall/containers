@@ -31,15 +31,15 @@
 - [Worktree guard blocks eval + heredocs](worktree-guard-blocks-eval-and-heredocs.md) — refuses the literal `eval` (incl. `yq eval`) and `golem-work.sh complete`…
 - [Staged harness blocks worktree-rm](staged-harness-blocks-worktree-rm.md) — leftover `.claude/tmp/harness/*.workflow.js` makes teardown refuse; delete it if it's the only entry
 - [Pre-push skips network tests](pre-push-skips-network-tests.md) — SKIP_NETWORK_TESTS=1 keeps the push gate offline
-- [Zero checks is not green](zero-checks-is-not-green.md) — check-runs can't tell "never fired" from "delayed"
+- [Zero checks is not green](zero-checks-is-not-green.md) — check-runs can't tell "never fired" from "delayed"; right after a push, `gh pr checks` reads the OLD head
 - [Stale git index.lock](stale-git-index-lock.md) — host↔container git index ping-pong under Zed (zed#52265)
 - [Fetch before releasing](fetch-before-release-bot-owns-main.md) — auto-patch bot pushes releases+tags to main on a schedule
 
 ## Topic indexes
 
-- [Review harness & golem internals](index-review-harness-golem.md) — open when driving golems, the ship-issue/next-issue review harness, PR/merge automation, or host monitors (30)
+- [Review harness & golem internals](index-review-harness-golem.md) — open when driving golems, the ship-issue/next-issue review harness, PR/merge automation, or host monitors (32)
 - [Filesystem, virtiofs, FUSE & case-sensitivity](index-filesystem-mounts.md) — open on wedged files, EBADF/ELOOP, stale symlinks, case-shadowed paths, or env leaking across process boundaries (8)
-- [CI & test-framework gotchas](index-ci-test-gotchas.md) — open when a test or CI job fails oddly, flakes, or passes suspiciously (36)
+- [CI & test-framework gotchas](index-ci-test-gotchas.md) — open when a test or CI job fails oddly, flakes, or passes suspiciously (37)
 - [Dependencies, advisories & version pinning](index-deps-security.md) — open when handling osv/cargo-deny advisories, version pins, auto-patch, checksums or signatures (14)
 - [Luggage, catalog, evidence & containers-db](index-luggage-catalog-evidence.md) — open when touching luggage install methods, the vendored catalog, evidence runs, or containers-db schema (15)
 - [Container runtime, entrypoint, Zed & permissions](index-runtime-devcontainer.md) — open when debugging the entrypoint, UID handling, Zed/devcontainer startup, cron or logging inside the image (11)

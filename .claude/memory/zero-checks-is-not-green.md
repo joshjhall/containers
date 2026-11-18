@@ -1,9 +1,11 @@
 ---
 name: zero-checks-is-not-green
-description: check-runs can't tell "CI never fired" from "event delayed"; query actions/runs?branch= and treat zero effective checks past grace as failing
+description: "check-runs can't tell \"CI never fired\" from \"event delayed\", and right after a push gh pr checks still reports the previous head; pin the poll to the new SHA"
 metadata:
   node_type: memory
   type: project
+  originSessionId: db20f8d3-6e46-4c52-9b20-f7e08b5f8d50
+  modified: 2026-11-17T21:28:44.815Z
 ---
 
 **Probing "did CI fire?" via check-runs on a commit gives a false negative
@@ -41,6 +43,18 @@ both of which silently produce a *pass* when gotten wrong:
   Only explicit `SUCCESS` passes; a null conclusion or a status GitHub adds
   later must fail closed. An allowlist fails *open* — the unknown value matches
   no bucket, still counts as an effective check, and emerges as a pass.
+
+**The sibling false pass is the previous head's checks (containers-db#626,
+2026-11-17).** Right after a push, `gh pr checks N` can still report the old
+head's completed checks. `ci-wait.sh` returned `result=pass` at
+`elapsed_min=0` while all three checks on the new SHA were pending
+(joshjhall/librarian#1271). Until that's fixed, after any push:
+
+- poll `commits/<new-sha>/check-runs` until `total_count` is at least the
+  expected number of jobs
+- only then trust the wait
+- merge with `gh pr merge --match-head-commit <sha>`, so a green result for
+  another commit can't merge this one
 
 Follow-up worth doing: required status checks on `main` (`Run Tests`,
 `PR Tier`) would make this binding rather than advisory — see

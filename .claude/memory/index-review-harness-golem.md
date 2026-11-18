@@ -19,6 +19,7 @@ Sub-index of [MEMORY.md](MEMORY.md): open when driving golems, the ship-issue/ne
 - [Ship review reads whole files](ship-review-whole-file-scope.md) — ship review flags pre-existing main code
 - [prComments need real id](pr-comments-need-real-id.md) — id-less PR comment forces harness clean:false despite 0 findings; convergence may still say stop
 - [Post-PR review is pr-attempt*.json](post-pr-review-artifact-is-pr-attempt.md) — glob *attempt*.json before holding a merge for a missing post-PR review
+- [Solo review result is not on disk](solo-review-result-not-on-disk.md) — a non-golem ship-issue run writes no attempt<N>.json; read the verdict from the task-notification, never synthesize the file
 - [File follow-ups before teardown](file-followups-before-teardown.md) — subagent spawned in a golem worktree is stranded when Phase D removes it
 - [workflow.js must be readable in-worktree](workflow-js-must-be-readable-in-worktree.md) — stage via harness-stage.sh (librarian v0.15.0+)
 - [PR link closes despite Refs](pr-link-closes-despite-refs.md) — a linked PR closes its issue on merge even with only `Refs #N`; check closedByPullRequestsReferences first
@@ -33,3 +34,4 @@ Sub-index of [MEMORY.md](MEMORY.md): open when driving golems, the ship-issue/ne
 - [worktree-rm blocked by held build artifacts](worktree-rm-blocked-by-held-build-artifacts.md) — leftover cargo artifacts held open by rust-analyzer
 - [Fine-grained PAT lacks admin](fine-grained-pat-lacks-admin.md) — repo-settings writes 403 despite permissions.admin=true
 - [Stale repo-local git identity](stale-repo-local-git-identity.md) — `.git/config` `t <t@t.t>` shadows the 1Password global identity
+- [Negated closing keyword still closes](negated-closing-keyword-still-closes.md) — "does not close #N" in a PR body auto-closes #N on merge

@@ -39,3 +39,4 @@ Sub-index of [MEMORY.md](MEMORY.md): open when a test or CI job fails oddly, fla
 - [Signed commit unknown_key is identity](signed-commit-unknown-key-is-identity.md) — GitHub matches the SSH key to the committer email; a repo-local bot `[user]` makes a valid signature fail
 - [ubuntu-26.04 runner breakage](bash53-null-cd-breaks-stripped-path-tests.md) — bash 5.3 errors on `cd ""` (stripped-PATH tests); shellcheck 0.11 adds SC2232 on `sudo command`
 - [cargo injects SSL_CERT_DIR](cargo-injects-ssl-cert-dir.md) — empty SSL_CERT_FILE alone does not simulate a no-CA host under `cargo test`; empty both
+- [yq missing-key tag compare](yq-missing-key-tag-compare.md) — `(.k|tag) != "!!null"` selects an ABSENT key; test optional fields with has() + a passing no-field run
