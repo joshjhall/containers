@@ -227,6 +227,9 @@ fn unstattable_create_only_target_errors_in_check_and_init() {
     assert_ok(&standards(tmp.path(), &["init"]), "init");
     let dir = tmp.path().join(".github/ISSUE_TEMPLATE");
     let target = dir.join("bug.md");
+    // stibbons names the path under the canonical repo root (macOS's tempdir
+    // is /var -> /private/var), so build the expectation from it too.
+    let shown = fs::canonicalize(tmp.path()).unwrap().join(".github/ISSUE_TEMPLATE/bug.md");
     let guard = standards_common::ModeGuard::set(&dir, 0o000);
     // Control: root (or CAP_DAC_OVERRIDE) stats through mode 000. CI runs
     // unprivileged with REQUIRE_UNPRIVILEGED_TESTS=1, making this skip a failure.
@@ -239,7 +242,7 @@ fn unstattable_create_only_target_errors_in_check_and_init() {
         eprintln!("skipping: mode 000 is traversable here (running as root?)");
         return;
     }
-    let want = format!("failed to stat {}: ", target.display());
+    let want = format!("failed to stat {}: ", shown.display());
     for cmd in ["check", "init"] {
         let out = standards(tmp.path(), &[cmd]);
         let err = String::from_utf8_lossy(&out.stderr);
