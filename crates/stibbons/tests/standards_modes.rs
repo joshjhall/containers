@@ -216,3 +216,38 @@ fn link_is_skipped_without_aborting_where_symlinks_are_unsupported() {
     }
     assert_ok(&standards(tmp.path(), &["check"]), "check");
 }
+
+/// A create-only target whose parent cannot be searched is an error for both
+/// `check` and `init`, never "absent"/"create": the stat failure must reach
+/// the user through each call site (`classify_check`, `classify_init`).
+#[cfg(unix)]
+#[test]
+fn unstattable_create_only_target_errors_in_check_and_init() {
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    let dir = tmp.path().join(".github/ISSUE_TEMPLATE");
+    let target = dir.join("bug.md");
+    let guard = standards_common::ModeGuard::set(&dir, 0o000);
+    // Control: root (or CAP_DAC_OVERRIDE) stats through mode 000. CI runs
+    // unprivileged with REQUIRE_UNPRIVILEGED_TESTS=1, making this skip a failure.
+    if fs::symlink_metadata(&target).is_ok() {
+        drop(guard);
+        assert!(
+            std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
+            "REQUIRE_UNPRIVILEGED_TESTS=1 but mode 000 is traversable (running as root?)"
+        );
+        eprintln!("skipping: mode 000 is traversable here (running as root?)");
+        return;
+    }
+    let want = format!("failed to stat {}: ", target.display());
+    for cmd in ["check", "init"] {
+        let out = standards(tmp.path(), &[cmd]);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(1), "{cmd}: {err}");
+        assert!(err.contains(&want), "{cmd}: expected `{want}` in `{err}`");
+        let s = stdout_of(&out);
+        assert!(!s.contains("ISSUE_TEMPLATE/bug.md (create-only; absent"), "{cmd}: {s}");
+        assert!(!s.contains("create     .github/ISSUE_TEMPLATE/bug.md"), "{cmd}: {s}");
+    }
+    drop(guard);
+}
