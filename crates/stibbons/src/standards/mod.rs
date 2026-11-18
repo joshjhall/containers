@@ -373,15 +373,8 @@ fn classify_init(
     force: bool,
 ) -> Result<InitAction, Box<dyn std::error::Error>> {
     if file.mode.create_only() {
-        // Anything at the path — even a dangling symlink — makes it the
-        // user's; only a truly absent target is created.
-        return Ok(if exists_no_follow(&root.join(&file.target)) {
-            InitAction::Kept
-        } else if file.mode == Mode::Link && !cfg!(unix) {
-            InitAction::Unsupported
-        } else {
-            InitAction::Created
-        });
+        let present = exists_no_follow(&root.join(&file.target));
+        return Ok(classify_create_only(file.mode, present, SYMLINKS_SUPPORTED));
     }
     let Some(disk) = read_if_exists(&root.join(&file.target))? else {
         return Ok(InitAction::Created);
@@ -461,6 +454,25 @@ fn touches(file: &RenderedFile, action: InitAction) -> bool {
     action.writes() || (file.executable && action == InitAction::Unchanged)
 }
 
+/// Whether this platform can create the symlinks `link` targets need:
+/// unprivileged symlinks are a Unix feature (Windows needs Developer Mode).
+const SYMLINKS_SUPPORTED: bool = cfg!(unix);
+
+/// `init`'s action for a create-only (`once`/`link`) target. Anything at the
+/// path — even a dangling symlink — makes it the user's ([`InitAction::Kept`]);
+/// an absent link where symlinks are unsupported is
+/// [`InitAction::Unsupported`], so the rest of the render still runs.
+/// Pure, so every platform's branch is unit-tested on any host.
+const fn classify_create_only(mode: Mode, present: bool, symlinks: bool) -> InitAction {
+    if present {
+        InitAction::Kept
+    } else if matches!(mode, Mode::Link) && !symlinks {
+        InitAction::Unsupported
+    } else {
+        InitAction::Created
+    }
+}
+
 /// Whether anything is at `path`, without following a final symlink — so a
 /// dangling link counts as present, as in `render.sh`'s `[ -e ] || [ -L ]`.
 fn exists_no_follow(path: &Path) -> bool {
@@ -475,4 +487,38 @@ fn short_sha(sha: &str) -> &str {
 fn join<'a>(items: impl Iterator<Item = &'a str>) -> String {
     let v: Vec<&str> = items.collect();
     if v.is_empty() { "none".to_string() } else { v.join(", ") }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_only_classification_covers_every_platform() {
+        use InitAction::{Created, Kept, Unsupported};
+        for (mode, present, symlinks, want) in [
+            (Mode::Once, false, true, Created),
+            (Mode::Once, false, false, Created),
+            (Mode::Once, true, true, Kept),
+            (Mode::Link, false, true, Created),
+            (Mode::Link, false, false, Unsupported),
+            (Mode::Link, true, false, Kept),
+            (Mode::Link, true, true, Kept),
+        ] {
+            assert_eq!(
+                classify_create_only(mode, present, symlinks),
+                want,
+                "{mode:?} present={present} symlinks={symlinks}"
+            );
+        }
+    }
+
+    #[test]
+    fn unsupported_link_is_reported_not_written() {
+        assert!(!InitAction::Unsupported.writes());
+        assert_eq!(
+            InitAction::Unsupported.verb(),
+            "skipped (symlinks are not supported here; create this link yourself)"
+        );
+    }
 }

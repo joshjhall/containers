@@ -121,6 +121,20 @@ fn once_stubs_are_created_then_never_overwritten() {
     assert!(accepted_keys(root).is_empty());
 }
 
+/// A bare `accept` takes only modified tracked files: an edited create-only
+/// target is never recorded, and is never reported as accepted.
+#[test]
+fn bare_accept_ignores_edited_create_only_targets() {
+    let tmp = shell_python_repo();
+    assert_ok(&standards(tmp.path(), &["init"]), "init");
+    fs::write(tmp.path().join("CLAUDE.md"), "mine\n").unwrap();
+    fs::write(tmp.path().join("CODEOWNERS"), "* @me\n").unwrap();
+    let out = standards(tmp.path(), &["accept"]);
+    assert_ok(&out, "accept");
+    assert_eq!(stdout_of(&out), "No modified baseline files to accept.\n");
+    assert!(accepted_keys(tmp.path()).is_empty());
+}
+
 #[test]
 fn a_deleted_once_stub_is_not_drift_but_init_recreates_it() {
     let tmp = shell_python_repo();
