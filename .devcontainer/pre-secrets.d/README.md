@@ -24,7 +24,9 @@ Provider hooks are usually machine-specific. Keep them out of git with a
 unless every contributor uses the same provider.
 
 Mounts the provider needs (its socket, its shims) and the opt-in flag go in
-`.devcontainer/docker-compose.override.yml`, which is gitignored:
+`.devcontainer/docker-compose.override.yml`. `devcontainer.json` already
+layers it after `docker-compose.yml`; the committed copy is an empty
+placeholder, so a clean checkout still opens. Edit it locally:
 
 ```yaml
 services:
@@ -33,13 +35,10 @@ services:
       CREDENTIAL_SETUP_HOOKS: "true"
 ```
 
-Add it to your local `dockerComposeFile` list:
+Then keep your edits out of git:
 
-```jsonc
-"dockerComposeFile": ["docker-compose.yml", "docker-compose.override.yml"],
+```bash
+git update-index --skip-worktree .devcontainer/docker-compose.override.yml
 ```
-
-Don't commit that `devcontainer.json` change: Compose fails on a missing file,
-so a clean checkout without an override would no longer open.
 
 Full reference: `docs/claude-code/external-credential-providers.md`.

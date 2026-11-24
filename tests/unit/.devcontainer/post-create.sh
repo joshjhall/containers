@@ -529,6 +529,24 @@ test_devcontainer_json_wires_hooks() {
         "postStartCommand runs post-start.sh (array form)"
 }
 
+# Test: devcontainer.json layers the local override, and the placeholder it
+# names is tracked (Compose fails on a missing file, so a clean checkout
+# would not open without it).
+test_devcontainer_json_layers_override() {
+    local json
+    json=$(command cat "$PROJECT_ROOT/.devcontainer/devcontainer.json")
+
+    assert_contains "$json" '"dockerComposeFile": ["docker-compose.yml", "docker-compose.override.yml"]' \
+        "dockerComposeFile layers docker-compose.override.yml after the base file"
+
+    if command git -C "$PROJECT_ROOT" ls-files --error-unmatch \
+        .devcontainer/docker-compose.override.yml >/dev/null 2>&1; then
+        assert_true true "docker-compose.override.yml placeholder is tracked"
+    else
+        assert_true false "docker-compose.override.yml placeholder is not tracked"
+    fi
+}
+
 test_old_scripts_removed() {
     assert_file_not_exists "$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
     assert_file_not_exists "$PROJECT_ROOT/.devcontainer/rebuild.sh"
@@ -586,6 +604,7 @@ run_test test_drift_duplicate_conf_key_last_wins "Drift check: duplicate conf ke
 run_test test_drift_duplicate_compose_key_each_compared "Drift check: duplicate compose key, each compared"
 run_test test_drift_parses_real_compose "Drift check: parses the real docker-compose.yml"
 run_test test_devcontainer_json_wires_hooks "devcontainer.json wires post-create/post-start"
+run_test test_devcontainer_json_layers_override "devcontainer.json layers the tracked override placeholder"
 run_test test_old_scripts_removed "Old setup-dev-environment.sh and rebuild.sh are gone"
 run_test test_no_githooks_directory "No .githooks directory (lefthook uses .git/hooks)"
 run_test test_no_precommit_config "No .pre-commit-config.yaml (fully migrated)"

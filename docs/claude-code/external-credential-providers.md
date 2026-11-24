@@ -111,10 +111,12 @@ nothing in the startup path depends on it.
 
 Wire a provider in locally without committing it:
 
-- Put mounts in `.devcontainer/docker-compose.override.yml` (gitignored) and
-  add it to your local `dockerComposeFile` list. Compose cannot optionally
-  include a missing file, so the checked-in `devcontainer.json` keeps the
-  single file and a clean checkout still opens.
+- Put mounts in `.devcontainer/docker-compose.override.yml`.
+  `devcontainer.json` already layers it after `docker-compose.yml`. Compose
+  cannot optionally include a missing file, so the committed copy is an empty
+  `services: {}` placeholder that keeps a clean checkout opening. Keep your
+  edits local with
+  `git update-index --skip-worktree .devcontainer/docker-compose.override.yml`.
 - Drop hook scripts in `.devcontainer/pre-secrets.d/` and set
   `CREDENTIAL_SETUP_HOOKS: "true"` in that override's `environment` — see the
   README there.

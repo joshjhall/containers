@@ -55,6 +55,9 @@ Thumbs.db
 
 .dockerignore.local
 docker-compose.override.yml
+# Committed as an empty placeholder (devcontainer.json lists it); keep local
+# edits out with `git update-index --skip-worktree`.
+!.devcontainer/docker-compose.override.yml
 docker-compose.local.yml
 
 # ============================================================================
