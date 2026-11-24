@@ -185,12 +185,15 @@ newest patch of each minor, minimum_recommended floor and up
   uses local rows. A wrong report only costs a warning. A wrong matrix costs up
   to 200 runners re-testing covered cells. With the variable unset (unit tests,
   local runs), the vendored `tested[]` decides.
+
 - **Newest patch per minor**, because that's what `RUST_VERSION=X.Y` installs.
   Superseded patches stay installable but aren't re-tested.
+
 - **Pending only.** Re-running a covered cell is a no-op at ingest, and the full
   product (18 versions × 18 tuples = 324) exceeds GitHub's 256-job matrix cap.
   A base-image rebuild re-evidences its tuple separately
   ([`dispatch-evidence-for-tuple.sh`](../../bin/dispatch-evidence-for-tuple.sh)).
+
 - **Failing cells cool down, then retry last** (#1326). Only a passing row
   covers a cell, so without a policy a tuple that always fails (a broken
   toolchain/distro combination) came back on every push. It used a runner each
@@ -228,17 +231,21 @@ newest patch of each minor, minimum_recommended floor and up
   `EVIDENCE_FAIL_COOLDOWN_DAYS=0` retries every failure on the next push (still
   ordered last). Tests pin the clock with `EVIDENCE_NOW` (epoch seconds). The
   same rule applies to vendored `tested[]` when no published source is set.
+
 - **Capped at 200 per run, oldest versions first** (never-tested cells before
   failure retries), so a backlog (a new platform, or the 1.82+ backfill) drains
   over successive pushes, floor first.
+
 - **Published images only.** A tuple is available only if
   `ghcr.io/.../base-<tuple>:latest` exists. On the merge that adds a tuple, the
   matrix runs alongside the base-image publish; without this, the first run
   queued cells for images that didn't exist yet (#1113: 74 cells failed at
   `Resolve base image digest`). Those tuples stay pending and run once
   published.
+
 - **Nothing pending** → `has_cells=false` and the evidence job is skipped (an
   empty matrix is a hard error in Actions).
+
 - **Pull requests** dry-run only the first pending cell in that order. That
   proves the pipeline still works without re-evidencing the backlog on every PR.
 
@@ -336,10 +343,12 @@ same split #1560 made for `ci.yml`):
   containers-db, so cancelling one loses nothing. A new push to a PR cancels
   the old head's run. This matters because a source-build cell (node on alpine)
   can hold a runner for about two hours.
+
 - **`main` and dispatch runs ingest.** Two pushes to `main` stay serialized per
   ref, so they cannot race to open duplicate containers-db PRs. These runs are
   never cancelled, because an interrupted ingest could leave a half-pushed
   branch behind.
+
 - **Merged or closed PRs.** A merged or closed PR gets no new push, so the
   workflow also triggers on `pull_request` `closed`. That run joins the PR's
   group, and starting it cancels the in-flight dry run. The close-event run
@@ -353,6 +362,7 @@ same split #1560 made for `ci.yml`):
   This needs no `actions: write` token and no matching on branch names, and it
   works for PRs from forks. It also cannot reach a `main` run, because `main`
   runs use a different group.
+
 - **`collect` uses `!cancelled()`, not `always()`.** It still runs when some
   cells failed or timed out, because a fail row is evidence too. It does not
   start on a run that a newer push or a close cancelled. `always()` would

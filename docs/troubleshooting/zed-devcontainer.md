@@ -428,6 +428,7 @@ REBUILD`.
 
 - **VS Code** — run **"Dev Containers: Rebuild Container"** from the command
   palette.
+
 - **Zed** — Zed has no rebuild action and doesn't detect `devcontainer.json`
   changes, so tear the stack down from a **host** terminal (not inside the
   container), from the repo root:
