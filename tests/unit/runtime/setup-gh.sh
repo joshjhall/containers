@@ -751,7 +751,7 @@ HOSTILE
         "RC_SNIPPET_LIB is not sourced without TEST_MODE=1"
     assert_contains "$output" "removed pre-#1711 token snippet" \
         "The sibling rc-snippet helper is used instead of the override"
-    assert_file_not_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>\&1 \&\& gh auth status' \
+    assert_file_not_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>&1 && gh auth status' \
         "The legacy block is removed by the real helper"
 }
 
