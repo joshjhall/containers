@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.23.1] - 2026-11-25
+
+### Documentation
+
+- Add MD076 list-item spacing for rumdl 0.3.5 (#1774)
+
 ## [4.23.0] - 2026-11-18
 
 ### Added
@@ -1379,6 +1385,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add Cargo workspace with stibbons and containers-common crates
+- Port feature registry and dependency resolution from Go to Rust
+- Port .igor.yml config parsing from Go to Rust
+- Port template rendering and golden file tests from Go to Rust
+- Port TUI wizard from charmbracelet/huh to Rust with inquire
+- Wire up stibbons init file generation and remove Go codebase
 - Update octarine to v0.3.0-beta.1 and require Windows CI
 - Add lefthook + gitleaks, migrate git hooks from pre-commit (#366)
 - Add cspell spell checker
@@ -1386,6 +1398,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI/CD
 
+- Add Rust CI job, pre-commit hooks, and editor integration
+- Add v5 branch to CI triggers
 - Remove Go test job and fix Rust CI for octarine dependency
 - Fix octarine fetch in test job and allow Windows failure
 - Install mado and dprint so lefthook lint step passes in CI
@@ -1395,13 +1409,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrate markdown hooks to mado + dprint (#377)
 - Replace pre-commit-hooks uvx shims with native equivalents (#382)
 
+### Documentation
+
+- Rewrite README and CLAUDE.md for v5 architecture
+- Add claude memory files for v5 architecture decisions
+
 ### Fixed
 
+- Use HTTPS URL for octarine git dependency
 - Widen curl retry window for tool downloads
 - Gunzip install path produced gzipped binaries; add nmap (#378)
 
 ### Miscellaneous
 
+- Add Rust tooling config and update ignore files
+- Fix cspell dictionary ordering and add ratatui
 - Skip Go tests when cmd/igor/ no longer exists
 - Update Trivy image ref and add memory entries
 - Refresh Cargo lockfile and bump inquire 0.7 → 0.9
@@ -1514,29 +1536,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.15.11] - 2026-03-25
 
-### Added
-
-- Add Cargo workspace with stibbons and containers-common crates
-- Port feature registry and dependency resolution from Go to Rust
-- Port .igor.yml config parsing from Go to Rust
-- Port template rendering and golden file tests from Go to Rust
-- Port TUI wizard from charmbracelet/huh to Rust with inquire
-- Wire up stibbons init file generation and remove Go codebase
-
-### CI/CD
-
-- Add Rust CI job, pre-commit hooks, and editor integration
-- Add v5 branch to CI triggers
-
-### Documentation
-
-- Rewrite README and CLAUDE.md for v5 architecture
-- Add claude memory files for v5 architecture decisions
-
 ### Fixed
 
 - Add MEMORY_FILE_PATH env var and fix comment indentation
-- Use HTTPS URL for octarine git dependency
 - Skip issues with status/on-hold label
 - Measure production code only for file-length thresholds
 - Exclude git submodules from codebase-audit scans
@@ -1544,11 +1546,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 
 - Parallelize op read calls and background claude-setup
-
-### Miscellaneous
-
-- Add Rust tooling config and update ignore files
-- Fix cspell dictionary ordering and add ratatui
 
 ## [4.15.10] - 2026-03-23
 
@@ -2265,6 +2262,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.12.8] - 2025-12-28
 
+### Fixed
+
+- Ignore devcontainer.json and remove invalid linter key
+
 ### Miscellaneous
 
 - Sync extension recommendations across configs
@@ -2276,7 +2277,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Filter out Go pre-release versions
-- Ignore devcontainer.json and remove invalid linter key
 
 ### Miscellaneous
 
@@ -2995,6 +2995,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.23.1]: https://github.com/joshjhall/containers/compare/v4.23.0...v4.23.1
 [4.23.0]: https://github.com/joshjhall/containers/compare/v4.22.2...v4.23.0
 [4.22.2]: https://github.com/joshjhall/containers/compare/v4.22.1...v4.22.2
 [4.22.1]: https://github.com/joshjhall/containers/compare/v4.22.0...v4.22.1

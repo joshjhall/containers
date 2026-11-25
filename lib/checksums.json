@@ -218,6 +218,11 @@
           "sha256": "f51704793a19dc108b037cbe9261b742070f3b4af9cec6d4e676d0362795d486",
           "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.1.2/spring-boot-cli-4.1.2-bin.tar.gz",
           "added": "2026-10-25"
+        },
+        "4.2.0": {
+          "sha256": "d7fbfd1646214edea8a1db521df5a2c50d4d8cd60e6214a652b4e062e2af75e9",
+          "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.2.0/spring-boot-cli-4.2.0-bin.tar.gz",
+          "added": "2026-11-25"
         }
       }
     },
@@ -343,6 +348,19 @@
             }
           },
           "added": "2026-10-12"
+        },
+        "0.22.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "10d20fd7b7e0350e7996ff191a68bfd52093a2361c72b08f6fa10b31dd6782ce",
+              "url": "https://github.com/dandavison/delta/releases/download/0.22.0/delta-0.22.0-x86_64-unknown-linux-gnu.tar.gz"
+            },
+            "arm64": {
+              "sha256": "9f462d3ffb74d188964f2f0c408619f1d63f60425f87f3dce83bab0db1c71313",
+              "url": "https://github.com/dandavison/delta/releases/download/0.22.0/delta-0.22.0-aarch64-unknown-linux-gnu.tar.gz"
+            }
+          },
+          "added": "2026-11-25"
         }
       }
     },
@@ -715,6 +733,19 @@
             }
           },
           "added": "2026-11-15"
+        },
+        "2.6.9": {
+          "checksums": {
+            "amd64": {
+              "sha256": "5409e32eb17b47e0d1d9bbf213b749eba1f9c35d8b18fbd2ee55971157918a57",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.6.9/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "df2dc6a7c8c0d094512e96e03318154d7412d7b405bc34dcf09a4508357cfdee",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.6.9/biome-linux-arm64"
+            }
+          },
+          "added": "2026-11-25"
         }
       }
     },
@@ -887,6 +918,19 @@
             }
           },
           "added": "2026-10-18"
+        },
+        "2.2.3": {
+          "checksums": {
+            "amd64": {
+              "sha256": "f25a53b1991c2727aa2819fdd7a4b9798fc0c210d1e1a92f035be8f346cec9fb",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.2.3/lefthook_2.2.3_Linux_x86_64.gz"
+            },
+            "arm64": {
+              "sha256": "bec8af4e4eeeb55dc59928a632b3c53ae54fb84786cc72428db33b901158d629",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.2.3/lefthook_2.2.3_Linux_aarch64.gz"
+            }
+          },
+          "added": "2026-11-25"
         }
       }
     },
@@ -1012,6 +1056,19 @@
             }
           },
           "added": "2026-10-25"
+        },
+        "0.65.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "d1aaf0c6d015931b860804eda5bf7fac9d29e2253351b7d6b0177e6b03a8776d",
+              "url": "https://github.com/dprint/dprint/releases/download/0.65.0/dprint-x86_64-unknown-linux-gnu.zip"
+            },
+            "arm64": {
+              "sha256": "804535e54f431674f5481725ba5d4718de0a7398d6abd33b899fd734f6d98062",
+              "url": "https://github.com/dprint/dprint/releases/download/0.65.0/dprint-aarch64-unknown-linux-gnu.zip"
+            }
+          },
+          "added": "2026-11-25"
         }
       }
     },
@@ -1244,6 +1301,19 @@
             }
           },
           "added": "2026-11-15"
+        },
+        "0.3.6": {
+          "checksums": {
+            "amd64": {
+              "sha256": "dceca66687b4ae5bc129f34378268f329f830b9d736cd34b8c515790dc6347ee",
+              "url": "https://github.com/rvben/rumdl/releases/download/v0.3.6/rumdl-v0.3.6-x86_64-unknown-linux-gnu.tar.gz"
+            },
+            "arm64": {
+              "sha256": "e03b97d17ffb28c13dc077416dd39d57c10dddfe6cedb8169764987af0fbcfcd",
+              "url": "https://github.com/rvben/rumdl/releases/download/v0.3.6/rumdl-v0.3.6-aarch64-unknown-linux-gnu.tar.gz"
+            }
+          },
+          "added": "2026-11-25"
         }
       }
     },
@@ -1481,6 +1551,19 @@
             }
           },
           "added": "2026-10-12"
+        },
+        "1.6.4": {
+          "checksums": {
+            "amd64": {
+              "sha256": "8477f3841cba6ac8c45847d42eb5254f1f2d7fbc3045baf333e1cbe92267022d",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.6.4/codegraph-linux-x64.tar.gz"
+            },
+            "arm64": {
+              "sha256": "e9cd2bebb29ce6aa83b4489755f76a36f3e22658beac5ebef023b874be7cfce1",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.6.4/codegraph-linux-arm64.tar.gz"
+            }
+          },
+          "added": "2026-11-25"
         }
       }
     },
@@ -1576,12 +1659,25 @@
             }
           },
           "added": "2026-11-15"
+        },
+        "1.28.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "dad3d904258f50b0cc5ac34e6a6e8cefbada8bf65ab3da063faa1d6b534ad28a",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.28.0/cargo-binstall-x86_64-unknown-linux-musl.tgz"
+            },
+            "arm64": {
+              "sha256": "a2fc44f58416eecd6091eb55b21bda968283fc7cae7712679cbb4f490c8a1489",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.28.0/cargo-binstall-aarch64-unknown-linux-musl.tgz"
+            }
+          },
+          "added": "2026-11-25"
         }
       }
     }
   },
   "metadata": {
-    "generated": "2026-11-15T08:44:50Z",
+    "generated": "2026-11-25T04:25:40Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
