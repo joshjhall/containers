@@ -62,10 +62,12 @@ gets simpler. Touches `lib/features/claude-code-setup.sh` and
 
 - Epic: `joshjhall/containers#607` (has a comment with the full 58-artifact
   triage table + a comment listing all sub-issues and suggested order).
+
 - containers-side: #608 (pinned local-marketplace install, removes #574
   bake/stamp), #609 (justfile recipes delegate to bundled scripts), #610
   (docs sweep), #611 (remove migrated artifacts — do LAST, after librarian
   live + container consuming).
+
 - librarian-side (`joshjhall/librarian`): #1 scaffold (foundational, blocks
 
   #2–#5), #2 migrate dev-core, #3 migrate review-audit, #4 migrate workflow +

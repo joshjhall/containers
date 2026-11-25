@@ -267,6 +267,7 @@ For each feature script (e.g. `node.sh`, `python.sh`):
    covers every component the bash script currently adds explicitly. Then run
    `just db-validate-vendored` — a tool newly mirrored from containers-db is
    exactly the case the drift check is there to catch.
+
 2. **Confirm install method support.** Check `install_methods[].platform`
    matches the target distros, and that each method's `method_kind` is one
    luggage implements. `method_kind` is the dispatch discriminant —
@@ -287,11 +288,13 @@ For each feature script (e.g. `node.sh`, `python.sh`):
    yet, that's a luggage-side issue, not a port — and a kind luggage doesn't
    recognise (or a missing `method_kind`) fails as a catalog error rather
    than being inferred from the method name.
+
 3. **Strip the inline install.** Remove from the bash script: source lines
    for `checksum-fetch.sh` / `download-verify.sh` / `checksum-verification.sh`
    (no longer needed in this script), the download `curl` invocation, the
    `verify_download_or_fail` call, the installer `su -c` block, and any
    explicit component-add lines covered by catalog `post_install`.
+
 4. **Add the luggage call.** Replace with one invocation:
 
    ```bash
@@ -306,11 +309,13 @@ For each feature script (e.g. `node.sh`, `python.sh`):
    Handle channel names (`stable`/`beta`/`nightly`) with a separate branch
    that uses `--channel "$value"` and bare `<tool>`. `set -euo pipefail`
    already gives fail-fast on luggage's non-zero exit — do not add `|| true`.
+
 5. **Run the smoke and production tests.**
    - `just test-integration-one luggage_rust` — the fixture-only luggage
      smoke test (renamed for each feature once you add yours).
    - `just test-integration-one <feature>` — the production-path
      integration test that exercises the real `Dockerfile` build.
+
 6. **Update this doc.** Add the feature to the "Ported features" list below.
    If the port surfaced a luggage-side limitation (channel resolution,
    unsupported install method, missing post_install variant), file a

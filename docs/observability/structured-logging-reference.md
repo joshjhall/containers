@@ -115,6 +115,7 @@ command** that failed:
 
 - The same line appended to `$BUILD_LOG_DIR/build-failure.log` (surfaced first
   by `check-build-logs.sh`).
+
 - Under CI only, a GitHub annotation: `::error title=Build failed in
   <feature>::COMMAND #N '<desc>' failed (exit <code>): <cmd>`.
 

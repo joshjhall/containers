@@ -69,6 +69,7 @@ To bump a third-party action:
 
 1. Replace the SHA in the `uses:` line and update the `# version` comment to
    match the tag.
+
 1. Run `just test` (the guard test below runs under `./tests/run_unit_tests.sh`).
 
 Dependabot can also be configured to bump SHA pins while preserving the comment;

@@ -26,6 +26,7 @@ How it is wired:
   values are a hard error, never a silent "off": empty, multi-word, a relative
   path (`./ccache`; use a bare name or an absolute path), or a directory (`/`,
   `.`, `..`, `bin/`). Other install methods ignore it.
+
 - **Nothing installed in the image under test.** A ccache *package* would
   pull in its own runtime libraries (`libstdc++`, `zstd`, `xxhash` on alpine).
   Those could mask a runtime dependency the catalog forgot, so a cell would
@@ -34,6 +35,7 @@ How it is wired:
   verifies its sha256 per architecture, and bind-mounts the binary read-only
   at `/opt/evidence-ccache/ccache`. To bump it, update the version and both
   checksums from the release's asset digests.
+
 - **In the container.** The cell mounts
   [`bin/lib/evidence-ccache-entry.sh`](../../bin/lib/evidence-ccache-entry.sh)
   and runs luggage through it. The script:
@@ -47,11 +49,13 @@ How it is wired:
   build runs uncached with a `::warning::`. Cache plumbing never decides a
   verdict (the stats and save steps are also `continue-on-error`), and nothing
   ccache-related ever reaches a production image.
+
 - **Hashing.** luggage extracts each build into a random
   `/tmp/.../luggage-build-*` directory. `CCACHE_BASEDIR=/tmp` plus
   `CCACHE_NOHASHDIR=1` keep that path out of the hash. Without them every run
   would miss. `CCACHE_COMPILERCHECK=content` is set because the compiler is
   reinstalled into a fresh container each run, so its mtime proves nothing.
+
 - **Key.** Each save writes `ccache-<tool>-<tuple>-<major>-<version>-<run_id>-<attempt>`.
   Cache entries are immutable, so a fixed key would freeze the first cold
   build's objects (even a timed-out, partial one) and no later run could add
@@ -61,10 +65,12 @@ How it is wired:
   lead the key, so no restore ever crosses tools or platforms. A version with
   no numeric major gets the major `x`, with a warning, rather than failing the
   cell.
+
 - **Size.** `CCACHE_MAXSIZE=2G` per entry. GitHub's repository cache budget is
   10 GB and evicts least-recently-used entries past it. Since every run saves a
   new entry, superseded entries for the same cell age out first; ccache's own
   cap keeps any single entry at or under 2 GB.
+
 - **Save.** Only main runs save: a `push` to main, or a `workflow_dispatch` on
   main (#1612). Pull-request dry runs restore and report stats, but never save.
   GitHub scopes a PR run's entries to its `refs/pull/N/merge` ref, so main
@@ -73,6 +79,7 @@ How it is wired:
   also keeps every entry built from merged code. On main the step runs under
   `always()`, so a cold build that fails or times out still keeps the objects
   it compiled.
+
 - **Cancellation (#1595).** PR runs share a per-PR concurrency group with
   `cancel-in-progress`, so a new push or the PR closing cancels the old run.
   An `always()` step still runs after a cancel, but on a PR run the event gate

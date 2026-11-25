@@ -237,8 +237,11 @@ In the workflow file, adjust priority levels:
 ### Branch Not Auto-Merging
 
 1. Check the workflow run logs
+
 1. Verify all CI jobs passed
+
 1. Check repository permissions for GitHub Actions
+
 1. Check branch protection on `main`. Protection is **decided but not yet
    applied** (#904); once it is, `main` will require the `Run Tests` and
    `PR Tier` contexts. `gh pr merge --auto` is designed to work with this: it

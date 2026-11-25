@@ -109,6 +109,7 @@ Residuals — all fail closed (a false red, never a false green):
    against the PR diff. The script maps changed files to feature names
    (canonical set: keys of `FEATURE_MAP` in
    [`tests/test_feature.sh`](../../tests/test_feature.sh)).
+
 2. The result is one of three modes:
    - **skip**: the `ci/full-build` label is absent (opt-in gate, #508), or no
      container-affecting changes (docs / unit tests only)
@@ -116,7 +117,9 @@ Residuals — all fail closed (a false red, never a false green):
    - **full**: a foundational file changed (`Dockerfile`, `lib/base/**`,
      `lib/runtime/**`, `tests/framework/**`, `crates/**`) → fall back to
      the merge-tier cluster on this PR
+
 3. `build-feature` matrix builds each feature image with buildx + GHA cache.
+
 4. `pr-tier` summary job rolls up matrix results into a single status check
    for branch protection. That rollup is the designated required context on
    `main` (#904), alongside `Run Tests` — see
@@ -527,6 +530,7 @@ caches. The historical global `type=gha` scope is no longer used.
 1. Add the feature to `FEATURE_MAP` in
    [`tests/test_feature.sh`](../../tests/test_feature.sh) — the PR tier's
    feature → INCLUDE_* mapping is sourced from there.
+
 2. If the feature has its own integration test under
    `tests/integration/builds/`, add a `# @tier: ...` header line declaring
    which tiers it belongs to:
@@ -540,6 +544,7 @@ caches. The historical global `type=gha` scope is no longer used.
    The header alone does not put a suite in CI: either add it to the
    `integration-test` matrix (as a `test` or `extra_suites` entry) or add a
    `# @ci:` marker — see [Integration suite coverage](#integration-suite-coverage).
+
 3. The PR tier's `changed_features.sh` will automatically pick up the new
    feature on diffs that touch `lib/features/<name>.sh` or
    `lib/features/lib/<name>/`.
