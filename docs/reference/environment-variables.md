@@ -159,7 +159,7 @@ Control which version of each language to install:
 | `NODE_VERSION`   | `22`     | Node.js major version (from NodeSource) |
 | `RUST_VERSION`   | `1.94.0` | Rust toolchain version                  |
 | `RUBY_VERSION`   | `4.0.1`  | Ruby version to install from source     |
-| `R_VERSION`      | `4.5.2`  | R version from CRAN repositories        |
+| `R_VERSION`      | `4.5.3`  | R version from CRAN repositories        |
 | `GO_VERSION`     | `1.26.1` | Go version to install                   |
 | `JAVA_VERSION`   | `21`     | Java JDK version (Temurin)              |
 | `KOTLIN_VERSION` | `2.3.10` | Kotlin compiler version                 |

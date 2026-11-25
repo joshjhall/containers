@@ -243,7 +243,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # R Statistical Computing
 ARG INCLUDE_R=false
 ARG INCLUDE_R_DEV=false
-ARG R_VERSION=4.6.2
+ARG R_VERSION=4.5.3
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_R}" = "true" ] || [ "${INCLUDE_R_DEV}" = "true" ]; then \

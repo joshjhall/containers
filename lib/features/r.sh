@@ -38,7 +38,7 @@ source /tmp/build-scripts/base/cache-utils.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-R_VERSION="${R_VERSION:-4.6.2}"
+R_VERSION="${R_VERSION:-4.5.3}"
 
 # Validate R version format to prevent shell injection
 validate_r_version "$R_VERSION" || {
@@ -110,30 +110,36 @@ log_command "Setting gnupg permissions" \
 # Add R CRAN repository key (using new keyring method)
 log_message "Adding R repository key..."
 
-# Method 1: Try to download the key directly from CRAN with retry
-log_message "Downloading R repository key from CRAN"
-if retry_with_backoff wget -qO- https://cloud.r-project.org/bin/linux/debian/marutter_pubkey.asc 2>/dev/null | gpg --dearmor >/usr/share/keyrings/r-project-archive-keyring.gpg 2>/dev/null; then
-    log_message "Key downloaded from CRAN"
+# CRAN's Debian repo is signed by Johannes Ranke's key. CRAN no longer serves
+# it as a file (marutter_pubkey.asc is 404), so fetch it by fingerprint from
+# the Ubuntu keyserver over HTTPS, falling back to the HKP protocol, then
+# verify the fingerprint of whatever landed in the keyring (#1666).
+# Fingerprint in spaced groups (as docker.sh/aws.sh do); spaces stripped below.
+R_CRAN_KEY_FINGERPRINT="95C0 FAF3 8DB3 CCAD 0C08  0A7B DC78 B2DD EABC 47B7"
+R_CRAN_KEY_FINGERPRINT="${R_CRAN_KEY_FINGERPRINT// /}"
+R_KEYRING="/usr/share/keyrings/r-project-archive-keyring.gpg"
+
+log_message "Downloading R repository key ${R_CRAN_KEY_FINGERPRINT} from keyserver"
+if retry_with_backoff bash -c "command wget -qO- 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${R_CRAN_KEY_FINGERPRINT}' | \
+        command sed -n '/-----BEGIN/,/-----END/p' | \
+        gpg --dearmor > '${R_KEYRING}' && test -s '${R_KEYRING}'"; then
+    log_message "Key downloaded from keyserver (HTTPS)"
 else
-    log_warning "CRAN key failed, trying keyserver..."
-    # Method 2: Get key from keyserver using the Johannes Ranke key
-    if log_command "Getting key from keyserver" \
-        bash -c "gpg --keyserver keyserver.ubuntu.com --recv-keys '95C0FAF38DB3CCAD0C080A7BDC78B2DDEABC47B7' && \
-        gpg --export '95C0FAF38DB3CCAD0C080A7BDC78B2DDEABC47B7' | gpg --dearmor > /usr/share/keyrings/r-project-archive-keyring.gpg"; then
-        log_message "Key obtained from keyserver"
-    else
-        log_warning "Keyserver failed, trying direct download..."
-        # Method 3: Direct download from keyserver
-        log_command "Direct download from keyserver" \
-            bash -c "command wget -O- 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x95C0FAF38DB3CCAD0C080A7BDC78B2DDEABC47B7' | \
-                command sed -n '/-----BEGIN/,/-----END/p' | \
-                gpg --dearmor > /usr/share/keyrings/r-project-archive-keyring.gpg"
-    fi
+    log_warning "HTTPS key download failed, trying gpg --recv-keys..."
+    # gpg --export emits binary keyring format already — no --dearmor
+    log_command "Getting key from keyserver" \
+        bash -c "gpg --keyserver keyserver.ubuntu.com --recv-keys '${R_CRAN_KEY_FINGERPRINT}' && \
+        gpg --export '${R_CRAN_KEY_FINGERPRINT}' > '${R_KEYRING}'"
 fi
 
-# Verify we have a keyring file
-if [ ! -f /usr/share/keyrings/r-project-archive-keyring.gpg ]; then
-    log_error "Failed to create R keyring"
+# Verify the keyring holds exactly one primary key and that it is the expected
+# one. apt trusts EVERY key in a signed-by keyring, so a response carrying
+# extra keys must fail too, not just a missing/empty/wrong-key keyring.
+# Primary-key fingerprints only: an fpr record directly after a `pub` record.
+_r_key_fingerprints=$(gpg --show-keys --with-colons "${R_KEYRING}" 2>/dev/null |
+    command awk -F: '$1 == "pub" {want = 1; next} $1 == "fpr" && want {print $10; want = 0}' || true)
+if [ "$_r_key_fingerprints" != "${R_CRAN_KEY_FINGERPRINT}" ]; then
+    log_error "R repository keyring must hold exactly key ${R_CRAN_KEY_FINGERPRINT}; found: ${_r_key_fingerprints:-<none>}"
     log_feature_end
     exit 1
 fi
@@ -147,63 +153,30 @@ log_command "Adding R repository" \
 # Update package lists with R repository
 apt_update
 
-# Install R with version pinning
-log_message "Installing R packages..."
+# Install R with version pinning.
+#
+# Fail closed: if CRAN's Debian repo does not publish R_VERSION for this
+# codename, abort with the versions it DOES publish. Never fall back to an
+# unpinned r-base (CRAN latest or Debian's own build) — that silently ships a
+# different R than the pin claims, which is how a 4.6.x pin produced R 4.5.3
+# images (#1666). bin/check-versions.sh derives R "latest" from these same
+# {codename}-cran40 listings so auto-patch can't pin an unpublished version.
+log_message "Installing R ${R_VERSION} from CRAN (${VERSION_CODENAME}-cran${R_VERSION_SHORT})..."
 
-# _install_r_from_cran - Attempt to install R from CRAN repository
-# Returns 0 on success, 1 on failure
-# Note: explicit || return 1 needed because set -e does not propagate
-# failure from functions called in an if-condition context reliably.
-_install_r_from_cran() {
-    if apt-cache show r-base-core 2>/dev/null | command grep -q "Version: ${R_VERSION}"; then
-        # Install specific version if available
-        log_message "Installing R version ${R_VERSION}..."
-        if apt_install \
-            r-base-core="${R_VERSION}"-* \
-            r-base-dev="${R_VERSION}"-* \
-            r-recommended="${R_VERSION}"-*; then
-            return 0
-        fi
-        log_warning "Exact version ${R_VERSION} not found, trying latest from CRAN..."
-    fi
-    log_message "Installing latest R version from CRAN repository..."
-    apt_install \
-        r-base \
-        r-base-dev \
-        r-recommended || return 1
-}
-
-# Temporarily disable set -e so the fallback path can execute if CRAN fails.
-# set -e exits at the first failed command in the call chain (inside apt_retry),
-# preventing the function from returning non-zero to the if-! check.
-set +e
-_install_r_from_cran
-_cran_exit_code=$?
-set -e
-if [ "$_cran_exit_code" -ne 0 ]; then
-    log_warning "CRAN repository install failed (mirror sync issue?), falling back to Debian packages"
-    # Remove CRAN source to prevent any further pulls from broken mirror
-    command rm -f /etc/apt/sources.list.d/r-cran.list
-    # Fix dpkg state enough to run purge commands
-    dpkg --configure -a 2>/dev/null || true
-    # Purge ALL R packages (fully-installed and broken) so Debian reinstall starts clean.
-    # Must remove everything in one dpkg call so dependency ordering is handled atomically.
-    # || true at end makes pipeline set -e/pipefail safe when grep finds no matches.
-    _r_pkgs=$(dpkg -l 2>/dev/null | command grep -E '^(ii|i[UFH])' | command awk '{print $2}' | command grep -E '^(r-base|r-cran-|r-recommended)' || true)
-    if [ -n "$_r_pkgs" ]; then
-        log_message "Purging R packages from failed CRAN install..."
-        # shellcheck disable=SC2086
-        dpkg --purge --force-depends --force-remove-reinstreq $_r_pkgs 2>/dev/null || true
-    fi
-    dpkg --configure -a 2>/dev/null || true
-    apt-get clean || true
-    apt_update
-    log_message "Installing R from Debian repositories..."
-    apt_install \
-        r-base \
-        r-base-dev \
-        r-recommended
+_r_available=$(apt-cache madison r-base-core 2>/dev/null |
+    command awk -F'|' '{gsub(/ /, "", $2); print $2}' || true)
+if ! printf '%s\n' "$_r_available" | command grep -q "^${R_VERSION//./\\.}-"; then
+    log_error "R_VERSION=${R_VERSION} is not published for ${VERSION_CODENAME} in ${VERSION_CODENAME}-cran${R_VERSION_SHORT}"
+    log_error "Available r-base-core versions: $(printf '%s' "${_r_available:-<none>}" | command tr '\n' ' ')"
+    log_error "Pin R_VERSION to an available version (see docs/reference/versions.md)"
+    log_feature_end
+    exit 1
 fi
+
+apt_install \
+    r-base-core="${R_VERSION}-*" \
+    r-base-dev="${R_VERSION}-*" \
+    r-recommended="${R_VERSION}-*"
 
 # ============================================================================
 # Build Dependencies
@@ -383,11 +356,28 @@ install -m 755 /tmp/build-scripts/features/lib/r/test-r.sh \
 # ============================================================================
 log_message "Verifying R installation..."
 
-log_command "Checking R version" \
-    /usr/local/bin/R --version | command head -n 1 || log_warning "R symlink not found"
+# Capture the full output rather than piping into `head -n 1`: under pipefail
+# head's early exit SIGPIPEs R and fired a spurious "symlink not found" (#1666).
+# Assert the installed version matches the pin — the build must not ship a
+# different R than R_VERSION claims.
+_r_version_line=$(/usr/local/bin/R --version 2>&1) || {
+    log_error "/usr/local/bin/R --version failed"
+    log_feature_end
+    exit 1
+}
+_r_version_line=${_r_version_line%%$'\n'*}
+log_message "Installed: ${_r_version_line}"
+case "$_r_version_line" in
+    "R version ${R_VERSION} "*) ;;
+    *)
+        log_error "Installed R does not match R_VERSION=${R_VERSION}: ${_r_version_line}"
+        log_feature_end
+        exit 1
+        ;;
+esac
 
 log_command "Checking Rscript version" \
-    /usr/local/bin/Rscript --version 2>&1 | command head -n 1 || log_warning "Rscript symlink not found"
+    /usr/local/bin/Rscript --version
 
 # ============================================================================
 # Final ownership fix

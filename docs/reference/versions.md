@@ -16,7 +16,7 @@ These are defined as build arguments in the Dockerfile:
 - `RUST_VERSION` (currently 1.99.0): container default only; the MSRV is
   separate, see [Rust version policy](rust-version-policy.md)
 - `RUBY_VERSION` (currently 4.0.7)
-- `R_VERSION` (currently 4.6.1)
+- `R_VERSION` (currently 4.5.3)
 - `GO_VERSION` (currently 1.27.1)
 - `MOJO_VERSION` (currently 25.4)
 - `JAVA_VERSION` (currently 21)
