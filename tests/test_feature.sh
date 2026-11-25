@@ -282,6 +282,10 @@ case "$FEATURE" in
         if [ -z "$EXPECTED_R" ]; then
             EXPECTED_R=$(command sed -n 's/^ARG R_VERSION=//p' "$PROJECT_ROOT/Dockerfile" | command head -n 1)
         fi
+        if [ -z "$EXPECTED_R" ]; then
+            echo -e "${RED}✗ Could not determine expected R_VERSION (no R_VERSION= arg, no ARG R_VERSION= in Dockerfile)${NC}"
+            exit 1
+        fi
         # The entrypoint prints startup banners first, so select the R line
         # rather than assuming it is line 1.
         VERSION=$(docker run --rm "$IMAGE_NAME" R --version 2>&1 |

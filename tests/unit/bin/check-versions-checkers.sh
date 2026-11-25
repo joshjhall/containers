@@ -374,6 +374,47 @@ test_check_r_missing_listing_is_error() {
     assert_equals "error" "${LATEST_VERSIONS[0]}" "R check errors when a codename listing is missing"
 }
 
+test_check_r_disjoint_codenames_is_error() {
+    setup_check_env
+
+    add_tool "R" "4.5.3" "Dockerfile"
+
+    # Both listings fetch fine but share no version: nothing is installable
+    # everywhere, so neither codename's newest may be reported.
+    fetch_url() {
+        case "$1" in
+            */bookworm-cran40/) _cran_listing bookworm 4.5.2 ;;
+            */trixie-cran40/) _cran_listing trixie 4.6.0 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_r
+
+    assert_equals "error" "${LATEST_VERSIONS[0]}" "R check errors when codename version sets are disjoint"
+}
+
+test_check_r_noise_only_listing_is_error() {
+    setup_check_env
+
+    add_tool "R" "4.5.3" "Dockerfile"
+
+    # bookworm's listing has only non-r-base-core packages (no args → noise line)
+    fetch_url() {
+        case "$1" in
+            */bookworm-cran40/) _cran_listing bookworm ;;
+            */trixie-cran40/) _cran_listing trixie 4.5.3 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_r
+
+    assert_equals "error" "${LATEST_VERSIONS[0]}" "R check errors when a listing has no r-base-core versions"
+}
+
 run_test test_check_python_mock "check_python with mock API response"
 run_test test_check_rust_mock "check_rust with mock API response"
 run_test test_check_github_release_mock "check_github_release with mock API response"
@@ -391,6 +432,8 @@ run_test test_check_kubectl_mock "check_kubectl with mock API response"
 run_test test_check_r_common_to_all_codenames "check_r ignores versions not published for every codename"
 run_test test_check_r_picks_newest_common "check_r version-sorts the common set"
 run_test test_check_r_missing_listing_is_error "check_r reports error when a codename listing is missing"
+run_test test_check_r_disjoint_codenames_is_error "check_r reports error when no version is common to every codename"
+run_test test_check_r_noise_only_listing_is_error "check_r reports error when a listing has no r-base-core entries"
 
 # Generate test report
 generate_report

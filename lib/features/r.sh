@@ -132,12 +132,14 @@ else
         gpg --export '${R_CRAN_KEY_FINGERPRINT}' > '${R_KEYRING}'"
 fi
 
-# Verify the keyring contains the expected signing key (fails on a missing,
-# empty, or wrong-key keyring)
+# Verify the keyring holds exactly one primary key and that it is the expected
+# one. apt trusts EVERY key in a signed-by keyring, so a response carrying
+# extra keys must fail too, not just a missing/empty/wrong-key keyring.
+# Primary-key fingerprints only: an fpr record directly after a `pub` record.
 _r_key_fingerprints=$(gpg --show-keys --with-colons "${R_KEYRING}" 2>/dev/null |
-    command awk -F: '$1 == "fpr" {print $10}' || true)
-if ! printf '%s\n' "$_r_key_fingerprints" | command grep -qx "${R_CRAN_KEY_FINGERPRINT}"; then
-    log_error "R repository keyring missing or does not contain key ${R_CRAN_KEY_FINGERPRINT}"
+    command awk -F: '$1 == "pub" {want = 1; next} $1 == "fpr" && want {print $10; want = 0}' || true)
+if [ "$_r_key_fingerprints" != "${R_CRAN_KEY_FINGERPRINT}" ]; then
+    log_error "R repository keyring must hold exactly key ${R_CRAN_KEY_FINGERPRINT}; found: ${_r_key_fingerprints:-<none>}"
     log_feature_end
     exit 1
 fi
