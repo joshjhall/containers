@@ -6,8 +6,9 @@
 # `cargo build -p luggage` clones it at image build time. That works on
 # rust:*-slim because cargo uses libgit2. The repo's .cargo/config.toml sets
 # `git-fetch-with-cli = true`, which needs a `git` binary the slim image lacks —
-# so copying .cargo/ (explicitly, or via a whole-context `COPY . `) into the
-# stage would break the image build. These tests pin that invariant.
+# so exposing .cargo/ to the stage (a COPY of it or of the whole context, or a
+# bind mount), or setting CARGO_NET_GIT_FETCH_WITH_CLI there, would break the
+# image build. These tests pin that invariant.
 #
 # LUGGAGE_BUILDER_DOCKERFILE overrides the Dockerfile path (for mutation checks).
 
@@ -32,7 +33,8 @@ STAGE="$(command awk '
 # Instruction lines only, for the COPY/ADD checks: comments stripped, then
 # backslash-continued lines joined so a COPY split across lines is one line.
 INSTRUCTIONS="$(printf '%s\n' "$STAGE" | command grep -vE '^[[:space:]]*#' |
-    command awk '/\\$/ { sub(/\\$/, ""); buf = buf $0 " "; next } { print buf $0; buf = "" }' || true)"
+    command awk '/\\$/ { sub(/\\$/, ""); buf = buf $0 " "; next } { print buf $0; buf = "" }
+        END { if (buf != "") print buf }' || true)"
 
 test_stage_exists() {
     assert_matches "$STAGE" 'cargo build --release -p luggage' \
@@ -50,9 +52,25 @@ test_no_cargo_config_copied() {
 test_no_whole_context_copy() {
     local hits
     hits="$(printf '%s\n' "$INSTRUCTIONS" |
-        command grep -E '^[[:space:]]*(COPY|ADD)([[:space:]]+--[^[:space:]]+)*[[:space:]]+(\.\/?[[:space:]]|\[[[:space:]]*"\.\/?")' || true)"
+        command grep -E '^[[:space:]]*(COPY|ADD)([[:space:]]+--[^[:space:]]+)*[[:space:]]+((\.\/?|\*)[[:space:]]|\[[[:space:]]*"(\.\/?|\*)")' || true)"
     assert_empty "$hits" \
         "luggage-builder must not copy the whole build context: it would pull in .cargo/config.toml (git-fetch-with-cli = true) and need a git binary rust:*-slim lacks (#1760). Offending: $hits"
+}
+
+test_no_bind_mount() {
+    # A bind mount exposes context files (incl. .cargo/config.toml) without any COPY.
+    local hits
+    hits="$(printf '%s\n' "$INSTRUCTIONS" | command grep -E -- '--mount=([^[:space:]]*,)?type=bind' || true)"
+    assert_empty "$hits" \
+        "luggage-builder must not bind-mount the build context: it would expose .cargo/config.toml (git-fetch-with-cli = true) to cargo (#1760). Offending: $hits"
+}
+
+test_no_cli_fetch_env() {
+    # The env-var spelling of the same cargo setting.
+    local hits
+    hits="$(printf '%s\n' "$INSTRUCTIONS" | command grep -E 'CARGO_NET_GIT_FETCH_WITH_CLI' || true)"
+    assert_empty "$hits" \
+        "luggage-builder must not set CARGO_NET_GIT_FETCH_WITH_CLI: CLI git fetch needs a git binary rust:*-slim lacks (#1760). Offending: $hits"
 }
 
 test_stage_documents_git_fetch() {
@@ -63,6 +81,8 @@ test_stage_documents_git_fetch() {
 run_test test_stage_exists "luggage-builder stage exists and builds luggage"
 run_test test_no_cargo_config_copied "luggage-builder does not copy .cargo/"
 run_test test_no_whole_context_copy "luggage-builder does not copy the whole context"
+run_test test_no_bind_mount "luggage-builder does not bind-mount the context"
+run_test test_no_cli_fetch_env "luggage-builder does not set CARGO_NET_GIT_FETCH_WITH_CLI"
 run_test test_stage_documents_git_fetch "luggage-builder documents the git-fetch caveat"
 
 generate_report
