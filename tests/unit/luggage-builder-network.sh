@@ -42,7 +42,7 @@ test_stage_exists() {
 test_no_cargo_config_copied() {
     local hits
     hits="$(printf '%s\n' "$INSTRUCTIONS" |
-        command grep -E '^[[:space:]]*(COPY|ADD)[[:space:]].*\.cargo([/[:space:]]|$)' || true)"
+        command grep -E '^[[:space:]]*(COPY|ADD)[[:space:]].*\.cargo([/[:space:]"]|$)' || true)"
     assert_empty "$hits" \
         "luggage-builder must not COPY/ADD .cargo/: .cargo/config.toml sets git-fetch-with-cli = true, which needs a git binary rust:*-slim lacks (#1760). Offending: $hits"
 }
