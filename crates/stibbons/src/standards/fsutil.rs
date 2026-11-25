@@ -25,7 +25,9 @@ pub fn exists_no_follow(path: &Path) -> Result<bool, Box<dyn std::error::Error>>
 }
 
 /// Refuse a target whose path, at any existing component under `root`, is a
-/// symlink — writing through one could land outside the repository.
+/// symlink — writing through one could land outside the repository. Only
+/// not-found ends the walk early; any other stat error (a permission-denied
+/// component) is returned, since deeper components could not be checked.
 pub fn ensure_no_symlink(root: &Path, target: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut p = root.to_path_buf();
     for part in target.split('/') {
@@ -40,7 +42,8 @@ pub fn ensure_no_symlink(root: &Path, target: &str) -> Result<(), Box<dyn std::e
             }
             Ok(_) => {}
             // Nothing exists from here down, so nothing deeper can be a link.
-            Err(_) => break,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => break,
+            Err(e) => return Err(format!("failed to stat {}: {e}", p.display()).into()),
         }
     }
     Ok(())
@@ -103,6 +106,36 @@ mod tests {
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
         let err = res.unwrap_err().to_string();
         assert!(err.starts_with(&format!("failed to stat {}: ", dir.join("f").display())), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_no_symlink_errors_on_an_unreadable_component() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("locked");
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let probe = std::fs::symlink_metadata(dir.join("f"));
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // Control: under root the stat sees NotFound, not a denial, so the
+        // non-NotFound path is unreachable. CI sets REQUIRE_UNPRIVILEGED_TESTS=1.
+        if probe.as_ref().err().map(std::io::Error::kind)
+            != Some(std::io::ErrorKind::PermissionDenied)
+        {
+            assert!(
+                std::env::var("REQUIRE_UNPRIVILEGED_TESTS").as_deref() != Ok("1"),
+                "REQUIRE_UNPRIVILEGED_TESTS=1 but mode 000 is traversable (running as root?)"
+            );
+            eprintln!("skipping: mode 000 is traversable here (running as root?)");
+            return;
+        }
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let res = ensure_no_symlink(tmp.path(), "locked/f");
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let err = res.unwrap_err().to_string();
+        assert!(err.starts_with(&format!("failed to stat {}: ", dir.join("f").display())), "{err}");
+        assert!(!exists_no_follow(&dir.join("f")).unwrap(), "nothing may be written");
     }
 
     #[test]
