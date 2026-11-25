@@ -40,7 +40,7 @@ run_hook() {
     HOOK_OUT=$(cd "$TEST_REPO" && env -i \
         PATH="$PATH" HOME="$TEST_TEMP_DIR/home" \
         GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$TEST_TEMP_DIR/home/.gitconfig" \
-        "$@" bash "$SCRIPT" 2>&1) || HOOK_RC=$?
+        "$@" bash "${HOOK_SCRIPT:-$SCRIPT}" 2>&1) || HOOK_RC=$?
 }
 
 set_local_identity() {
@@ -148,6 +148,51 @@ test_unresolvable_identity_passes() {
     assert_not_equals "0" "$var_rc" "fixture must leave git var unable to resolve an identity"
 }
 
+# Linked into .git/hooks/ (or anywhere else): the helper must still resolve
+# next to the real script, not next to the link (#1734).
+test_symlinked_invocation() {
+    command mkdir -p "$TEST_TEMP_DIR/hooks"
+    command ln -s "$SCRIPT" "$TEST_TEMP_DIR/hooks/pre-commit"
+    set_local_identity "t" "t@t.t"
+    HOOK_SCRIPT="$TEST_TEMP_DIR/hooks/pre-commit" run_hook
+    assert_equals "1" "$HOOK_RC" "symlinked hook must still refuse t@t.t: $HOOK_OUT"
+    # Discriminate: a source failure also exits non-zero — prove the helper ran.
+    assert_contains "$HOOK_OUT" "author email <t@t.t> is a placeholder" \
+        "symlinked hook must reach the placeholder check"
+
+    set_local_identity "Real Person" "real@yaplabs.com"
+    HOOK_SCRIPT="$TEST_TEMP_DIR/hooks/pre-commit" run_hook
+    assert_equals "0" "$HOOK_RC" "symlinked hook must accept a real email: $HOOK_OUT"
+}
+
+# A copy out of the repo has no helper beside it: fail loudly, naming it.
+test_missing_helper_clear_error() {
+    command mkdir -p "$TEST_TEMP_DIR/hooks"
+    command cp "$SCRIPT" "$TEST_TEMP_DIR/hooks/copied.sh"
+    set_local_identity "Real Person" "real@yaplabs.com"
+    HOOK_SCRIPT="$TEST_TEMP_DIR/hooks/copied.sh" run_hook
+    assert_equals "1" "$HOOK_RC" "copied hook without its helper must fail: $HOOK_OUT"
+    assert_contains "$HOOK_OUT" "shared helper not found" "error should say the helper is missing"
+    assert_contains "$HOOK_OUT" "_git-email-placeholder" "error should name the helper file"
+}
+
+# Where `readlink -f` is unavailable (old BSD readlink) the hook falls back to
+# the literal path; a direct in-repo invocation must still load the helper.
+test_readlink_fallback_direct_invocation() {
+    command mkdir -p "$TEST_TEMP_DIR/stub"
+    /usr/bin/printf '#!/bin/sh\nexit 1\n' >"$TEST_TEMP_DIR/stub/readlink"
+    command chmod +x "$TEST_TEMP_DIR/stub/readlink"
+    set_local_identity "t" "t@t.t"
+    run_hook PATH="$TEST_TEMP_DIR/stub:$PATH"
+    assert_equals "1" "$HOOK_RC" "fallback path must still refuse t@t.t: $HOOK_OUT"
+    assert_contains "$HOOK_OUT" "author email <t@t.t> is a placeholder" \
+        "fallback path must reach the placeholder check"
+    # Discriminate: prove the stub really shadowed readlink in that env.
+    local rl_rc=0
+    env -i PATH="$TEST_TEMP_DIR/stub:$PATH" bash -c 'command readlink -f /' >/dev/null 2>&1 || rl_rc=$?
+    assert_equals "1" "$rl_rc" "stub readlink must be the one the hook resolves"
+}
+
 run_test test_script_executable "Script is executable"
 run_test test_unresolvable_identity_passes "Passes when git can resolve no identity (CI lint)"
 run_test test_rejects_the_incident_email "Rejects t@t.t"
@@ -157,5 +202,8 @@ run_test test_accepts_real_emails "Accepts real emails"
 run_test test_local_shadows_good_global "Catches a local identity shadowing a good global"
 run_test test_env_committer_override_checked "Checks the committer identity from env"
 run_test test_env_author_override_accepted "Env identity overrides config"
+run_test test_symlinked_invocation "Works when invoked through a symlink"
+run_test test_missing_helper_clear_error "Missing helper fails with a clear error"
+run_test test_readlink_fallback_direct_invocation "Falls back to the literal path without readlink -f"
 
 generate_report
