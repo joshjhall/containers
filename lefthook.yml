@@ -380,7 +380,19 @@ pre-push:
           # non-regular-file match short-circuits the && and falls straight
           # into `|| exit 1`, reporting as loudly as a real config error.
           [ -f "$f" ] || continue
-          docker compose -f "$f" config >/dev/null || exit 1
+          # An override is a fragment Compose only ever loads layered on the
+          # base file beside it (devcontainer.json lists both), so validate
+          # it the same way; standalone it has no image/build and fails.
+          case "$f" in
+            *.override.yml | *.override.yaml)
+              base="$(dirname "$f")/docker-compose.yml"
+              [ -f "$base" ] || { echo "no base compose file for override $f" >&2; exit 1; }
+              docker compose -f "$base" -f "$f" config >/dev/null || exit 1
+              ;;
+            *)
+              docker compose -f "$f" config >/dev/null || exit 1
+              ;;
+          esac
         done
 
     dprint-yaml-check:
