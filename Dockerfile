@@ -46,10 +46,12 @@ FROM rust:1.99-slim-trixie AS luggage-builder
 # workspace even under `-p luggage`. Cargo.lock pins it by SHA, so the fetch is
 # reproducible; it does need GitHub reachable and containers-db public.
 # Cargo's built-in libgit2 does the fetch, so the slim image needs no `git`.
-# Do NOT copy or bind-mount .cargo/ (or the whole context) into this stage, nor
-# set CARGO_NET_GIT_FETCH_WITH_CLI: .cargo/config.toml sets
-# `git-fetch-with-cli = true`, which needs the `git` binary this image lacks
-# (guarded by tests/unit/luggage-builder-network.sh). If the git fetch
+# Keep .cargo/ out of this stage and do not set CARGO_NET_GIT_FETCH_WITH_CLI:
+# .cargo/config.toml sets `git-fetch-with-cli = true`, which needs the `git`
+# binary this image lacks. tests/unit/luggage-builder-network.sh enforces an
+# allowlist: COPY only Cargo.toml, Cargo.lock and crates, and only type=cache
+# mounts (a --mount with no type= is a bind mount). To add a source, extend the
+# allowlist there after confirming it cannot bring .cargo/ in. If the git fetch
 # itself becomes a problem, the escape hatches are building from a trimmed
 # manifest that excludes stibbons, or `cargo vendor`-ing the git source.
 WORKDIR /workspace
