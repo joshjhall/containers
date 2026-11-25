@@ -299,6 +299,16 @@ test_commands_mapping_without_siblings_succeeds() {
     assert_equals "0" "$rc" "map_to_test must return 0 for a command with no suite at all"
     assert_equals "" "$out" "a command with no suite at all maps to nothing"
 
+    # Sibling only (a split that renamed the original away): the glob must
+    # still run when the exact check misses, not be nested inside it.
+    : >"$root/tests/unit/runtime/baz-split.sh"
+    rc=0
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" \
+        map_to_test "lib/runtime/commands/baz") || rc=$?
+    assert_equals "0" "$rc" "map_to_test must return 0 for a sibling-only command"
+    assert_equals "$root/tests/unit/runtime/baz-split.sh" "$out" \
+        "a sibling-only command maps to exactly its sibling suite"
+
     /usr/bin/rm -rf "$root"
 }
 
