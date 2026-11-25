@@ -32,7 +32,8 @@ DOCKERFILE="${LUGGAGE_BUILDER_DOCKERFILE:-$PROJECT_ROOT/Dockerfile}"
 # (or .cargo/config.toml) into the luggage-builder stage.
 #   ALLOWED_COPY_SOURCES      build-context paths COPY may name (no globs, no `.`)
 #   ALLOWED_MOUNT_TYPES       RUN --mount types (bind is the BuildKit default)
-#   ALLOWED_COPY_FROM_STAGES  earlier stages COPY --from may read (none today)
+#   ALLOWED_COPY_FROM_STAGES  earlier stages COPY --from / --mount from= may
+#                             read (none today)
 ALLOWED_COPY_SOURCES="Cargo.toml Cargo.lock crates"
 ALLOWED_MOUNT_TYPES="cache"
 ALLOWED_COPY_FROM_STAGES=""
@@ -84,6 +85,14 @@ stage_violations() {
                 }
                 if (!listed(type, mounts))
                     print "mount type not allowlisted (--mount " opt "): " $0
+                # A mount with from= is seeded from another stage/context, the
+                # same route as COPY --from, so it gets the same stage allowlist.
+                if (match(opt, /(^|,)from=[^,]*/)) {
+                    mfrom = substr(opt, RSTART, RLENGTH)
+                    sub(/^,?from=/, "", mfrom)
+                    if (!listed(mfrom, stages))
+                        print "mount from=" mfrom " is not an allowlisted stage (--mount " opt "): " $0
+                }
             }
 
             if (kw == "ADD") { print "ADD is not allowlisted (use COPY): " $0; next }
@@ -141,7 +150,7 @@ test_copy_and_mount_allowlist() {
     local hits
     hits="$(stage_violations)"
     assert_empty "$hits" \
-        "luggage-builder may only COPY {$ALLOWED_COPY_SOURCES} and only declare --mount type={$ALLOWED_MOUNT_TYPES}: anything wider can expose .cargo/config.toml (git-fetch-with-cli = true), which needs a git binary rust:*-slim lacks (#1760). To allow a new source, mount type or COPY --from stage, add it to ALLOWED_COPY_SOURCES / ALLOWED_MOUNT_TYPES / ALLOWED_COPY_FROM_STAGES in tests/unit/luggage-builder-network.sh after confirming it cannot bring .cargo/ into the stage. Violations:
+        "luggage-builder may only COPY {$ALLOWED_COPY_SOURCES} and only declare --mount type={$ALLOWED_MOUNT_TYPES}: anything wider can expose .cargo/config.toml (git-fetch-with-cli = true), which needs a git binary rust:*-slim lacks (#1760). To allow a new source, mount type or COPY --from / --mount from= stage, add it to ALLOWED_COPY_SOURCES / ALLOWED_MOUNT_TYPES / ALLOWED_COPY_FROM_STAGES in tests/unit/luggage-builder-network.sh after confirming it cannot bring .cargo/ into the stage. Violations:
 $hits"
 }
 
