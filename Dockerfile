@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.23.0
+# Version: 4.23.1
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -234,7 +234,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Ruby + Ruby development tools
 ARG INCLUDE_RUBY=false
 ARG INCLUDE_RUBY_DEV=false
-ARG RUBY_VERSION=4.0.9
+ARG RUBY_VERSION=4.0.10
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUBY}" = "true" ] || [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
@@ -326,7 +326,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.11.8
+ARG MISE_VERSION=2026.11.14
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi
