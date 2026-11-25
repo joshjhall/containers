@@ -158,11 +158,14 @@ BASHRC
 }
 
 # Remove the exact legacy block from $1 via the shared rc-snippet helper
-# (#1721). RC_SNIPPET_LIB, when set, is the only path tried (tests point it at
-# a missing file); otherwise the source-tree sibling, then the installed copy.
-# An older image without the helper degrades to a no-op.
+# (#1721): the source-tree sibling, then the installed copy. An older image
+# without the helper degrades to a no-op. RC_SNIPPET_LIB overrides the path
+# ONLY under TEST_MODE=1 (exported by tests/framework.sh) — the helper is
+# sourced in a process holding the forge token, so production runs never
+# load code from an env-named path (#1749).
 _remove_legacy_snippet() {
-    local lib="${RC_SNIPPET_LIB:-}" cand
+    local lib="" cand
+    if [ "${TEST_MODE:-}" = "1" ]; then lib="${RC_SNIPPET_LIB:-}"; fi
     if [ -z "$lib" ]; then
         for cand in "$(command dirname "${BASH_SOURCE[0]}")/../lib/rc-snippet.sh" \
                     /opt/container-runtime/lib/rc-snippet.sh; do

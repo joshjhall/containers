@@ -681,7 +681,7 @@ RC
 test_legacy_snippet_helper_absent_is_noop() {
     _write_gh_legacy_rc
     local rc=0 output
-    output=$(_run_setup_gh_authed RC_SNIPPET_LIB="$TEST_TEMP_DIR/missing-rc-snippet.sh") || rc=$?
+    output=$(_run_setup_gh_authed TEST_MODE=1 RC_SNIPPET_LIB="$TEST_TEMP_DIR/missing-rc-snippet.sh") || rc=$?
     assert_equals "0" "$rc" "setup-gh succeeds when the rc-snippet helper is absent"
     assert_not_contains "$output" "removed pre-#1711" "Nothing is reported removed without the helper"
     assert_file_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>&1 && gh auth status' \
@@ -695,7 +695,7 @@ test_legacy_snippet_helper_absent_is_noop() {
 test_legacy_snippet_uses_shared_helper() {
     _write_gh_legacy_rc
     local rc=0 output
-    output=$(_run_setup_gh_authed RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || rc=$?
+    output=$(_run_setup_gh_authed TEST_MODE=1 RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || rc=$?
     assert_equals "0" "$rc" "setup exits 0 when the shared helper removes the block"
     assert_contains "$output" "removed pre-#1711 token snippet" \
         "The shared helper reports the removal through setup-gh's logger"
@@ -721,7 +721,7 @@ STUB
     command chmod +x "$TEST_TEMP_DIR/catstub/cat"
     local rc=0 output kept
     output=$(_run_setup_gh_authed PATH="$TEST_TEMP_DIR/catstub:$TEST_TEMP_DIR/bin:$PATH" \
-        RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || rc=$?
+        TEST_MODE=1 RC_SNIPPET_LIB="$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh") || rc=$?
     assert_equals "0" "$rc" "setup-gh still exits 0 when the copy-back fails"
     assert_contains "$output" "could not rewrite" "setup-gh warns about the failed rewrite"
     kept=$(printf '%s\n' "$output" | command sed -n "s/.*saved at \(.*\.bashrc\.[^ ]*\) — restore.*/\1/p")
@@ -732,5 +732,29 @@ STUB
 }
 
 run_test_with_setup test_legacy_snippet_copy_back_failure_warns "#1721: failed copy-back warns with the kept copy and a restore command"
+
+# #1749: outside TEST_MODE, RC_SNIPPET_LIB is ignored — the helper is sourced
+# in a process holding the forge token, so an env-named file must never load.
+# The hostile file drops a marker and no-ops rc_remove_block; the legacy block
+# being removed proves the real sibling helper ran instead (a silent no-op
+# would also leave no marker, so the marker check alone cannot discriminate).
+test_legacy_snippet_override_ignored_without_test_mode() {
+    _write_gh_legacy_rc
+    command cat >"$TEST_TEMP_DIR/hostile-rc-snippet.sh" <<HOSTILE
+: >"$TEST_TEMP_DIR/hostile.sourced"
+rc_remove_block() { return 1; }
+HOSTILE
+    local rc=0 output
+    output=$(_run_setup_gh_authed TEST_MODE= RC_SNIPPET_LIB="$TEST_TEMP_DIR/hostile-rc-snippet.sh") || rc=$?
+    assert_equals "0" "$rc" "setup-gh succeeds with RC_SNIPPET_LIB set outside TEST_MODE"
+    assert_file_not_exists "$TEST_TEMP_DIR/hostile.sourced" \
+        "RC_SNIPPET_LIB is not sourced without TEST_MODE=1"
+    assert_contains "$output" "removed pre-#1711 token snippet" \
+        "The sibling rc-snippet helper is used instead of the override"
+    assert_file_not_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>&1 && gh auth status' \
+        "The legacy block is removed by the real helper"
+}
+
+run_test_with_setup test_legacy_snippet_override_ignored_without_test_mode "#1749: RC_SNIPPET_LIB ignored outside TEST_MODE"
 
 generate_report
