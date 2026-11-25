@@ -40,6 +40,17 @@ ARG BASE_IMAGE=debian:trixie-slim
 # toolchain out of the runtime image while still bundling a reproducible
 # binary built from the in-tree workspace.
 FROM rust:1.99-slim-trixie AS luggage-builder
+# Network at build time (#1760, accepted): besides crates.io, this build clones
+# https://github.com/joshjhall/containers-db. `repo-baseline` is a workspace git
+# dependency used only by stibbons, but cargo resolves git sources for the whole
+# workspace even under `-p luggage`. Cargo.lock pins it by SHA, so the fetch is
+# reproducible; it does need GitHub reachable and containers-db public.
+# Cargo's built-in libgit2 does the fetch, so the slim image needs no `git`.
+# Do NOT copy .cargo/ (or the whole context) into this stage: .cargo/config.toml
+# sets `git-fetch-with-cli = true`, which needs the `git` binary this image
+# lacks (guarded by tests/unit/luggage-builder-network.sh). If the git fetch
+# itself becomes a problem, the escape hatches are building from a trimmed
+# manifest that excludes stibbons, or `cargo vendor`-ing the git source.
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
