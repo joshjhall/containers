@@ -255,10 +255,16 @@ map_to_test() {
             if [ -f "$test_path" ]; then
                 echo "$test_path"
             fi
+            # if/fi, not `[ -f ] && echo`: an unmatched glob would leave the
+            # loop (and the bare return) at status 1, aborting the set -e
+            # caller's `result=$(map_to_test ...)` for every command with no
+            # split sibling.
             for match in "${TESTS_DIR}"/unit/runtime/"${base}"-*.sh; do
-                [ -f "$match" ] && echo "$match"
+                if [ -f "$match" ]; then
+                    echo "$match"
+                fi
             done
-            return
+            return 0
             ;;
 
         # lib/runtime/lib/workspace-fs-health-*.sh → every fs-health suite.

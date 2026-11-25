@@ -268,6 +268,32 @@ test_commands_mapping_emits_siblings() {
         "exactly the two setup-git command suites must be mapped"
 }
 
+test_commands_mapping_without_siblings_succeeds() {
+    local out rc root
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # A command with NO split sibling leaves the glob unmatched. The arm must
+    # still return 0: the runner calls `result=$(map_to_test ...)` under
+    # set -e, so a leaked status 1 aborts the whole push gate (#1733 review).
+    # Sandboxed so a future real foo-*.sh split cannot make the glob match and
+    # quietly stop exercising the unmatched path.
+    root=$(/usr/bin/mktemp -d)
+    command mkdir -p "$root/tests/unit/runtime"
+    : >"$root/tests/unit/runtime/foo.sh"
+
+    rc=0
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" \
+        map_to_test "lib/runtime/commands/foo") || rc=$?
+    assert_equals "0" "$rc" "map_to_test must return 0 for a command with no siblings"
+    assert_equals "$root/tests/unit/runtime/foo.sh" "$out" \
+        "a command with no siblings maps to exactly its own suite"
+
+    /usr/bin/rm -rf "$root"
+}
+
 test_runtime_mapping_no_duplicate_paths() {
     local out uniq_count total_count
     if ! _load_map_to_test; then
@@ -811,6 +837,7 @@ run_test test_runtime_mapping_unmatched_is_silent "uncovered runtime script maps
 run_test test_runtime_mapping_keeps_prefixed_suites "runtime mapping finds suites that keep the NN- prefix (#832)"
 run_test test_runtime_mapping_no_duplicate_paths "runtime mapping emits no duplicate test paths (#832)"
 run_test test_commands_mapping_emits_siblings "commands mapping emits split sibling suites (#1733)"
+run_test test_commands_mapping_without_siblings_succeeds "commands mapping returns 0 when no sibling exists (#1733)"
 run_test test_runtime_lib_fragment_maps_to_script_suites "fs-health fragment maps to the script's suites (#1090)"
 run_test test_bin_mapping_emits_all_siblings "bin mapping emits every sibling suite (#1024)"
 run_test test_collection_keeps_each_sibling_suite "runner collection keeps each sibling suite as its own path (#1024)"
