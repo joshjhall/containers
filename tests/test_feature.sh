@@ -270,6 +270,33 @@ case "$FEATURE" in
         fi
         ;;
 
+    r | r-dev)
+        # The installed R must be exactly the pin — r.sh used to fall back to
+        # CRAN latest silently when R_VERSION wasn't published (#1666).
+        EXPECTED_R=""
+        for arg in "$@"; do
+            case "$arg" in
+                R_VERSION=*) EXPECTED_R="${arg#R_VERSION=}" ;;
+            esac
+        done
+        if [ -z "$EXPECTED_R" ]; then
+            EXPECTED_R=$(command sed -n 's/^ARG R_VERSION=//p' "$PROJECT_ROOT/Dockerfile" | command head -n 1)
+        fi
+        # The entrypoint prints startup banners first, so select the R line
+        # rather than assuming it is line 1.
+        VERSION=$(docker run --rm "$IMAGE_NAME" R --version 2>&1 |
+            command sed -n '/^R version /{p;q;}') || VERSION=""
+        case "$VERSION" in
+            "R version ${EXPECTED_R} "*)
+                echo -e "${GREEN}✓ R installed: $VERSION${NC}"
+                ;;
+            *)
+                echo -e "${RED}✗ R version mismatch: expected R_VERSION=${EXPECTED_R}, got: ${VERSION:-<none>}${NC}"
+                exit 1
+                ;;
+        esac
+        ;;
+
     *)
         echo -e "${YELLOW}⚠ No specific verification for $FEATURE${NC}"
         echo -e "${GREEN}✓ Build completed successfully${NC}"

@@ -300,6 +300,80 @@ test_check_kubectl_mock() {
     assert_equals "1.33.1" "${LATEST_VERSIONS[0]}" "kubectl version extracted for major.minor"
 }
 
+# CRAN Debian directory listing for one codename, built from version args
+_cran_listing() {
+    local codename="$1" v
+    shift
+    for v in "$@"; do
+        printf '<a href="r-base-core_%s-1~%scran.0_amd64.deb">r-base-core_%s-1~%scran.0_amd64.deb</a>\n' \
+            "$v" "$codename" "$v" "$codename"
+    done
+    # Noise that must not be read as an r-base-core version
+    printf '<a href="r-base-html_9.9.9-1~%scran.0_all.deb">x</a>\n' "$codename"
+}
+
+test_check_r_common_to_all_codenames() {
+    setup_check_env
+
+    add_tool "R" "4.5.3" "Dockerfile"
+
+    # trixie publishes 4.6.0 but bookworm does not: 4.6.0 is NOT installable
+    # on every supported codename, so latest must stay at 4.5.3.
+    fetch_url() {
+        case "$1" in
+            */bookworm-cran40/) _cran_listing bookworm 4.5.2 4.5.3 ;;
+            */trixie-cran40/) _cran_listing trixie 4.5.3 4.6.0 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_r
+
+    assert_equals "4.5.3" "${LATEST_VERSIONS[0]}" "R latest is newest version published for every codename"
+}
+
+test_check_r_picks_newest_common() {
+    setup_check_env
+
+    add_tool "R" "4.5.3" "Dockerfile"
+
+    # 4.10.0 vs 4.9.1 proves a version sort, not a lexical one
+    fetch_url() {
+        case "$1" in
+            */bookworm-cran40/) _cran_listing bookworm 4.9.1 4.10.0 ;;
+            */trixie-cran40/) _cran_listing trixie 4.9.1 4.10.0 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_r
+
+    assert_equals "4.10.0" "${LATEST_VERSIONS[0]}" "R latest version-sorts the common set"
+}
+
+test_check_r_missing_listing_is_error() {
+    setup_check_env
+
+    add_tool "R" "4.5.3" "Dockerfile"
+
+    # A codename listing that fails to fetch must not let the other codename
+    # decide "latest" on its own.
+    fetch_url() {
+        case "$1" in
+            */bookworm-cran40/) return 1 ;;
+            */trixie-cran40/) _cran_listing trixie 4.6.0 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_r
+
+    assert_equals "error" "${LATEST_VERSIONS[0]}" "R check errors when a codename listing is missing"
+}
+
 run_test test_check_python_mock "check_python with mock API response"
 run_test test_check_rust_mock "check_rust with mock API response"
 run_test test_check_github_release_mock "check_github_release with mock API response"
@@ -314,6 +388,9 @@ run_test test_check_rubygems_missing_gem "check_rubygems falls back to null on a
 run_test test_check_maven_central_mock "check_maven_central with mock API response"
 run_test test_check_biome_new_format "check_biome parses new tag format"
 run_test test_check_kubectl_mock "check_kubectl with mock API response"
+run_test test_check_r_common_to_all_codenames "check_r ignores versions not published for every codename"
+run_test test_check_r_picks_newest_common "check_r version-sorts the common set"
+run_test test_check_r_missing_listing_is_error "check_r reports error when a codename listing is missing"
 
 # Generate test report
 generate_report

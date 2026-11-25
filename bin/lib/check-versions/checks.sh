@@ -95,13 +95,37 @@ check_java() {
 
 check_r() {
     progress_msg "  R..."
-    local latest
+    # lib/features/r.sh installs r-base-core from CRAN's Debian repo
+    # ({codename}-cran40/) and fails closed when the pin isn't published there.
+    # So "latest" must be the newest r-base-core version actually published for
+    # EVERY supported codename — derived from the .deb filenames, not from the
+    # upstream R release on sources.html, which runs ahead of the Debian
+    # builds and minted uninstallable 4.6.x pins (#1666; same lesson as the
+    # jdtls check below).
+    local latest="" codename listing versions common=""
+    local first=true
+    for codename in bookworm trixie; do
+        listing=$(fetch_url "https://cloud.r-project.org/bin/linux/debian/${codename}-cran40/" 8)
+        versions=$(printf '%s\n' "$listing" |
+            command grep -oE 'r-base-core_[0-9]+\.[0-9]+\.[0-9]+-' |
+            command sed 's/^r-base-core_//;s/-$//' | command sort -u)
+        if [ -z "$versions" ]; then
+            common=""
+            break
+        fi
+        if [ "$first" = true ]; then
+            common="$versions"
+            first=false
+        else
+            common=$(command comm -12 <(printf '%s\n' "$common") <(printf '%s\n' "$versions"))
+        fi
+    done
 
-    # Use CRAN sources page - more reliable than homepage or SVN
-    # Parse the latest release tarball name
-    latest=$(fetch_url "https://cran.r-project.org/sources.html" 8 | command grep -oE 'R-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' | command head -1 | command sed 's/R-//;s/\.tar\.gz//' 2>/dev/null)
+    if [ -n "$common" ]; then
+        latest=$(printf '%s\n' "$common" | command sort -V | command tail -1)
+    fi
 
-    # Mark as error if fetch failed
+    # Mark as error if any fetch failed or no version is common to all codenames
     if [ -z "$latest" ]; then
         latest="error"
     fi
