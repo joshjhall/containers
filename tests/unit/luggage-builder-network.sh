@@ -57,10 +57,20 @@ test_no_whole_context_copy() {
         "luggage-builder must not copy the whole build context: it would pull in .cargo/config.toml (git-fetch-with-cli = true) and need a git binary rust:*-slim lacks (#1760). Offending: $hits"
 }
 
+test_instructions_parsed() {
+    # The negative guards below scan INSTRUCTIONS; prove the filter pipeline
+    # produced the real build line so they cannot pass on an empty string.
+    assert_matches "$INSTRUCTIONS" 'cargo build --release -p luggage' \
+        "INSTRUCTIONS filter lost the cargo build line (the negative guards would pass vacuously)"
+}
+
 test_no_bind_mount() {
-    # A bind mount exposes context files (incl. .cargo/config.toml) without any COPY.
+    # A bind mount exposes context files (incl. .cargo/config.toml) without any
+    # COPY. BuildKit's --mount defaults to type=bind, so every --mount option
+    # must name an explicitly safe type; one with no type= or any other type fails.
     local hits
-    hits="$(printf '%s\n' "$INSTRUCTIONS" | command grep -E -- '--mount=([^[:space:]]*,)?type=bind' || true)"
+    hits="$(printf '%s\n' "$INSTRUCTIONS" | command grep -oE -- '--mount[= ][^[:space:]]+' |
+        command grep -vE -- '(^--mount[= ]|,)type=(cache|tmpfs|secret|ssh)(,|$)' || true)"
     assert_empty "$hits" \
         "luggage-builder must not bind-mount the build context: it would expose .cargo/config.toml (git-fetch-with-cli = true) to cargo (#1760). Offending: $hits"
 }
@@ -79,6 +89,7 @@ test_stage_documents_git_fetch() {
 }
 
 run_test test_stage_exists "luggage-builder stage exists and builds luggage"
+run_test test_instructions_parsed "luggage-builder instruction filter keeps the build line"
 run_test test_no_cargo_config_copied "luggage-builder does not copy .cargo/"
 run_test test_no_whole_context_copy "luggage-builder does not copy the whole context"
 run_test test_no_bind_mount "luggage-builder does not bind-mount the context"
