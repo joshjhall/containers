@@ -29,8 +29,10 @@ STAGE="$(command awk '
     in_stage { print }
 ' "$DOCKERFILE")"
 
-# Instruction lines only (comments stripped), for the COPY/ADD checks.
-INSTRUCTIONS="$(printf '%s\n' "$STAGE" | command grep -vE '^[[:space:]]*#' || true)"
+# Instruction lines only, for the COPY/ADD checks: comments stripped, then
+# backslash-continued lines joined so a COPY split across lines is one line.
+INSTRUCTIONS="$(printf '%s\n' "$STAGE" | command grep -vE '^[[:space:]]*#' |
+    command awk '/\\$/ { sub(/\\$/, ""); buf = buf $0 " "; next } { print buf $0; buf = "" }' || true)"
 
 test_stage_exists() {
     assert_matches "$STAGE" 'cargo build --release -p luggage' \
@@ -48,7 +50,7 @@ test_no_cargo_config_copied() {
 test_no_whole_context_copy() {
     local hits
     hits="$(printf '%s\n' "$INSTRUCTIONS" |
-        command grep -E '^[[:space:]]*(COPY|ADD)([[:space:]]+--[^[:space:]]+)*[[:space:]]+\.\/?[[:space:]]' || true)"
+        command grep -E '^[[:space:]]*(COPY|ADD)([[:space:]]+--[^[:space:]]+)*[[:space:]]+(\.\/?[[:space:]]|\[[[:space:]]*"\.\/?")' || true)"
     assert_empty "$hits" \
         "luggage-builder must not copy the whole build context: it would pull in .cargo/config.toml (git-fetch-with-cli = true) and need a git binary rust:*-slim lacks (#1760). Offending: $hits"
 }
