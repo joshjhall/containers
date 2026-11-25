@@ -243,6 +243,31 @@ test_runtime_mapping_keeps_prefixed_suites() {
         "60-setup-git.sh must map to its OWN suite, not the stripped-name one"
 }
 
+test_commands_mapping_emits_siblings() {
+    local out count
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # #1733 split the setup-git suite; the commands arm used to emit only the
+    # exact <name>.sh, so the push gate silently skipped the sibling.
+    out=$(map_to_test "lib/runtime/commands/setup-git")
+    assert_contains "$out" "tests/unit/runtime/setup-git.sh" \
+        "commands/setup-git must map to its exact-match suite"
+    assert_contains "$out" "tests/unit/runtime/setup-git-identity.sh" \
+        "commands/setup-git must also map to its split sibling (#1733)"
+
+    count=0
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        count=$((count + 1))
+        assert_file_exists "$path" "mapped test path must exist: $path"
+    done <<<"$out"
+    assert_equals "2" "$count" \
+        "exactly the two setup-git command suites must be mapped"
+}
+
 test_runtime_mapping_no_duplicate_paths() {
     local out uniq_count total_count
     if ! _load_map_to_test; then
@@ -785,6 +810,7 @@ run_test test_runtime_mapping_emits_all_siblings "runtime mapping emits every si
 run_test test_runtime_mapping_unmatched_is_silent "uncovered runtime script maps to no test path (#832)"
 run_test test_runtime_mapping_keeps_prefixed_suites "runtime mapping finds suites that keep the NN- prefix (#832)"
 run_test test_runtime_mapping_no_duplicate_paths "runtime mapping emits no duplicate test paths (#832)"
+run_test test_commands_mapping_emits_siblings "commands mapping emits split sibling suites (#1733)"
 run_test test_runtime_lib_fragment_maps_to_script_suites "fs-health fragment maps to the script's suites (#1090)"
 run_test test_bin_mapping_emits_all_siblings "bin mapping emits every sibling suite (#1024)"
 run_test test_collection_keeps_each_sibling_suite "runner collection keeps each sibling suite as its own path (#1024)"

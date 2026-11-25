@@ -245,13 +245,19 @@ map_to_test() {
             ;;
 
         # lib/runtime/commands/foo → tests/unit/runtime/foo.sh (no ext on source)
+        # plus every split sibling tests/unit/runtime/foo-*.sh (#1733: the
+        # setup-git #1533 cases moved to setup-git-identity.sh; emitting only
+        # the exact match would silently drop them from the push gate).
         lib/runtime/commands/*)
-            local base
+            local base match
             base=$(basename "$file")
             local test_path="${TESTS_DIR}/unit/runtime/${base}.sh"
             if [ -f "$test_path" ]; then
                 echo "$test_path"
             fi
+            for match in "${TESTS_DIR}"/unit/runtime/"${base}"-*.sh; do
+                [ -f "$match" ] && echo "$match"
+            done
             return
             ;;
 
