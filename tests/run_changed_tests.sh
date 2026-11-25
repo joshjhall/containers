@@ -245,14 +245,30 @@ map_to_test() {
             ;;
 
         # lib/runtime/commands/foo → tests/unit/runtime/foo.sh (no ext on source)
+        # plus every split sibling tests/unit/runtime/foo-*.sh (#1733: the
+        # setup-git #1533 cases moved to setup-git-identity.sh; emitting only
+        # the exact match would silently drop them from the push gate).
+        # The glob is a dash-prefix match, so a command named like a prefix
+        # of another (a future `setup` vs setup-gh.sh) would also pull in
+        # those suites. That over-match only runs EXTRA suites, never fewer,
+        # the same trade the lib/runtime/*.sh arm below accepts.
         lib/runtime/commands/*)
-            local base
+            local base match
             base=$(basename "$file")
             local test_path="${TESTS_DIR}/unit/runtime/${base}.sh"
             if [ -f "$test_path" ]; then
                 echo "$test_path"
             fi
-            return
+            # if/fi, not `[ -f ] && echo`: an unmatched glob would leave the
+            # loop (and the bare return) at status 1, aborting the set -e
+            # caller's `result=$(map_to_test ...)` for every command with no
+            # split sibling.
+            for match in "${TESTS_DIR}"/unit/runtime/"${base}"-*.sh; do
+                if [ -f "$match" ]; then
+                    echo "$match"
+                fi
+            done
+            return 0
             ;;
 
         # lib/runtime/lib/workspace-fs-health-*.sh → every fs-health suite.

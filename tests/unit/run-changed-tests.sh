@@ -243,6 +243,75 @@ test_runtime_mapping_keeps_prefixed_suites() {
         "60-setup-git.sh must map to its OWN suite, not the stripped-name one"
 }
 
+test_commands_mapping_emits_siblings() {
+    local out count
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # #1733 split the setup-git suite; the commands arm used to emit only the
+    # exact <name>.sh, so the push gate silently skipped the sibling.
+    out=$(map_to_test "lib/runtime/commands/setup-git")
+    assert_contains "$out" "tests/unit/runtime/setup-git.sh" \
+        "commands/setup-git must map to its exact-match suite"
+    assert_contains "$out" "tests/unit/runtime/setup-git-identity.sh" \
+        "commands/setup-git must also map to its split sibling (#1733)"
+
+    count=0
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        count=$((count + 1))
+        assert_file_exists "$path" "mapped test path must exist: $path"
+    done <<<"$out"
+    assert_equals "2" "$count" \
+        "exactly the two setup-git command suites must be mapped"
+}
+
+test_commands_mapping_without_siblings_succeeds() {
+    local out rc root
+    if ! _load_map_to_test; then
+        fail_test "could not extract map_to_test from $RUNNER"
+        return 0
+    fi
+
+    # A command with NO split sibling leaves the glob unmatched. The arm must
+    # still return 0: the runner calls `result=$(map_to_test ...)` under
+    # set -e, so a leaked status 1 aborts the whole push gate (#1733 review).
+    # Sandboxed so a future real foo-*.sh split cannot make the glob match and
+    # quietly stop exercising the unmatched path.
+    root=$(/usr/bin/mktemp -d)
+    command mkdir -p "$root/tests/unit/runtime"
+    : >"$root/tests/unit/runtime/foo.sh"
+
+    rc=0
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" \
+        map_to_test "lib/runtime/commands/foo") || rc=$?
+    assert_equals "0" "$rc" "map_to_test must return 0 for a command with no siblings"
+    assert_equals "$root/tests/unit/runtime/foo.sh" "$out" \
+        "a command with no siblings maps to exactly its own suite"
+
+    # Neither an exact suite nor a sibling (today: _source-env-secrets and
+    # friends): both tests in the arm fail, and it must still return 0 empty.
+    rc=0
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" \
+        map_to_test "lib/runtime/commands/bar") || rc=$?
+    assert_equals "0" "$rc" "map_to_test must return 0 for a command with no suite at all"
+    assert_equals "" "$out" "a command with no suite at all maps to nothing"
+
+    # Sibling only (a split that renamed the original away): the glob must
+    # still run when the exact check misses, not be nested inside it.
+    : >"$root/tests/unit/runtime/baz-split.sh"
+    rc=0
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" \
+        map_to_test "lib/runtime/commands/baz") || rc=$?
+    assert_equals "0" "$rc" "map_to_test must return 0 for a sibling-only command"
+    assert_equals "$root/tests/unit/runtime/baz-split.sh" "$out" \
+        "a sibling-only command maps to exactly its sibling suite"
+
+    /usr/bin/rm -rf "$root"
+}
+
 test_runtime_mapping_no_duplicate_paths() {
     local out uniq_count total_count
     if ! _load_map_to_test; then
@@ -785,6 +854,8 @@ run_test test_runtime_mapping_emits_all_siblings "runtime mapping emits every si
 run_test test_runtime_mapping_unmatched_is_silent "uncovered runtime script maps to no test path (#832)"
 run_test test_runtime_mapping_keeps_prefixed_suites "runtime mapping finds suites that keep the NN- prefix (#832)"
 run_test test_runtime_mapping_no_duplicate_paths "runtime mapping emits no duplicate test paths (#832)"
+run_test test_commands_mapping_emits_siblings "commands mapping emits split sibling suites (#1733)"
+run_test test_commands_mapping_without_siblings_succeeds "commands mapping returns 0 when no sibling exists (#1733)"
 run_test test_runtime_lib_fragment_maps_to_script_suites "fs-health fragment maps to the script's suites (#1090)"
 run_test test_bin_mapping_emits_all_siblings "bin mapping emits every sibling suite (#1024)"
 run_test test_collection_keeps_each_sibling_suite "runner collection keeps each sibling suite as its own path (#1024)"
