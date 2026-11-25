@@ -14,8 +14,18 @@ set -euo pipefail
 
 # placeholder_reason EMAIL — shared with setup-git (#1533) so the rules
 # cannot drift; returns 0 and prints the reason for a placeholder email.
+# Resolve through symlinks (e.g. linked into .git/hooks/) so the helper is
+# found next to the real script. Fall back to the literal path where
+# `readlink -f` is unavailable (old BSD readlink).
+self=$(command readlink -f "${BASH_SOURCE[0]}" 2>/dev/null) || self="${BASH_SOURCE[0]}"
+helper="$(dirname "$self")/../lib/runtime/commands/_git-email-placeholder"
+if [ ! -r "$helper" ]; then
+    /usr/bin/printf 'ERROR: check-author-identity: shared helper not found: %s\n' "$helper" >&2
+    /usr/bin/printf 'Run the hook from the repo (bin/check-author-identity.sh) or a symlink to it, not a copy.\n' >&2
+    exit 1
+fi
 # shellcheck source=lib/runtime/commands/_git-email-placeholder
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/runtime/commands/_git-email-placeholder"
+. "$helper"
 
 fail=0
 for role in AUTHOR COMMITTER; do
