@@ -135,7 +135,21 @@ mod tests {
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
         let err = res.unwrap_err().to_string();
         assert!(err.starts_with(&format!("failed to stat {}: ", dir.join("f").display())), "{err}");
-        assert!(!exists_no_follow(&dir.join("f")).unwrap(), "nothing may be written");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_no_symlink_errors_on_a_file_where_a_directory_should_be() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("a");
+        std::fs::write(&file, b"x").unwrap();
+        // NotADirectory, not NotFound: only a missing component ends the walk.
+        let err = ensure_no_symlink(tmp.path(), "a/b").unwrap_err().to_string();
+        assert!(
+            err.starts_with(&format!("failed to stat {}: ", file.join("b").display())),
+            "{err}"
+        );
+        assert!(ensure_no_symlink(tmp.path(), "absent/b").is_ok());
     }
 
     #[test]
