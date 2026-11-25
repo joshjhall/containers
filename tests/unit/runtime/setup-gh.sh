@@ -757,4 +757,89 @@ HOSTILE
 
 run_test_with_setup test_legacy_snippet_override_ignored_without_test_mode "#1749: RC_SNIPPET_LIB ignored outside TEST_MODE"
 
+# ---------------------------------------------------------------------------
+# #1750: the default (production) helper lookup — sibling, then /opt — with
+# RC_SNIPPET_LIB unset and TEST_MODE off. The dev/CI image ships a real
+# /opt/container-runtime/lib/rc-snippet.sh, which would mask a broken sibling
+# path, so each test runs a scratch copy of setup-gh whose helper is a marker
+# wrapper around the real one: the marker proves WHICH branch loaded it, the
+# removed legacy block proves the real helper ran.
+# ---------------------------------------------------------------------------
+_RC_OPT_LITERAL="/opt/container-runtime/lib/rc-snippet.sh"
+
+# Write a helper at $1 that drops marker $2 then sources the real helper.
+_write_marker_helper() {
+    command mkdir -p "$(command dirname "$1")"
+    command cat >"$1" <<WRAP
+: >"$2"
+. "$PROJECT_ROOT/lib/runtime/lib/rc-snippet.sh"
+WRAP
+}
+
+# Run setup-gh from script path $1 with the override path fully disabled.
+_run_setup_gh_copy() {
+    _install_stub_gh ok
+    touch "$TEST_TEMP_DIR/gh.loggedin"
+    command env -u BASH_ENV -u GITHUB_TOKEN -u GH_TOKEN -u RC_SNIPPET_LIB -u TEST_MODE \
+        HOME="$TEST_HOME" PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        _ENV_SECRETS_LOADED=1 _OP_CACHE_LOADED=1 \
+        bash "$1" 2>&1
+}
+
+test_legacy_snippet_sibling_lookup() {
+    assert_file_exists "$(command dirname "$SETUP_GH_SCRIPT")/../lib/rc-snippet.sh" \
+        "The source tree keeps rc-snippet.sh at commands/../lib (the sibling path)"
+    command mkdir -p "$TEST_TEMP_DIR/rt/commands"
+    command cp "$SETUP_GH_SCRIPT" "$TEST_TEMP_DIR/rt/commands/setup-gh"
+    _write_marker_helper "$TEST_TEMP_DIR/rt/lib/rc-snippet.sh" "$TEST_TEMP_DIR/sibling.sourced"
+    _write_gh_legacy_rc
+    local rc=0 output
+    output=$(_run_setup_gh_copy "$TEST_TEMP_DIR/rt/commands/setup-gh") || rc=$?
+    assert_equals "0" "$rc" "setup-gh exits 0 via the sibling helper"
+    assert_file_exists "$TEST_TEMP_DIR/sibling.sourced" \
+        "The sibling commands/../lib/rc-snippet.sh is the helper that loads"
+    assert_contains "$output" "removed pre-#1711 token snippet" \
+        "The sibling helper reports the removal"
+    assert_file_not_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>&1 && gh auth status' \
+        "The sibling helper removes the legacy block"
+    assert_file_contains "$TEST_HOME/.bashrc" "^before$" "Content before the block is preserved"
+    assert_file_contains "$TEST_HOME/.bashrc" "^after$" "Content after the block is preserved"
+}
+
+test_legacy_snippet_opt_fallback() {
+    # Must not contain the /opt literal itself, or the zero-count check can't see the rewrite.
+    local fake_opt="$TEST_TEMP_DIR/fake-install-root/lib/rc-snippet.sh"
+    local copy="$TEST_TEMP_DIR/rt/commands/setup-gh"
+    assert_equals "1" "$(command grep -cF "$_RC_OPT_LITERAL" "$SETUP_GH_SCRIPT")" \
+        "setup-gh names the installed helper path exactly once"
+    command mkdir -p "$TEST_TEMP_DIR/rt/commands"
+    command sed "s#$_RC_OPT_LITERAL#$fake_opt#" "$SETUP_GH_SCRIPT" >"$copy"
+    assert_equals "0" "$(command grep -cF "$_RC_OPT_LITERAL" "$copy")" \
+        "The scratch copy's /opt path is redirected to the fake install root"
+
+    # Control: no sibling lib/ and no fake /opt helper — nothing reachable.
+    _write_gh_legacy_rc
+    local rc=0 output
+    output=$(_run_setup_gh_copy "$copy") || rc=$?
+    assert_equals "0" "$rc" "The scratch copy exits 0 with no helper reachable"
+    assert_not_contains "$output" "removed pre-#1711" "Control: nothing removed without a helper"
+    assert_file_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>&1 && gh auth status' \
+        "Control: the legacy block survives when no helper is reachable"
+
+    _write_marker_helper "$fake_opt" "$TEST_TEMP_DIR/opt.sourced"
+    _write_gh_legacy_rc
+    rc=0
+    output=$(_run_setup_gh_copy "$copy") || rc=$?
+    assert_equals "0" "$rc" "setup-gh exits 0 via the /opt fallback"
+    assert_file_exists "$TEST_TEMP_DIR/opt.sourced" \
+        "The installed-path fallback is the helper that loads"
+    assert_contains "$output" "removed pre-#1711 token snippet" \
+        "The /opt fallback helper reports the removal"
+    assert_file_not_contains "$TEST_HOME/.bashrc" 'if command -v gh >/dev/null 2>&1 && gh auth status' \
+        "The /opt fallback helper removes the legacy block"
+}
+
+run_test_with_setup test_legacy_snippet_sibling_lookup "#1750: default lookup finds the sibling commands/../lib helper"
+run_test_with_setup test_legacy_snippet_opt_fallback "#1750: default lookup falls back to /opt/container-runtime/lib"
+
 generate_report
