@@ -153,6 +153,32 @@ run_test_with_setup test_empty_text_never_matches "Empty TEXT never matches"
 run_test_with_setup test_mode_preserved "rc file mode preserved by in-place rewrite"
 run_test_with_setup test_failed_copy_back_keeps_full_copy "Failed copy-back keeps the full copy and returns 2"
 
+# A mktemp failure (e.g. the rc file's directory is not writable) must return 1
+# and leave FILE untouched. Stub mktemp on PATH rather than chmod the directory:
+# root ignores directory write bits, so a read-only dir would not fail mktemp.
+test_mktemp_failure_leaves_file_unchanged() {
+    printf 'before\n%s\nafter\n' "$BLOCK" >"$RC"
+    local orig
+    orig=$(command cat "$RC")
+    command mkdir -p "$TEST_TEMP_DIR/stub"
+    printf '#!/bin/sh\n: >"$MKTEMP_MARK"\nexit 1\n' >"$TEST_TEMP_DIR/stub/mktemp"
+    command chmod +x "$TEST_TEMP_DIR/stub/mktemp"
+    local out rc=0
+    # BASH_ENV is unset: it rebuilds PATH in non-interactive bash, dropping the stub.
+    out=$(command env -u BASH_ENV MKTEMP_MARK="$TEST_TEMP_DIR/mktemp-called" \
+        PATH="$TEST_TEMP_DIR/stub:$PATH" \
+        bash -c '. "$1" && rc_remove_block "$2" "$3"; printf "%s" "$?"' _ "$SOURCE_FILE" "$RC" "$BLOCK") || rc=$?
+    assert_equals "0" "$rc" "Probe shell itself succeeds"
+    # The marker proves mktemp was reached, so the 1 is not the pre-check's early exit.
+    assert_file_exists "$TEST_TEMP_DIR/mktemp-called" "The mktemp stub was invoked"
+    assert_equals "1" "$out" "mktemp failure returns 1"
+    assert_equals "$orig" "$(command cat "$RC")" "mktemp failure leaves the rc file unchanged"
+    assert_equals "" "$(command find "$TEST_TEMP_DIR" -maxdepth 1 -name '.bashrc.*')" \
+        "No stray temp file is left beside the rc file"
+}
+
+run_test_with_setup test_mktemp_failure_leaves_file_unchanged "mktemp failure returns 1 and leaves the file unchanged"
+
 # The matcher must not read past EOF: an unset awk element is "", so a TEXT
 # ending in a blank line could otherwise "match" a block that ends the file.
 test_no_match_past_eof() {
