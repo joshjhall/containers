@@ -248,6 +248,10 @@ map_to_test() {
         # plus every split sibling tests/unit/runtime/foo-*.sh (#1733: the
         # setup-git #1533 cases moved to setup-git-identity.sh; emitting only
         # the exact match would silently drop them from the push gate).
+        # The glob is a dash-prefix match, so a command named like a prefix
+        # of another (a future `setup` vs setup-gh.sh) would also pull in
+        # those suites. That over-match only runs EXTRA suites, never fewer,
+        # the same trade the lib/runtime/*.sh arm below accepts.
         lib/runtime/commands/*)
             local base match
             base=$(basename "$file")

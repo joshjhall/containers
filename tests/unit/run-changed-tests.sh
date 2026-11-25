@@ -291,6 +291,14 @@ test_commands_mapping_without_siblings_succeeds() {
     assert_equals "$root/tests/unit/runtime/foo.sh" "$out" \
         "a command with no siblings maps to exactly its own suite"
 
+    # Neither an exact suite nor a sibling (today: _source-env-secrets and
+    # friends): both tests in the arm fail, and it must still return 0 empty.
+    rc=0
+    out=$(PROJECT_ROOT="$root" TESTS_DIR="$root/tests" \
+        map_to_test "lib/runtime/commands/bar") || rc=$?
+    assert_equals "0" "$rc" "map_to_test must return 0 for a command with no suite at all"
+    assert_equals "" "$out" "a command with no suite at all maps to nothing"
+
     /usr/bin/rm -rf "$root"
 }
 
