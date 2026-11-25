@@ -1,6 +1,6 @@
 {
   "name": "Containers Development",
-  "dockerComposeFile": "docker-compose.yml",
+  "dockerComposeFile": ["docker-compose.yml", "docker-compose.override.yml"],
   "service": "devcontainer",
   "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
 

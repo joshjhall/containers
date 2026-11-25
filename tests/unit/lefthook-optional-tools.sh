@@ -227,6 +227,24 @@ test_socket_mounting_composes_enable_the_docker_feature() {
         "compose services mounting docker.sock must set INCLUDE_DOCKER (#831 AC6)"
 }
 
+# An override file is a Compose fragment (no image/build of its own), so the
+# hook must validate it layered on its sibling base file, the way Compose and
+# devcontainer.json load it. Validating it standalone rejected the tracked
+# .devcontainer/docker-compose.override.yml placeholder on every push.
+test_docker_compose_validate_layers_override_files() {
+    local body stripped
+    if ! body=$(lh_run_body "docker-compose-validate"); then
+        tf_fail_assertion "docker-compose-validate must exist" "hook not found"
+        return
+    fi
+    stripped=$(/usr/bin/printf '%s\n' "$body" | /usr/bin/grep -v '^[[:space:]]*#' || true)
+
+    assert_contains "$stripped" '*.override.yml' \
+        "override files must get their own validation branch"
+    assert_contains "$stripped" 'docker compose -f "$base" -f "$f" config' \
+        "an override must be validated layered on its base compose file"
+}
+
 run_test test_lefthook_yaml_parseable "lefthook.yml is valid YAML"
 run_test test_every_optional_tool_hook_has_a_skip_guard "every optional-tool hook has a skip guard"
 run_test test_docker_compose_validate_has_a_skip_guard "docker-compose-validate has a skip guard"
@@ -234,5 +252,6 @@ run_test test_docker_compose_validate_probes_the_compose_plugin "docker-compose-
 run_test test_docker_compose_validate_has_no_precedence_bug "docker-compose-validate has no && / || exit precedence bug"
 run_test test_guard_is_a_skip_block_not_an_inline_exit "the guard is a skip: block, not an inline exit 0"
 run_test test_socket_mounting_composes_enable_the_docker_feature "socket-mounting composes enable the docker feature"
+run_test test_docker_compose_validate_layers_override_files "docker-compose-validate layers override files on their base"
 
 generate_report

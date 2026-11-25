@@ -1,0 +1,11 @@
+# Local, per-machine Compose overrides for the devcontainer service.
+#
+# devcontainer.json lists this file after docker-compose.yml, so anything
+# here (credential-provider mounts, CREDENTIAL_SETUP_HOOKS, extra env) is
+# merged on top. The committed copy is an intentionally empty placeholder:
+# Compose fails on a missing file, so a clean checkout needs it to exist.
+#
+# Edit it locally, then stop git tracking your edits:
+#   git update-index --skip-worktree .devcontainer/docker-compose.override.yml
+# See docs/claude-code/external-credential-providers.md.
+services: {}
