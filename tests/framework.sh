@@ -55,33 +55,30 @@ unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR GIT_PREFIX
 # scratch-repo `git commit` a test made therefore signed through drumknott, and
 # under the parallel pre-push load signing failed intermittently (git exit 128,
 # often with a misleading "profile ... is locked on the host" message), failing
-# a random unrelated suite. Append signing-off entries to the env config: git
-# applies GIT_CONFIG_KEY_n in index order, so later entries win over the
-# injected `true`. Existing entries are preserved, nothing is written to any
-# git config file, and the override lives only in this process tree — the
-# operator's own commits outside the framework stay signed.
+# a random unrelated suite.
 #
-# Idempotent: a child shell that re-sources the framework (or a re-run of
-# init_test_framework) must not keep growing GIT_CONFIG_COUNT.
+# The override goes in GIT_CONFIG_PARAMETERS (the `git -c` channel), NOT as
+# appended GIT_CONFIG_KEY_n entries. BASH_ENV=/etc/bash_env runs
+# /etc/bashrc.d/90-drumknott.sh in every non-interactive bash, which re-exports
+# GIT_CONFIG_COUNT=8 — so an appended KEY_8 would be silently dropped in any
+# child `bash` a test spawns (each suite is itself such a child of the runner).
+# Nothing in that chain touches GIT_CONFIG_PARAMETERS, and git applies it AFTER
+# the GIT_CONFIG_COUNT entries, so it wins over the injected `true` in every
+# descendant. An explicit `git -c commit.gpgsign=...` in a test still wins
+# over it. Existing GIT_CONFIG_PARAMETERS / GIT_CONFIG_* entries are preserved,
+# nothing is written to any git config file, and the override lives only in
+# this process tree — operator commits outside the framework stay signed.
+#
+# Idempotent: re-sourcing the framework in a child shell (or re-running
+# init_test_framework) must not keep growing GIT_CONFIG_PARAMETERS.
+readonly TF_GIT_NOSIGN_PARAMS="'commit.gpgsign'='false' 'tag.gpgsign'='false'"
 tf_disable_git_signing() {
-    local n="${GIT_CONFIG_COUNT:-0}"
-    # git rejects a non-numeric count outright; start over from 0 rather than
-    # propagate a value that would make every git command in the suite fail.
-    [[ "$n" =~ ^[0-9]+$ ]] || n=0
-    n=$((10#$n))
-
-    if [ "$n" -ge 2 ]; then
-        local k1="GIT_CONFIG_KEY_$((n - 2))" v1="GIT_CONFIG_VALUE_$((n - 2))"
-        local k2="GIT_CONFIG_KEY_$((n - 1))" v2="GIT_CONFIG_VALUE_$((n - 1))"
-        if [ "${!k1:-}" = "commit.gpgsign" ] && [ "${!v1:-}" = "false" ] &&
-            [ "${!k2:-}" = "tag.gpgsign" ] && [ "${!v2:-}" = "false" ]; then
-            return 0
-        fi
-    fi
-
-    export "GIT_CONFIG_KEY_${n}=commit.gpgsign" "GIT_CONFIG_VALUE_${n}=false"
-    export "GIT_CONFIG_KEY_$((n + 1))=tag.gpgsign" "GIT_CONFIG_VALUE_$((n + 1))=false"
-    export GIT_CONFIG_COUNT=$((n + 2))
+    local current="${GIT_CONFIG_PARAMETERS:-}"
+    case "$current" in
+        *"$TF_GIT_NOSIGN_PARAMS") return 0 ;;
+        "") export GIT_CONFIG_PARAMETERS="$TF_GIT_NOSIGN_PARAMS" ;;
+        *) export GIT_CONFIG_PARAMETERS="$current $TF_GIT_NOSIGN_PARAMS" ;;
+    esac
 }
 tf_disable_git_signing
 
