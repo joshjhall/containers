@@ -41,12 +41,18 @@ ALLOWED_MOUNT_TYPES="cache"
 ALLOWED_COPY_FROM_STAGES=""
 
 # stage_of <dockerfile-text> — the luggage-builder stage: its FROM through the
-# line before the next FROM.
+# line before the next FROM. Two choices here together prevent a SIGPIPE
+# abort: the input is a here-string (no separate writer process), and awk
+# reads to EOF instead of exiting at the next FROM. The old form,
+# `printf ... | awk '...{ exit }'`, closed the pipe while printf was still
+# writing a large Dockerfile; printf took SIGPIPE and, under
+# `set -o pipefail`, the 141 aborted the whole suite before any test ran.
+# Only the first luggage-builder stage is taken.
 stage_of() {
-    printf '%s\n' "$1" | command awk '
-        /^[Ff][Rr][Oo][Mm][[:space:]].*[[:space:]][Aa][Ss][[:space:]]+luggage-builder([[:space:]]|$)/ { in_stage = 1; print; next }
-        in_stage && /^[Ff][Rr][Oo][Mm][[:space:]]/ { exit }
-        in_stage { print }'
+    command awk '
+        /^[Ff][Rr][Oo][Mm][[:space:]].*[[:space:]][Aa][Ss][[:space:]]+luggage-builder([[:space:]]|$)/ { if (!done) { in_stage = 1; print }; next }
+        in_stage && /^[Ff][Rr][Oo][Mm][[:space:]]/ { in_stage = 0; done = 1; next }
+        in_stage { print }' <<<"$1"
 }
 
 # instructions_of <stage-text> — comments stripped, then backslash-continued
@@ -58,13 +64,15 @@ instructions_of() {
             END { if (buf != "") print buf }' || true
 }
 
-# stage_violations <instructions-text> — one line per instruction outside the
-# allowlist; no output means the stage is allowed.
+# stage_violations <instructions-text> [allowed-from-stages] — one line per
+# instruction outside the allowlist; no output means the stage is allowed. The
+# optional second argument overrides ALLOWED_COPY_FROM_STAGES (fixtures use it
+# to exercise the allowlisted-stage path, which the real empty list never hits).
 stage_violations() {
     printf '%s\n' "$1" | command awk \
         -v sources="$ALLOWED_COPY_SOURCES" \
         -v mounts="$ALLOWED_MOUNT_TYPES" \
-        -v stages="$ALLOWED_COPY_FROM_STAGES" '
+        -v stages="${2-$ALLOWED_COPY_FROM_STAGES}" '
         function listed(word, list,    n, i, a) {
             n = split(list, a, /[[:space:]]+/)
             for (i = 1; i <= n; i++) if (a[i] != "" && a[i] == word) return 1
@@ -207,8 +215,9 @@ FIXTURE_RUN='RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release -p luggage --bin luggage'
 FIXTURE_TAIL='FROM debian:trixie-slim AS base'
 
-# fixture_violations <extra-instruction-text> — allowlist + cli-fetch hits for
-# the minimal stage with the extra text inserted before the RUN.
+# fixture_violations <extra-instruction-text> [allowed-from-stages] —
+# allowlist + cli-fetch hits for the minimal stage with the extra text inserted
+# before the RUN. The optional second argument overrides the from-stage list.
 fixture_violations() {
     local df ins
     df="$FIXTURE_HEAD
@@ -216,8 +225,29 @@ $1
 $FIXTURE_RUN
 $FIXTURE_TAIL"
     ins="$(instructions_of "$(stage_of "$df")")"
-    stage_violations "$ins"
+    stage_violations "$ins" "${2-$ALLOWED_COPY_FROM_STAGES}"
     cli_fetch_hits "$ins"
+}
+
+test_stage_of_survives_large_input() {
+    # Regression for the SIGPIPE abort: 1 MiB of text AFTER the next FROM.
+    # The old `printf ... | awk '...{ exit }'` failed here every time
+    # (padding at >=512 KiB, after the FROM; padding before the FROM never
+    # fails, since awk reads it all first). Verified by splicing the exact
+    # pre-fix stage_of back in: this test then FAILs 5/5. Run in a pipefail
+    # subshell so a 141 is caught as a test failure, not a suite abort.
+    local pad df rc=0 stage
+    pad="$(printf '%*s' $((1024 * 1024)) '' | command tr ' ' 'x')"
+    df="$FIXTURE_HEAD
+$FIXTURE_RUN
+$FIXTURE_TAIL
+# $pad"
+    stage="$(
+        set -o pipefail
+        stage_of "$df"
+    )" || rc=$?
+    assert_equals "0" "$rc" "stage_of must not fail on a >64 KiB Dockerfile (141 = SIGPIPE from an early awk exit)"
+    assert_matches "$stage" 'COPY crates' "stage_of on large input must still return the luggage-builder stage"
 }
 
 test_fixture_baseline_is_clean() {
@@ -243,6 +273,9 @@ copy-continued-trailing-space	COPY \  \n    . ./
 copy-unlisted-source	COPY src ./src
 copy-lowercase	copy . ./
 copy-from-unlisted	COPY --from=builder /x /y
+copy-from-space-form	COPY --from builder /x /y
+copy-from-upper-flag	COPY --FROM=builder /x /y
+copy-from-after-other-flag	COPY --chown=1 --from=builder /x /y
 add	ADD Cargo.toml ./x
 env-cli-fetch	ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 config-cli-fetch	RUN cargo build --config net.git-fetch-with-cli=true
@@ -297,6 +330,37 @@ EOF
     assert_equals "0" "$failed" "every GOOD fixture must be allowed ($failed rejected)"
 }
 
+test_fixture_allowlisted_stage_cases() {
+    # ALLOWED_COPY_FROM_STAGES is empty in production, so the allow side of the
+    # from-stage check would otherwise never run. Pass an allowlist of
+    # "builder" and require: the allowlisted stage is accepted (both COPY
+    # --from and --mount from=, in each spelling), and a different stage is
+    # still rejected (so the override does not simply disable the check).
+    local inst hits failed=0
+    for inst in \
+        'COPY --from=builder /x /y' \
+        'COPY --from builder /x /y' \
+        'COPY --FROM=builder /x /y' \
+        'RUN --mount=type=cache,from=builder,target=/x true' \
+        'RUN --mount=type=cache,FROM=builder,target=/x true'; do
+        hits="$(fixture_violations "$inst" "builder")"
+        if [ -n "$hits" ]; then
+            echo "    allowlisted stage rejected: $inst: $hits"
+            failed=$((failed + 1))
+        fi
+    done
+    for inst in \
+        'COPY --from=other /x /y' \
+        'RUN --mount=type=cache,from=other,target=/x true'; do
+        hits="$(fixture_violations "$inst" "builder")"
+        if [ -z "$hits" ]; then
+            echo "    unlisted stage accepted: $inst"
+            failed=$((failed + 1))
+        fi
+    done
+    assert_equals "0" "$failed" "allowlisted from-stages must pass and others must still fail ($failed wrong)"
+}
+
 run_test test_stage_exists "luggage-builder stage exists and builds luggage"
 run_test test_instructions_parsed "luggage-builder instruction filter keeps the COPY and build lines"
 run_test test_copy_and_mount_allowlist "luggage-builder COPY sources and mount types are allowlisted"
@@ -305,5 +369,7 @@ run_test test_stage_documents_git_fetch "luggage-builder documents the git-fetch
 run_test test_fixture_baseline_is_clean "fixture: minimal allowed stage has no violations"
 run_test test_fixture_bad_cases "fixture: every broken stage is rejected"
 run_test test_fixture_good_cases "fixture: every legitimate stage is allowed"
+run_test test_fixture_allowlisted_stage_cases "fixture: allowlisted from-stage passes, others still fail"
+run_test test_stage_of_survives_large_input "stage_of survives a >64 KiB Dockerfile (no SIGPIPE abort)"
 
 generate_report
