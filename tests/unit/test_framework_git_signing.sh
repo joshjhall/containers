@@ -284,8 +284,33 @@ test_framework_does_not_touch_git_config_files() {
     assert_equals "true" "$out" "commit.gpgsign stays true outside the framework"
 }
 
+# In-suite mutation check: a scratch copy of the framework with the override
+# calls stubbed out must make the unsigned-commit scenario FAIL. Proves the
+# commit cases discriminate on the override itself, without anyone having to
+# re-run the mutation by hand. The tracked framework.sh is never modified.
+test_mutation_without_override_commit_fails() {
+    _prepare_hostile
+    local src_dir mut_dir out calls
+    src_dir="$(command dirname "$FRAMEWORK_SH")"
+    mut_dir="$TEST_TEMP_DIR/mutant"
+    command mkdir -p "$mut_dir"
+    command cp "$src_dir/framework.sh" "$mut_dir/framework.sh"
+    command cp -r "$src_dir/framework" "$mut_dir/framework"
+    command sed -i 's/^tf_disable_git_signing$/:/; s/^    tf_disable_git_signing$/    :/' \
+        "$mut_dir/framework.sh"
+    # The mutation must actually have removed both call sites.
+    calls=$(command grep -cE '^ *tf_disable_git_signing$' "$mut_dir/framework.sh" || true)
+    assert_equals "0" "$calls" "mutant must contain no tf_disable_git_signing call"
+
+    out=$(FRAMEWORK_SH="$mut_dir/framework.sh" _run_hostile yes "$COMMIT_BODY")
+    assert_contains "$out" "commit_rc=fail" \
+        "without the override the always-failing signer must break the scratch commit"
+    assert_not_contains "$out" "hook_not_applied" "the hostile BASH_ENV hook must have applied"
+}
+
 run_test test_control_stub_signer_breaks_commit "control: failing signer breaks commit without the framework"
 run_test test_framework_commit_is_unsigned "scratch commit under the framework is unsigned"
+run_test test_mutation_without_override_commit_fails "mutation: framework copy without the override signs (and fails)"
 run_test test_child_bash_with_bash_env_commits_unsigned "child bash re-exporting signing via BASH_ENV still commits unsigned"
 run_test test_framework_annotated_tag_is_unsigned "annotated tag under the framework is unsigned"
 run_test test_explicit_git_c_still_wins "explicit git -c commit.gpgsign=true still wins"
