@@ -37,8 +37,14 @@ environment." The boundary stays at the install method's exit.
 ## Catalog source (interim)
 
 Production builds copy `crates/luggage/testdata/catalog` into the image at
-`/opt/containers-db` via `COPY` from the `luggage-builder` stage. This keeps
-builds reproducible from `Cargo.lock` with no build-time network fetch.
+`/opt/containers-db` via `COPY` from the `luggage-builder` stage. The catalog
+itself needs no build-time network fetch.
+
+Compiling luggage in that stage does use the network: it fetches crates.io
+and, because cargo resolves git sources workspace-wide, the stibbons-only
+`repo-baseline` git dependency from `github.com/joshjhall/containers-db`. Both
+are pinned by `Cargo.lock`. This was accepted in #1760. Rationale and the
+`.cargo/` caveat live in the comment on the `luggage-builder` stage.
 
 A follow-up issue will swap this for a pinned `containers-db@vX.Y.Z` snapshot
 (per the design memo's "main repo pins a snapshot SHA" decision). Until then,
