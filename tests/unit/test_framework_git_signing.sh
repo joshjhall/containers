@@ -55,10 +55,17 @@ _prepare_hostile() {
 # framework (and runs init_test_framework) first; $1=no runs the body bare.
 # BASH_ENV points at the hostile hook, so the outer shell AND every child bash
 # get the signing config re-exported, exactly as in the devcontainer.
+#
+# stdin is /dev/null on purpose: under `env -i` SHLVL is unset, and bash skips
+# BASH_ENV (running ~/.bashrc instead) when SHLVL < 2 and stdin is a network
+# socket — which it intermittently is under some harnesses. That made the hook
+# silently not fire. The hook_applied guard below makes any such regression
+# loud instead of letting a case pass (or fail) for the wrong reason.
 _run_hostile() {
     local with_framework="$1" body="$2" prelude=''
+    prelude='[ "${GIT_CONFIG_COUNT:-}" = 6 ] || { /usr/bin/echo "hook_not_applied"; exit 0; }; '
     if [ "$with_framework" = yes ]; then
-        prelude='source "$FRAMEWORK_SH" >/dev/null 2>&1; init_test_framework >/dev/null 2>&1; '
+        prelude+='source "$FRAMEWORK_SH" >/dev/null 2>&1; init_test_framework >/dev/null 2>&1; '
     fi
     /usr/bin/env -i \
         PATH="/usr/bin:/bin" \
@@ -70,7 +77,7 @@ _run_hostile() {
         GIT_CONFIG_NOSYSTEM=1 \
         GIT_CONFIG_GLOBAL="$TEST_TEMP_DIR/home/.gitconfig" \
         REPO="$TEST_TEMP_DIR/repo" \
-        /bin/bash -c "${prelude}${body}"
+        /bin/bash -c "${prelude}${body}" </dev/null
 }
 
 # Commit in a fresh scratch repo; report rc and whether HEAD carries gpgsig.
@@ -95,9 +102,20 @@ COMMIT_BODY='
 test_control_stub_signer_breaks_commit() {
     _prepare_hostile
     local out
-    out=$(_run_hostile no "$COMMIT_BODY")
-    assert_equals "commit_rc=fail" "$out" \
+    out=$(_run_hostile no '
+        /usr/bin/git init -q "$REPO" && cd "$REPO" || exit 9
+        /usr/bin/git commit -q --allow-empty -m init >/dev/null 2>&1 &&
+            /usr/bin/echo "commit_rc=0" || /usr/bin/echo "commit_rc=fail"
+        # Prove the failure is the SIGNER, not a missing identity: the same
+        # commit with signing explicitly off must succeed.
+        /usr/bin/git -c commit.gpgsign=false commit -q --allow-empty -m nosign >/dev/null 2>&1 &&
+            /usr/bin/echo "unsigned_ok=1" || /usr/bin/echo "unsigned_ok=0"
+    ')
+    assert_contains "$out" "commit_rc=fail" \
         "without the framework the always-failing signer must break git commit"
+    assert_contains "$out" "unsigned_ok=1" \
+        "the same commit with signing off must succeed, so the failure is the signer"
+    assert_not_contains "$out" "hook_not_applied" "the hostile BASH_ENV hook must have applied"
 }
 
 test_framework_commit_is_unsigned() {
@@ -155,9 +173,35 @@ test_explicit_git_c_still_wins() {
     _prepare_hostile
     local out
     out=$(_run_hostile yes '
-        /usr/bin/git -c commit.gpgsign=true config --get commit.gpgsign
+        /usr/bin/echo "default=$(/usr/bin/git config --get commit.gpgsign)"
+        /usr/bin/echo "explicit=$(/usr/bin/git -c commit.gpgsign=true config --get commit.gpgsign)"
+        /usr/bin/git init -q "$REPO" && cd "$REPO" || exit 9
+        if /usr/bin/git -c commit.gpgsign=true commit -q --allow-empty -m x >/dev/null 2>&1; then
+            /usr/bin/echo "signed_commit=succeeded"
+        else
+            /usr/bin/echo "signed_commit=refused"
+        fi
     ')
-    assert_equals "true" "$out" "an explicit git -c must override the framework default"
+    # default=false proves the framework flipped it, so explicit=true is a real
+    # override rather than the untouched hostile value.
+    assert_contains "$out" "default=false" "framework default must be signing off"
+    assert_contains "$out" "explicit=true" "an explicit git -c must override the framework default"
+    assert_contains "$out" "signed_commit=refused" \
+        "explicit git -c commit.gpgsign=true must really attempt signing (stub signer refuses)"
+}
+
+# init_test_framework re-asserts the override: a consumer that clears
+# GIT_CONFIG_PARAMETERS after sourcing gets it back on re-init.
+test_init_reasserts_after_clear() {
+    _prepare_hostile
+    local out
+    out=$(/usr/bin/env -i PATH="/usr/bin:/bin" HOME="$TEST_TEMP_DIR/home" \
+        SKIP_DOCKER_CHECK=true FRAMEWORK_SH="$FRAMEWORK_SH" \
+        /bin/bash -c 'source "$FRAMEWORK_SH" >/dev/null 2>&1
+            unset GIT_CONFIG_PARAMETERS
+            init_test_framework >/dev/null 2>&1
+            /usr/bin/echo "params=|${GIT_CONFIG_PARAMETERS:-}|"')
+    assert_equals "params=|$NOSIGN|" "$out" "init_test_framework must restore the override"
 }
 
 # Source the framework in a minimal env with only the given args and report
@@ -214,6 +258,14 @@ test_config_count_entries_untouched() {
     out=$(_source_with_env GIT_CONFIG_COUNT=1 \
         GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=true)
     assert_contains "$out" "count=1 " "GIT_CONFIG_COUNT must not be changed"
+
+    # ...and the override still beats that untouched COUNT entry.
+    out=$(/usr/bin/env -i PATH="/usr/bin:/bin" HOME="$TEST_TEMP_DIR/home" \
+        SKIP_DOCKER_CHECK=true FRAMEWORK_SH="$FRAMEWORK_SH" GIT_CONFIG_NOSYSTEM=1 \
+        GIT_CONFIG_GLOBAL="$TEST_TEMP_DIR/home/.gitconfig" GIT_CONFIG_COUNT=1 \
+        GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=true \
+        /bin/bash -c 'source "$FRAMEWORK_SH" >/dev/null 2>&1; /usr/bin/git config --get commit.gpgsign')
+    assert_equals "false" "$out" "override must win over a GIT_CONFIG_COUNT commit.gpgsign=true"
 }
 
 # The override lives only in the environment: no git config file is written,
@@ -237,6 +289,7 @@ run_test test_framework_commit_is_unsigned "scratch commit under the framework i
 run_test test_child_bash_with_bash_env_commits_unsigned "child bash re-exporting signing via BASH_ENV still commits unsigned"
 run_test test_framework_annotated_tag_is_unsigned "annotated tag under the framework is unsigned"
 run_test test_explicit_git_c_still_wins "explicit git -c commit.gpgsign=true still wins"
+run_test test_init_reasserts_after_clear "init_test_framework restores a cleared override"
 run_test test_params_set_once_and_idempotent "override set once; re-init and nested re-source are no-ops"
 run_test test_existing_params_preserved "existing GIT_CONFIG_PARAMETERS preserved"
 run_test test_partial_or_earlier_match_still_appends "override not last -> appended again"
