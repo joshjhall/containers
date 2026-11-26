@@ -159,15 +159,36 @@ fn sync_replay_uses_injected_identity() {
 /// Source of the shared helpers, checked structurally below.
 const COMMON_SRC: &str = include_str!("common/mod.rs");
 
-/// Top-level `fn` items in `src` as `(name, body)` pairs, with `//` comment
-/// lines dropped so prose can't satisfy or trip a check. Relies on rustfmt
-/// layout: an item starts with `fn`/`pub fn`/`const fn`/`pub const fn` at
-/// column 0 and ends at the first column-0 `}`.
+/// `line` with any `//` comment removed. A `//` only counts as a comment
+/// when it sits outside a string literal (an even number of `"` before it).
+/// Escaped quotes are not handled; `common/mod.rs` contains none.
+fn strip_line_comment(line: &str) -> &str {
+    let mut quotes = 0;
+    let bytes = line.as_bytes();
+    for i in 0..bytes.len() {
+        match bytes[i] {
+            b'"' => quotes += 1,
+            b'/' if quotes % 2 == 0 && bytes.get(i + 1) == Some(&b'/') => {
+                return line[..i].trim_end();
+            }
+            _ => {}
+        }
+    }
+    line
+}
+
+/// Top-level `fn` items in `src` as `(name, body)` pairs. `//` comments, both
+/// whole-line and trailing, are stripped so prose can't satisfy or trip a
+/// check. Relies on rustfmt layout: an item starts with
+/// `fn`/`pub fn`/`const fn`/`pub const fn` at column 0 and ends at the first
+/// column-0 `}`. This is a text scan, not a parser. A `stibbons_cmd(` inside
+/// a string literal would still satisfy it.
 fn top_level_fns(src: &str) -> Vec<(String, String)> {
     let mut fns = Vec::new();
     let mut current: Option<(String, String)> = None;
     for line in src.lines() {
-        if line.trim_start().starts_with("//") {
+        let line = strip_line_comment(line);
+        if line.trim().is_empty() {
             continue;
         }
         if current.is_none() {
@@ -253,10 +274,15 @@ fn routing_guard_rejects_bypasses() {
          // stibbons_cmd( mentioned only in a comment\n    \
          sneaky(cwd)\n}}\n"
     );
+    let trailing_comment_run = format!(
+        "{COMMON_SRC}\npub fn run_baz(cwd: &Path) -> Output {{\n    \
+         sneaky(cwd) // was stibbons_cmd(\"baz\", cwd)\n}}\n"
+    );
     for (label, src, want) in [
         ("run_* spawning stibbons_bin()", bypass_run, "run_foo"),
         ("bare CARGO_BIN_EXE spawn", bare_spawn, "sneaky"),
         ("run_* not calling stibbons_cmd", unrouted_run, "run_bar"),
+        ("stibbons_cmd( only in a trailing comment", trailing_comment_run, "run_baz"),
     ] {
         match check_routing(&src) {
             Ok(()) => panic!("guard accepted a bypass: {label}"),
