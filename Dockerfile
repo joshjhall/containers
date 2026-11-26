@@ -48,12 +48,14 @@ FROM rust:1.99-slim-trixie AS luggage-builder
 # Cargo's built-in libgit2 does the fetch, so the slim image needs no `git`.
 # Keep .cargo/ out of this stage and do not set CARGO_NET_GIT_FETCH_WITH_CLI:
 # .cargo/config.toml sets `git-fetch-with-cli = true`, which needs the `git`
-# binary this image lacks. tests/unit/luggage-builder-network.sh enforces an
-# allowlist: COPY only Cargo.toml, Cargo.lock and crates, and only type=cache
-# mounts (a --mount with no type= is a bind mount). To add a source, extend the
-# allowlist there after confirming it cannot bring .cargo/ in. If the git fetch
-# itself becomes a problem, the escape hatches are building from a trimmed
-# manifest that excludes stibbons, or `cargo vendor`-ing the git source.
+# binary this image lacks. tests/unit/luggage-builder-network.sh pins this
+# whole stage (FROM line included, comments ignored) to an approved snapshot,
+# so any change fails until someone confirms it cannot bring .cargo/ in or set
+# git-fetch-with-cli, then updates the snapshot. Watch the FROM image (an
+# earlier stage is inherited whole) and --mount (no type= is a bind mount).
+# If the git fetch itself becomes a problem, the escape hatches are building
+# from a trimmed manifest that excludes stibbons, or `cargo vendor`-ing the git
+# source.
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
