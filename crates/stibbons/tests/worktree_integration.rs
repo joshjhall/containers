@@ -11,33 +11,10 @@
 
 mod common;
 
-use std::fmt::Write as _;
 use std::path::Path;
 use std::process::{Command, Output};
 
-use common::run_worktree;
-
-/// Runs `git <args>` in `dir` with a fixed identity and a clean git env,
-/// asserting success.
-fn git(dir: &Path, args: &[&str]) {
-    // Prevent the enclosing repo's git env from leaking into the fixture.
-    let out = common::scrub_git_env(&mut Command::new("git"))
-        .current_dir(dir)
-        .args(args)
-        // Hermetic identity — no reliance on a global gitconfig.
-        .env("GIT_AUTHOR_NAME", "Test")
-        .env("GIT_AUTHOR_EMAIL", "test@example.com")
-        .env("GIT_COMMITTER_NAME", "Test")
-        .env("GIT_COMMITTER_EMAIL", "test@example.com")
-        .output()
-        .expect("failed to spawn git");
-    assert!(
-        out.status.success(),
-        "git {args:?} failed\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr),
-    );
-}
+use common::{commit_file, git, init_repo, rev_parse_head, run_worktree, write_igor_yml};
 
 /// `worktree create 1` rewrites the `.git` pointer and back-link to
 /// container-internal paths and adds the compose mount; `remove 1` cleans up.
@@ -197,63 +174,6 @@ fn worktree_list_and_sync() {
         main_tip,
         "after a fast-forward rebase, agent01 should sit on main's tip",
     );
-}
-
-/// `git -C <dir> rev-parse HEAD` with a clean git env, returning the trimmed SHA.
-fn rev_parse_head(dir: &Path) -> String {
-    let out = common::scrub_git_env(&mut Command::new("git"))
-        .current_dir(dir)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .expect("failed to spawn git");
-    assert!(out.status.success(), "rev-parse failed: {}", String::from_utf8_lossy(&out.stderr));
-    String::from_utf8_lossy(&out.stdout).trim().to_string()
-}
-
-/// Inits a real repo at `dir` on `main` with one commit (`README.md` = `hi`).
-fn init_repo(dir: &Path) {
-    std::fs::create_dir_all(dir).unwrap();
-    git(dir, &["init", "-b", "main"]);
-    std::fs::write(dir.join("README.md"), "hi\n").unwrap();
-    git(dir, &["add", "."]);
-    git(dir, &["commit", "-m", "init"]);
-}
-
-/// Writes `file` = `content` in `dir` and commits it on the current branch.
-fn commit_file(dir: &Path, file: &str, content: &str, msg: &str) {
-    std::fs::write(dir.join(file), content).unwrap();
-    git(dir, &["add", "."]);
-    git(dir, &["commit", "-m", msg]);
-}
-
-/// Writes a minimal `.igor.yml` for project `myapp` rooted at `project` (so
-/// `base_dir` is its parent). A non-empty `repos` and/or a `max` add an
-/// `agents:` block; with neither, the agent defaults apply (repos `[myapp]`,
-/// max 5).
-fn write_igor_yml(project: &Path, repos: &[&str], max: Option<u32>) {
-    let mut cfg = format!(
-        "schema_version: 1\n\
-         containers_dir: containers\n\
-         project:\n\
-         \x20 name: myapp\n\
-         \x20 working_dir: {}\n\
-         features:\n\
-         \x20 - python\n",
-        project.display()
-    );
-    if !repos.is_empty() || max.is_some() {
-        cfg.push_str("agents:\n");
-        if let Some(m) = max {
-            writeln!(cfg, "  max: {m}").unwrap();
-        }
-        if !repos.is_empty() {
-            cfg.push_str("  repos:\n");
-            for r in repos {
-                writeln!(cfg, "    - {r}").unwrap();
-            }
-        }
-    }
-    std::fs::write(project.join(".igor.yml"), cfg).unwrap();
 }
 
 fn stdout(out: &Output) -> String {
@@ -451,35 +371,4 @@ fn worktree_sync_rejects_invalid_agent_number() {
         );
     }
     assert_eq!(rev_parse_head(&worktree_dir), tip_before, "rejected syncs must not move the tip");
-}
-
-/// #1694: every stibbons spawn must strip the enclosing git env and carry a
-/// fixed identity, so stibbons' own git children (`worktree add`, `rebase`)
-/// can neither retarget the outer repo nor fail on a host with no gitconfig.
-#[test]
-fn stibbons_cmd_is_hermetic() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let cmd = common::stibbons_cmd("worktree", dir.path());
-    let envs: std::collections::HashMap<_, _> = cmd
-        .get_envs()
-        .map(|(k, v)| {
-            (k.to_string_lossy().into_owned(), v.map(|v| v.to_string_lossy().into_owned()))
-        })
-        .collect();
-
-    // Pin the list itself too, so trimming it is a visible test failure.
-    for must in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"] {
-        assert!(common::LEAKY_GIT_VARS.contains(&must), "{must} missing from LEAKY_GIT_VARS");
-    }
-    for &removed in common::LEAKY_GIT_VARS {
-        assert_eq!(envs.get(removed), Some(&None), "{removed} must be explicitly removed");
-    }
-    for (key, want) in [
-        ("GIT_AUTHOR_NAME", common::TEST_GIT_NAME),
-        ("GIT_AUTHOR_EMAIL", common::TEST_GIT_EMAIL),
-        ("GIT_COMMITTER_NAME", common::TEST_GIT_NAME),
-        ("GIT_COMMITTER_EMAIL", common::TEST_GIT_EMAIL),
-    ] {
-        assert_eq!(envs.get(key), Some(&Some(want.to_owned())), "{key} must be pinned");
-    }
 }
