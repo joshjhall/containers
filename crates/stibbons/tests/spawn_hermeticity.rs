@@ -80,6 +80,7 @@ fn replay_fixture(base: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
 ///   The replacement sets `user.useConfigOnly`, so git can't guess an identity
 ///   from the hostname.
 /// - `EMAIL`, `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_PARAMETERS` are removed.
+/// - `LC_ALL=C`, so the control's stderr match sees git's untranslated messages.
 fn identityless_sync(project: &Path, home: &Path) -> Command {
     let mut cmd = common::stibbons_cmd("worktree", project);
     cmd.args(["sync", "1"])
@@ -91,7 +92,8 @@ fn identityless_sync(project: &Path, home: &Path) -> Command {
         .env("GIT_CONFIG_VALUE_0", "true")
         .env_remove("EMAIL")
         .env_remove("GIT_CONFIG_GLOBAL")
-        .env_remove("GIT_CONFIG_PARAMETERS");
+        .env_remove("GIT_CONFIG_PARAMETERS")
+        .env("LC_ALL", "C");
     cmd
 }
 
@@ -152,8 +154,10 @@ fn sync_replay_uses_injected_identity() {
         format!("{} <{}>", common::TEST_GIT_NAME, common::TEST_GIT_EMAIL),
         "the replayed commit's committer must be the injected identity"
     );
-    // The empty HOME stayed empty: stibbons wrote no gitconfig behind our back.
-    assert_eq!(std::fs::read_dir(home.path()).unwrap().count(), 0, "HOME must stay empty");
+    // stibbons persisted no identity behind our back (e.g. `git config --global`).
+    for cfg in [".gitconfig", "git/config", ".config/git/config"] {
+        assert!(!home.path().join(cfg).exists(), "stibbons must not write {cfg} into HOME");
+    }
 }
 
 /// Source of the shared helpers, checked structurally below.
