@@ -5,6 +5,7 @@
 //! here are expected and suppressed.
 #![allow(dead_code)]
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -139,4 +140,85 @@ pub fn strip_json_comments(content: &str) -> String {
         .filter(|line| !line.trim_start().starts_with("//"))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+// --- git fixture helpers (shared by worktree + spawn-hermeticity tests) ---
+
+/// Runs `git <args>` in `dir` with a fixed identity and a clean git env,
+/// asserting success.
+pub fn git(dir: &Path, args: &[&str]) {
+    // Prevent the enclosing repo's git env from leaking into the fixture.
+    let out = scrub_git_env(&mut Command::new("git"))
+        .current_dir(dir)
+        .args(args)
+        // Hermetic identity — no reliance on a global gitconfig.
+        .env("GIT_AUTHOR_NAME", TEST_GIT_NAME)
+        .env("GIT_AUTHOR_EMAIL", TEST_GIT_EMAIL)
+        .env("GIT_COMMITTER_NAME", TEST_GIT_NAME)
+        .env("GIT_COMMITTER_EMAIL", TEST_GIT_EMAIL)
+        .output()
+        .expect("failed to spawn git");
+    assert!(
+        out.status.success(),
+        "git {args:?} failed\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+}
+
+/// `git -C <dir> rev-parse HEAD` with a clean git env, returning the trimmed SHA.
+pub fn rev_parse_head(dir: &Path) -> String {
+    let out = scrub_git_env(&mut Command::new("git"))
+        .current_dir(dir)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("failed to spawn git");
+    assert!(out.status.success(), "rev-parse failed: {}", String::from_utf8_lossy(&out.stderr));
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// Inits a real repo at `dir` on `main` with one commit (`README.md` = `hi`).
+pub fn init_repo(dir: &Path) {
+    std::fs::create_dir_all(dir).unwrap();
+    git(dir, &["init", "-b", "main"]);
+    std::fs::write(dir.join("README.md"), "hi\n").unwrap();
+    git(dir, &["add", "."]);
+    git(dir, &["commit", "-m", "init"]);
+}
+
+/// Writes `file` = `content` in `dir` and commits it on the current branch.
+pub fn commit_file(dir: &Path, file: &str, content: &str, msg: &str) {
+    std::fs::write(dir.join(file), content).unwrap();
+    git(dir, &["add", "."]);
+    git(dir, &["commit", "-m", msg]);
+}
+
+/// Writes a minimal `.igor.yml` for project `myapp` rooted at `project` (so
+/// `base_dir` is its parent). A non-empty `repos` and/or a `max` add an
+/// `agents:` block; with neither, the agent defaults apply (repos `[myapp]`,
+/// max 5).
+pub fn write_igor_yml(project: &Path, repos: &[&str], max: Option<u32>) {
+    let mut cfg = format!(
+        "schema_version: 1\n\
+         containers_dir: containers\n\
+         project:\n\
+         \x20 name: myapp\n\
+         \x20 working_dir: {}\n\
+         features:\n\
+         \x20 - python\n",
+        project.display()
+    );
+    if !repos.is_empty() || max.is_some() {
+        cfg.push_str("agents:\n");
+        if let Some(m) = max {
+            writeln!(cfg, "  max: {m}").unwrap();
+        }
+        if !repos.is_empty() {
+            cfg.push_str("  repos:\n");
+            for r in repos {
+                writeln!(cfg, "    - {r}").unwrap();
+            }
+        }
+    }
+    std::fs::write(project.join(".igor.yml"), cfg).unwrap();
 }
