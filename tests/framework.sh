@@ -47,6 +47,44 @@ set -euo pipefail
 # scope. init_test_framework re-clears as belt-and-suspenders. See #599 / #587.
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR GIT_PREFIX
 
+# Tests must never depend on the operator's signing key (#1789).
+#
+# The devcontainer injects git config through GIT_CONFIG_COUNT /
+# GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n, including commit.gpgsign=true,
+# tag.gpgsign=true and gpg.ssh.program (the drumknott signing shim). Every
+# scratch-repo `git commit` a test made therefore signed through drumknott, and
+# under the parallel pre-push load signing failed intermittently (git exit 128,
+# often with a misleading "profile ... is locked on the host" message), failing
+# a random unrelated suite. Append signing-off entries to the env config: git
+# applies GIT_CONFIG_KEY_n in index order, so later entries win over the
+# injected `true`. Existing entries are preserved, nothing is written to any
+# git config file, and the override lives only in this process tree — the
+# operator's own commits outside the framework stay signed.
+#
+# Idempotent: a child shell that re-sources the framework (or a re-run of
+# init_test_framework) must not keep growing GIT_CONFIG_COUNT.
+tf_disable_git_signing() {
+    local n="${GIT_CONFIG_COUNT:-0}"
+    # git rejects a non-numeric count outright; start over from 0 rather than
+    # propagate a value that would make every git command in the suite fail.
+    [[ "$n" =~ ^[0-9]+$ ]] || n=0
+    n=$((10#$n))
+
+    if [ "$n" -ge 2 ]; then
+        local k1="GIT_CONFIG_KEY_$((n - 2))" v1="GIT_CONFIG_VALUE_$((n - 2))"
+        local k2="GIT_CONFIG_KEY_$((n - 1))" v2="GIT_CONFIG_VALUE_$((n - 1))"
+        if [ "${!k1:-}" = "commit.gpgsign" ] && [ "${!v1:-}" = "false" ] &&
+            [ "${!k2:-}" = "tag.gpgsign" ] && [ "${!v2:-}" = "false" ]; then
+            return 0
+        fi
+    fi
+
+    export "GIT_CONFIG_KEY_${n}=commit.gpgsign" "GIT_CONFIG_VALUE_${n}=false"
+    export "GIT_CONFIG_KEY_$((n + 1))=tag.gpgsign" "GIT_CONFIG_VALUE_$((n + 1))=false"
+    export GIT_CONFIG_COUNT=$((n + 2))
+}
+tf_disable_git_signing
+
 # Framework version (exported for external use)
 # shellcheck disable=SC2034  # Used by external scripts
 readonly TEST_FRAMEWORK_VERSION="4.23.1"
@@ -277,6 +315,9 @@ init_test_framework() {
     # consumer that re-initialises the framework after mutating the environment
     # still starts from a hermetic git state. See #599 / #587.
     unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR GIT_PREFIX
+
+    # Re-assert signing-off git config (#1789); a no-op when already applied.
+    tf_disable_git_signing
 
     # Create directories
     mkdir -p "$RESULTS_DIR"
